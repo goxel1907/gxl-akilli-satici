@@ -1,5 +1,5 @@
-import OpenAI from "openai";
 import type { MarketplaceListingPack } from "./types.js";
+import { generateStructuredObject, hasAiProvider, type AiRuntimeEnv } from "./structured-ai.js";
 
 export interface ListingInput {
   name: string;
@@ -49,25 +49,12 @@ function fallback(input: ListingInput): MarketplaceListingPack {
   };
 }
 
-export async function generateListingPack(input: ListingInput): Promise<MarketplaceListingPack> {
-  if (!process.env.OPENAI_API_KEY) return fallback(input);
-  const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-  const response = await client.responses.create({
-    model: process.env.OPENAI_MODEL || "gpt-5.6-luna",
-    store: false,
-    input: [
-      {
-        role: "developer",
-        content: "GXL için ürün kategorisinden bağımsız çok kanallı e-ticaret ilan uzmanısın. Ürünü gümüş, tesbih veya takı varsayma. Etsy metni doğal Amerikan İngilizcesi, Shopier ve Letgo metni Türkçe olmalı. Önce ürünün Etsy yaratıcılık ve yasaklı ürün kurallarına uygunluğunun ayrıca doğrulanması gerektiğini düşün. Yalnızca doğrulanmış gerçekleri kullan; fiyat, gram, el işçiliği, kargo, üretim yeri veya garanti uydurma. Etsy için 13 doğal çok kelimeli etiket üret, tekrar ve keyword stuffing yapma. Teslimat sürelerini vaat olarak değil taşıyıcı doğrulaması gereken profil olarak sun. Hazır stok değilse 1 gün hazırlama yazma. Çıktı belirtilen JSON şemasına uymalı."
-      },
-      { role: "user", content: JSON.stringify(input) }
-    ],
-    text: {
-      format: {
-        type: "json_schema",
-        name: "marketplace_listing_pack",
-        strict: true,
-        schema: {
+export async function generateListingPack(input: ListingInput, env?: AiRuntimeEnv): Promise<MarketplaceListingPack> {
+  if (!hasAiProvider(env)) return fallback(input);
+  return generateStructuredObject<MarketplaceListingPack>({
+    prompt: `GXL için ürün kategorisinden bağımsız çok kanallı e-ticaret ilan uzmanısın. Ürünü gümüş, tesbih veya takı varsayma. Etsy metni doğal Amerikan İngilizcesi, Shopier ve Letgo metni Türkçe olmalı. Önce ürünün Etsy yaratıcılık ve yasaklı ürün kurallarına uygunluğunun ayrıca doğrulanması gerektiğini düşün. Yalnızca doğrulanmış gerçekleri kullan; fiyat, gram, el işçiliği, kargo, üretim yeri veya garanti uydurma. Etsy için 13 doğal çok kelimeli etiket üret, tekrar ve keyword stuffing yapma. Teslimat sürelerini vaat olarak değil taşıyıcı doğrulaması gereken profil olarak sun. Hazır stok değilse 1 gün hazırlama yazma. Çıktı belirtilen JSON şemasına uymalı.\n\nÜrün: ${JSON.stringify(input)}`,
+    schemaName: "marketplace_listing_pack",
+    schema: {
           type: "object",
           additionalProperties: false,
           properties: {
@@ -92,8 +79,5 @@ export async function generateListingPack(input: ListingInput): Promise<Marketpl
           },
           required: ["etsy", "turkey", "shipping", "warnings"]
         }
-      }
-    }
-  });
-  return JSON.parse(response.output_text) as MarketplaceListingPack;
+  }, env);
 }
