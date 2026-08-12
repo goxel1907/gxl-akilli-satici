@@ -4,6 +4,7 @@ import { decideReply } from "./agent.js";
 import { connectors } from "./connectors.js";
 import { db, createApproval, createMessage, findLead, findProducts } from "./store.js";
 import { canAutoReply, canStartConversation } from "./policy.js";
+import { generateListingPack } from "./listing-agent.js";
 import type { Channel } from "./types.js";
 
 const port = Number(process.env.PORT || 8787);
@@ -50,6 +51,25 @@ const server = createServer(async (req, res) => {
     if (req.method === "GET" && url.pathname === "/api/products") return json(res, 200, db.products);
     if (req.method === "GET" && url.pathname === "/api/leads") return json(res, 200, db.leads);
     if (req.method === "GET" && url.pathname === "/api/approvals") return json(res, 200, db.approvals);
+
+    if (req.method === "POST" && url.pathname === "/api/listings/generate") {
+      const input = await body(req);
+      const name = String(input.name || "").trim();
+      const material = String(input.material || "").trim();
+      if (!name || !material) return json(res, 400, { error: "Ürün adı ve doğrulanmış malzeme bilgisi gerekli." });
+      const pack = await generateListingPack({
+        name,
+        category: String(input.category || "ürün"),
+        description: input.description ? String(input.description) : undefined,
+        material,
+        weightGrams: input.weightGrams ? Number(input.weightGrams) : undefined,
+        priceTry: input.priceTry ? Number(input.priceTry) : undefined,
+        stock: Math.max(0, Number(input.stock || 0)),
+        readyToShip: Boolean(input.readyToShip),
+        verifiedFacts: Array.isArray(input.verifiedFacts) ? input.verifiedFacts.map(String) : []
+      });
+      return json(res, 200, pack);
+    }
 
     if (req.method === "POST" && url.pathname === "/api/approvals") {
       const input = await body(req);
