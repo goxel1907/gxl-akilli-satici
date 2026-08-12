@@ -1,8 +1,8 @@
 # GXL Akıllı Satıcı
 
-GXL markasının tesbih, gümüş tesbih, çakı, takı ve hobi ürünleri için Android merkezli satış asistanı prototipi.
+GXL Market Studio için ürün kategorisinden bağımsız, Android merkezli çok kanallı satış ve pazar fırsatı asistanı.
 
-Sistem; ürün kataloğu, müşteri adayları, ilk temas onayı, onay sonrası otomatik konuşma, ürün önerisi, Shopier/Letgo yönlendirmesi ve insan devralma kurallarını tek yerde toplar.
+Sistem; serbest kategorili ürün kataloğu, pazar fırsatları, müşteri adayları, ilk temas onayı, onay sonrası otomatik konuşma, ürün önerisi, çok kanallı satış yönlendirmesi ve insan devralma kurallarını tek yerde toplar.
 
 ## Hızlı başlangıç
 
