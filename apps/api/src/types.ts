@@ -6,7 +6,7 @@ export interface Product {
   id: string;
   sku: string;
   name: string;
-  category: "tesbih" | "gumus_tesbih" | "caki" | "taki" | "hobi";
+  category: string;
   description: string;
   priceTry?: number;
   stock: number;
