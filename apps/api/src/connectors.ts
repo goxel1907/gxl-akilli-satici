@@ -35,10 +35,31 @@ class LetgoConnector implements ChannelConnector {
   }
 }
 
+class EtsyConnector implements ChannelConnector {
+  channel = "etsy" as const;
+  mode = "catalog_and_orders" as const;
+  async send() {
+    return { accepted: false, reason: "Etsy müşteri edinme için toplu mesaj kanalı değildir; ilan, sipariş ve izinli müşteri görüşmeleri yönetilir." };
+  }
+}
+
+class EmailConnector implements ChannelConnector {
+  channel = "email" as const;
+  mode = "automatic" as const;
+  async send() {
+    if (!process.env.EMAIL_FROM || !process.env.EMAIL_PROVIDER_TOKEN) {
+      return { accepted: false, reason: "İşletme e-posta hesabı ve gönderim sağlayıcısı bağlanmadı." };
+    }
+    return { accepted: false, reason: "E-posta sağlayıcısı adaptörü yapılandırılmalı." };
+  }
+}
+
 export const connectors: Record<Channel, ChannelConnector> = {
   whatsapp: new MetaConnector("whatsapp"),
   instagram: new MetaConnector("instagram"),
   facebook: new MetaConnector("facebook"),
   shopier: new ShopierConnector(),
-  letgo: new LetgoConnector()
+  letgo: new LetgoConnector(),
+  etsy: new EtsyConnector(),
+  email: new EmailConnector()
 };
