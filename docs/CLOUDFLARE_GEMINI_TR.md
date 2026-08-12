@@ -7,9 +7,9 @@ Bu yapı ürün fotoğrafı analizi, SEO ilan metni ve yanıt taslağını Gemin
 1. Cloudflare `Workers & Pages` ekranında `Create application` seçin.
 2. `Import a repository` veya `Connect to Git` seçeneğiyle `goxel1907/gxl-akilli-satici` deposunu bağlayın.
 3. Üretim dalını `main` olarak seçin.
-4. Root directory alanını boş bırakın.
-5. Build command alanına `npm install` yazın.
-6. Deploy command alanına `npm run worker:deploy` yazın.
+4. Root directory alanını `/` olarak bırakın.
+5. Build command alanını boş bırakın.
+6. Deploy command alanına `npx wrangler deploy` yazın.
 7. Worker adı olarak `gxl-akilli-satici-api` kullanın ve kurulumu başlatın.
 
 ## Gizli değerler
@@ -20,7 +20,7 @@ Worker açıldıktan sonra `Settings > Variables and Secrets > Add` yolundan ekl
 - Variable: `GEMINI_MODEL` = `gemini-2.5-flash-lite`
 - İsteğe bağlı Secret: `APP_ACCESS_TOKEN` = sizin oluşturduğunuz uzun ve rastgele uygulama anahtarı
 
-Anahtarları ekledikten sonra `Deployments > Retry deployment` ile yeniden yayınlayın.
+Anahtarları ekledikten sonra yeni bir üretim dağıtımı başlatın. Git bağlantısı kullanılıyorsa `main` dalına gelen sonraki kayıt Cloudflare derlemesini otomatik tetikler ve Secret çalışan sürüme bağlanır.
 
 ## Test
 
