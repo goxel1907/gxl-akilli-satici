@@ -15,24 +15,25 @@ export interface ListingInput {
 
 function fallback(input: ListingInput): MarketplaceListingPack {
   const weight = input.weightGrams ? `${input.weightGrams}g ` : "";
-  const materialEn = input.material.toLocaleLowerCase("tr-TR").includes("925") ? "925 Sterling Silver" : input.material;
-  const tags = [
-    "sterling silver", "prayer beads", "tesbih beads", "misbaha gift", "muslim gift",
-    "silver tasbih", "dhikr beads", "men silver gift", "turkish tesbih", "islamic gift",
-    "handmade beads", "collectors beads", "gxl silver"
-  ];
+  const isSilver = input.material.toLocaleLowerCase("tr-TR").includes("925");
+  const isTesbih = /tesbih|tasbih|misbaha/i.test(`${input.name} ${input.category}`);
+  const materialEn = isSilver ? "925 Sterling Silver" : input.material;
+  const productEn = isTesbih ? "Prayer Beads" : input.category;
+  const tags = isTesbih
+    ? ["prayer beads", "tesbih beads", "misbaha gift", "muslim gift", "dhikr beads", "turkish tesbih", "islamic gift", "mens gift", "collectors beads", "artisan beads", materialEn.toLowerCase(), "unique keepsake", "gxl collection"]
+    : [productEn, materialEn, `handmade ${productEn}`, `unique ${productEn}`, `gift for collectors`, "artisan gift", "thoughtful gift", "small business gift", "limited stock", "gift idea", "gxl collection", "quality material", "collectible item"].map((tag) => tag.toLowerCase());
   return {
     etsy: {
       language: "en",
-      title: `${materialEn} ${weight}Prayer Beads, Turkish Tesbih, Thoughtful Islamic Gift`.trim(),
-      description: `${materialEn} prayer beads by GXL. ${input.description || input.name}\n\nVerified details:\n- Material: ${input.material}\n${input.weightGrams ? `- Weight: ${input.weightGrams} g\n` : ""}- Stock: ${input.stock}\n\nThe exact piece shown is prepared with care. Please review the photos and contact us before ordering if you need an additional measurement or detail.`,
+      title: `${materialEn} ${weight}${productEn}, Unique GXL Gift`.trim(),
+      description: `${productEn} by GXL. ${input.description || input.name}\n\nVerified details:\n- Material: ${input.material}\n${input.weightGrams ? `- Weight: ${input.weightGrams} g\n` : ""}- Stock: ${input.stock}\n\nPlease review the photos and contact us before ordering if you need an additional measurement or detail.`,
       tags,
       materials: [materialEn]
     },
     turkey: {
       title: `${input.name}${input.weightGrams ? ` · ${input.weightGrams} g` : ""}`,
       description: `${input.description || input.name}\n\nMalzeme: ${input.material}${input.weightGrams ? `\nAğırlık: ${input.weightGrams} g` : ""}\nStok: ${input.stock}\nFotoğraflardaki ürün gönderilir. Sipariş öncesi ölçü ve stok teyidi yapılır.`,
-      tags: ["gümüş tesbih", "925 ayar", "tesbih", "koleksiyon", "hediyelik", "GXL"]
+      tags: [input.category, input.material, "koleksiyon", "hediyelik", "özel ürün", "GXL"]
     },
     shipping: {
       processingMinBusinessDays: input.readyToShip ? 1 : 2,
@@ -57,7 +58,7 @@ export async function generateListingPack(input: ListingInput): Promise<Marketpl
     input: [
       {
         role: "developer",
-        content: "GXL için çok kanallı e-ticaret ilan uzmanısın. Etsy metni doğal Amerikan İngilizcesi, Shopier ve Letgo metni Türkçe olmalı. Yalnızca doğrulanmış gerçekleri kullan; fiyat, gram, el işçiliği, kargo, üretim yeri veya garanti uydurma. Etsy için 13 doğal çok kelimeli etiket üret, tekrar ve keyword stuffing yapma. Teslimat sürelerini vaat olarak değil taşıyıcı doğrulaması gereken profil olarak sun. Hazır stok değilse 1 gün hazırlama yazma. Çıktı belirtilen JSON şemasına uymalı."
+        content: "GXL için ürün kategorisinden bağımsız çok kanallı e-ticaret ilan uzmanısın. Ürünü gümüş, tesbih veya takı varsayma. Etsy metni doğal Amerikan İngilizcesi, Shopier ve Letgo metni Türkçe olmalı. Önce ürünün Etsy yaratıcılık ve yasaklı ürün kurallarına uygunluğunun ayrıca doğrulanması gerektiğini düşün. Yalnızca doğrulanmış gerçekleri kullan; fiyat, gram, el işçiliği, kargo, üretim yeri veya garanti uydurma. Etsy için 13 doğal çok kelimeli etiket üret, tekrar ve keyword stuffing yapma. Teslimat sürelerini vaat olarak değil taşıyıcı doğrulaması gereken profil olarak sun. Hazır stok değilse 1 gün hazırlama yazma. Çıktı belirtilen JSON şemasına uymalı."
       },
       { role: "user", content: JSON.stringify(input) }
     ],
