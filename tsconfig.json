@@ -9,5 +9,5 @@
     "noEmit": true,
     "types": ["node"]
   },
-  "include": ["apps/api/src/**/*.ts", "apps/api/test/**/*.ts"]
+  "include": ["apps/api/src/**/*.ts", "apps/api/test/**/*.ts", "apps/worker/src/**/*.ts"]
 }
