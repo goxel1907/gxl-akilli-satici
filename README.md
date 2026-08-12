@@ -25,6 +25,10 @@ npm start
 
 Expo Go ile QR kodunu Android telefonda açabilirsiniz. Gerçek kanal bağlantıları için `docs/KURULUM_TR.md` dosyasını izleyin.
 
+## Cloudflare Worker
+
+`main` dalı Cloudflare Workers Builds'e bağlıdır. Worker yapılandırması kökteki `wrangler.jsonc` dosyasından okunur ve `npx wrangler deploy` komutuyla yayımlanır.
+
 ## Telefona doğrudan APK kurma
 
 `apps/mobile/eas.json` içindeki `preview` profili doğrudan Android telefona kurulabilen APK üretir. Bulut derlemesi bir Expo hesabında şu komutla başlatılır:
