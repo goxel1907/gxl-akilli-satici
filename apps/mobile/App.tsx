@@ -7,6 +7,7 @@ import * as ImagePicker from "expo-image-picker";
 const API_URL = process.env.EXPO_PUBLIC_API_URL?.trim();
 const SALES_EMAIL = "gxl.marketstudio@gmail.com";
 type Tab = "Özet" | "Onaylar" | "Müşteriler" | "Ürünler";
+type ProductOrigin = "made_by_seller" | "designed_by_seller" | "vintage" | "craft_supply" | "commercial_resale" | "unknown";
 
 const demo = {
   metrics: { activeLeads: 0, pendingApprovals: 0, catalogProducts: 3, conversations: 0 },
@@ -189,23 +190,86 @@ function Products({ items, addProduct }: any) {
 function ProductForm({ visible, onClose, onSave }: any) {
   const [name, setName] = useState("");
   const [category, setCategory] = useState("ürün");
+  const [material, setMaterial] = useState("");
+  const [origin, setOrigin] = useState<ProductOrigin>("unknown");
+  const [yearMade, setYearMade] = useState("");
   const [weight, setWeight] = useState("");
   const [price, setPrice] = useState("");
   const [stock, setStock] = useState("1");
   const [imageUri, setImageUri] = useState<string | undefined>();
+  const [imageDataUrl, setImageDataUrl] = useState<string | undefined>();
+  const [analysis, setAnalysis] = useState<any>();
+  const [analyzing, setAnalyzing] = useState(false);
 
   const chooseImage = async () => {
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permission.granted) return Alert.alert("Galeri izni gerekli", "Ürün fotoğrafı seçmek için galeri izni verin.");
-    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ["images"], quality: 0.8 });
-    if (!result.canceled) setImageUri(result.assets[0].uri);
+    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ["images"], quality: 0.65, base64: true });
+    if (!result.canceled) {
+      const asset = result.assets[0];
+      setImageUri(asset.uri);
+      setImageDataUrl(asset.base64 ? `data:${asset.mimeType || "image/jpeg"};base64,${asset.base64}` : undefined);
+      setAnalysis(undefined);
+    }
+  };
+  const analyze = async () => {
+    if (!imageDataUrl) return Alert.alert("Fotoğraf gerekli", "Önce galeriden ürünün net fotoğrafını seçin.");
+    if (!API_URL) return Alert.alert("Canlı ajan bağlantısı gerekli", "Görsel analiz için güvenli GXL sunucusu ve API bağlantısı kurulmalıdır. API anahtarı telefona kaydedilmez.");
+    setAnalyzing(true);
+    try {
+      const response = await fetch(`${API_URL}/api/products/analyze-images`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ imageDataUrls: [imageDataUrl], sellerFacts: { name, category, material, origin, yearMade: Number(yearMade) || undefined, authenticityVerified: false } })
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "Analiz tamamlanamadı.");
+      setAnalysis(result);
+      setName((current) => current.trim() || result.product.genericNameTr);
+      setCategory(result.product.categoryTr || category);
+    } catch (error) {
+      Alert.alert("Analiz yapılamadı", error instanceof Error ? error.message : "Sunucu bağlantısını kontrol edin.");
+    } finally {
+      setAnalyzing(false);
+    }
   };
   const save = () => {
     if (!name.trim()) return Alert.alert("Ürün adı gerekli", "Lütfen ürün adını yazın.");
-    onSave({ id: `gxl-local-${Date.now()}`, name: name.trim(), category: category.trim() || "ürün", weightGrams: Number(weight) || undefined, priceTry: Number(price) || undefined, stock: Number(stock) || 0, stockVerified: true, localImageUri: imageUri });
-    setName(""); setWeight(""); setPrice(""); setStock("1"); setImageUri(undefined);
+    onSave({ id: `gxl-local-${Date.now()}`, name: name.trim(), category: category.trim() || "ürün", material: material.trim(), origin, yearMade: Number(yearMade) || undefined, weightGrams: Number(weight) || undefined, priceTry: Number(price) || undefined, stock: Number(stock) || 0, stockVerified: true, localImageUri: imageUri, analysis });
+    setName(""); setCategory("ürün"); setMaterial(""); setOrigin("unknown"); setYearMade(""); setWeight(""); setPrice(""); setStock("1"); setImageUri(undefined); setImageDataUrl(undefined); setAnalysis(undefined);
   };
-  return <Modal visible={visible} animationType="slide" onRequestClose={onClose}><SafeAreaView style={styles.formSafe}><ScrollView contentContainerStyle={styles.formContent}><View style={styles.formHeader}><Text style={styles.sectionTitle}>Yeni ürün ekle</Text><Pressable onPress={onClose}><Ionicons name="close" size={28} color="#17221E" /></Pressable></View><Pressable style={styles.imagePicker} onPress={chooseImage}>{imageUri ? <Image source={{ uri: imageUri }} style={styles.formImage} /> : <><Ionicons name="camera-outline" size={32} color="#315B4C" /><Text style={styles.rowTitle}>Galeriden fotoğraf seç</Text></>}</Pressable><Field label="Ürün adı" value={name} onChangeText={setName} placeholder="Ürünün doğrulanmış adı" /><Field label="Kategori" value={category} onChangeText={setCategory} placeholder="Ürünün gerçek kategorisi" /><Field label="Ağırlık (g)" value={weight} onChangeText={setWeight} placeholder="Varsa" keyboardType="decimal-pad" /><Field label="Fiyat (TL)" value={price} onChangeText={setPrice} placeholder="2500" keyboardType="decimal-pad" /><Field label="Stok" value={stock} onChangeText={setStock} placeholder="1" keyboardType="number-pad" /><Pressable style={styles.primary} onPress={save}><Text style={styles.primaryText}>Kataloğa kaydet</Text></Pressable><Text style={styles.formHint}>GXL hiçbir ürün grubuyla sınırlı değildir. Ajan her ürünü kendi kategorisi, talebi ve platform kurallarına göre ayrı değerlendirir.</Text></ScrollView></SafeAreaView></Modal>;
+  const origins: Array<[ProductOrigin, string]> = [["made_by_seller", "Ben ürettim"], ["designed_by_seller", "Ben tasarladım"], ["vintage", "Vintage"], ["craft_supply", "El işi malzemesi"], ["commercial_resale", "Hazır ürün"], ["unknown", "Bilmiyorum"]];
+  return <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
+    <SafeAreaView style={styles.formSafe}><ScrollView contentContainerStyle={styles.formContent}>
+      <View style={styles.formHeader}><Text style={styles.sectionTitle}>Akıllı ürün ekle</Text><Pressable onPress={onClose}><Ionicons name="close" size={28} color="#17221E" /></Pressable></View>
+      <Pressable style={styles.imagePicker} onPress={chooseImage}>{imageUri ? <Image source={{ uri: imageUri }} style={styles.formImage} /> : <><Ionicons name="camera-outline" size={32} color="#315B4C" /><Text style={styles.rowTitle}>Ürün fotoğrafını seç</Text><Text style={styles.small}>Etiket, damga ve kusurlar net görünsün</Text></>}</Pressable>
+      <Text style={styles.fieldLabel}>Ürün kaynağı</Text>
+      <View style={styles.chips}>{origins.map(([value, label]) => <Pressable key={value} style={[styles.chip, origin === value && styles.chipActive]} onPress={() => setOrigin(value)}><Text style={[styles.chipText, origin === value && styles.chipTextActive]}>{label}</Text></Pressable>)}</View>
+      <Field label="Üretim yılı" value={yearMade} onChangeText={setYearMade} placeholder="Vintage ise doğrulanmış yıl" keyboardType="number-pad" />
+      <Field label="Ürün adı" value={name} onChangeText={setName} placeholder="Boş bırakılırsa ajan önerir" />
+      <Field label="Kategori" value={category} onChangeText={setCategory} placeholder="Ajan gerçek kategoriyi önerir" />
+      <Field label="Malzeme" value={material} onChangeText={setMaterial} placeholder="Etiket/damga ile doğrulanmışsa yazın" />
+      <Pressable style={[styles.analyzeButton, analyzing && styles.primaryDisabled]} disabled={analyzing} onPress={analyze}>{analyzing ? <ActivityIndicator color="white" /> : <Ionicons name="sparkles" size={19} color="white" />}<Text style={styles.primaryText}>{analyzing ? "Fotoğraf inceleniyor..." : "Ajanla analiz et ve ilanları hazırla"}</Text></Pressable>
+      {analysis && <View style={styles.analysisCard}>
+        <Text style={styles.cardTitle}>Görsel analiz sonucu</Text>
+        <Text style={styles.muted}>{analysis.product.genericNameTr} · %{Math.round(analysis.product.confidence * 100)} güven</Text>
+        {analysis.product.observedFacts.map((fact: any, index: number) => <Text style={styles.analysisLine} key={`${fact.label}-${index}`}>• {fact.label}: {fact.value}</Text>)}
+        {!!analysis.questions.length && <><Text style={styles.warningTitle}>Doğrulanması gerekenler</Text>{analysis.questions.map((question: string) => <Text style={styles.warningText} key={question}>• {question}</Text>)}</>}
+        <Text style={styles.warningTitle}>Platform güvenlik kontrolü</Text>
+        {analysis.policies.map((policy: any) => <View style={[styles.policyBox, policy.status === "blocked" ? styles.policyBlocked : policy.status === "review" ? styles.policyReview : styles.policyAllowed]} key={policy.marketplace}><Text style={styles.policyName}>{policy.marketplace.toUpperCase()}</Text><Text style={styles.policyLabel}>{policy.label}</Text><Text style={styles.small}>{policy.reasons.join(" ")}</Text>{policy.requiredEvidence.map((evidence: string) => <Text style={styles.small} key={evidence}>• {evidence}</Text>)}</View>)}
+        <Text style={styles.cardTitle}>Hazır ilan başlıkları</Text>
+        <Text style={styles.analysisLine}>Etsy: {analysis.listings.etsy.title}</Text>
+        <Text style={styles.analysisLine}>Shopier: {analysis.listings.shopier.title}</Text>
+        <Text style={styles.analysisLine}>Letgo: {analysis.listings.letgo.title}</Text>
+        <Text style={styles.formHint}>{analysis.taxonomyNotice}</Text>
+      </View>}
+      <Field label="Ağırlık (g)" value={weight} onChangeText={setWeight} placeholder="Varsa" keyboardType="decimal-pad" />
+      <Field label="Fiyat (TL)" value={price} onChangeText={setPrice} placeholder="2500" keyboardType="decimal-pad" />
+      <Field label="Stok" value={stock} onChangeText={setStock} placeholder="1" keyboardType="number-pad" />
+      <Pressable style={styles.primary} onPress={save}><Text style={styles.primaryText}>Onaylı bilgileri kataloğa kaydet</Text></Pressable>
+      <Text style={styles.formHint}>YASAK sonucu alan ürün yayımlanamaz. İNCELEME GEREKLİ sonucu alan ürün belge veya insan onayı olmadan otomatik yayımlanmaz.</Text>
+    </ScrollView></SafeAreaView>
+  </Modal>;
 }
 
 function Field({ label, ...props }: any) { return <View style={styles.field}><Text style={styles.fieldLabel}>{label}</Text><TextInput style={styles.input} placeholderTextColor="#9AA39F" {...props} /></View>; }
@@ -272,6 +336,23 @@ const styles = StyleSheet.create({
   fieldLabel: { color: "#315B4C", fontWeight: "800", fontSize: 12, marginBottom: 6 },
   input: { backgroundColor: "white", borderRadius: 12, borderWidth: 1, borderColor: "#DDD8CE", paddingHorizontal: 14, paddingVertical: 12, color: "#17221E" },
   formHint: { color: "#7A847F", fontSize: 11, lineHeight: 16, textAlign: "center" },
+  analyzeButton: { flexDirection: "row", justifyContent: "center", alignItems: "center", gap: 9, backgroundColor: "#A86B2E", padding: 15, borderRadius: 14, marginBottom: 16 },
+  primaryDisabled: { opacity: 0.6 },
+  chips: { flexDirection: "row", flexWrap: "wrap", gap: 7, marginBottom: 14 },
+  chip: { borderWidth: 1, borderColor: "#D8D4CA", borderRadius: 99, paddingHorizontal: 10, paddingVertical: 7, backgroundColor: "white" },
+  chipActive: { backgroundColor: "#315B4C", borderColor: "#315B4C" },
+  chipText: { color: "#56615C", fontSize: 11, fontWeight: "700" },
+  chipTextActive: { color: "white" },
+  analysisCard: { backgroundColor: "white", borderRadius: 16, padding: 15, marginBottom: 16, borderWidth: 1, borderColor: "#DCD8CF" },
+  analysisLine: { color: "#47514C", fontSize: 12, lineHeight: 18, marginBottom: 4 },
+  warningTitle: { color: "#8A521F", fontWeight: "800", marginTop: 12, marginBottom: 5 },
+  warningText: { color: "#805D38", fontSize: 12, lineHeight: 18 },
+  policyBox: { borderRadius: 11, padding: 10, marginTop: 8, borderWidth: 1 },
+  policyBlocked: { backgroundColor: "#FFF0F0", borderColor: "#D96060" },
+  policyReview: { backgroundColor: "#FFF8E8", borderColor: "#D6A04E" },
+  policyAllowed: { backgroundColor: "#ECF7F0", borderColor: "#64A47A" },
+  policyName: { color: "#17221E", fontSize: 11, fontWeight: "900" },
+  policyLabel: { color: "#303B36", fontSize: 12, fontWeight: "800", marginVertical: 3 },
   nav: { position: "absolute", bottom: 0, left: 0, right: 0, height: 78, backgroundColor: "white", borderTopWidth: 1, borderTopColor: "#E3E0D8", flexDirection: "row", paddingBottom: 10 },
   navItem: { flex: 1, alignItems: "center", justifyContent: "center", gap: 4 },
   navText: { color: "#748079", fontSize: 10, fontWeight: "600" },
