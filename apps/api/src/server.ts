@@ -6,6 +6,9 @@ import { db, createApproval, createMessage, findLead, findProducts } from "./sto
 import { canAutoReply, canStartConversation } from "./policy.js";
 import { generateListingPack } from "./listing-agent.js";
 import { rankMarketOpportunities, type MarketSignal } from "./market-advisor.js";
+import { analyzeProductImages } from "./product-analyzer.js";
+import { evaluateMarketplacePolicies, type ProductOrigin, type RiskFlag } from "./marketplace-policy.js";
+import { scoreProspect, type ProspectSignal } from "./prospecting.js";
 import type { Channel } from "./types.js";
 
 const port = Number(process.env.PORT || 8787);
@@ -22,7 +25,13 @@ function json(res: ServerResponse, status: number, body: unknown) {
 
 async function body(req: IncomingMessage): Promise<Record<string, unknown>> {
   const chunks: Buffer[] = [];
-  for await (const chunk of req) chunks.push(Buffer.from(chunk));
+  let size = 0;
+  for await (const chunk of req) {
+    const buffer = Buffer.from(chunk);
+    size += buffer.length;
+    if (size > 12_000_000) throw new Error("PAYLOAD_TOO_LARGE");
+    chunks.push(buffer);
+  }
   if (!chunks.length) return {};
   return JSON.parse(Buffer.concat(chunks).toString("utf8")) as Record<string, unknown>;
 }
@@ -52,6 +61,44 @@ const server = createServer(async (req, res) => {
     if (req.method === "GET" && url.pathname === "/api/products") return json(res, 200, db.products);
     if (req.method === "GET" && url.pathname === "/api/leads") return json(res, 200, db.leads);
     if (req.method === "GET" && url.pathname === "/api/approvals") return json(res, 200, db.approvals);
+
+    if (req.method === "POST" && url.pathname === "/api/products/analyze-images") {
+      const input = await body(req);
+      const imageDataUrls = Array.isArray(input.imageDataUrls) ? input.imageDataUrls.map(String) : [];
+      if (!imageDataUrls.length) return json(res, 400, { error: "En az bir ürün fotoğrafı gerekli." });
+      const sellerFacts = input.sellerFacts && typeof input.sellerFacts === "object" ? input.sellerFacts as Record<string, unknown> : {};
+      const analysis = await analyzeProductImages({
+        imageDataUrls,
+        sellerFacts: {
+          name: sellerFacts.name ? String(sellerFacts.name) : undefined,
+          category: sellerFacts.category ? String(sellerFacts.category) : undefined,
+          description: sellerFacts.description ? String(sellerFacts.description) : undefined,
+          material: sellerFacts.material ? String(sellerFacts.material) : undefined,
+          origin: sellerFacts.origin ? String(sellerFacts.origin) as ProductOrigin : "unknown",
+          yearMade: sellerFacts.yearMade ? Number(sellerFacts.yearMade) : undefined,
+          authenticityVerified: Boolean(sellerFacts.authenticityVerified)
+        }
+      });
+      return json(res, 200, analysis);
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/products/policy-check") {
+      const input = await body(req);
+      const policies = evaluateMarketplacePolicies({
+        origin: String(input.origin || "unknown") as ProductOrigin,
+        yearMade: input.yearMade ? Number(input.yearMade) : undefined,
+        authenticityVerified: Boolean(input.authenticityVerified),
+        riskFlags: Array.isArray(input.riskFlags) ? input.riskFlags.map(String) as RiskFlag[] : ["none"]
+      });
+      return json(res, 200, { policies });
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/prospects/score") {
+      const input = await body(req);
+      const signals = Array.isArray(input.signals) ? input.signals as ProspectSignal[] : [];
+      if (!signals.length) return json(res, 400, { error: "Gerçek etkileşim sinyali gerekli." });
+      return json(res, 200, scoreProspect(signals, Array.isArray(input.catalogTags) ? input.catalogTags.map(String) : []));
+    }
 
     if (req.method === "POST" && url.pathname === "/api/listings/generate") {
       const input = await body(req);
@@ -174,6 +221,9 @@ const server = createServer(async (req, res) => {
     return json(res, 404, { error: "Endpoint bulunamadı." });
   } catch (error) {
     console.error(error);
+    if (error instanceof Error && error.message === "PAYLOAD_TOO_LARGE") return json(res, 413, { error: "Fotoğraf isteği çok büyük; en fazla 4 sıkıştırılmış görsel gönderin." });
+    if (error instanceof Error && error.message === "OPENAI_API_KEY_NOT_CONFIGURED") return json(res, 503, { error: "Görsel analiz servisi henüz yapılandırılmadı." });
+    if (error instanceof Error && error.message === "INVALID_IMAGE_INPUT") return json(res, 400, { error: "Görsel biçimi veya boyutu uygun değil." });
     return json(res, 500, { error: "Beklenmeyen sunucu hatası." });
   }
 });
