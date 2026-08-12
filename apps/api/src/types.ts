@@ -1,4 +1,4 @@
-export type Channel = "whatsapp" | "instagram" | "facebook" | "shopier" | "letgo";
+export type Channel = "whatsapp" | "instagram" | "facebook" | "shopier" | "letgo" | "etsy" | "email";
 export type LeadStage = "new" | "qualified" | "contact_pending" | "active" | "won" | "lost" | "blocked";
 export type ApprovalStatus = "pending" | "approved" | "rejected";
 
@@ -18,6 +18,33 @@ export interface Product {
   tags: string[];
   shopierUrl?: string;
   letgoUrl?: string;
+  etsyUrl?: string;
+}
+
+export interface MarketplaceListingPack {
+  etsy: {
+    language: "en";
+    title: string;
+    description: string;
+    tags: string[];
+    materials: string[];
+  };
+  turkey: {
+    title: string;
+    description: string;
+    tags: string[];
+  };
+  shipping: {
+    processingMinBusinessDays: number;
+    processingMaxBusinessDays: number;
+    destinations: Array<{
+      region: "US" | "EU" | "TR" | "WORLD";
+      minTransitBusinessDays: number;
+      maxTransitBusinessDays: number;
+      note: string;
+    }>;
+  };
+  warnings: string[];
 }
 
 export interface Lead {
