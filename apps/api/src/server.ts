@@ -5,6 +5,7 @@ import { connectors } from "./connectors.js";
 import { db, createApproval, createMessage, findLead, findProducts } from "./store.js";
 import { canAutoReply, canStartConversation } from "./policy.js";
 import { generateListingPack } from "./listing-agent.js";
+import { rankMarketOpportunities, type MarketSignal } from "./market-advisor.js";
 import type { Channel } from "./types.js";
 
 const port = Number(process.env.PORT || 8787);
@@ -69,6 +70,13 @@ const server = createServer(async (req, res) => {
         verifiedFacts: Array.isArray(input.verifiedFacts) ? input.verifiedFacts.map(String) : []
       });
       return json(res, 200, pack);
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/market-opportunities") {
+      const input = await body(req);
+      const signals = Array.isArray(input.signals) ? input.signals as MarketSignal[] : [];
+      if (!signals.length) return json(res, 400, { error: "Tarih ve kaynak bağlantısı içeren güncel pazar sinyalleri gerekli; ajan veri olmadan çok satan iddiası üretmez." });
+      return json(res, 200, { opportunities: rankMarketOpportunities(signals) });
     }
 
     if (req.method === "POST" && url.pathname === "/api/approvals") {
