@@ -38,7 +38,7 @@ Profesyonel Instagram hesabını Facebook Sayfasına bağlayın ve Meta uygulama
 
 ## 6. Yapay zekâ ajanı
 
-Sunucuya `OPENAI_API_KEY` verildiğinde yapılandırılmış Responses API çıktısı kullanılır. Anahtar yoksa kural tabanlı demo ajanı devrededir. Model sadece seçilmiş katalog kayıtlarını görür; stok, fiyat veya ürün özelliği uydurmasına izin verilmez.
+Başlangıçta ücretsiz Gemini katmanı için Cloudflare Worker sırrı olarak `GEMINI_API_KEY` ve `GEMINI_MODEL=gemini-2.5-flash-lite` tanımlanır. İstenirse daha sonra `OPENAI_API_KEY` ile OpenAI sağlayıcısına geçilebilir. Hiçbir sağlayıcı anahtarı APK içine konmaz. Anahtar yoksa kural tabanlı demo ajanı devrededir. Model sadece seçilmiş katalog kayıtlarını görür; stok, fiyat veya ürün özelliği uydurmasına izin verilmez.
 
 Fotoğraf analizinde ayrıca `OPENAI_VISION_MODEL=gpt-5.6` kullanılır. Fotoğraf Base64 olarak güvenli sunucuya gönderilir; API anahtarı APK içine konmaz. Anahtar yoksa uygulama görsel analiz yaptığını iddia etmez ve açık yapılandırma hatası gösterir.
 
@@ -66,6 +66,7 @@ Motor; gelen mesaj, ürün favorisi, mağaza takibi, reklam formu, yorum, hikây
 
 ```bash
 EXPO_PUBLIC_API_URL=https://ALAN-ADINIZ
+EXPO_PUBLIC_GXL_APP_TOKEN=SUNUCUDAKI_APP_ACCESS_TOKEN_ILE_AYNI
 ```
 
 Yerel Android emülatöründe varsayılan `http://10.0.2.2:8787` adresi çalışır. Fiziksel telefonda bilgisayarın yerel IP adresini kullanın.
