@@ -1,7 +1,7 @@
-import OpenAI from "openai";
 import { products } from "./data.js";
 import { requestsOptOut, requiresHumanHandoff, validateDecision } from "./policy.js";
 import type { AgentDecision, Lead, Product } from "./types.js";
+import { generateStructuredObject, hasAiProvider, type AiRuntimeEnv } from "./structured-ai.js";
 
 function rankProducts(text: string, lead: Lead): Product[] {
   const terms = `${text} ${lead.interests.join(" ")}`.toLocaleLowerCase("tr-TR");
@@ -40,11 +40,10 @@ function demoDecision(text: string, lead: Lead): AgentDecision {
   }, products);
 }
 
-export async function decideReply(text: string, lead: Lead): Promise<AgentDecision> {
-  if (!process.env.OPENAI_API_KEY) return demoDecision(text, lead);
+export async function decideReply(text: string, lead: Lead, env?: AiRuntimeEnv): Promise<AgentDecision> {
+  if (!hasAiProvider(env)) return demoDecision(text, lead);
   if (requestsOptOut(text) || requiresHumanHandoff(text)) return demoDecision(text, lead);
 
-  const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
   const catalog = rankProducts(text, lead).map((product) => ({
     id: product.id,
     name: product.name,
@@ -57,25 +56,10 @@ export async function decideReply(text: string, lead: Lead): Promise<AgentDecisi
     shopierUrl: product.shopierUrl
   }));
 
-  const response = await client.responses.create({
-    model: process.env.OPENAI_MODEL || "gpt-5.6-luna",
-    store: false,
-    input: [
-      {
-        role: "developer",
-        content: "Türkçe konuşan bir mağaza satış asistanısın. Yalnızca verilen katalog bilgisini kullan. Fiyat, stok veya özellik uydurma. İndirim, iade, şikâyet, hukuki konu, çakı veya emin olmadığın durumda action=handoff seç. Kısa ve nazik ol."
-      },
-      {
-        role: "user",
-        content: `Müşteri: ${lead.displayName}\nİlgi alanları: ${lead.interests.join(", ")}\nMesaj: ${text}\nKatalog: ${JSON.stringify(catalog)}`
-      }
-    ],
-    text: {
-      format: {
-        type: "json_schema",
-        name: "sales_decision",
-        strict: true,
-        schema: {
+  const decision = await generateStructuredObject<AgentDecision>({
+    prompt: `Türkçe konuşan bir mağaza satış asistanısın. Yalnızca verilen katalog bilgisini kullan. Fiyat, stok veya özellik uydurma. İndirim, iade, şikâyet, hukuki konu, çakı veya emin olmadığın durumda action=handoff seç. Kısa ve nazik ol.\n\nMüşteri: ${lead.displayName}\nİlgi alanları: ${lead.interests.join(", ")}\nMesaj: ${text}\nKatalog: ${JSON.stringify(catalog)}`,
+    schemaName: "sales_decision",
+    schema: {
           type: "object",
           additionalProperties: false,
           properties: {
@@ -86,10 +70,6 @@ export async function decideReply(text: string, lead: Lead): Promise<AgentDecisi
           },
           required: ["reply", "productIds", "action", "reason"]
         }
-      }
-    }
-  });
-
-  const decision = JSON.parse(response.output_text) as AgentDecision;
+  }, env);
   return validateDecision(decision, products);
 }
