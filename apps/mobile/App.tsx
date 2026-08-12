@@ -5,6 +5,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as ImagePicker from "expo-image-picker";
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL?.trim();
+const SALES_EMAIL = "gxl.marketstudio@gmail.com";
 type Tab = "Özet" | "Onaylar" | "Müşteriler" | "Ürünler";
 
 const demo = {
@@ -157,6 +158,7 @@ function Overview({ data, setTab, online }: any) {
       <Channel name="Shopier" status="Satış sayfasını aç" icon="bag-handle" onPress={() => openUrl("https://www.shopier.com/goxsel/49555980", "Shopier")} />
       <Channel name="Letgo" status="İlanı aç · manuel devralma" icon="open-outline" onPress={() => openUrl("https://www.letgo.com/ad/1732503836", "Letgo")} />
       <Channel name="Etsy" status="Mağaza yöneticisini aç · bağlantı gerekli" icon="storefront-outline" onPress={() => openUrl("https://www.etsy.com/your/shops/me/dashboard", "Etsy")} />
+      <Channel name="E-posta" status={SALES_EMAIL} icon="mail-outline" onPress={() => openUrl(`mailto:${SALES_EMAIL}?subject=${encodeURIComponent("GXL Market Studio")}`, "E-posta")} />
     </View>
   </>;
 }
