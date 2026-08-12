@@ -222,7 +222,9 @@ const server = createServer(async (req, res) => {
   } catch (error) {
     console.error(error);
     if (error instanceof Error && error.message === "PAYLOAD_TOO_LARGE") return json(res, 413, { error: "Fotoğraf isteği çok büyük; en fazla 4 sıkıştırılmış görsel gönderin." });
-    if (error instanceof Error && error.message === "OPENAI_API_KEY_NOT_CONFIGURED") return json(res, 503, { error: "Görsel analiz servisi henüz yapılandırılmadı." });
+    if (error instanceof Error && error.message === "AI_PROVIDER_NOT_CONFIGURED") return json(res, 503, { error: "Görsel analiz servisi henüz yapılandırılmadı." });
+    if (error instanceof Error && error.message === "AI_FREE_QUOTA_EXCEEDED") return json(res, 429, { error: "Ücretsiz yapay zekâ kotası doldu; ücretli işlem yapılmadı." });
+    if (error instanceof Error && error.message === "AI_PROVIDER_REQUEST_FAILED") return json(res, 502, { error: "Yapay zekâ sağlayıcısı geçici olarak yanıt vermedi." });
     if (error instanceof Error && error.message === "INVALID_IMAGE_INPUT") return json(res, 400, { error: "Görsel biçimi veya boyutu uygun değil." });
     return json(res, 500, { error: "Beklenmeyen sunucu hatası." });
   }

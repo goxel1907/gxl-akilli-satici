@@ -1,5 +1,5 @@
-import OpenAI from "openai";
 import { evaluateMarketplacePolicies, type ProductOrigin, type RiskFlag } from "./marketplace-policy.js";
+import { generateStructuredObject, type AiRuntimeEnv } from "./structured-ai.js";
 
 export interface ProductAnalysisInput {
   imageDataUrls: string[];
@@ -40,33 +40,18 @@ function validImageDataUrl(value: string): boolean {
   return /^data:image\/(jpeg|jpg|png|webp);base64,[A-Za-z0-9+/=]+$/.test(value) && value.length <= 8_000_000;
 }
 
-export async function analyzeProductImages(input: ProductAnalysisInput): Promise<ProductAnalysisResult> {
-  if (!process.env.OPENAI_API_KEY) throw new Error("OPENAI_API_KEY_NOT_CONFIGURED");
+export async function analyzeProductImages(input: ProductAnalysisInput, env?: AiRuntimeEnv): Promise<ProductAnalysisResult> {
   if (!input.imageDataUrls.length || input.imageDataUrls.length > 4 || input.imageDataUrls.some((image) => !validImageDataUrl(image))) {
     throw new Error("INVALID_IMAGE_INPUT");
   }
 
-  const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
   const sellerFacts = input.sellerFacts || {};
-  const response = await client.responses.create({
-    model: process.env.OPENAI_VISION_MODEL || process.env.OPENAI_MODEL || "gpt-5.6",
-    store: false,
-    input: [{
-      role: "user",
-      content: [
-        {
-          type: "input_text",
-          text: `GXL çok kategorili mağazası için bu gerçek ürün fotoğraflarını incele. Satıcının beyanları: ${JSON.stringify(sellerFacts)}.\n\nGörselden kesin görülemeyen marka, model, üretim yılı, orijinallik, ayar, el yapımı oluş, malzeme ve güvenlik iddialarını gerçekmiş gibi yazma. Bunları unverifiedClaims ve questions alanlarına koy. genericNameTr ve categoryTr sadece güvenli, genel ürün tanımı olsun. Her platform için farklı, doğal ilan metni hazırla. Etsy metni İngilizce ve tam 13 etiketten oluşsun; Shopier ve Letgo Türkçe olsun. Yasaklı/riskli olabilecek sinyalleri riskFlags ile işaretle. Kategori önerileri canlı platform kategori kimliği değildir.`
-        },
-        ...input.imageDataUrls.map((image_url) => ({ type: "input_image" as const, image_url, detail: "high" as const }))
-      ]
-    }],
-    text: {
-      format: {
-        type: "json_schema",
-        name: "gxl_product_image_analysis",
-        strict: true,
-        schema: {
+  const analysis = await generateStructuredObject<Omit<ProductAnalysisResult, "policies" | "taxonomyNotice">>({
+    prompt: `GXL çok kategorili mağazası için bu gerçek ürün fotoğraflarını incele. Satıcının beyanları: ${JSON.stringify(sellerFacts)}.\n\nGörselden kesin görülemeyen marka, model, üretim yılı, orijinallik, ayar, el yapımı oluş, malzeme ve güvenlik iddialarını gerçekmiş gibi yazma. Bunları unverifiedClaims ve questions alanlarına koy. genericNameTr ve categoryTr sadece güvenli, genel ürün tanımı olsun. Her platform için farklı, doğal ilan metni hazırla. Etsy metni İngilizce ve tam 13 etiketten oluşsun; Shopier ve Letgo Türkçe olsun. Yasaklı/riskli olabilecek sinyalleri riskFlags ile işaretle. Kategori önerileri canlı platform kategori kimliği değildir.`,
+    schemaName: "gxl_product_image_analysis",
+    vision: true,
+    imageDataUrls: input.imageDataUrls,
+    schema: {
           type: "object",
           additionalProperties: false,
           properties: {
@@ -95,12 +80,7 @@ export async function analyzeProductImages(input: ProductAnalysisInput): Promise
           },
           required: ["product", "riskFlags", "unverifiedClaims", "questions", "listings"]
         }
-      }
-    }
-  });
-
-  if (!response.output_text) throw new Error("EMPTY_ANALYSIS");
-  const analysis = JSON.parse(response.output_text) as Omit<ProductAnalysisResult, "policies" | "taxonomyNotice">;
+  }, env);
   const policies = evaluateMarketplacePolicies({
     origin: sellerFacts.origin || "unknown",
     yearMade: sellerFacts.yearMade,

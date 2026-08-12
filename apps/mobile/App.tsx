@@ -5,7 +5,12 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as ImagePicker from "expo-image-picker";
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL?.trim();
+const API_TOKEN = process.env.EXPO_PUBLIC_GXL_APP_TOKEN?.trim();
 const SALES_EMAIL = "gxl.marketstudio@gmail.com";
+const apiHeaders = (json = false) => ({
+  ...(json ? { "content-type": "application/json" } : {}),
+  ...(API_TOKEN ? { authorization: `Bearer ${API_TOKEN}` } : {})
+});
 type Tab = "Özet" | "Onaylar" | "Müşteriler" | "Ürünler";
 type ProductOrigin = "made_by_seller" | "designed_by_seller" | "vintage" | "craft_supply" | "commercial_resale" | "unknown";
 
@@ -40,7 +45,7 @@ export default function App() {
       return;
     }
     try {
-      const response = await fetch(`${API_URL}/api/dashboard`);
+      const response = await fetch(`${API_URL}/api/dashboard`, { headers: apiHeaders() });
       if (!response.ok) throw new Error();
       setData(await response.json());
       setOnline(true);
@@ -90,7 +95,7 @@ export default function App() {
       return;
     }
     try {
-      const response = await fetch(`${API_URL}/api/approvals/${id}/${action}`, { method: "POST" });
+      const response = await fetch(`${API_URL}/api/approvals/${id}/${action}`, { method: "POST", headers: apiHeaders() });
       if (!response.ok) throw new Error();
       await refresh();
       Alert.alert(action === "approve" ? "Onaylandı" : "Reddedildi", action === "approve" ? "İlk mesaj gönderim kuyruğuna alındı." : "Taslak iptal edildi.");
@@ -219,7 +224,7 @@ function ProductForm({ visible, onClose, onSave }: any) {
     try {
       const response = await fetch(`${API_URL}/api/products/analyze-images`, {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: apiHeaders(true),
         body: JSON.stringify({ imageDataUrls: [imageDataUrl], sellerFacts: { name, category, material, origin, yearMade: Number(yearMade) || undefined, authenticityVerified: false } })
       });
       const result = await response.json();
