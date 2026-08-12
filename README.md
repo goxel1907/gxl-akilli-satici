@@ -4,6 +4,8 @@ GXL Market Studio için ürün kategorisinden bağımsız, Android merkezli çok
 
 Sistem; serbest kategorili ürün kataloğu, pazar fırsatları, müşteri adayları, ilk temas onayı, onay sonrası otomatik konuşma, ürün önerisi, çok kanallı satış yönlendirmesi ve insan devralma kurallarını tek yerde toplar.
 
+Yeni akıllı ürün modülü; telefondan seçilen gerçek ürün fotoğrafını analiz eder, yalnızca gözlemlenebilir özellikleri çıkarır, doğrulanamayan marka/yıl/malzeme iddialarını soruya dönüştürür, Etsy için İngilizce; Shopier ve Letgo için Türkçe ilan taslakları hazırlar. Deterministik politika kilidi `YASAK`, `İNCELEME GEREKLİ` ve `UYGUNLUK KONTROLÜ GEÇTİ` sonuçlarından birini verir; yasak veya eksik kanıtlı ürün otomatik yayınlanmaz.
+
 ## Hızlı başlangıç
 
 ```bash
@@ -54,6 +56,8 @@ Depodaki `GXL Android APK` iş akışı `main` dalına yapılan her mobil uygula
 - GXL 925 ayar gümüş tesbih fotoğrafları ve gerçek satış bağlantıları
 - İlk temas onay motoru
 - Kural tabanlı demo ajanı ve isteğe bağlı OpenAI Responses API sağlayıcısı
+- Görselden ürün tanıma, üç platforma özel ilan üretimi ve politika kilidi
+- İzinli etkileşimleri niyet, güncellik ve katalog eşleşmesine göre puanlayan potansiyel müşteri motoru
 - Meta, Shopier ve Letgo bağlayıcı sınırları
 - Testler, API örnekleri ve canlıya geçiş kontrol listesi
 
