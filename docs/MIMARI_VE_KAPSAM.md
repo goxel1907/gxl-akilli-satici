@@ -12,6 +12,8 @@
 
 ## GXL ürünleri
 
+Bu tablo yalnızca mevcut başlangıç ürünlerini gösterir; GXL'in ürün kapsamını sınırlamaz. Yeni kategoriler serbestçe eklenir ve her ürün platform uygunluğu açısından ayrı değerlendirilir.
+
 | Ürün | Doğrulanan bilgi | Satış bağlantısı |
 | --- | --- | --- |
 | Ay-yıldızlı oksitli tesbih | 925 ayar gümüş, 24 g | Letgo `1732503836` |
