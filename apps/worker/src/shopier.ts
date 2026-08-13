@@ -32,16 +32,22 @@ export class ShopierIntegrationError extends Error {
   readonly code: "NOT_CONFIGURED" | "AUTH_FAILED" | "RATE_LIMITED" | "UPSTREAM_FAILED";
   readonly status?: number;
   readonly endpoint?: string;
+  readonly upstreamCode?: string;
+  readonly upstreamMessage?: string;
 
   constructor(
     code: "NOT_CONFIGURED" | "AUTH_FAILED" | "RATE_LIMITED" | "UPSTREAM_FAILED",
     status?: number,
-    endpoint?: string
+    endpoint?: string,
+    upstreamCode?: string,
+    upstreamMessage?: string
   ) {
     super(code);
     this.code = code;
     this.status = status;
     this.endpoint = endpoint;
+    this.upstreamCode = upstreamCode;
+    this.upstreamMessage = upstreamMessage;
   }
 }
 
@@ -74,9 +80,20 @@ async function shopierGet<T>(env: ShopierRuntimeEnv, path: string, query: Record
   const response = await fetcher(url.toString(), {
     headers: { authorization: `Bearer ${token}`, accept: "application/json" }
   });
-  if (response.status === 401 || response.status === 403) throw new ShopierIntegrationError("AUTH_FAILED", response.status, path);
-  if (response.status === 429) throw new ShopierIntegrationError("RATE_LIMITED", response.status, path);
-  if (!response.ok) throw new ShopierIntegrationError("UPSTREAM_FAILED", response.status, path);
+  if (!response.ok) {
+    let upstreamCode: string | undefined;
+    let upstreamMessage: string | undefined;
+    try {
+      const body = await response.json() as Record<string, unknown>;
+      upstreamCode = typeof body.error === "string" ? body.error.slice(0, 80) : undefined;
+      upstreamMessage = typeof body.message === "string" ? body.message.slice(0, 160) : undefined;
+    } catch {
+      // Shopier sometimes returns an empty/non-JSON error body.
+    }
+    if (response.status === 401 || response.status === 403) throw new ShopierIntegrationError("AUTH_FAILED", response.status, path, upstreamCode, upstreamMessage);
+    if (response.status === 429) throw new ShopierIntegrationError("RATE_LIMITED", response.status, path, upstreamCode, upstreamMessage);
+    throw new ShopierIntegrationError("UPSTREAM_FAILED", response.status, path, upstreamCode, upstreamMessage);
+  }
   return await response.json() as T;
 }
 
@@ -88,8 +105,8 @@ export async function getShopierSnapshot(env: ShopierRuntimeEnv, fetcher: Fetche
   const dateEnd = isoWithoutMilliseconds(new Date());
   const dateStart = isoWithoutMilliseconds(new Date(Date.now() - 30 * 24 * 60 * 60 * 1000));
   const [productPayload, orderPayload] = await Promise.all([
-    shopierGet<unknown>(env, "/products", { limit: 100, page: 1, sort: "dateDesc" }, fetcher),
-    shopierGet<unknown>(env, "/orders", { dateStart, dateEnd, limit: 100, page: 1, sort: "dateDesc" }, fetcher)
+    shopierGet<unknown>(env, "/products", { limit: 50, page: 1, sort: "dateDesc" }, fetcher),
+    shopierGet<unknown>(env, "/orders", { dateStart, dateEnd, limit: 50, page: 1, sort: "dateDesc" }, fetcher)
   ]);
   const products = asArray<ShopierProduct>(productPayload);
   const orders = asArray<ShopierOrder>(orderPayload);
@@ -104,7 +121,7 @@ export async function getShopierSnapshot(env: ShopierRuntimeEnv, fetcher: Fetche
 }
 
 export async function listShopierProducts(env: ShopierRuntimeEnv, fetcher: Fetcher = fetch) {
-  const payload = await shopierGet<unknown>(env, "/products", { limit: 100, page: 1, sort: "dateDesc" }, fetcher);
+  const payload = await shopierGet<unknown>(env, "/products", { limit: 50, page: 1, sort: "dateDesc" }, fetcher);
   return asArray<ShopierProduct>(payload).map((product) => ({
     id: String(product.id || ""),
     title: String(product.title || "Ürün"),
@@ -119,7 +136,7 @@ export async function listShopierProducts(env: ShopierRuntimeEnv, fetcher: Fetch
 export async function listRedactedShopierOrders(env: ShopierRuntimeEnv, fetcher: Fetcher = fetch) {
   const dateEnd = isoWithoutMilliseconds(new Date());
   const dateStart = isoWithoutMilliseconds(new Date(Date.now() - 30 * 24 * 60 * 60 * 1000));
-  const payload = await shopierGet<unknown>(env, "/orders", { dateStart, dateEnd, limit: 100, page: 1, sort: "dateDesc" }, fetcher);
+  const payload = await shopierGet<unknown>(env, "/orders", { dateStart, dateEnd, limit: 50, page: 1, sort: "dateDesc" }, fetcher);
   return asArray<ShopierOrder>(payload).map((order) => ({
     id: String(order.id || ""),
     status: order.status,
