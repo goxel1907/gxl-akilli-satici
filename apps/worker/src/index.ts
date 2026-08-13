@@ -4,8 +4,9 @@ import { evaluateMarketplacePolicies, type ProductOrigin, type RiskFlag } from "
 import { analyzeProductImages } from "../../api/src/product-analyzer.js";
 import { scoreProspect, type ProspectSignal } from "../../api/src/prospecting.js";
 import type { AiRuntimeEnv } from "../../api/src/structured-ai.js";
+import { getShopierSnapshot, listRedactedShopierOrders, listShopierProducts, ShopierIntegrationError, type ShopierRuntimeEnv } from "./shopier.js";
 
-interface Env extends AiRuntimeEnv {
+interface Env extends AiRuntimeEnv, ShopierRuntimeEnv {
   APP_ACCESS_TOKEN?: string;
 }
 
@@ -50,9 +51,31 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
     if (request.method === "OPTIONS") return json(204, {});
     const url = new URL(request.url);
     if (request.method === "GET" && url.pathname === "/health") {
-      return json(200, { ok: true, service: "gxl-akilli-satici", ai: env.GEMINI_API_KEY ? "gemini" : env.OPENAI_API_KEY ? "openai" : "not_configured" });
+      return json(200, { ok: true, service: "gxl-akilli-satici", ai: env.GEMINI_API_KEY ? "gemini" : env.OPENAI_API_KEY ? "openai" : "not_configured", shopier: env.SHOPIER_ACCESS_TOKEN ? "configured" : "not_configured" });
     }
     if (url.pathname.startsWith("/api/") && !authorized(request, env)) return json(401, { error: "Uygulama erişim anahtarı geçersiz." });
+
+    if (request.method === "GET" && url.pathname === "/api/channels/status") {
+      try {
+        return json(200, { shopier: await getShopierSnapshot(env) });
+      } catch (error) {
+        const code = error instanceof ShopierIntegrationError ? error.code : "UPSTREAM_FAILED";
+        const messages: Record<string, string> = {
+          AUTH_FAILED: "Shopier erişim anahtarı reddedildi. Cloudflare secret değerini yenileyin.",
+          RATE_LIMITED: "Shopier istek sınırına ulaşıldı. Birkaç dakika sonra tekrar deneyin.",
+          UPSTREAM_FAILED: "Shopier geçici olarak yanıt vermedi."
+        };
+        return json(200, { shopier: { configured: Boolean(env.SHOPIER_ACCESS_TOKEN), connected: false, error: code, message: messages[code] || messages.UPSTREAM_FAILED } });
+      }
+    }
+
+    if (request.method === "GET" && url.pathname === "/api/shopier/products") {
+      return json(200, { products: await listShopierProducts(env) });
+    }
+    if (request.method === "GET" && url.pathname === "/api/shopier/orders") {
+      if (!env.APP_ACCESS_TOKEN) return json(503, { error: "Sipariş özeti için uygulama erişim anahtarı yapılandırılmalıdır." });
+      return json(200, { orders: await listRedactedShopierOrders(env), privacy: "Müşteri adı, telefon, e-posta ve adres bilgileri bu yanıtta bulunmaz." });
+    }
 
     if (request.method === "GET" && url.pathname === "/api/dashboard") return json(200, dashboard());
     if (request.method === "GET" && url.pathname === "/api/products") return json(200, products);
@@ -122,6 +145,12 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
     if (code === "AI_FREE_QUOTA_EXCEEDED") return json(429, { error: "Ücretsiz Gemini kotası doldu. Kota yenilenince tekrar deneyin; ücretli işlem yapılmadı." });
     if (code === "AI_PROVIDER_REQUEST_FAILED") return json(502, { error: "Gemini geçici olarak yanıt vermedi. Bir süre sonra tekrar deneyin." });
     if (code === "INVALID_IMAGE_INPUT") return json(400, { error: "Görsel biçimi veya boyutu uygun değil." });
+    if (error instanceof ShopierIntegrationError) {
+      if (error.code === "NOT_CONFIGURED") return json(503, { error: "Shopier erişim anahtarı henüz sunucuya eklenmedi." });
+      if (error.code === "AUTH_FAILED") return json(401, { error: "Shopier erişim anahtarı reddedildi." });
+      if (error.code === "RATE_LIMITED") return json(429, { error: "Shopier istek sınırına ulaşıldı. Birkaç dakika sonra tekrar deneyin." });
+      return json(502, { error: "Shopier geçici olarak yanıt vermedi." });
+    }
     return json(500, { error: "Beklenmeyen sunucu hatası." });
   }
 }
