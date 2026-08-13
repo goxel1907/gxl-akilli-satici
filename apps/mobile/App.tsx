@@ -36,6 +36,7 @@ export default function App() {
   const [data, setData] = useState<any>(demo);
   const [loading, setLoading] = useState(true);
   const [online, setOnline] = useState(false);
+  const [channels, setChannels] = useState<any>({ shopier: { configured: false, connected: false } });
 
   const refresh = async () => {
     if (!API_URL) {
@@ -45,9 +46,14 @@ export default function App() {
       return;
     }
     try {
-      const response = await fetch(`${API_URL}/api/dashboard`, { headers: apiHeaders() });
+      const [response, channelResponse] = await Promise.all([
+        fetch(`${API_URL}/api/dashboard`, { headers: apiHeaders() }),
+        fetch(`${API_URL}/api/channels/status`, { headers: apiHeaders() })
+      ]);
       if (!response.ok) throw new Error();
       setData(await response.json());
+      if (channelResponse.ok) setChannels(await channelResponse.json());
+      else setChannels({ shopier: { configured: true, connected: false, message: "Shopier durumu alınamadı." } });
       setOnline(true);
     } catch {
       setData(demo);
@@ -117,7 +123,7 @@ export default function App() {
       </View>
       {loading ? <ActivityIndicator style={{ marginTop: 40 }} color="#C88B47" /> : (
         <ScrollView contentContainerStyle={styles.content}>
-          {tab === "Özet" && <Overview data={data} setTab={setTab} online={online} />}
+          {tab === "Özet" && <Overview data={data} setTab={setTab} online={online} channels={channels} />}
           {tab === "Onaylar" && <Approvals items={pending} decide={decide} />}
           {tab === "Müşteriler" && <Leads items={data.leads} />}
           {tab === "Ürünler" && <Products items={data.products} addProduct={addProduct} />}
@@ -143,7 +149,11 @@ async function openUrl(url: string, label: string) {
   }
 }
 
-function Overview({ data, setTab, online }: any) {
+function Overview({ data, setTab, online, channels }: any) {
+  const shopier = channels?.shopier;
+  const shopierStatus = shopier?.connected
+    ? `Bağlı · ${shopier.productCount} ürün · 30 günde ${shopier.recentOrderCount} sipariş`
+    : shopier?.message || (shopier?.configured ? "Bağlantı doğrulanamadı" : "Bağlantı bekliyor");
   return <>
     <Text style={styles.sectionTitle}>Bugünün görünümü</Text>
     <View style={styles.metrics}>
@@ -161,7 +171,7 @@ function Overview({ data, setTab, online }: any) {
     <View style={styles.card}>
       <Channel name="WhatsApp" status="Uygulamayı aç" icon="logo-whatsapp" onPress={() => openUrl("https://wa.me/", "WhatsApp")} />
       <Channel name="Instagram / Facebook" status="Meta gelen kutusunu aç" icon="logo-instagram" onPress={() => openUrl("https://business.facebook.com/latest/inbox/all/", "Meta Business Suite")} />
-      <Channel name="Shopier" status="Satış sayfasını aç" icon="bag-handle" onPress={() => openUrl("https://www.shopier.com/goxsel/49555980", "Shopier")} />
+      <Channel name="Shopier" status={shopierStatus} icon="bag-handle" connected={Boolean(shopier?.connected)} onPress={() => openUrl("https://www.shopier.com/goxsel/49555980", "Shopier")} />
       <Channel name="Letgo" status="İlanı aç · manuel devralma" icon="open-outline" onPress={() => openUrl("https://www.letgo.com/ad/1732503836", "Letgo")} />
       <Channel name="Etsy" status="Mağaza yöneticisini aç · bağlantı gerekli" icon="storefront-outline" onPress={() => openUrl("https://www.etsy.com/your/shops/me/dashboard", "Etsy")} />
       <Channel name="E-posta" status={SALES_EMAIL} icon="mail-outline" onPress={() => openUrl(`mailto:${SALES_EMAIL}?subject=${encodeURIComponent("GXL Market Studio")}`, "E-posta")} />
@@ -173,8 +183,8 @@ function Metric({ value, label, icon, accent }: any) {
   return <View style={[styles.metric, accent && styles.metricAccent]}><Ionicons name={icon} size={21} color={accent ? "#C88B47" : "#315B4C"} /><Text style={styles.metricValue}>{value}</Text><Text style={styles.metricLabel}>{label}</Text></View>;
 }
 
-function Channel({ name, status, icon, onPress }: any) {
-  return <Pressable accessibilityRole="button" style={({ pressed }) => [styles.row, pressed && styles.rowPressed]} onPress={onPress}><View style={styles.rowIcon}><Ionicons name={icon} size={20} color="#315B4C" /></View><View style={{ flex: 1 }}><Text style={styles.rowTitle}>{name}</Text><Text style={styles.small}>{status}</Text></View><Ionicons name="chevron-forward" size={18} color="#9AA39F" /></Pressable>;
+function Channel({ name, status, icon, onPress, connected }: any) {
+  return <Pressable accessibilityRole="button" style={({ pressed }) => [styles.row, pressed && styles.rowPressed]} onPress={onPress}><View style={styles.rowIcon}><Ionicons name={icon} size={20} color="#315B4C" /></View><View style={{ flex: 1 }}><Text style={styles.rowTitle}>{name}</Text><Text style={[styles.small, connected && styles.connectedText]}>{connected ? "● " : ""}{status}</Text></View><Ionicons name="chevron-forward" size={18} color="#9AA39F" /></Pressable>;
 }
 
 function Approvals({ items, decide }: any) {
@@ -309,6 +319,7 @@ const styles = StyleSheet.create({
   cardTitle: { fontSize: 15, fontWeight: "800", color: "#17221E", marginBottom: 4 },
   muted: { color: "#68736E", lineHeight: 20 },
   small: { color: "#7A847F", fontSize: 12 },
+  connectedText: { color: "#2B7A50", fontWeight: "700" },
   row: { flexDirection: "row", alignItems: "center", paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: "#F0EDE6" },
   rowPressed: { opacity: 0.55 },
   rowIcon: { width: 38, height: 38, borderRadius: 11, backgroundColor: "#EDF2EF", alignItems: "center", justifyContent: "center", marginRight: 10 },
