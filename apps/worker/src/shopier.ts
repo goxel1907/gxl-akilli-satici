@@ -30,10 +30,18 @@ type ShopierOrder = {
 
 export class ShopierIntegrationError extends Error {
   readonly code: "NOT_CONFIGURED" | "AUTH_FAILED" | "RATE_LIMITED" | "UPSTREAM_FAILED";
+  readonly status?: number;
+  readonly endpoint?: string;
 
-  constructor(code: "NOT_CONFIGURED" | "AUTH_FAILED" | "RATE_LIMITED" | "UPSTREAM_FAILED") {
+  constructor(
+    code: "NOT_CONFIGURED" | "AUTH_FAILED" | "RATE_LIMITED" | "UPSTREAM_FAILED",
+    status?: number,
+    endpoint?: string
+  ) {
     super(code);
     this.code = code;
+    this.status = status;
+    this.endpoint = endpoint;
   }
 }
 
@@ -66,9 +74,9 @@ async function shopierGet<T>(env: ShopierRuntimeEnv, path: string, query: Record
   const response = await fetcher(url.toString(), {
     headers: { authorization: `Bearer ${token}`, accept: "application/json" }
   });
-  if (response.status === 401 || response.status === 403) throw new ShopierIntegrationError("AUTH_FAILED");
-  if (response.status === 429) throw new ShopierIntegrationError("RATE_LIMITED");
-  if (!response.ok) throw new ShopierIntegrationError("UPSTREAM_FAILED");
+  if (response.status === 401 || response.status === 403) throw new ShopierIntegrationError("AUTH_FAILED", response.status, path);
+  if (response.status === 429) throw new ShopierIntegrationError("RATE_LIMITED", response.status, path);
+  if (!response.ok) throw new ShopierIntegrationError("UPSTREAM_FAILED", response.status, path);
   return await response.json() as T;
 }
 
