@@ -5,8 +5,9 @@ import { analyzeProductImages } from "../../api/src/product-analyzer.js";
 import { scoreProspect, type ProspectSignal } from "../../api/src/prospecting.js";
 import type { AiRuntimeEnv } from "../../api/src/structured-ai.js";
 import { getShopierSnapshot, listRedactedShopierOrders, listShopierProducts, ShopierIntegrationError, type ShopierRuntimeEnv } from "./shopier.js";
+import { createEtsyConnectSession, EtsyIntegrationError, getEtsyStatus, handleEtsyCallback, type EtsyRuntimeEnv } from "./etsy.js";
 
-interface Env extends AiRuntimeEnv, ShopierRuntimeEnv {
+interface Env extends AiRuntimeEnv, ShopierRuntimeEnv, EtsyRuntimeEnv {
   APP_ACCESS_TOKEN?: string;
 }
 
@@ -51,13 +52,21 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
     if (request.method === "OPTIONS") return json(204, {});
     const url = new URL(request.url);
     if (request.method === "GET" && url.pathname === "/health") {
-      return json(200, { ok: true, service: "gxl-akilli-satici", ai: env.GEMINI_API_KEY ? "gemini" : env.OPENAI_API_KEY ? "openai" : "not_configured", shopier: env.SHOPIER_ACCESS_TOKEN ? "configured" : "not_configured" });
+      return json(200, {
+        ok: true,
+        service: "gxl-akilli-satici",
+        ai: env.GEMINI_API_KEY ? "gemini" : env.OPENAI_API_KEY ? "openai" : "not_configured",
+        shopier: env.SHOPIER_ACCESS_TOKEN ? "configured" : "not_configured",
+        etsy: env.ETSY_API_KEY && env.ETSY_SHARED_SECRET ? "configured" : "not_configured"
+      });
     }
+    if (request.method === "GET" && url.pathname === "/etsy/oauth/callback") return await handleEtsyCallback(request, env);
     if (url.pathname.startsWith("/api/") && !authorized(request, env)) return json(401, { error: "Uygulama erişim anahtarı geçersiz." });
 
     if (request.method === "GET" && url.pathname === "/api/channels/status") {
+      let shopier: unknown;
       try {
-        return json(200, { shopier: await getShopierSnapshot(env) });
+        shopier = await getShopierSnapshot(env);
       } catch (error) {
         const code = error instanceof ShopierIntegrationError ? error.code : "UPSTREAM_FAILED";
         const messages: Record<string, string> = {
@@ -65,19 +74,22 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
           RATE_LIMITED: "Shopier istek sınırına ulaşıldı. Birkaç dakika sonra tekrar deneyin.",
           UPSTREAM_FAILED: "Shopier geçici olarak yanıt vermedi."
         };
-        return json(200, {
-          shopier: {
-            configured: Boolean(env.SHOPIER_ACCESS_TOKEN),
-            connected: false,
-            error: code,
-            upstreamStatus: error instanceof ShopierIntegrationError ? error.status : undefined,
-            failedEndpoint: error instanceof ShopierIntegrationError ? error.endpoint : undefined,
-            upstreamCode: error instanceof ShopierIntegrationError ? error.upstreamCode : undefined,
-            upstreamMessage: error instanceof ShopierIntegrationError ? error.upstreamMessage : undefined,
-            message: messages[code] || messages.UPSTREAM_FAILED
-          }
-        });
+        shopier = {
+          configured: Boolean(env.SHOPIER_ACCESS_TOKEN),
+          connected: false,
+          error: code,
+          upstreamStatus: error instanceof ShopierIntegrationError ? error.status : undefined,
+          failedEndpoint: error instanceof ShopierIntegrationError ? error.endpoint : undefined,
+          upstreamCode: error instanceof ShopierIntegrationError ? error.upstreamCode : undefined,
+          upstreamMessage: error instanceof ShopierIntegrationError ? error.upstreamMessage : undefined,
+          message: messages[code] || messages.UPSTREAM_FAILED
+        };
       }
+      return json(200, { shopier, etsy: await getEtsyStatus(env) });
+    }
+
+    if (request.method === "POST" && url.pathname === "/api/etsy/connect-session") {
+      return json(200, await createEtsyConnectSession(request, env));
     }
 
     if (request.method === "GET" && url.pathname === "/api/shopier/products") {
@@ -156,6 +168,13 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
     if (code === "AI_FREE_QUOTA_EXCEEDED") return json(429, { error: "Ücretsiz Gemini kotası doldu. Kota yenilenince tekrar deneyin; ücretli işlem yapılmadı." });
     if (code === "AI_PROVIDER_REQUEST_FAILED") return json(502, { error: "Gemini geçici olarak yanıt vermedi. Bir süre sonra tekrar deneyin." });
     if (code === "INVALID_IMAGE_INPUT") return json(400, { error: "Görsel biçimi veya boyutu uygun değil." });
+    if (error instanceof EtsyIntegrationError) {
+      if (error.code === "NOT_CONFIGURED") return json(503, { error: "Etsy keystring ve shared secret henüz sunucuya eklenmedi." });
+      if (error.code === "STORAGE_NOT_CONFIGURED") return json(503, { error: "Etsy güvenli token deposu henüz bağlanmadı." });
+      if (error.code === "NOT_CONNECTED") return json(401, { error: "Etsy hesabı henüz bağlanmadı." });
+      if (error.code === "AUTH_FAILED") return json(401, { error: error.message });
+      return json(502, { error: "Etsy geçici olarak yanıt vermedi." });
+    }
     if (error instanceof ShopierIntegrationError) {
       if (error.code === "NOT_CONFIGURED") return json(503, { error: "Shopier erişim anahtarı henüz sunucuya eklenmedi." });
       if (error.code === "AUTH_FAILED") return json(401, { error: "Shopier erişim anahtarı reddedildi." });
