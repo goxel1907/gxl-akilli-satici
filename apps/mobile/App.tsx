@@ -186,13 +186,17 @@ function Overview({ data, setTab, online, channels }: any) {
     ? `Bağlı · ${shopier.productCount} ürün · 30 günde ${shopier.recentOrderCount} sipariş`
     : shopier?.message || (shopier?.configured ? "Bağlantı doğrulanamadı" : "Bağlantı bekliyor");
   const etsy = channels?.etsy;
-  const etsyStatus = etsy?.connected
+  const etsyAuthorized = Boolean(etsy?.authorized || etsy?.connected);
+  const etsyShopReady = Boolean(etsy?.shopReady || etsy?.shopId);
+  const etsyStatus = etsyShopReady
     ? `Bağlı${etsy.shopName ? ` · ${etsy.shopName}` : ""}`
-    : etsy?.message || (!etsy?.configured
-      ? "API anahtarları bekleniyor"
-      : !etsy?.storageConfigured
-        ? "Güvenli token deposu bekleniyor"
-        : "Bağlanmak için dokun");
+    : etsyAuthorized
+      ? "Hesap yetkili · mağaza kurulumunu tamamla"
+      : etsy?.message || (!etsy?.configured
+        ? "API anahtarları bekleniyor"
+        : !etsy?.storageConfigured
+          ? "Güvenli token deposu bekleniyor"
+          : "Bağlanmak için dokun");
   return <>
     <Text style={styles.sectionTitle}>Bugünün görünümü</Text>
     <View style={styles.metrics}>
@@ -212,7 +216,7 @@ function Overview({ data, setTab, online, channels }: any) {
       <Channel name="Instagram / Facebook" status="Meta gelen kutusunu aç" icon="logo-instagram" onPress={() => openUrl("https://business.facebook.com/latest/inbox/all/", "Meta Business Suite")} />
       <Channel name="Shopier" status={shopierStatus} icon="bag-handle" connected={Boolean(shopier?.connected)} onPress={() => openUrl("https://www.shopier.com/goxsel/49555980", "Shopier")} />
       <Channel name="Letgo" status="İlanı aç · manuel devralma" icon="open-outline" onPress={() => openUrl("https://www.letgo.com/ad/1732503836", "Letgo")} />
-      <Channel name="Etsy" status={etsyStatus} icon="storefront-outline" connected={Boolean(etsy?.connected)} onPress={() => etsy?.connected ? openUrl("https://www.etsy.com/your/shops/me/dashboard", "Etsy") : connectEtsy()} />
+      <Channel name="Etsy" status={etsyStatus} icon="storefront-outline" connected={etsyAuthorized} onPress={() => etsyShopReady ? openUrl("https://www.etsy.com/your/shops/me/dashboard", "Etsy mağaza yöneticisi") : etsyAuthorized ? openUrl("https://www.etsy.com/sell", "Etsy mağaza kurulumu") : connectEtsy()} />
       <Channel name="E-posta" status={SALES_EMAIL} icon="mail-outline" onPress={() => openUrl(`mailto:${SALES_EMAIL}?subject=${encodeURIComponent("GXL Market Studio")}`, "E-posta")} />
     </View>
   </>;

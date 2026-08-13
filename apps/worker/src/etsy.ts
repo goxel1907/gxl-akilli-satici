@@ -187,10 +187,23 @@ export async function getEtsyStatus(env: EtsyRuntimeEnv) {
 
   try {
     const shop = safeShopSummary(await etsyApi(env, `/application/users/${encodeURIComponent(tokens.userId)}/shops`));
+    if (!shop.shopId) {
+      return {
+        configured: true,
+        storageConfigured: true,
+        authorized: true,
+        connected: false,
+        shopReady: false,
+        scope: tokens.scope,
+        message: "Etsy hesap izni tamamlandı; mağaza kurulumu bekliyor."
+      };
+    }
     return {
       configured: true,
       storageConfigured: true,
+      authorized: true,
       connected: true,
+      shopReady: true,
       scope: tokens.scope,
       ...shop
     };
