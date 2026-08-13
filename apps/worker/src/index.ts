@@ -72,6 +72,8 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
             error: code,
             upstreamStatus: error instanceof ShopierIntegrationError ? error.status : undefined,
             failedEndpoint: error instanceof ShopierIntegrationError ? error.endpoint : undefined,
+            upstreamCode: error instanceof ShopierIntegrationError ? error.upstreamCode : undefined,
+            upstreamMessage: error instanceof ShopierIntegrationError ? error.upstreamMessage : undefined,
             message: messages[code] || messages.UPSTREAM_FAILED
           }
         });
