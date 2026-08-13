@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { ActivityIndicator, Alert, Image, Linking, Modal, Pressable, SafeAreaView, ScrollView, Share, StatusBar, StyleSheet, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Alert, AppState, Image, Linking, Modal, Pressable, SafeAreaView, ScrollView, Share, StatusBar, StyleSheet, Text, TextInput, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as ImagePicker from "expo-image-picker";
@@ -36,7 +36,10 @@ export default function App() {
   const [data, setData] = useState<any>(demo);
   const [loading, setLoading] = useState(true);
   const [online, setOnline] = useState(false);
-  const [channels, setChannels] = useState<any>({ shopier: { configured: false, connected: false } });
+  const [channels, setChannels] = useState<any>({
+    shopier: { configured: false, connected: false },
+    etsy: { configured: false, storageConfigured: false, connected: false }
+  });
 
   const refresh = async () => {
     if (!API_URL) {
@@ -53,7 +56,10 @@ export default function App() {
       if (!response.ok) throw new Error();
       setData(await response.json());
       if (channelResponse.ok) setChannels(await channelResponse.json());
-      else setChannels({ shopier: { configured: true, connected: false, message: "Shopier durumu alınamadı." } });
+      else setChannels({
+        shopier: { configured: true, connected: false, message: "Shopier durumu alınamadı." },
+        etsy: { configured: true, storageConfigured: true, connected: false, message: "Etsy durumu alınamadı." }
+      });
       setOnline(true);
     } catch {
       setData(demo);
@@ -64,6 +70,12 @@ export default function App() {
   };
 
   useEffect(() => { refresh(); }, []);
+  useEffect(() => {
+    const subscription = AppState.addEventListener("change", (state) => {
+      if (state === "active") refresh();
+    });
+    return () => subscription.remove();
+  }, []);
   useEffect(() => {
     AsyncStorage.getItem("gxl.localProducts").then((stored) => {
       if (!stored) return;
@@ -149,11 +161,38 @@ async function openUrl(url: string, label: string) {
   }
 }
 
+async function connectEtsy() {
+  if (!API_URL) {
+    Alert.alert("Sunucu bağlı değil", "Önce GXL API bağlantısını yapılandırın.");
+    return;
+  }
+  try {
+    const response = await fetch(`${API_URL}/api/etsy/connect-session`, {
+      method: "POST",
+      headers: apiHeaders(true),
+      body: JSON.stringify({ source: "gxl-mobile" })
+    });
+    const result = await response.json() as any;
+    if (!response.ok || !result.authorizationUrl) throw new Error(result.error || "Etsy bağlantısı başlatılamadı.");
+    await openUrl(result.authorizationUrl, "Etsy yetkilendirme");
+  } catch (error) {
+    Alert.alert("Etsy bağlantısı", error instanceof Error ? error.message : "Bağlantı başlatılamadı.");
+  }
+}
+
 function Overview({ data, setTab, online, channels }: any) {
   const shopier = channels?.shopier;
   const shopierStatus = shopier?.connected
     ? `Bağlı · ${shopier.productCount} ürün · 30 günde ${shopier.recentOrderCount} sipariş`
     : shopier?.message || (shopier?.configured ? "Bağlantı doğrulanamadı" : "Bağlantı bekliyor");
+  const etsy = channels?.etsy;
+  const etsyStatus = etsy?.connected
+    ? `Bağlı${etsy.shopName ? ` · ${etsy.shopName}` : ""}`
+    : etsy?.message || (!etsy?.configured
+      ? "API anahtarları bekleniyor"
+      : !etsy?.storageConfigured
+        ? "Güvenli token deposu bekleniyor"
+        : "Bağlanmak için dokun");
   return <>
     <Text style={styles.sectionTitle}>Bugünün görünümü</Text>
     <View style={styles.metrics}>
@@ -173,7 +212,7 @@ function Overview({ data, setTab, online, channels }: any) {
       <Channel name="Instagram / Facebook" status="Meta gelen kutusunu aç" icon="logo-instagram" onPress={() => openUrl("https://business.facebook.com/latest/inbox/all/", "Meta Business Suite")} />
       <Channel name="Shopier" status={shopierStatus} icon="bag-handle" connected={Boolean(shopier?.connected)} onPress={() => openUrl("https://www.shopier.com/goxsel/49555980", "Shopier")} />
       <Channel name="Letgo" status="İlanı aç · manuel devralma" icon="open-outline" onPress={() => openUrl("https://www.letgo.com/ad/1732503836", "Letgo")} />
-      <Channel name="Etsy" status="Mağaza yöneticisini aç · bağlantı gerekli" icon="storefront-outline" onPress={() => openUrl("https://www.etsy.com/your/shops/me/dashboard", "Etsy")} />
+      <Channel name="Etsy" status={etsyStatus} icon="storefront-outline" connected={Boolean(etsy?.connected)} onPress={() => etsy?.connected ? openUrl("https://www.etsy.com/your/shops/me/dashboard", "Etsy") : connectEtsy()} />
       <Channel name="E-posta" status={SALES_EMAIL} icon="mail-outline" onPress={() => openUrl(`mailto:${SALES_EMAIL}?subject=${encodeURIComponent("GXL Market Studio")}`, "E-posta")} />
     </View>
   </>;
