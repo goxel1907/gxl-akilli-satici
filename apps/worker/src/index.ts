@@ -65,7 +65,16 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
           RATE_LIMITED: "Shopier istek sınırına ulaşıldı. Birkaç dakika sonra tekrar deneyin.",
           UPSTREAM_FAILED: "Shopier geçici olarak yanıt vermedi."
         };
-        return json(200, { shopier: { configured: Boolean(env.SHOPIER_ACCESS_TOKEN), connected: false, error: code, message: messages[code] || messages.UPSTREAM_FAILED } });
+        return json(200, {
+          shopier: {
+            configured: Boolean(env.SHOPIER_ACCESS_TOKEN),
+            connected: false,
+            error: code,
+            upstreamStatus: error instanceof ShopierIntegrationError ? error.status : undefined,
+            failedEndpoint: error instanceof ShopierIntegrationError ? error.endpoint : undefined,
+            message: messages[code] || messages.UPSTREAM_FAILED
+          }
+        });
       }
     }
 
