@@ -54,7 +54,7 @@ function asArray<T>(value: unknown): T[] {
 }
 
 async function shopierGet<T>(env: ShopierRuntimeEnv, path: string, query: Record<string, string | number | undefined>, fetcher: Fetcher): Promise<T> {
-  const token = env.SHOPIER_ACCESS_TOKEN?.trim();
+  const token = env.SHOPIER_ACCESS_TOKEN?.trim().replace(/^Bearer\s+/i, "").replace(/^(["'])(.*)\1$/, "$2").trim();
   if (!token) throw new ShopierIntegrationError("NOT_CONFIGURED");
 
   const url = new URL(`${API_BASE}${path}`);
