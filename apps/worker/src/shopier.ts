@@ -1,3 +1,4 @@
+// Deployment refresh: 2026-08-13 Shopier secret binding
 export interface ShopierRuntimeEnv {
   SHOPIER_ACCESS_TOKEN?: string;
 }
