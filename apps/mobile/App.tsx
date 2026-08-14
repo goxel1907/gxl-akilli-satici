@@ -114,9 +114,15 @@ export default function App() {
     }
     try {
       const response = await fetch(`${API_URL}/api/approvals/${id}/${action}`, { method: "POST", headers: apiHeaders() });
-      if (!response.ok) throw new Error();
+      const result = await response.json() as any;
+      if (!response.ok) throw new Error(result.error || "Onay işlemi tamamlanamadı.");
       await refresh();
-      Alert.alert(action === "approve" ? "Onaylandı" : "Reddedildi", action === "approve" ? "İlk mesaj gönderim kuyruğuna alındı." : "Taslak iptal edildi.");
+      if (action === "approve" && item) {
+        await handoffMessage(item);
+        Alert.alert("Onaylandı", "Mesaj otomatik gönderilmedi. Telefonun paylaşım ekranından doğru alıcıyı seçerek manuel gönderin.");
+      } else {
+        Alert.alert("Reddedildi", "Taslak iptal edildi.");
+      }
     } catch {
       setOnline(false);
       Alert.alert("Bağlantı kesildi", "Mesaj otomatik gönderilmedi. Kanal bağlantısı yeniden kurulmalı.");
@@ -131,7 +137,7 @@ export default function App() {
           <Text style={styles.eyebrow}>SATIŞ MERKEZİ</Text>
           <Text style={styles.title}>GXL Akıllı Satıcı</Text>
         </View>
-        <View style={[styles.agentBadge, !online && styles.localBadge]}><View style={[styles.dot, !online && styles.localDot]} /><Text style={styles.agentText}>{online ? "Ajan bağlı" : "Yerel mod"}</Text></View>
+        <View style={[styles.agentBadge, !online && styles.localBadge]}><View style={[styles.dot, !online && styles.localDot]} /><Text style={styles.agentText}>{online ? "Sunucu bağlı" : "Yerel mod"}</Text></View>
       </View>
       {loading ? <ActivityIndicator style={{ marginTop: 40 }} color="#C88B47" /> : (
         <ScrollView contentContainerStyle={styles.content}>
@@ -191,12 +197,12 @@ function Overview({ data, setTab, online, channels }: any) {
   const etsyStatus = etsyShopReady
     ? `Bağlı${etsy.shopName ? ` · ${etsy.shopName}` : ""}`
     : etsyAuthorized
-      ? "Hesap yetkili · mağaza kurulumunu tamamla"
+      ? "Hesap yetkili · mağaza kurulumu/ücret adımı bekliyor"
       : etsy?.message || (!etsy?.configured
         ? "API anahtarları bekleniyor"
         : !etsy?.storageConfigured
           ? "Güvenli token deposu bekleniyor"
-          : "Bağlanmak için dokun");
+          : "API hazır · Etsy hesabını yetkilendir");
   return <>
     <Text style={styles.sectionTitle}>Bugünün görünümü</Text>
     <View style={styles.metrics}>
@@ -212,11 +218,11 @@ function Overview({ data, setTab, online, channels }: any) {
     <Pressable style={styles.primary} onPress={() => setTab("Onaylar")}><Text style={styles.primaryText}>Onay kuyruğunu aç</Text><Ionicons name="arrow-forward" size={18} color="white" /></Pressable>
     <Text style={styles.sectionTitle}>Kanallar</Text>
     <View style={styles.card}>
-      <Channel name="WhatsApp" status="Uygulamayı aç" icon="logo-whatsapp" onPress={() => openUrl("https://wa.me/", "WhatsApp")} />
-      <Channel name="Instagram / Facebook" status="Meta gelen kutusunu aç" icon="logo-instagram" onPress={() => openUrl("https://business.facebook.com/latest/inbox/all/", "Meta Business Suite")} />
+      <Channel name="WhatsApp" status="Bağlı değil · yalnızca manuel paylaşım" icon="logo-whatsapp" onPress={() => openUrl("https://wa.me/", "WhatsApp")} />
+      <Channel name="Instagram / Facebook" status="Bağlı değil · yalnızca gelen kutusu açılır" icon="logo-instagram" onPress={() => openUrl("https://business.facebook.com/latest/inbox/all/", "Meta Business Suite")} />
       <Channel name="Shopier" status={shopierStatus} icon="bag-handle" connected={Boolean(shopier?.connected)} onPress={() => openUrl("https://www.shopier.com/goxsel/49555980", "Shopier")} />
       <Channel name="Letgo" status="İlanı aç · manuel devralma" icon="open-outline" onPress={() => openUrl("https://www.letgo.com/ad/1732503836", "Letgo")} />
-      <Channel name="Etsy" status={etsyStatus} icon="storefront-outline" connected={etsyAuthorized} onPress={() => etsyShopReady ? openUrl("https://www.etsy.com/your/shops/me/dashboard", "Etsy mağaza yöneticisi") : etsyAuthorized ? openUrl("https://www.etsy.com/sell", "Etsy mağaza kurulumu") : connectEtsy()} />
+      <Channel name="Etsy" status={etsyStatus} icon="storefront-outline" connected={etsyShopReady} onPress={() => etsyShopReady ? openUrl("https://www.etsy.com/your/shops/me/dashboard", "Etsy mağaza yöneticisi") : etsyAuthorized ? openUrl("https://www.etsy.com/sell", "Etsy mağaza kurulumu") : connectEtsy()} />
       <Channel name="E-posta" status={SALES_EMAIL} icon="mail-outline" onPress={() => openUrl(`mailto:${SALES_EMAIL}?subject=${encodeURIComponent("GXL Market Studio")}`, "E-posta")} />
     </View>
   </>;
@@ -232,7 +238,7 @@ function Channel({ name, status, icon, onPress, connected }: any) {
 
 function Approvals({ items, decide }: any) {
   if (!items.length) return <Empty icon="checkmark-done" title="Kuyruk temiz" text="Onay bekleyen ilk mesaj bulunmuyor." />;
-  return <><Text style={styles.sectionTitle}>İlk temas onayları</Text>{items.map((item: any) => <View style={styles.card} key={item.id}><View style={styles.pill}><Text style={styles.pillText}>{item.channel}</Text></View><Text style={styles.cardTitle}>Gönderilecek mesaj</Text><Text style={styles.quote}>{item.draft}</Text><View style={styles.actions}><Pressable style={styles.reject} onPress={() => decide(item.id, "reject")}><Text style={styles.rejectText}>Reddet</Text></Pressable><Pressable style={styles.approve} onPress={() => decide(item.id, "approve")}><Text style={styles.primaryText}>Onayla ve gönder</Text></Pressable></View></View>)}</>;
+  return <><Text style={styles.sectionTitle}>İlk temas onayları</Text>{items.map((item: any) => <View style={styles.card} key={item.id}><View style={styles.pill}><Text style={styles.pillText}>{item.channel}</Text></View><Text style={styles.cardTitle}>Gönderilecek mesaj</Text><Text style={styles.quote}>{item.draft}</Text><View style={styles.actions}><Pressable style={styles.reject} onPress={() => decide(item.id, "reject")}><Text style={styles.rejectText}>Reddet</Text></Pressable><Pressable style={styles.approve} onPress={() => decide(item.id, "approve")}><Text style={styles.primaryText}>Onayla ve devret</Text></Pressable></View></View>)}</>;
 }
 
 function Leads({ items }: any) {
