@@ -105,6 +105,25 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
     if (request.method === "GET" && url.pathname === "/api/leads") return json(200, leads);
     if (request.method === "GET" && url.pathname === "/api/approvals") return json(200, approvals);
 
+    const approvalDecision = url.pathname.match(/^\/api\/approvals\/([^/]+)\/(approve|reject)$/);
+    if (request.method === "POST" && approvalDecision) {
+      const [, approvalId, action] = approvalDecision;
+      const approval = approvals.find((item) => item.id === decodeURIComponent(approvalId));
+      if (!approval) return json(404, { error: "Onay kaydı bulunamadı." });
+      if (approval.status !== "pending") return json(409, { error: "Bu taslak daha önce karara bağlandı." });
+      approval.status = action === "approve" ? "approved" : "rejected";
+      approval.decidedAt = new Date().toISOString();
+      return json(200, {
+        ok: true,
+        status: approval.status,
+        sent: false,
+        delivery: action === "approve" ? "manual_handoff" : "cancelled",
+        message: action === "approve"
+          ? "Taslak onaylandı; otomatik gönderilmedi. Doğru alıcı ve kanal kullanıcı tarafından seçilmelidir."
+          : "Taslak reddedildi ve gönderilmedi."
+      });
+    }
+
     if (request.method === "POST" && url.pathname === "/api/products/analyze-images") {
       const input = await readBody(request);
       const imageDataUrls = Array.isArray(input.imageDataUrls) ? input.imageDataUrls.map(String) : [];
