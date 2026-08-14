@@ -4,5 +4,11 @@
   "main": "apps/worker/src/index.ts",
   "compatibility_date": "2026-08-12",
   "compatibility_flags": ["nodejs_compat"],
-  "observability": { "enabled": true }
+  "observability": { "enabled": true },
+  "kv_namespaces": [
+    {
+      "binding": "ETSY_OAUTH",
+      "id": "a25ddefa50874df19970648274b891c7"
+    }
+  ]
 }
