@@ -3,6 +3,7 @@ import { generateListingPack } from "../../api/src/listing-agent.js";
 import { evaluateMarketplacePolicies, type ProductOrigin, type RiskFlag } from "../../api/src/marketplace-policy.js";
 import { analyzeProductImages } from "../../api/src/product-analyzer.js";
 import { scoreProspect, type ProspectSignal } from "../../api/src/prospecting.js";
+import { answerSalesAgent, buildOpportunityRadar, type CatalogProduct } from "../../api/src/sales-agent.js";
 import type { AiRuntimeEnv } from "../../api/src/structured-ai.js";
 import { getShopierSnapshot, listRedactedShopierOrders, listShopierProducts, ShopierIntegrationError, type ShopierRuntimeEnv } from "./shopier.js";
 import { createEtsyConnectSession, EtsyIntegrationError, getEtsyStatus, handleEtsyCallback, type EtsyRuntimeEnv } from "./etsy.js";
@@ -40,6 +41,47 @@ function dashboard() {
     products,
     messages: messages.slice(-20)
   };
+}
+
+async function opportunityContext(env: Env) {
+  let catalog: CatalogProduct[] = products.map((product) => ({
+    id: product.id,
+    title: product.name,
+    url: product.shopierUrl || product.letgoUrl,
+    price: product.priceTry,
+    currency: "TRY"
+  }));
+  let shopierConnected = false;
+
+  try {
+    const liveProducts = await listShopierProducts(env);
+    shopierConnected = true;
+    if (liveProducts.length) {
+      catalog = liveProducts.map((product) => ({
+        id: product.id,
+        title: product.title,
+        url: product.url,
+        price: product.price,
+        currency: product.currency
+      }));
+    }
+  } catch {
+    // Fırsat radarı, kanal geçici olarak yanıt vermediğinde yerel katalogla çalışmaya devam eder.
+  }
+
+  let etsyAuthorized = false;
+  let etsyShopReady = false;
+  try {
+    const status = await getEtsyStatus(env);
+    etsyAuthorized = Boolean(status.authorized || status.connected);
+    etsyShopReady = Boolean(status.shopReady || status.shopId);
+  } catch {
+    // Etsy kurulumu tamamlanana kadar diğer izinli kaynaklar kullanılabilir.
+  }
+
+  const base = { catalog, shopierConnected, etsyAuthorized, etsyShopReady };
+  const radar = buildOpportunityRadar(base);
+  return { ...base, sources: radar.sources, radar };
 }
 
 function authorized(request: Request, env: Env): boolean {
@@ -100,10 +142,51 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
       return json(200, { orders: await listRedactedShopierOrders(env), privacy: "Müşteri adı, telefon, e-posta ve adres bilgileri bu yanıtta bulunmaz." });
     }
 
+
+    if (request.method === "GET" && url.pathname === "/api/opportunities") {
+      const context = await opportunityContext(env);
+      return json(200, context.radar);
+    }
+
+    if (request.method === "POST" && url.pathname === "/api/agent/chat") {
+      const input = await readBody(request);
+      const message = String(input.message || "").trim();
+      if (!message) return json(400, { error: "Ajana yazmak için bir mesaj girin." });
+      if (message.length > 2_000) return json(400, { error: "Mesaj en fazla 2.000 karakter olabilir." });
+      const context = await opportunityContext(env);
+      const answer = await answerSalesAgent(message, {
+        catalog: context.catalog,
+        shopierConnected: context.shopierConnected,
+        etsyAuthorized: context.etsyAuthorized,
+        etsyShopReady: context.etsyShopReady,
+        sources: context.sources
+      }, env);
+      return json(200, { ...answer, generatedAt: new Date().toISOString() });
+    }
+
     if (request.method === "GET" && url.pathname === "/api/dashboard") return json(200, dashboard());
     if (request.method === "GET" && url.pathname === "/api/products") return json(200, products);
     if (request.method === "GET" && url.pathname === "/api/leads") return json(200, leads);
     if (request.method === "GET" && url.pathname === "/api/approvals") return json(200, approvals);
+
+    const approvalDecision = url.pathname.match(/^\/api\/approvals\/([^/]+)\/(approve|reject)$/);
+    if (request.method === "POST" && approvalDecision) {
+      const [, approvalId, action] = approvalDecision;
+      const approval = approvals.find((item) => item.id === decodeURIComponent(approvalId));
+      if (!approval) return json(404, { error: "Onay kaydı bulunamadı." });
+      if (approval.status !== "pending") return json(409, { error: "Bu taslak daha önce karara bağlandı." });
+      approval.status = action === "approve" ? "approved" : "rejected";
+      approval.decidedAt = new Date().toISOString();
+      return json(200, {
+        ok: true,
+        status: approval.status,
+        sent: false,
+        delivery: action === "approve" ? "manual_handoff" : "cancelled",
+        message: action === "approve"
+          ? "Taslak onaylandı; otomatik gönderilmedi. Doğru alıcı ve kanal kullanıcı tarafından seçilmelidir."
+          : "Taslak reddedildi ve gönderilmedi."
+      });
+    }
 
     if (request.method === "POST" && url.pathname === "/api/products/analyze-images") {
       const input = await readBody(request);
