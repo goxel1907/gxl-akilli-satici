@@ -11,7 +11,7 @@ const apiHeaders = (json = false) => ({
   ...(json ? { "content-type": "application/json" } : {}),
   ...(API_TOKEN ? { authorization: `Bearer ${API_TOKEN}` } : {})
 });
-type Tab = "Özet" | "Onaylar" | "Müşteriler" | "Ürünler";
+type Tab = "Özet" | "Onaylar" | "Fırsatlar" | "Ürünler" | "Ajan";
 type ProductOrigin = "made_by_seller" | "designed_by_seller" | "vintage" | "craft_supply" | "commercial_resale" | "unknown";
 
 const demo = {
@@ -31,6 +31,29 @@ const productImages: Record<string, any> = {
   "gxl-gumus-telkari": require("./assets/products/gxl-telkari-1.jpg")
 };
 
+const fallbackRadar = {
+  generatedAt: "",
+  policy: {
+    firstContactApprovalRequired: true,
+    unsolicitedBulkMessaging: false,
+    automaticSendEnabled: false
+  },
+  sources: [
+    { id: "shopier-inbound", name: "Shopier soru ve siparişleri", status: "ready", mode: "inbound", explanation: "Ürünü gören ve size ulaşan gerçek alıcı sinyalleri.", nextStep: "Soruları ve siparişleri düzenli kontrol et." },
+    { id: "email-inbound", name: "E-posta talepleri", status: "ready", mode: "inbound", explanation: "GXL adresine gelen ürün soruları ve teklif talepleri.", nextStep: "Gelen mesajları izinli aday havuzuna al." },
+    { id: "forms-referrals", name: "Formlar ve referanslar", status: "ready", mode: "opt_in", explanation: "Kampanya formu, QR kodu ve müşteri tavsiyesiyle gelen izinli adaylar.", nextStep: "Ürün gruplarına özel ilgi formu oluştur." },
+    { id: "public-trends", name: "Açık web eğilimleri", status: "research_only", mode: "research", explanation: "Ürün, kategori ve ülke talebini araştırır; kişi kimliği toplamaz.", nextStep: "Talep gören kategori ve içerik fikirlerini Ajana Sor." },
+    { id: "letgo-manual", name: "Letgo ilanları", status: "deferred", mode: "manual", explanation: "Ücretli ilan nedeniyle şimdilik manuel devirde.", nextStep: "Hazır başlık ve açıklamayı kopyalayıp ilanı elle yönet." }
+  ],
+  matches: demo.products.map((product) => ({
+    productId: product.id,
+    productName: product.name,
+    audienceSegments: ["Ürünün kategorisiyle ilgilenen alıcılar", "Hediye arayan müşteriler", "Koleksiyon ve el işi meraklıları"],
+    recommendedSources: ["Shopier soru ve siparişleri", "E-posta talepleri", "Formlar ve referanslar", "Açık web eğilimleri"],
+    firstContactNeedsApproval: true
+  }))
+};
+
 export default function App() {
   const [tab, setTab] = useState<Tab>("Özet");
   const [data, setData] = useState<any>(demo);
@@ -40,6 +63,15 @@ export default function App() {
     shopier: { configured: false, connected: false },
     etsy: { configured: false, storageConfigured: false, connected: false }
   });
+  const [radar, setRadar] = useState<any>(fallbackRadar);
+  const [agentInput, setAgentInput] = useState("");
+  const [agentBusy, setAgentBusy] = useState(false);
+  const [agentMessages, setAgentMessages] = useState<any[]>([
+    {
+      role: "assistant",
+      text: "Merhaba. Ürün, hedef kitle, kanal, ilan metni ve güvenli satış adımları hakkında Türkçe sorabilirsiniz. Gerçek kişi bulunmadığında bunu açıkça söylerim; izinsiz mesaj göndermem."
+    }
+  ]);
 
   const refresh = async () => {
     if (!API_URL) {
@@ -49,12 +81,14 @@ export default function App() {
       return;
     }
     try {
-      const [response, channelResponse] = await Promise.all([
+      const [response, channelResponse, opportunityResponse] = await Promise.all([
         fetch(`${API_URL}/api/dashboard`, { headers: apiHeaders() }),
-        fetch(`${API_URL}/api/channels/status`, { headers: apiHeaders() })
+        fetch(`${API_URL}/api/channels/status`, { headers: apiHeaders() }),
+        fetch(`${API_URL}/api/opportunities`, { headers: apiHeaders() })
       ]);
       if (!response.ok) throw new Error();
       setData(await response.json());
+      if (opportunityResponse.ok) setRadar(await opportunityResponse.json());
       if (channelResponse.ok) setChannels(await channelResponse.json());
       else setChannels({
         shopier: { configured: true, connected: false, message: "Shopier durumu alınamadı." },
@@ -129,6 +163,38 @@ export default function App() {
     }
   };
 
+  const askAgent = async (suggestedMessage?: string) => {
+    const message = (suggestedMessage || agentInput).trim();
+    if (!message || agentBusy) return;
+    setAgentMessages((current) => [...current, { role: "user", text: message }]);
+    setAgentInput("");
+    setAgentBusy(true);
+    try {
+      if (!API_URL) throw new Error("Canlı ajan sunucusu bağlı değil.");
+      const response = await fetch(`${API_URL}/api/agent/chat`, {
+        method: "POST",
+        headers: apiHeaders(true),
+        body: JSON.stringify({ message })
+      });
+      const result = await response.json() as any;
+      if (!response.ok) throw new Error(result.error || "Ajan yanıt veremedi.");
+      setAgentMessages((current) => [...current, {
+        role: "assistant",
+        text: result.answer,
+        actions: result.actions || [],
+        warnings: result.warnings || [],
+        requiresApproval: Boolean(result.requiresApproval)
+      }]);
+    } catch (error) {
+      setAgentMessages((current) => [...current, {
+        role: "assistant",
+        text: `${error instanceof Error ? error.message : "Bağlantı kurulamadı."} Ürün kataloğu ve fırsat radarı kullanılabilir; canlı yapay zekâ yanıtı için sunucu bağlantısını yenileyin.`
+      }]);
+    } finally {
+      setAgentBusy(false);
+    }
+  };
+
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="light-content" backgroundColor="#12261F" />
@@ -141,16 +207,17 @@ export default function App() {
       </View>
       {loading ? <ActivityIndicator style={{ marginTop: 40 }} color="#C88B47" /> : (
         <ScrollView contentContainerStyle={styles.content}>
-          {tab === "Özet" && <Overview data={data} setTab={setTab} online={online} channels={channels} />}
+          {tab === "Özet" && <Overview data={data} setTab={setTab} online={online} channels={channels} radar={radar} />}
           {tab === "Onaylar" && <Approvals items={pending} decide={decide} />}
-          {tab === "Müşteriler" && <Leads items={data.leads} />}
+          {tab === "Fırsatlar" && <Leads items={data.leads} radar={radar} />}
           {tab === "Ürünler" && <Products items={data.products} addProduct={addProduct} />}
+          {tab === "Ajan" && <AgentScreen messages={agentMessages} input={agentInput} setInput={setAgentInput} onSend={askAgent} busy={agentBusy} />}
         </ScrollView>
       )}
       <View style={styles.nav}>
-        {(["Özet", "Onaylar", "Müşteriler", "Ürünler"] as Tab[]).map((item) => (
+        {(["Özet", "Onaylar", "Fırsatlar", "Ürünler", "Ajan"] as Tab[]).map((item) => (
           <Pressable key={item} style={styles.navItem} onPress={() => setTab(item)}>
-            <Ionicons name={item === "Özet" ? "grid" : item === "Onaylar" ? "checkmark-circle" : item === "Müşteriler" ? "people" : "cube"} size={22} color={tab === item ? "#C88B47" : "#748079"} />
+            <Ionicons name={item === "Özet" ? "grid" : item === "Onaylar" ? "checkmark-circle" : item === "Fırsatlar" ? "compass" : item === "Ürünler" ? "cube" : "sparkles"} size={21} color={tab === item ? "#C88B47" : "#748079"} />
             <Text style={[styles.navText, tab === item && styles.navTextActive]}>{item}</Text>
           </Pressable>
         ))}
@@ -186,7 +253,7 @@ async function connectEtsy() {
   }
 }
 
-function Overview({ data, setTab, online, channels }: any) {
+function Overview({ data, setTab, online, channels, radar }: any) {
   const shopier = channels?.shopier;
   const shopierStatus = shopier?.connected
     ? `Bağlı · ${shopier.productCount} ürün · 30 günde ${shopier.recentOrderCount} sipariş`
@@ -203,6 +270,7 @@ function Overview({ data, setTab, online, channels }: any) {
         : !etsy?.storageConfigured
           ? "Güvenli token deposu bekleniyor"
           : "API hazır · Etsy hesabını yetkilendir");
+  const usableSources = (radar?.sources || []).filter((source: any) => source.status === "active" || source.status === "ready" || source.status === "research_only").length;
   return <>
     <Text style={styles.sectionTitle}>Bugünün görünümü</Text>
     <View style={styles.metrics}>
@@ -213,9 +281,12 @@ function Overview({ data, setTab, online, channels }: any) {
     </View>
     <View style={styles.callout}>
       <View style={styles.calloutIcon}><Ionicons name="sparkles" size={24} color="#C88B47" /></View>
-      <View style={{ flex: 1 }}><Text style={styles.cardTitle}>Ajan özeti</Text><Text style={styles.muted}>{online ? `${data.metrics.activeLeads} müşteri adayı ve ${data.metrics.pendingApprovals} onay bekleyen mesaj var.` : "Yerel katalog modu. Otomatik müşteri bulma ve mesajlaşma için işletme kanallarını yetkilendirin."}</Text></View>
+      <View style={{ flex: 1 }}><Text style={styles.cardTitle}>Ajan özeti</Text><Text style={styles.muted}>{data.metrics.activeLeads > 0 ? `${data.metrics.activeLeads} gerçek müşteri adayı ve ${data.metrics.pendingApprovals} onay bekleyen mesaj var.` : `Henüz gerçek müşteri adayı yok. ${usableSources} güvenli kaynak ürün ve hedef kitle fırsatları için hazır.`}</Text></View>
     </View>
-    <Pressable style={styles.primary} onPress={() => setTab("Onaylar")}><Text style={styles.primaryText}>Onay kuyruğunu aç</Text><Ionicons name="arrow-forward" size={18} color="white" /></Pressable>
+    <View style={styles.homeActions}>
+      <Pressable style={[styles.primary, styles.homeButton]} onPress={() => setTab("Fırsatlar")}><Text style={styles.primaryText}>Fırsat radarını aç</Text><Ionicons name="compass" size={18} color="white" /></Pressable>
+      <Pressable style={[styles.secondaryButton, styles.homeButton]} onPress={() => setTab("Ajan")}><Ionicons name="sparkles" size={18} color="#315B4C" /><Text style={styles.secondaryButtonText}>Ajana Sor</Text></Pressable>
+    </View>
     <Text style={styles.sectionTitle}>Kanallar</Text>
     <View style={styles.card}>
       <Channel name="WhatsApp" status="Bağlı değil · yalnızca manuel paylaşım" icon="logo-whatsapp" onPress={() => openUrl("https://wa.me/", "WhatsApp")} />
@@ -241,9 +312,70 @@ function Approvals({ items, decide }: any) {
   return <><Text style={styles.sectionTitle}>İlk temas onayları</Text>{items.map((item: any) => <View style={styles.card} key={item.id}><View style={styles.pill}><Text style={styles.pillText}>{item.channel}</Text></View><Text style={styles.cardTitle}>Gönderilecek mesaj</Text><Text style={styles.quote}>{item.draft}</Text><View style={styles.actions}><Pressable style={styles.reject} onPress={() => decide(item.id, "reject")}><Text style={styles.rejectText}>Reddet</Text></Pressable><Pressable style={styles.approve} onPress={() => decide(item.id, "approve")}><Text style={styles.primaryText}>Onayla ve devret</Text></Pressable></View></View>)}</>;
 }
 
-function Leads({ items }: any) {
-  if (!items.length) return <Empty icon="people-outline" title="Henüz gerçek müşteri yok" text="Meta ve WhatsApp bağlantıları tamamlanınca izinli müşteri adayları burada gösterilecek." />;
-  return <><Text style={styles.sectionTitle}>Müşteri adayları</Text>{items.map((lead: any) => <View style={styles.card} key={lead.id}><View style={styles.leadTop}><View style={styles.avatar}><Text style={styles.avatarText}>{lead.displayName[0]}</Text></View><View style={{ flex: 1 }}><Text style={styles.cardTitle}>{lead.displayName}</Text><Text style={styles.small}>{lead.channel} · {lead.stage}</Text></View><View style={styles.score}><Text style={styles.scoreText}>{lead.score}</Text></View></View><Text style={styles.muted}>İlgi: {lead.interests.join(", ")}</Text></View>)}</>;
+function Leads({ items, radar }: any) {
+  const sourceLabels: Record<string, string> = {
+    active: "Canlı",
+    ready: "Hazır",
+    setup_required: "Bağlantı gerekli",
+    deferred: "Arka planda",
+    research_only: "Araştırma"
+  };
+  return <>
+    <Text style={styles.sectionTitle}>Gerçek müşteri adayları</Text>
+    {!items.length
+      ? <View style={styles.truthCard}><Ionicons name="shield-checkmark-outline" size={24} color="#315B4C" /><View style={{ flex: 1 }}><Text style={styles.cardTitle}>Henüz kişi kaydı yok</Text><Text style={styles.muted}>Ajan hayali müşteri üretmez. Shopier/Etsy soruları, e-posta, formlar, referanslar ve izinli kanal etkileşimleri geldikçe gerçek kişiler burada görünür.</Text></View></View>
+      : items.map((lead: any) => <View style={styles.card} key={lead.id}><View style={styles.leadTop}><View style={styles.avatar}><Text style={styles.avatarText}>{lead.displayName[0]}</Text></View><View style={{ flex: 1 }}><Text style={styles.cardTitle}>{lead.displayName}</Text><Text style={styles.small}>{lead.channel} · {lead.stage}</Text></View><View style={styles.score}><Text style={styles.scoreText}>{lead.score}</Text></View></View><Text style={styles.muted}>İlgi: {lead.interests.join(", ")}</Text></View>)}
+    <Text style={styles.sectionTitle}>Çok kaynaklı fırsat radarı</Text>
+    {(radar?.sources || []).map((source: any) => <View style={styles.sourceCard} key={source.id}>
+      <View style={styles.sourceHeader}><Text style={styles.cardTitle}>{source.name}</Text><View style={[styles.statusPill, source.status === "active" || source.status === "ready" ? styles.statusReady : source.status === "research_only" ? styles.statusResearch : styles.statusWaiting]}><Text style={styles.statusText}>{sourceLabels[source.status] || source.status}</Text></View></View>
+      <Text style={styles.muted}>{source.explanation}</Text>
+      <Text style={styles.nextStep}>Sonraki adım: {source.nextStep}</Text>
+    </View>)}
+    <Text style={styles.sectionTitle}>Ürün–hedef kitle eşleşmeleri</Text>
+    {(radar?.matches || []).map((match: any) => <View style={styles.card} key={match.productId}>
+      <Text style={styles.cardTitle}>{match.productName}</Text>
+      <Text style={styles.fieldLabel}>Hedef kitle</Text>
+      <Text style={styles.muted}>{match.audienceSegments.join(" · ")}</Text>
+      <Text style={styles.fieldLabel}>Önerilen kaynaklar</Text>
+      <Text style={styles.muted}>{match.recommendedSources.join(" · ")}</Text>
+      <Text style={styles.approvalNote}>İlk temas: sizin onayınız gerekir</Text>
+    </View>)}
+  </>;
+}
+
+function AgentScreen({ messages, input, setInput, onSend, busy }: any) {
+  const suggestions = [
+    "Shopier ürünlerim için hedef kitle öner",
+    "Bugün hangi satış fırsatlarına odaklanmalıyım?",
+    "Bir ürün için güvenli ilk mesaj taslağı yaz",
+    "Etsy açılınca ilk hangi ürünü hazırlayalım?"
+  ];
+  return <>
+    <Text style={styles.sectionTitle}>Ajana Sor</Text>
+    <View style={styles.agentNotice}>
+      <Ionicons name="information-circle-outline" size={22} color="#315B4C" />
+      <Text style={[styles.muted, { flex: 1 }]}>Ajan katalog ve bağlı kanal verilerini kullanır. İlk mesajı siz onaylamadan göndermez; anonim ziyaretçilerin kimliğini çıkarmaz.</Text>
+    </View>
+    <View style={styles.quickWrap}>{suggestions.map((suggestion) => <Pressable key={suggestion} style={styles.quickButton} disabled={busy} onPress={() => onSend(suggestion)}><Text style={styles.quickText}>{suggestion}</Text></Pressable>)}</View>
+    {messages.map((message: any, index: number) => <View key={`${message.role}-${index}`} style={[styles.messageBubble, message.role === "user" ? styles.userBubble : styles.assistantBubble]}>
+      <Text style={message.role === "user" ? styles.userMessageText : styles.assistantMessageText}>{message.text}</Text>
+      {!!message.actions?.length && <View style={styles.messageExtras}>{message.actions.map((action: string) => <Text key={action} style={styles.actionLine}>• {action}</Text>)}</View>}
+      {!!message.warnings?.length && <View style={styles.messageWarning}>{message.warnings.map((warning: string) => <Text key={warning} style={styles.warningText}>• {warning}</Text>)}</View>}
+      {message.requiresApproval && <Text style={styles.approvalNote}>Bu işlem ilk temas onayı gerektirir.</Text>}
+    </View>)}
+    {busy && <View style={[styles.messageBubble, styles.assistantBubble]}><ActivityIndicator color="#315B4C" /><Text style={styles.small}>Ajan katalog ve fırsatları inceliyor…</Text></View>}
+    <View style={styles.composer}>
+      <TextInput
+        style={styles.agentInput}
+        value={input}
+        onChangeText={setInput}
+        placeholder="Ajana Türkçe bir soru yazın"
+        placeholderTextColor="#8D9792"
+        multiline
+      />
+      <Pressable accessibilityRole="button" style={[styles.sendButton, (!input.trim() || busy) && styles.primaryDisabled]} disabled={!input.trim() || busy} onPress={() => onSend()}><Ionicons name="send" size={18} color="white" /></Pressable>
+    </View>
+  </>;
 }
 
 function Products({ items, addProduct }: any) {
@@ -364,6 +496,10 @@ const styles = StyleSheet.create({
   calloutIcon: { width: 40, height: 40, borderRadius: 12, backgroundColor: "white", alignItems: "center", justifyContent: "center" },
   primary: { flexDirection: "row", justifyContent: "center", alignItems: "center", gap: 10, backgroundColor: "#315B4C", padding: 15, borderRadius: 14, marginBottom: 20 },
   primaryText: { color: "white", fontWeight: "800" },
+  homeActions: { flexDirection: "row", gap: 9, marginBottom: 16 },
+  homeButton: { flex: 1, marginBottom: 0 },
+  secondaryButton: { flexDirection: "row", justifyContent: "center", alignItems: "center", gap: 8, borderWidth: 1, borderColor: "#315B4C", borderRadius: 14, padding: 14, backgroundColor: "white" },
+  secondaryButtonText: { color: "#315B4C", fontWeight: "800" },
   card: { backgroundColor: "white", borderRadius: 16, padding: 16, marginBottom: 12, borderWidth: 1, borderColor: "#E7E3D9" },
   cardTitle: { fontSize: 15, fontWeight: "800", color: "#17221E", marginBottom: 4 },
   muted: { color: "#68736E", lineHeight: 20 },
@@ -385,6 +521,31 @@ const styles = StyleSheet.create({
   avatarText: { color: "white", fontWeight: "800" },
   score: { width: 38, height: 38, borderRadius: 19, backgroundColor: "#FFF1D9", alignItems: "center", justifyContent: "center" },
   scoreText: { color: "#9A5C19", fontWeight: "800" },
+  truthCard: { flexDirection: "row", gap: 12, backgroundColor: "#E7EEE9", padding: 15, borderRadius: 16, marginBottom: 14 },
+  sourceCard: { backgroundColor: "white", borderRadius: 16, padding: 15, marginBottom: 10, borderWidth: 1, borderColor: "#E7E3D9" },
+  sourceHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 },
+  statusPill: { borderRadius: 99, paddingHorizontal: 8, paddingVertical: 4 },
+  statusReady: { backgroundColor: "#DDF2E5" },
+  statusResearch: { backgroundColor: "#E8ECF7" },
+  statusWaiting: { backgroundColor: "#F4E8D8" },
+  statusText: { color: "#315B4C", fontSize: 9, fontWeight: "900", textTransform: "uppercase" },
+  nextStep: { color: "#315B4C", fontSize: 11, fontWeight: "700", marginTop: 8 },
+  approvalNote: { color: "#8A5A25", fontSize: 11, fontWeight: "800", marginTop: 9 },
+  agentNotice: { flexDirection: "row", gap: 10, backgroundColor: "#E7EEE9", borderRadius: 14, padding: 13, marginBottom: 12 },
+  quickWrap: { flexDirection: "row", flexWrap: "wrap", gap: 7, marginBottom: 14 },
+  quickButton: { backgroundColor: "white", borderWidth: 1, borderColor: "#D9D5CB", borderRadius: 99, paddingHorizontal: 10, paddingVertical: 8 },
+  quickText: { color: "#315B4C", fontSize: 10, fontWeight: "700" },
+  messageBubble: { maxWidth: "92%", borderRadius: 15, padding: 13, marginBottom: 9 },
+  userBubble: { alignSelf: "flex-end", backgroundColor: "#315B4C" },
+  assistantBubble: { alignSelf: "flex-start", backgroundColor: "white", borderWidth: 1, borderColor: "#E1DDD4" },
+  userMessageText: { color: "white", lineHeight: 20 },
+  assistantMessageText: { color: "#27332E", lineHeight: 20 },
+  messageExtras: { marginTop: 9, backgroundColor: "#EEF4F0", borderRadius: 10, padding: 9 },
+  actionLine: { color: "#315B4C", fontSize: 12, lineHeight: 18 },
+  messageWarning: { marginTop: 9, backgroundColor: "#FFF7E8", borderRadius: 10, padding: 9 },
+  composer: { flexDirection: "row", alignItems: "flex-end", gap: 8, marginTop: 8, backgroundColor: "white", borderRadius: 16, padding: 8, borderWidth: 1, borderColor: "#D9D5CB" },
+  agentInput: { flex: 1, minHeight: 44, maxHeight: 120, paddingHorizontal: 8, paddingVertical: 9, color: "#17221E" },
+  sendButton: { width: 44, height: 44, borderRadius: 22, backgroundColor: "#315B4C", alignItems: "center", justifyContent: "center" },
   product: { flexDirection: "row", backgroundColor: "white", borderRadius: 16, padding: 12, marginBottom: 10, borderWidth: 1, borderColor: "#E7E3D9" },
   productImage: { width: 64, height: 64, borderRadius: 13, backgroundColor: "#F2EEE5", alignItems: "center", justifyContent: "center", marginRight: 12 },
   productImagePhoto: { width: 76, height: 76, borderRadius: 13, marginRight: 12, resizeMode: "cover" },
@@ -420,6 +581,6 @@ const styles = StyleSheet.create({
   policyLabel: { color: "#303B36", fontSize: 12, fontWeight: "800", marginVertical: 3 },
   nav: { position: "absolute", bottom: 0, left: 0, right: 0, height: 78, backgroundColor: "white", borderTopWidth: 1, borderTopColor: "#E3E0D8", flexDirection: "row", paddingBottom: 10 },
   navItem: { flex: 1, alignItems: "center", justifyContent: "center", gap: 4 },
-  navText: { color: "#748079", fontSize: 10, fontWeight: "600" },
+  navText: { color: "#748079", fontSize: 9, fontWeight: "600" },
   navTextActive: { color: "#A86B2E" }
 });
