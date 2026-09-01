@@ -1,9 +1,12 @@
 import { approvals, leads, messages, products } from "../../api/src/data.js";
 import { generateListingPack } from "../../api/src/listing-agent.js";
 import { evaluateMarketplacePolicies, type ProductOrigin, type RiskFlag } from "../../api/src/marketplace-policy.js";
+import { buildOpportunityCenter, replyToAgent, type OpportunityContext } from "../../api/src/opportunity-agent.js";
+import { canStartConversation } from "../../api/src/policy.js";
 import { analyzeProductImages } from "../../api/src/product-analyzer.js";
 import { scoreProspect, type ProspectSignal } from "../../api/src/prospecting.js";
 import type { AiRuntimeEnv } from "../../api/src/structured-ai.js";
+import type { Channel, Lead } from "../../api/src/types.js";
 import { getShopierSnapshot, listRedactedShopierOrders, listShopierProducts, ShopierIntegrationError, type ShopierRuntimeEnv } from "./shopier.js";
 import { createEtsyConnectSession, EtsyIntegrationError, getEtsyStatus, handleEtsyCallback, type EtsyRuntimeEnv } from "./etsy.js";
 
@@ -39,6 +42,60 @@ function dashboard() {
     approvals,
     products,
     messages: messages.slice(-20)
+  };
+}
+
+const channels = new Set<Channel>(["whatsapp", "instagram", "facebook", "shopier", "letgo", "etsy", "email"]);
+
+function sourceName(channel: Channel): string {
+  const names: Record<Channel, string> = {
+    whatsapp: "WhatsApp",
+    instagram: "Instagram",
+    facebook: "Facebook",
+    shopier: "Shopier",
+    letgo: "Letgo",
+    etsy: "Etsy",
+    email: "İzinli e-posta/form"
+  };
+  return names[channel];
+}
+
+async function opportunityContext(env: Env): Promise<OpportunityContext> {
+  let shopier: OpportunityContext["shopier"];
+  try {
+    const snapshot = await getShopierSnapshot(env);
+    const liveProducts = snapshot.connected ? await listShopierProducts(env) : [];
+    shopier = { ...snapshot, products: liveProducts };
+  } catch (error) {
+    shopier = {
+      configured: Boolean(env.SHOPIER_ACCESS_TOKEN),
+      connected: false,
+      error: error instanceof ShopierIntegrationError ? error.code : "UPSTREAM_FAILED",
+      message: "Shopier geçici olarak yanıt vermedi."
+    };
+  }
+
+  return {
+    shopier,
+    etsy: await getEtsyStatus(env),
+    catalogProducts: products.map((product) => ({
+      id: product.id,
+      title: product.name,
+      url: product.shopierUrl || product.etsyUrl || product.letgoUrl,
+      stockQuantity: product.stock
+    })),
+    prospects: leads.map((lead) => ({
+      id: lead.id,
+      kind: lead.lastInboundAt ? "real_customer" as const : "permissioned_prospect" as const,
+      sourceId: lead.channel === "email" ? "permissioned_email_forms" : lead.channel === "shopier" || lead.channel === "etsy" || lead.channel === "letgo" ? "marketplace_inbound" : "meta_channels",
+      sourceName: sourceName(lead.channel),
+      displayName: lead.displayName,
+      evidence: lead.lastInboundAt
+        ? `Müşteri ${new Date(lead.lastInboundAt).toLocaleDateString("tr-TR")} tarihinde görüşmeyi kendisi başlattı.`
+        : "Açık iletişim izni ve doğrulanmış ürün ilgisi mevcut.",
+      score: lead.score,
+      contactAllowed: lead.consent
+    }))
   };
 }
 
@@ -104,6 +161,114 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
     if (request.method === "GET" && url.pathname === "/api/products") return json(200, products);
     if (request.method === "GET" && url.pathname === "/api/leads") return json(200, leads);
     if (request.method === "GET" && url.pathname === "/api/approvals") return json(200, approvals);
+
+    if (request.method === "GET" && url.pathname === "/api/opportunities") {
+      return json(200, buildOpportunityCenter(await opportunityContext(env)));
+    }
+
+    if (request.method === "POST" && url.pathname === "/api/agent/chat") {
+      const input = await readBody(request);
+      const message = String(input.message || "").trim();
+      if (!message) return json(400, { error: "Ajana sorulacak mesaj gerekli." });
+      if (message.length > 2_000) return json(400, { error: "Mesaj en fazla 2.000 karakter olabilir." });
+      return json(200, await replyToAgent(message, await opportunityContext(env), env));
+    }
+
+    if (request.method === "POST" && url.pathname === "/api/prospects/intake") {
+      const input = await readBody(request);
+      const channel = String(input.channel || "") as Channel;
+      const displayName = String(input.displayName || "").trim();
+      const handle = String(input.handle || "").trim();
+      const signals = Array.isArray(input.signals) ? input.signals as ProspectSignal[] : [];
+      if (!channels.has(channel) || !displayName || !handle || !signals.length) {
+        return json(400, { error: "Kaynak, görünen ad, kanal kimliği ve gerçek etkileşim sinyali gerekli." });
+      }
+      const scored = scoreProspect(signals, products.flatMap((product) => product.tags));
+      if (!scored.canDraftFirstContact) {
+        return json(202, { stored: false, classification: "market_signal", scored, reason: "Açık iletişim izni veya müşterinin başlattığı talep yok." });
+      }
+      const lastInboundAt = signals
+        .filter((signal) => signal.type === "inbound_message")
+        .map((signal) => signal.occurredAt)
+        .sort()
+        .at(-1);
+      let lead = leads.find((item) => item.channel === channel && item.handle === handle);
+      if (lead) {
+        lead.displayName = displayName;
+        lead.consent = true;
+        lead.interests = scored.matchedInterests;
+        lead.score = scored.score;
+        lead.stage = "qualified";
+        lead.lastInboundAt = lastInboundAt || lead.lastInboundAt;
+      } else {
+        lead = {
+          id: crypto.randomUUID(),
+          displayName,
+          channel,
+          handle,
+          stage: "qualified",
+          consent: true,
+          interests: scored.matchedInterests,
+          score: scored.score,
+          lastInboundAt,
+          autoReplyAllowed: false
+        } satisfies Lead;
+        leads.push(lead);
+      }
+      return json(201, { stored: true, classification: lastInboundAt ? "real_customer" : "permissioned_prospect", lead, scored });
+    }
+
+    if (request.method === "POST" && url.pathname === "/api/approvals") {
+      const input = await readBody(request);
+      const lead = leads.find((item) => item.id === String(input.leadId || ""));
+      if (!lead) return json(404, { error: "Müşteri adayı bulunamadı." });
+      if (!canStartConversation(lead)) return json(409, { error: "İzin/engelleme kuralı nedeniyle ilk temas oluşturulamaz." });
+      const approval = {
+        id: crypto.randomUUID(),
+        leadId: lead.id,
+        channel: lead.channel,
+        draft: String(input.draft || "").trim(),
+        productIds: Array.isArray(input.productIds) ? input.productIds.map(String) : [],
+        status: "pending" as const,
+        createdAt: new Date().toISOString()
+      };
+      if (!approval.draft) return json(400, { error: "Onaya sunulacak mesaj taslağı gerekli." });
+      approvals.push(approval);
+      lead.stage = "contact_pending";
+      return json(201, approval);
+    }
+
+    const approvalMatch = url.pathname.match(/^\/api\/approvals\/([^/]+)\/(approve|reject)$/);
+    if (request.method === "POST" && approvalMatch) {
+      const approval = approvals.find((item) => item.id === approvalMatch[1]);
+      if (!approval) return json(404, { error: "Onay kaydı bulunamadı." });
+      if (approval.status !== "pending") return json(409, { error: "Bu kayıt daha önce sonuçlandırıldı." });
+      approval.status = approvalMatch[2] === "approve" ? "approved" : "rejected";
+      approval.decidedAt = new Date().toISOString();
+      const lead = leads.find((item) => item.id === approval.leadId);
+      if (lead && approval.status === "approved") {
+        lead.stage = "active";
+        lead.autoReplyAllowed = true;
+        messages.push({
+          id: crypto.randomUUID(),
+          leadId: lead.id,
+          channel: lead.channel,
+          direction: "outbound",
+          text: approval.draft,
+          mediaUrls: [],
+          createdAt: new Date().toISOString(),
+          automated: false
+        });
+      }
+      return json(200, {
+        approval,
+        delivery: {
+          accepted: false,
+          mode: "manual_handoff",
+          reason: approval.status === "approved" ? "Kanal gönderim anahtarı bağlı değil; onaylı taslak uygulamada paylaşılmalı." : "Taslak reddedildi."
+        }
+      });
+    }
 
     if (request.method === "POST" && url.pathname === "/api/products/analyze-images") {
       const input = await readBody(request);
