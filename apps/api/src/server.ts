@@ -8,6 +8,7 @@ import { generateListingPack } from "./listing-agent.js";
 import { rankMarketOpportunities, type MarketSignal } from "./market-advisor.js";
 import { analyzeProductImages } from "./product-analyzer.js";
 import { evaluateMarketplacePolicies, type ProductOrigin, type RiskFlag } from "./marketplace-policy.js";
+import { buildOpportunityCenter, replyToAgent, type OpportunityContext } from "./opportunity-agent.js";
 import { scoreProspect, type ProspectSignal } from "./prospecting.js";
 import type { Channel } from "./types.js";
 
@@ -51,6 +52,29 @@ function dashboard() {
   };
 }
 
+function opportunityContext(): OpportunityContext {
+  return {
+    shopier: { configured: false, connected: false, productCount: 0, recentOrderCount: 0, orderWindowDays: 30 },
+    etsy: { configured: false, connected: false },
+    catalogProducts: db.products.map((product) => ({
+      id: product.id,
+      title: product.name,
+      url: product.shopierUrl || product.etsyUrl || product.letgoUrl,
+      stockQuantity: product.stock
+    })),
+    prospects: db.leads.map((lead) => ({
+      id: lead.id,
+      kind: lead.lastInboundAt ? "real_customer" as const : "permissioned_prospect" as const,
+      sourceId: lead.channel === "email" ? "permissioned_email_forms" : "meta_channels",
+      sourceName: lead.channel,
+      displayName: lead.displayName,
+      evidence: lead.lastInboundAt ? "Müşteri görüşmeyi kendisi başlattı." : "Açık iletişim izni mevcut.",
+      score: lead.score,
+      contactAllowed: lead.consent
+    }))
+  };
+}
+
 const server = createServer(async (req, res) => {
   try {
     if (req.method === "OPTIONS") return json(res, 204, {});
@@ -61,6 +85,14 @@ const server = createServer(async (req, res) => {
     if (req.method === "GET" && url.pathname === "/api/products") return json(res, 200, db.products);
     if (req.method === "GET" && url.pathname === "/api/leads") return json(res, 200, db.leads);
     if (req.method === "GET" && url.pathname === "/api/approvals") return json(res, 200, db.approvals);
+    if (req.method === "GET" && url.pathname === "/api/opportunities") return json(res, 200, buildOpportunityCenter(opportunityContext()));
+
+    if (req.method === "POST" && url.pathname === "/api/agent/chat") {
+      const input = await body(req);
+      const message = String(input.message || "").trim();
+      if (!message) return json(res, 400, { error: "Ajana sorulacak mesaj gerekli." });
+      return json(res, 200, await replyToAgent(message, opportunityContext()));
+    }
 
     if (req.method === "POST" && url.pathname === "/api/products/analyze-images") {
       const input = await body(req);
