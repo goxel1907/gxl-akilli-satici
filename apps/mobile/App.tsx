@@ -11,7 +11,7 @@ const apiHeaders = (json = false) => ({
   ...(json ? { "content-type": "application/json" } : {}),
   ...(API_TOKEN ? { authorization: `Bearer ${API_TOKEN}` } : {})
 });
-type Tab = "Özet" | "Onaylar" | "Müşteriler" | "Ürünler";
+type Tab = "Özet" | "Ajan" | "Onaylar" | "Müşteriler" | "Ürünler";
 type ProductOrigin = "made_by_seller" | "designed_by_seller" | "vintage" | "craft_supply" | "commercial_resale" | "unknown";
 
 const demo = {
@@ -22,6 +22,28 @@ const demo = {
     { id: "gxl-gumus-24g", name: "925 Ayar Ay Yıldızlı Oksitli Tesbih", stock: 1, stockVerified: false, weightGrams: 24, category: "gümüş tesbih", letgoUrl: "https://www.letgo.com/ad/1732503836" },
     { id: "gxl-gumus-17g", name: "925 Ayar Arpa Kesim Tesbih", stock: 1, stockVerified: false, weightGrams: 17, category: "gümüş tesbih", letgoUrl: "https://www.letgo.com/ad/1732517403" },
     { id: "gxl-gumus-telkari", name: "925 Ayar Telkâri Tesbih", stock: 1, stockVerified: false, category: "gümüş tesbih", shopierUrl: "https://www.shopier.com/goxsel/49555980" }
+  ]
+};
+
+const demoOpportunityCenter = {
+  counts: { realCustomers: 0, permissionedProspects: 0, marketSignals: 3 },
+  summary: "Şu an doğrulanmış müşteri adayı yok; 3 pazar sinyali ve test önerisi hazır.",
+  guardrails: [
+    "Kişisel veri kazıma, sahte hesap veya izinsiz toplu mesaj yok.",
+    "İlk dış temas, açık izin ya da gerçek bir gelen talep yoksa işletme sahibi onayı ister.",
+    "Pazar sinyalleri müşteri gibi gösterilmez."
+  ],
+  sources: [
+    { id: "shopier", name: "Shopier", category: "Mağaza ve sipariş", status: "ready", kind: "real_customer", note: "Canlı bağlantı geldiğinde ürün ve sipariş verisi okunur." },
+    { id: "etsy", name: "Etsy", category: "Uluslararası pazar yeri", status: "planned", kind: "real_customer", note: "Mağaza açılışı ve yetkilendirme sonrasında canlı çalışır." },
+    { id: "permissioned_email_forms", name: "İzinli e-posta ve formlar", category: "İzinli aday", status: "ready", kind: "permissioned_prospect", note: "Yalnızca açık izin veren kişiler puanlanır." },
+    { id: "search_trends", name: "Arama ve topluluk sinyalleri", category: "Talep araştırması", status: "planned", kind: "market_signal", note: "Kişi listesi değil ürün ve içerik fırsatı üretir." },
+    { id: "public_b2b_requests", name: "Açık B2B alım talepleri", category: "Kurumsal fırsat", status: "manual", kind: "market_signal", note: "Talep ve işletme doğrulanmadan müşteri sayılmaz." },
+    { id: "meta_channels", name: "Meta, WhatsApp ve Instagram", category: "Sosyal ve mesajlaşma", status: "planned", kind: "permissioned_prospect", note: "Kaynaklardan yalnızca biridir." }
+  ],
+  opportunities: [
+    { id: "local-shopier-test", kind: "market_signal", sourceName: "Shopier", title: "Canlı ürün için talep testi", evidence: "Yerel modda gerçek performans verisi okunamıyor.", nextAction: "Canlı bağlantıyı yenileyip ürün bağlantısı dönüşümünü ölç.", confidence: "medium", approvalRequired: true },
+    { id: "local-form", kind: "market_signal", sourceName: "İzinli form", title: "Ürün talep formu", evidence: "Henüz doğrulanmış izinli aday yok.", nextAction: "İletişim izni içeren kısa talep formu yayınla.", confidence: "high", approvalRequired: true }
   ]
 };
 
@@ -40,6 +62,7 @@ export default function App() {
     shopier: { configured: false, connected: false },
     etsy: { configured: false, storageConfigured: false, connected: false }
   });
+  const [opportunityCenter, setOpportunityCenter] = useState<any>(demoOpportunityCenter);
 
   const refresh = async () => {
     if (!API_URL) {
@@ -49,9 +72,10 @@ export default function App() {
       return;
     }
     try {
-      const [response, channelResponse] = await Promise.all([
+      const [response, channelResponse, opportunityResponse] = await Promise.all([
         fetch(`${API_URL}/api/dashboard`, { headers: apiHeaders() }),
-        fetch(`${API_URL}/api/channels/status`, { headers: apiHeaders() })
+        fetch(`${API_URL}/api/channels/status`, { headers: apiHeaders() }),
+        fetch(`${API_URL}/api/opportunities`, { headers: apiHeaders() })
       ]);
       if (!response.ok) throw new Error();
       setData(await response.json());
@@ -60,9 +84,12 @@ export default function App() {
         shopier: { configured: true, connected: false, message: "Shopier durumu alınamadı." },
         etsy: { configured: true, storageConfigured: true, connected: false, message: "Etsy durumu alınamadı." }
       });
+      if (opportunityResponse.ok) setOpportunityCenter(await opportunityResponse.json());
+      else setOpportunityCenter(demoOpportunityCenter);
       setOnline(true);
     } catch {
       setData(demo);
+      setOpportunityCenter(demoOpportunityCenter);
       setOnline(false);
     } finally {
       setLoading(false);
@@ -115,8 +142,14 @@ export default function App() {
     try {
       const response = await fetch(`${API_URL}/api/approvals/${id}/${action}`, { method: "POST", headers: apiHeaders() });
       if (!response.ok) throw new Error();
+      const result = await response.json() as any;
       await refresh();
-      Alert.alert(action === "approve" ? "Onaylandı" : "Reddedildi", action === "approve" ? "İlk mesaj gönderim kuyruğuna alındı." : "Taslak iptal edildi.");
+      if (action === "approve" && result.delivery?.accepted !== true && item) {
+        Alert.alert("Onaylandı", "Kanalın otomatik gönderim anahtarı bağlı değil. Onaylı taslak paylaşım ekranına aktarılıyor.");
+        await handoffMessage(item);
+      } else {
+        Alert.alert(action === "approve" ? "Gönderildi" : "Reddedildi", action === "approve" ? "İlk mesaj bağlı kanal üzerinden gönderildi." : "Taslak iptal edildi.");
+      }
     } catch {
       setOnline(false);
       Alert.alert("Bağlantı kesildi", "Mesaj otomatik gönderilmedi. Kanal bağlantısı yeniden kurulmalı.");
@@ -136,15 +169,16 @@ export default function App() {
       {loading ? <ActivityIndicator style={{ marginTop: 40 }} color="#C88B47" /> : (
         <ScrollView contentContainerStyle={styles.content}>
           {tab === "Özet" && <Overview data={data} setTab={setTab} online={online} channels={channels} />}
+          {tab === "Ajan" && <AgentScreen center={opportunityCenter} online={online} onRefresh={refresh} />}
           {tab === "Onaylar" && <Approvals items={pending} decide={decide} />}
           {tab === "Müşteriler" && <Leads items={data.leads} />}
           {tab === "Ürünler" && <Products items={data.products} addProduct={addProduct} />}
         </ScrollView>
       )}
       <View style={styles.nav}>
-        {(["Özet", "Onaylar", "Müşteriler", "Ürünler"] as Tab[]).map((item) => (
+        {(["Özet", "Ajan", "Onaylar", "Müşteriler", "Ürünler"] as Tab[]).map((item) => (
           <Pressable key={item} style={styles.navItem} onPress={() => setTab(item)}>
-            <Ionicons name={item === "Özet" ? "grid" : item === "Onaylar" ? "checkmark-circle" : item === "Müşteriler" ? "people" : "cube"} size={22} color={tab === item ? "#C88B47" : "#748079"} />
+            <Ionicons name={item === "Özet" ? "grid" : item === "Ajan" ? "sparkles" : item === "Onaylar" ? "checkmark-circle" : item === "Müşteriler" ? "people" : "cube"} size={22} color={tab === item ? "#C88B47" : "#748079"} />
             <Text style={[styles.navText, tab === item && styles.navTextActive]}>{item}</Text>
           </Pressable>
         ))}
@@ -209,7 +243,7 @@ function Overview({ data, setTab, online, channels }: any) {
       <View style={styles.calloutIcon}><Ionicons name="sparkles" size={24} color="#C88B47" /></View>
       <View style={{ flex: 1 }}><Text style={styles.cardTitle}>Ajan özeti</Text><Text style={styles.muted}>{online ? `${data.metrics.activeLeads} müşteri adayı ve ${data.metrics.pendingApprovals} onay bekleyen mesaj var.` : "Yerel katalog modu. Otomatik müşteri bulma ve mesajlaşma için işletme kanallarını yetkilendirin."}</Text></View>
     </View>
-    <Pressable style={styles.primary} onPress={() => setTab("Onaylar")}><Text style={styles.primaryText}>Onay kuyruğunu aç</Text><Ionicons name="arrow-forward" size={18} color="white" /></Pressable>
+    <Pressable style={styles.primary} onPress={() => setTab("Ajan")}><Text style={styles.primaryText}>Ajana sor ve fırsatları aç</Text><Ionicons name="arrow-forward" size={18} color="white" /></Pressable>
     <Text style={styles.sectionTitle}>Kanallar</Text>
     <View style={styles.card}>
       <Channel name="WhatsApp" status="Uygulamayı aç" icon="logo-whatsapp" onPress={() => openUrl("https://wa.me/", "WhatsApp")} />
@@ -219,6 +253,89 @@ function Overview({ data, setTab, online, channels }: any) {
       <Channel name="Etsy" status={etsyStatus} icon="storefront-outline" connected={etsyAuthorized} onPress={() => etsyShopReady ? openUrl("https://www.etsy.com/your/shops/me/dashboard", "Etsy mağaza yöneticisi") : etsyAuthorized ? openUrl("https://www.etsy.com/sell", "Etsy mağaza kurulumu") : connectEtsy()} />
       <Channel name="E-posta" status={SALES_EMAIL} icon="mail-outline" onPress={() => openUrl(`mailto:${SALES_EMAIL}?subject=${encodeURIComponent("GXL Market Studio")}`, "E-posta")} />
     </View>
+  </>;
+}
+
+function AgentScreen({ center, online, onRefresh }: any) {
+  const [question, setQuestion] = useState("");
+  const [sending, setSending] = useState(false);
+  const [chat, setChat] = useState<Array<{ role: "owner" | "agent"; text: string; warnings?: string[]; actions?: string[] }>>([
+    { role: "agent", text: center?.summary || "Fırsat kaynaklarını kontrol etmeye hazırım." }
+  ]);
+
+  const ask = async (preset?: string) => {
+    const message = (preset || question).trim();
+    if (!message || sending) return;
+    setQuestion("");
+    setChat((current) => [...current, { role: "owner", text: message }]);
+    if (!online || !API_URL) {
+      setChat((current) => [...current, {
+        role: "agent",
+        text: `${center?.summary || "Canlı kaynak verisi yok."} Canlı bağlantı kurulana kadar yalnızca doğrulanabilir satış testleri önerebilirim; kişi bulmuş gibi davranmam.`,
+        actions: center?.opportunities?.slice(0, 2).map((item: any) => item.nextAction) || []
+      }]);
+      return;
+    }
+    setSending(true);
+    try {
+      const response = await fetch(`${API_URL}/api/agent/chat`, {
+        method: "POST",
+        headers: apiHeaders(true),
+        body: JSON.stringify({ message })
+      });
+      const result = await response.json() as any;
+      if (!response.ok) throw new Error(result.error || "Ajan yanıt veremedi.");
+      setChat((current) => [...current, { role: "agent", text: result.reply, warnings: result.warnings, actions: result.suggestedActions }]);
+    } catch (error) {
+      setChat((current) => [...current, { role: "agent", text: error instanceof Error ? error.message : "Bağlantı kesildi; tekrar deneyin." }]);
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const kindLabel: Record<string, string> = {
+    real_customer: "GERÇEK MÜŞTERİ",
+    permissioned_prospect: "İZİNLİ ADAY",
+    market_signal: "PAZAR SİNYALİ"
+  };
+  const statusLabel: Record<string, string> = { live: "Canlı", ready: "Hazır", planned: "Bağlantı bekliyor", manual: "Manuel", paused: "Beklemede" };
+
+  return <>
+    <View style={styles.agentHero}>
+      <View style={styles.agentHeroTop}><View style={styles.agentAvatar}><Ionicons name="sparkles" size={23} color="white" /></View><View style={{ flex: 1 }}><Text style={styles.agentHeroTitle}>Ajana Sor</Text><Text style={styles.agentHeroText}>Gerçek müşteri, izinli aday ve pazar sinyali ayrı değerlendirilir.</Text></View><Pressable onPress={onRefresh}><Ionicons name="refresh" size={22} color="#C88B47" /></Pressable></View>
+      <View style={styles.agentCounts}>
+        <View style={styles.agentCount}><Text style={styles.agentCountValue}>{center?.counts?.realCustomers || 0}</Text><Text style={styles.agentCountLabel}>Gerçek müşteri</Text></View>
+        <View style={styles.agentCount}><Text style={styles.agentCountValue}>{center?.counts?.permissionedProspects || 0}</Text><Text style={styles.agentCountLabel}>İzinli aday</Text></View>
+        <View style={styles.agentCount}><Text style={styles.agentCountValue}>{center?.counts?.marketSignals || 0}</Text><Text style={styles.agentCountLabel}>Pazar sinyali</Text></View>
+      </View>
+    </View>
+
+    <Text style={styles.sectionTitle}>Ajanla konuş</Text>
+    <View style={styles.chatCard}>
+      {chat.map((message, index) => <View key={`${message.role}-${index}`} style={[styles.chatBubble, message.role === "owner" ? styles.ownerBubble : styles.agentBubble]}>
+        <Text style={message.role === "owner" ? styles.ownerMessage : styles.agentMessage}>{message.text}</Text>
+        {message.warnings?.map((warning) => <Text style={styles.chatWarning} key={warning}>⚠ {warning}</Text>)}
+        {message.actions?.map((action) => <Text style={styles.chatAction} key={action}>→ {action}</Text>)}
+      </View>)}
+      {sending && <ActivityIndicator style={{ alignSelf: "flex-start", margin: 10 }} color="#C88B47" />}
+      <View style={styles.chatInputRow}><TextInput value={question} onChangeText={setQuestion} style={styles.chatInput} placeholder="Ajana Türkçe sorun..." placeholderTextColor="#9AA39F" multiline /><Pressable style={[styles.sendButton, (!question.trim() || sending) && styles.primaryDisabled]} disabled={!question.trim() || sending} onPress={() => ask()}><Ionicons name="send" size={19} color="white" /></Pressable></View>
+      <View style={styles.quickPrompts}>
+        {["Bugünkü durum ne?", "Meta dışındaki fırsatları göster", "Shopier ürünü için ne yapalım?"].map((prompt) => <Pressable key={prompt} style={styles.quickPrompt} onPress={() => ask(prompt)}><Text style={styles.quickPromptText}>{prompt}</Text></Pressable>)}
+      </View>
+    </View>
+
+    <Text style={styles.sectionTitle}>Doğrulanmış fırsatlar</Text>
+    {!center?.opportunities?.length ? <Empty icon="radar-outline" title="Henüz fırsat kaydı yok" text="Canlı kaynaklardan kanıt geldiğinde burada görünecek." /> : center.opportunities.map((item: any) => <View style={styles.card} key={item.id}>
+      <View style={styles.opportunityTop}><View style={[styles.kindPill, item.kind === "real_customer" ? styles.kindReal : item.kind === "permissioned_prospect" ? styles.kindPermissioned : styles.kindSignal]}><Text style={styles.kindText}>{kindLabel[item.kind] || item.kind}</Text></View><Text style={styles.confidence}>{item.confidence === "high" ? "Yüksek kanıt" : item.confidence === "medium" ? "Orta kanıt" : "Düşük kanıt"}</Text></View>
+      <Text style={styles.cardTitle}>{item.title}</Text>
+      <Text style={styles.small}>{item.sourceName}</Text>
+      <Text style={styles.evidence}>{item.evidence}</Text>
+      <Text style={styles.nextAction}>Sonraki adım: {item.nextAction}</Text>
+    </View>)}
+
+    <Text style={styles.sectionTitle}>Kaynak radarı</Text>
+    <View style={styles.card}>{center?.sources?.map((source: any) => <View style={styles.sourceRow} key={source.id}><View style={[styles.sourceDot, source.status === "live" && styles.sourceLive, source.status === "ready" && styles.sourceReady]} /><View style={{ flex: 1 }}><View style={styles.sourceTitleRow}><Text style={styles.rowTitle}>{source.name}</Text><Text style={styles.sourceStatus}>{statusLabel[source.status] || source.status}</Text></View><Text style={styles.small}>{source.category} · {kindLabel[source.kind] || source.kind}</Text><Text style={styles.sourceNote}>{source.note}</Text></View></View>)}</View>
+    <View style={styles.guardrail}><Ionicons name="shield-checkmark" size={21} color="#315B4C" /><View style={{ flex: 1 }}>{center?.guardrails?.map((rule: string) => <Text style={styles.guardrailText} key={rule}>• {rule}</Text>)}</View></View>
   </>;
 }
 
@@ -356,6 +473,47 @@ const styles = StyleSheet.create({
   metricLabel: { color: "#68736E", fontSize: 12 },
   callout: { flexDirection: "row", gap: 12, backgroundColor: "#E7EEE9", padding: 15, borderRadius: 16, marginBottom: 12 },
   calloutIcon: { width: 40, height: 40, borderRadius: 12, backgroundColor: "white", alignItems: "center", justifyContent: "center" },
+  agentHero: { backgroundColor: "#12261F", borderRadius: 20, padding: 16, marginBottom: 16 },
+  agentHeroTop: { flexDirection: "row", alignItems: "center", gap: 11 },
+  agentAvatar: { width: 44, height: 44, borderRadius: 14, backgroundColor: "#A86B2E", alignItems: "center", justifyContent: "center" },
+  agentHeroTitle: { color: "white", fontSize: 19, fontWeight: "900" },
+  agentHeroText: { color: "#C5D2CC", fontSize: 11, lineHeight: 16, marginTop: 2 },
+  agentCounts: { flexDirection: "row", marginTop: 15, gap: 8 },
+  agentCount: { flex: 1, backgroundColor: "#1E382F", borderRadius: 12, padding: 10 },
+  agentCountValue: { color: "#F1B875", fontSize: 21, fontWeight: "900" },
+  agentCountLabel: { color: "#D7E0DC", fontSize: 9, marginTop: 2 },
+  chatCard: { backgroundColor: "white", borderRadius: 16, padding: 12, marginBottom: 14, borderWidth: 1, borderColor: "#E7E3D9" },
+  chatBubble: { maxWidth: "92%", borderRadius: 14, padding: 11, marginBottom: 8 },
+  ownerBubble: { alignSelf: "flex-end", backgroundColor: "#315B4C", borderBottomRightRadius: 4 },
+  agentBubble: { alignSelf: "flex-start", backgroundColor: "#F1EEE7", borderBottomLeftRadius: 4 },
+  ownerMessage: { color: "white", lineHeight: 19 },
+  agentMessage: { color: "#2F3934", lineHeight: 19 },
+  chatWarning: { color: "#8A521F", fontSize: 11, lineHeight: 16, marginTop: 7 },
+  chatAction: { color: "#315B4C", fontSize: 11, lineHeight: 16, marginTop: 6, fontWeight: "700" },
+  chatInputRow: { flexDirection: "row", alignItems: "flex-end", gap: 8, marginTop: 5 },
+  chatInput: { flex: 1, minHeight: 44, maxHeight: 100, backgroundColor: "#F7F6F2", borderWidth: 1, borderColor: "#DDD8CE", borderRadius: 13, paddingHorizontal: 12, paddingVertical: 10, color: "#17221E" },
+  sendButton: { width: 44, height: 44, borderRadius: 13, backgroundColor: "#A86B2E", alignItems: "center", justifyContent: "center" },
+  quickPrompts: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 10 },
+  quickPrompt: { borderWidth: 1, borderColor: "#D8D4CA", borderRadius: 99, paddingHorizontal: 9, paddingVertical: 7 },
+  quickPromptText: { color: "#56615C", fontSize: 10, fontWeight: "700" },
+  opportunityTop: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 9 },
+  kindPill: { borderRadius: 99, paddingHorizontal: 8, paddingVertical: 5 },
+  kindReal: { backgroundColor: "#DDF3E5" },
+  kindPermissioned: { backgroundColor: "#E7EEF8" },
+  kindSignal: { backgroundColor: "#FFF0D8" },
+  kindText: { color: "#315B4C", fontSize: 9, fontWeight: "900" },
+  confidence: { color: "#7A847F", fontSize: 10 },
+  evidence: { color: "#5A655F", fontSize: 12, lineHeight: 18, marginTop: 9 },
+  nextAction: { color: "#315B4C", fontSize: 12, lineHeight: 18, fontWeight: "700", marginTop: 9 },
+  sourceRow: { flexDirection: "row", gap: 10, paddingVertical: 11, borderBottomWidth: 1, borderBottomColor: "#F0EDE6" },
+  sourceDot: { width: 9, height: 9, borderRadius: 5, backgroundColor: "#B5B0A6", marginTop: 5 },
+  sourceLive: { backgroundColor: "#48A66D" },
+  sourceReady: { backgroundColor: "#D59A4D" },
+  sourceTitleRow: { flexDirection: "row", justifyContent: "space-between", gap: 8 },
+  sourceStatus: { color: "#8A5C28", fontSize: 10, fontWeight: "800" },
+  sourceNote: { color: "#68736E", fontSize: 11, lineHeight: 16, marginTop: 4 },
+  guardrail: { flexDirection: "row", gap: 10, backgroundColor: "#E7EEE9", borderRadius: 15, padding: 14, marginBottom: 12 },
+  guardrailText: { color: "#4C5A54", fontSize: 11, lineHeight: 17 },
   primary: { flexDirection: "row", justifyContent: "center", alignItems: "center", gap: 10, backgroundColor: "#315B4C", padding: 15, borderRadius: 14, marginBottom: 20 },
   primaryText: { color: "white", fontWeight: "800" },
   card: { backgroundColor: "white", borderRadius: 16, padding: 16, marginBottom: 12, borderWidth: 1, borderColor: "#E7E3D9" },
