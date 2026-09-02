@@ -13,12 +13,31 @@ Bu pakette GXL markası, iki Letgo ilanı ve Shopier satış bağlantısı örne
 ## 2. Shopier
 
 1. Shopier satıcı hesabında geliştirici modunu açın.
-2. Kendi işletmeniz için listelenmeyen uygulama oluşturun.
-3. İstemci bilgilerini yalnızca sunucudaki `.env` dosyasına girin.
-4. Sipariş ve ürün webhook adreslerini `https://ALAN-ADINIZ/webhooks/shopier` olarak tanımlayın.
-5. Ürün kayıtlarındaki `shopierUrl` alanlarını gerçek ürün sayfalarıyla değiştirin.
+2. Yalnız kendi mağazanız için Personal Access Token (PAT) üretin; token değerini yalnızca Cloudflare Worker sırrı `SHOPIER_ACCESS_TOKEN` olarak kaydedin.
+3. Mobil uygulama ile sunucu arasındaki yazma işlemleri için güçlü bir `APP_ACCESS_TOKEN` oluşturun; aynı değer APK derlemesinde `EXPO_PUBLIC_GXL_APP_TOKEN` olarak kullanılmalıdır.
+4. Worker üzerindeki `POST /webhooks/shopier` adresini Shopier'de `product.created`, `product.updated`, `order.created`, `order.addressUpdated`, `order.fulfilled`, `refund.requested` ve `refund.updated` olaylarına abone edin.
+5. Shopier'in webhook oluştururken yalnızca ilk yanıtta verdiği webhook token değerini `SHOPIER_WEBHOOK_TOKEN` sırrı olarak kaydedin. Eski kurulumlarla uyumluluk için `SHOPIER_WEBHOOK_SECRET` adı da kabul edilir.
+6. Uygulamadaki **Shopier** sekmesini yenileyin. Ürün okuma, sipariş okuma, ürün oluşturma/güncelleme ve imzalı bildirim satırlarının tamamı **Hazır** görünmelidir.
+
+Shopier üretim uçları:
+
+- `GET /api/shopier/center`: canlı ürünler, kişisel veriden arındırılmış 30 günlük sipariş özeti, yetenek ve eksik listesi.
+- `GET /api/shopier/products`: canlı ürün kataloğu.
+- `POST /api/shopier/products`: yeni canlı ürün; `APP_ACCESS_TOKEN` ve gövdede `confirm: true` zorunludur.
+- `PUT /api/shopier/products/:id`: fiyat, stok ve ilan alanı güncellemesi; `APP_ACCESS_TOKEN` ve `confirm: true` zorunludur.
+- `GET /api/shopier/orders`: kişisel veri içermeyen son 30 günlük sipariş özeti.
+- `POST /webhooks/shopier`: ham gövde üzerinden HMAC-SHA256 imzası, zaman damgası ve tekrar eden webhook kimliği kontrolü.
+
+Ürün silme özellikle uygulamaya açılmamıştır. Shopier ürün oluşturma API'si 1-5 adet herkese açık HTTPS görsel URL'si istediği için telefonun yerel galeri adresi doğrudan yayınlanamaz; önce güvenli medya deposuna yüklenmiş `jpg`, `jpeg`, `png` veya `bmp` bağlantısı kullanılmalıdır.
 
 Shopier bu sistemde ödeme/sipariş hedefidir; ajan ödeme kartı verisi almaz.
+
+### Kanal önceliği
+
+1. Shopier bağımsız canlı satış merkezi olarak tamamen hazır hale getirilir.
+2. Etsy mağaza kurulumu ödeme düğmesine kadar tamamlanır; nihai kurulum ücreti ve mağaza açma işlemi yalnızca hesap sahibi tarafından yapılır.
+3. Etsy mağazası açıldıktan sonra Etsy OAuth, ilan ve sipariş senkronizasyonu devreye alınır.
+4. Letgo ücretli ilan nedeniyle beklemede kalır; Meta/WhatsApp/Instagram sonraki aşamadır.
 
 ## 3. Letgo
 
