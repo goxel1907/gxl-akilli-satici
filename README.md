@@ -62,6 +62,7 @@ Depodaki `GXL Android APK` iş akışı `main` dalına yapılan her mobil uygula
 - İzinli etkileşimleri niyet, güncellik ve katalog eşleşmesine göre puanlayan potansiyel müşteri motoru
 - Meta, Shopier ve Letgo bağlayıcı sınırları
 - Bağımsız Shopier satış merkezi, canlı ürün oluşturma/güncelleme ve imzalı webhook doğrulaması
+- Telefondan Shopier ürün fotoğrafı seçme ve R2 üzerinden güvenli görsel sunma
 - Testler, API örnekleri ve canlıya geçiş kontrol listesi
 
 Bu sürüm bir üretim çekirdeği ve kurulabilir prototiptir. Canlı mesaj gönderimi; işletme doğrulaması, kanal erişim anahtarları, KVKK metinleri ve Meta/Shopier uygulama onayları tamamlanınca etkinleşir.

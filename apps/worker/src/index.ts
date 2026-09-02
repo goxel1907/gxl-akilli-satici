@@ -23,6 +23,10 @@ import { createEtsyConnectSession, EtsyIntegrationError, getEtsyStatus, handleEt
 
 interface Env extends AiRuntimeEnv, ShopierRuntimeEnv, EtsyRuntimeEnv {
   APP_ACCESS_TOKEN?: string;
+  PRODUCT_MEDIA?: {
+    get(key: string): Promise<{ body: ReadableStream; httpEtag?: string } | null>;
+    put(key: string, value: ArrayBuffer, options?: { httpMetadata?: { contentType?: string; cacheControl?: string } }): Promise<unknown>;
+  };
 }
 
 const corsHeaders = {
@@ -52,6 +56,18 @@ async function readRawBody(request: Request, maxBytes = 2_000_000): Promise<stri
   return raw;
 }
 
+function decodeProductImage(input: Record<string, unknown>): { bytes: ArrayBuffer; mimeType: string; extension: string } {
+  const mimeType = String(input.mimeType || "").toLowerCase();
+  const extensions: Record<string, string> = { "image/jpeg": "jpg", "image/png": "png", "image/bmp": "bmp" };
+  const extension = extensions[mimeType];
+  if (!extension) throw new ShopierIntegrationError("VALIDATION_FAILED", 400, "/api/shopier/media", "media", "Yalnızca JPG, PNG veya BMP ürün fotoğrafı yüklenebilir.");
+  const raw = String(input.imageBase64 || "").replace(/^data:[^;]+;base64,/, "").replace(/\s/g, "");
+  if (!raw || !/^[A-Za-z0-9+/]+={0,2}$/.test(raw)) throw new ShopierIntegrationError("VALIDATION_FAILED", 400, "/api/shopier/media", "media", "Ürün fotoğrafı okunamadı.");
+  const binary = Uint8Array.from(atob(raw), (character) => character.charCodeAt(0));
+  if (binary.byteLength < 1_000 || binary.byteLength > 5_000_000) throw new ShopierIntegrationError("VALIDATION_FAILED", 400, "/api/shopier/media", "media", "Ürün fotoğrafı 1 KB ile 5 MB arasında olmalıdır.");
+  return { bytes: binary.buffer, mimeType, extension };
+}
+
 function requireConfirmedShopierWrite(env: Env, input: Record<string, unknown>): Response | undefined {
   if (!env.APP_ACCESS_TOKEN) return json(503, { error: "Shopier yazma işlemleri için uygulama erişim anahtarı zorunludur." });
   if (input.confirm !== true) return json(409, { error: "Shopier mağazasında değişiklik yapmak için açık onay gereklidir.", requiresConfirmation: true });
@@ -65,9 +81,11 @@ async function shopierCenter(env: Env) {
   ]);
   const writeEnabled = Boolean(env.SHOPIER_ACCESS_TOKEN && env.APP_ACCESS_TOKEN);
   const webhookVerificationConfigured = Boolean(env.SHOPIER_WEBHOOK_TOKEN || env.SHOPIER_WEBHOOK_SECRET);
+  const mediaUploadConfigured = Boolean(env.PRODUCT_MEDIA);
   const blockers = [
     ...(!writeEnabled ? ["Ürün oluşturma ve güncelleme için APP_ACCESS_TOKEN yapılandırılmalı."] : []),
-    ...(!webhookVerificationConfigured ? ["Anlık ürün/sipariş olayları için SHOPIER_WEBHOOK_TOKEN yapılandırılmalı."] : [])
+    ...(!webhookVerificationConfigured ? ["Anlık ürün/sipariş olayları için SHOPIER_WEBHOOK_TOKEN yapılandırılmalı."] : []),
+    ...(!mediaUploadConfigured ? ["Telefondan ürün fotoğrafı yüklemek için PRODUCT_MEDIA R2 deposu bağlanmalı."] : [])
   ];
   return {
     connected: true,
@@ -82,7 +100,8 @@ async function shopierCenter(env: Env) {
       createProducts: writeEnabled,
       updateProducts: writeEnabled,
       deleteProducts: false,
-      signedWebhooks: webhookVerificationConfigured
+      signedWebhooks: webhookVerificationConfigured,
+      mediaUpload: mediaUploadConfigured
     },
     recentWebhookEvents: shopierWebhookEvents.slice(-20).reverse(),
     blockers,
@@ -179,6 +198,16 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
       });
     }
     if (request.method === "GET" && url.pathname === "/etsy/oauth/callback") return await handleEtsyCallback(request, env);
+    if (request.method === "GET" && url.pathname.startsWith("/media/shopier/")) {
+      if (!env.PRODUCT_MEDIA) return json(404, { error: "Ürün görseli bulunamadı." });
+      const key = url.pathname.slice("/media/".length);
+      if (!/^shopier\/[a-f0-9-]+\.(jpg|png|bmp)$/.test(key)) return json(404, { error: "Ürün görseli bulunamadı." });
+      const object = await env.PRODUCT_MEDIA.get(key);
+      if (!object) return json(404, { error: "Ürün görseli bulunamadı." });
+      const extension = key.split(".").at(-1);
+      const contentType = extension === "png" ? "image/png" : extension === "bmp" ? "image/bmp" : "image/jpeg";
+      return new Response(object.body, { headers: { "content-type": contentType, "cache-control": "public, max-age=31536000, immutable", ...(object.httpEtag ? { etag: object.httpEtag } : {}) } });
+    }
     if (request.method === "POST" && url.pathname === "/webhooks/shopier") {
       const rawBody = await readRawBody(request);
       const verification = await verifyShopierWebhook(rawBody, request.headers, env.SHOPIER_WEBHOOK_TOKEN || env.SHOPIER_WEBHOOK_SECRET);
@@ -236,6 +265,16 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
       const blocked = requireConfirmedShopierWrite(env, input);
       if (blocked) return blocked;
       return json(201, { product: await createShopierProduct(env, input as unknown as ShopierProductInput) });
+    }
+    if (request.method === "POST" && url.pathname === "/api/shopier/media") {
+      const input = await readBody(request);
+      const blocked = requireConfirmedShopierWrite(env, input);
+      if (blocked) return blocked;
+      if (!env.PRODUCT_MEDIA) return json(503, { error: "Telefondan fotoğraf yüklemek için PRODUCT_MEDIA deposu henüz bağlı değil." });
+      const image = decodeProductImage(input);
+      const key = `shopier/${crypto.randomUUID()}.${image.extension}`;
+      await env.PRODUCT_MEDIA.put(key, image.bytes, { httpMetadata: { contentType: image.mimeType, cacheControl: "public, max-age=31536000, immutable" } });
+      return json(201, { url: `${url.origin}/media/${key}` });
     }
     const shopierProductMatch = url.pathname.match(/^\/api\/shopier\/products\/([^/]+)$/);
     if (request.method === "PUT" && shopierProductMatch) {
