@@ -7,7 +7,18 @@ import { analyzeProductImages } from "../../api/src/product-analyzer.js";
 import { scoreProspect, type ProspectSignal } from "../../api/src/prospecting.js";
 import type { AiRuntimeEnv } from "../../api/src/structured-ai.js";
 import type { Channel, Lead } from "../../api/src/types.js";
-import { getShopierSnapshot, listRedactedShopierOrders, listShopierProducts, ShopierIntegrationError, type ShopierRuntimeEnv } from "./shopier.js";
+import {
+  createShopierProduct,
+  getShopierSnapshot,
+  listRedactedShopierOrders,
+  listShopierProducts,
+  ShopierIntegrationError,
+  updateShopierProduct,
+  verifyShopierWebhook,
+  type ShopierProductInput,
+  type ShopierProductPatch,
+  type ShopierRuntimeEnv
+} from "./shopier.js";
 import { createEtsyConnectSession, EtsyIntegrationError, getEtsyStatus, handleEtsyCallback, type EtsyRuntimeEnv } from "./etsy.js";
 
 interface Env extends AiRuntimeEnv, ShopierRuntimeEnv, EtsyRuntimeEnv {
@@ -17,8 +28,11 @@ interface Env extends AiRuntimeEnv, ShopierRuntimeEnv, EtsyRuntimeEnv {
 const corsHeaders = {
   "access-control-allow-origin": "*",
   "access-control-allow-headers": "content-type, authorization",
-  "access-control-allow-methods": "GET, POST, OPTIONS"
+  "access-control-allow-methods": "GET, POST, PUT, OPTIONS"
 };
+
+const processedShopierWebhookIds = new Set<string>();
+const shopierWebhookEvents: Array<{ id: string; event: string; resourceId?: string; receivedAt: string }> = [];
 
 function json(status: number, value: unknown): Response {
   return Response.json(value, { status, headers: corsHeaders });
@@ -28,6 +42,52 @@ async function readBody(request: Request): Promise<Record<string, unknown>> {
   const contentLength = Number(request.headers.get("content-length") || 0);
   if (contentLength > 12_000_000) throw new Error("PAYLOAD_TOO_LARGE");
   return await request.json() as Record<string, unknown>;
+}
+
+async function readRawBody(request: Request, maxBytes = 2_000_000): Promise<string> {
+  const contentLength = Number(request.headers.get("content-length") || 0);
+  if (contentLength > maxBytes) throw new Error("PAYLOAD_TOO_LARGE");
+  const raw = await request.text();
+  if (new TextEncoder().encode(raw).byteLength > maxBytes) throw new Error("PAYLOAD_TOO_LARGE");
+  return raw;
+}
+
+function requireConfirmedShopierWrite(env: Env, input: Record<string, unknown>): Response | undefined {
+  if (!env.APP_ACCESS_TOKEN) return json(503, { error: "Shopier yazma işlemleri için uygulama erişim anahtarı zorunludur." });
+  if (input.confirm !== true) return json(409, { error: "Shopier mağazasında değişiklik yapmak için açık onay gereklidir.", requiresConfirmation: true });
+  return undefined;
+}
+
+async function shopierCenter(env: Env) {
+  const [liveProducts, orders] = await Promise.all([
+    listShopierProducts(env),
+    listRedactedShopierOrders(env)
+  ]);
+  const writeEnabled = Boolean(env.SHOPIER_ACCESS_TOKEN && env.APP_ACCESS_TOKEN);
+  const webhookVerificationConfigured = Boolean(env.SHOPIER_WEBHOOK_TOKEN || env.SHOPIER_WEBHOOK_SECRET);
+  const blockers = [
+    ...(!writeEnabled ? ["Ürün oluşturma ve güncelleme için APP_ACCESS_TOKEN yapılandırılmalı."] : []),
+    ...(!webhookVerificationConfigured ? ["Anlık ürün/sipariş olayları için SHOPIER_WEBHOOK_TOKEN yapılandırılmalı."] : [])
+  ];
+  return {
+    connected: true,
+    checkedAt: new Date().toISOString(),
+    counts: { products: liveProducts.length, recentOrders: orders.length, orderWindowDays: 30 },
+    products: liveProducts,
+    orders,
+    privacy: "Sipariş özetinde müşteri adı, telefon, e-posta ve adres bilgileri bulunmaz.",
+    capabilities: {
+      readProducts: true,
+      readOrders: true,
+      createProducts: writeEnabled,
+      updateProducts: writeEnabled,
+      deleteProducts: false,
+      signedWebhooks: webhookVerificationConfigured
+    },
+    recentWebhookEvents: shopierWebhookEvents.slice(-20).reverse(),
+    blockers,
+    ready: blockers.length === 0
+  };
 }
 
 function dashboard() {
@@ -114,10 +174,29 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
         service: "gxl-akilli-satici",
         ai: env.GEMINI_API_KEY ? "gemini" : env.OPENAI_API_KEY ? "openai" : "not_configured",
         shopier: env.SHOPIER_ACCESS_TOKEN ? "configured" : "not_configured",
+        shopierWebhooks: env.SHOPIER_WEBHOOK_TOKEN || env.SHOPIER_WEBHOOK_SECRET ? "verified" : "not_configured",
         etsy: env.ETSY_API_KEY && env.ETSY_SHARED_SECRET ? "configured" : "not_configured"
       });
     }
     if (request.method === "GET" && url.pathname === "/etsy/oauth/callback") return await handleEtsyCallback(request, env);
+    if (request.method === "POST" && url.pathname === "/webhooks/shopier") {
+      const rawBody = await readRawBody(request);
+      const verification = await verifyShopierWebhook(rawBody, request.headers, env.SHOPIER_WEBHOOK_TOKEN || env.SHOPIER_WEBHOOK_SECRET);
+      if (!verification.ok) return json(401, { accepted: false, error: verification.reason });
+      if (processedShopierWebhookIds.has(verification.webhookId)) return json(200, { accepted: true, duplicate: true });
+      let payload: Record<string, unknown>;
+      try { payload = JSON.parse(rawBody) as Record<string, unknown>; } catch { return json(400, { accepted: false, error: "Shopier webhook gövdesi geçerli JSON değil." }); }
+      processedShopierWebhookIds.add(verification.webhookId);
+      if (processedShopierWebhookIds.size > 500) processedShopierWebhookIds.delete(processedShopierWebhookIds.values().next().value as string);
+      shopierWebhookEvents.push({
+        id: verification.webhookId,
+        event: verification.event,
+        resourceId: payload.id ? String(payload.id) : undefined,
+        receivedAt: new Date().toISOString()
+      });
+      if (shopierWebhookEvents.length > 100) shopierWebhookEvents.splice(0, shopierWebhookEvents.length - 100);
+      return json(200, { accepted: true, duplicate: false, event: verification.event });
+    }
     if (url.pathname.startsWith("/api/") && !authorized(request, env)) return json(401, { error: "Uygulama erişim anahtarı geçersiz." });
 
     if (request.method === "GET" && url.pathname === "/api/channels/status") {
@@ -152,9 +231,27 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
     if (request.method === "GET" && url.pathname === "/api/shopier/products") {
       return json(200, { products: await listShopierProducts(env) });
     }
+    if (request.method === "POST" && url.pathname === "/api/shopier/products") {
+      const input = await readBody(request);
+      const blocked = requireConfirmedShopierWrite(env, input);
+      if (blocked) return blocked;
+      return json(201, { product: await createShopierProduct(env, input as unknown as ShopierProductInput) });
+    }
+    const shopierProductMatch = url.pathname.match(/^\/api\/shopier\/products\/([^/]+)$/);
+    if (request.method === "PUT" && shopierProductMatch) {
+      const input = await readBody(request);
+      const blocked = requireConfirmedShopierWrite(env, input);
+      if (blocked) return blocked;
+      const { confirm: _confirm, ...patch } = input;
+      return json(200, { product: await updateShopierProduct(env, decodeURIComponent(shopierProductMatch[1]), patch as ShopierProductPatch) });
+    }
     if (request.method === "GET" && url.pathname === "/api/shopier/orders") {
       if (!env.APP_ACCESS_TOKEN) return json(503, { error: "Sipariş özeti için uygulama erişim anahtarı yapılandırılmalıdır." });
       return json(200, { orders: await listRedactedShopierOrders(env), privacy: "Müşteri adı, telefon, e-posta ve adres bilgileri bu yanıtta bulunmaz." });
+    }
+    if (request.method === "GET" && url.pathname === "/api/shopier/center") {
+      if (!env.APP_ACCESS_TOKEN) return json(503, { error: "Shopier satış merkezi için uygulama erişim anahtarı yapılandırılmalıdır." });
+      return json(200, await shopierCenter(env));
     }
 
     if (request.method === "GET" && url.pathname === "/api/dashboard") return json(200, dashboard());
@@ -344,6 +441,7 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
       if (error.code === "NOT_CONFIGURED") return json(503, { error: "Shopier erişim anahtarı henüz sunucuya eklenmedi." });
       if (error.code === "AUTH_FAILED") return json(401, { error: "Shopier erişim anahtarı reddedildi." });
       if (error.code === "RATE_LIMITED") return json(429, { error: "Shopier istek sınırına ulaşıldı. Birkaç dakika sonra tekrar deneyin." });
+      if (error.code === "VALIDATION_FAILED") return json(400, { error: error.message, field: error.upstreamCode });
       return json(502, { error: "Shopier geçici olarak yanıt vermedi." });
     }
     return json(500, { error: "Beklenmeyen sunucu hatası." });

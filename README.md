@@ -4,6 +4,8 @@ GXL Market Studio için ürün kategorisinden bağımsız, Android merkezli çok
 
 Sistem; serbest kategorili ürün kataloğu, pazar fırsatları, müşteri adayları, ilk temas onayı, onay sonrası otomatik konuşma, ürün önerisi, çok kanallı satış yönlendirmesi ve insan devralma kurallarını tek yerde toplar.
 
+Güncel kanal önceliği Shopier → Etsy'dir. Shopier uygulamada ayrı bir satış merkezi olarak canlı ürün/sipariş okuma, açık onaylı ürün oluşturma ve güncelleme, stok yönetimi ve imzalı webhook doğrulaması sağlar. Etsy ayrı bir kanal olarak tutulur; mağaza sahibi kurulum ücretini onaylayıp mağazayı açana kadar ödeme öncesi hazırlık aşamasında kalır. Letgo beklemededir.
+
 Yeni akıllı ürün modülü; telefondan seçilen gerçek ürün fotoğrafını analiz eder, yalnızca gözlemlenebilir özellikleri çıkarır, doğrulanamayan marka/yıl/malzeme iddialarını soruya dönüştürür, Etsy için İngilizce; Shopier ve Letgo için Türkçe ilan taslakları hazırlar. Deterministik politika kilidi `YASAK`, `İNCELEME GEREKLİ` ve `UYGUNLUK KONTROLÜ GEÇTİ` sonuçlarından birini verir; yasak veya eksik kanıtlı ürün otomatik yayınlanmaz.
 
 ## Hızlı başlangıç
@@ -24,10 +26,6 @@ npm start
 ```
 
 Expo Go ile QR kodunu Android telefonda açabilirsiniz. Gerçek kanal bağlantıları için `docs/KURULUM_TR.md` dosyasını izleyin.
-
-## Cloudflare Worker
-
-`main` dalı Cloudflare Workers Builds'e bağlıdır. Worker yapılandırması kökteki `wrangler.jsonc` dosyasından okunur ve `npx wrangler deploy` komutuyla yayımlanır.
 
 ## Telefona doğrudan APK kurma
 
@@ -63,6 +61,7 @@ Depodaki `GXL Android APK` iş akışı `main` dalına yapılan her mobil uygula
 - Görselden ürün tanıma, üç platforma özel ilan üretimi ve politika kilidi
 - İzinli etkileşimleri niyet, güncellik ve katalog eşleşmesine göre puanlayan potansiyel müşteri motoru
 - Meta, Shopier ve Letgo bağlayıcı sınırları
+- Bağımsız Shopier satış merkezi, canlı ürün oluşturma/güncelleme ve imzalı webhook doğrulaması
 - Testler, API örnekleri ve canlıya geçiş kontrol listesi
 
 Bu sürüm bir üretim çekirdeği ve kurulabilir prototiptir. Canlı mesaj gönderimi; işletme doğrulaması, kanal erişim anahtarları, KVKK metinleri ve Meta/Shopier uygulama onayları tamamlanınca etkinleşir.

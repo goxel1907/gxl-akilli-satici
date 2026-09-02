@@ -11,7 +11,7 @@ const apiHeaders = (json = false) => ({
   ...(json ? { "content-type": "application/json" } : {}),
   ...(API_TOKEN ? { authorization: `Bearer ${API_TOKEN}` } : {})
 });
-type Tab = "Özet" | "Ajan" | "Onaylar" | "Müşteriler" | "Ürünler";
+type Tab = "Özet" | "Shopier" | "Ajan" | "Onaylar" | "Müşteriler" | "Ürünler";
 type ProductOrigin = "made_by_seller" | "designed_by_seller" | "vintage" | "craft_supply" | "commercial_resale" | "unknown";
 
 const demo = {
@@ -47,6 +47,27 @@ const demoOpportunityCenter = {
   ]
 };
 
+const demoShopierCenter = {
+  connected: false,
+  ready: false,
+  counts: { products: 0, recentOrders: 0, orderWindowDays: 30 },
+  products: [],
+  orders: [],
+  capabilities: { readProducts: false, readOrders: false, createProducts: false, updateProducts: false, deleteProducts: false, signedWebhooks: false },
+  blockers: ["Canlı Shopier satış merkezi bağlantısı bekleniyor."],
+  recentWebhookEvents: []
+};
+
+const navigationTabs: Tab[] = ["Özet", "Shopier", "Ajan", "Onaylar", "Müşteriler", "Ürünler"];
+const navigationIcons: Record<Tab, any> = {
+  "Özet": "grid",
+  "Shopier": "bag-handle",
+  "Ajan": "sparkles",
+  "Onaylar": "checkmark-circle",
+  "Müşteriler": "people",
+  "Ürünler": "cube"
+};
+
 const productImages: Record<string, any> = {
   "gxl-gumus-24g": require("./assets/products/gxl-24g-1.jpg"),
   "gxl-gumus-17g": require("./assets/products/gxl-17g-1.jpg"),
@@ -63,6 +84,7 @@ export default function App() {
     etsy: { configured: false, storageConfigured: false, connected: false }
   });
   const [opportunityCenter, setOpportunityCenter] = useState<any>(demoOpportunityCenter);
+  const [shopierCenter, setShopierCenter] = useState<any>(demoShopierCenter);
 
   const refresh = async () => {
     if (!API_URL) {
@@ -72,10 +94,11 @@ export default function App() {
       return;
     }
     try {
-      const [response, channelResponse, opportunityResponse] = await Promise.all([
+      const [response, channelResponse, opportunityResponse, shopierResponse] = await Promise.all([
         fetch(`${API_URL}/api/dashboard`, { headers: apiHeaders() }),
         fetch(`${API_URL}/api/channels/status`, { headers: apiHeaders() }),
-        fetch(`${API_URL}/api/opportunities`, { headers: apiHeaders() })
+        fetch(`${API_URL}/api/opportunities`, { headers: apiHeaders() }),
+        fetch(`${API_URL}/api/shopier/center`, { headers: apiHeaders() })
       ]);
       if (!response.ok) throw new Error();
       setData(await response.json());
@@ -86,10 +109,13 @@ export default function App() {
       });
       if (opportunityResponse.ok) setOpportunityCenter(await opportunityResponse.json());
       else setOpportunityCenter(demoOpportunityCenter);
+      if (shopierResponse.ok) setShopierCenter(await shopierResponse.json());
+      else setShopierCenter(demoShopierCenter);
       setOnline(true);
     } catch {
       setData(demo);
       setOpportunityCenter(demoOpportunityCenter);
+      setShopierCenter(demoShopierCenter);
       setOnline(false);
     } finally {
       setLoading(false);
@@ -169,6 +195,7 @@ export default function App() {
       {loading ? <ActivityIndicator style={{ marginTop: 40 }} color="#C88B47" /> : (
         <ScrollView contentContainerStyle={styles.content}>
           {tab === "Özet" && <Overview data={data} setTab={setTab} online={online} channels={channels} />}
+          {tab === "Shopier" && <ShopierScreen center={shopierCenter} online={online} onRefresh={refresh} />}
           {tab === "Ajan" && <AgentScreen center={opportunityCenter} online={online} onRefresh={refresh} />}
           {tab === "Onaylar" && <Approvals items={pending} decide={decide} />}
           {tab === "Müşteriler" && <Leads items={data.leads} />}
@@ -176,9 +203,9 @@ export default function App() {
         </ScrollView>
       )}
       <View style={styles.nav}>
-        {(["Özet", "Ajan", "Onaylar", "Müşteriler", "Ürünler"] as Tab[]).map((item) => (
+        {navigationTabs.map((item) => (
           <Pressable key={item} style={styles.navItem} onPress={() => setTab(item)}>
-            <Ionicons name={item === "Özet" ? "grid" : item === "Ajan" ? "sparkles" : item === "Onaylar" ? "checkmark-circle" : item === "Müşteriler" ? "people" : "cube"} size={22} color={tab === item ? "#C88B47" : "#748079"} />
+            <Ionicons name={navigationIcons[item]} size={21} color={tab === item ? "#C88B47" : "#748079"} />
             <Text style={[styles.navText, tab === item && styles.navTextActive]}>{item}</Text>
           </Pressable>
         ))}
@@ -254,6 +281,158 @@ function Overview({ data, setTab, online, channels }: any) {
       <Channel name="E-posta" status={SALES_EMAIL} icon="mail-outline" onPress={() => openUrl(`mailto:${SALES_EMAIL}?subject=${encodeURIComponent("GXL Market Studio")}`, "E-posta")} />
     </View>
   </>;
+}
+
+function ShopierScreen({ center, online, onRefresh }: any) {
+  const [formProduct, setFormProduct] = useState<any>(undefined);
+  const [formVisible, setFormVisible] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const products = center?.products || [];
+  const orders = center?.orders || [];
+  const capabilities = center?.capabilities || {};
+
+  const openCreate = () => { setFormProduct(undefined); setFormVisible(true); };
+  const openEdit = (product: any) => { setFormProduct(product); setFormVisible(true); };
+  const commit = (payload: any) => {
+    if (!online || !API_URL) return Alert.alert("Shopier bağlı değil", "Canlı mağazada değişiklik yapmak için GXL sunucusu bağlı olmalıdır.");
+    const editing = Boolean(formProduct?.id);
+    Alert.alert(
+      editing ? "Shopier ürünü güncellensin mi?" : "Shopier'de ürün oluşturulsun mu?",
+      editing
+        ? `${formProduct.title} ürününün fiyat, stok ve ilan bilgileri canlı mağazada değişecek.`
+        : `${payload.title} canlı Shopier mağazasında satışa açılacak.`,
+      [
+        { text: "Vazgeç", style: "cancel" },
+        {
+          text: editing ? "Güncellemeyi onayla" : "Oluşturmayı onayla",
+          onPress: async () => {
+            setSaving(true);
+            try {
+              const response = await fetch(editing ? `${API_URL}/api/shopier/products/${encodeURIComponent(formProduct.id)}` : `${API_URL}/api/shopier/products`, {
+                method: editing ? "PUT" : "POST",
+                headers: apiHeaders(true),
+                body: JSON.stringify({ ...payload, confirm: true })
+              });
+              const result = await response.json() as any;
+              if (!response.ok) throw new Error(result.error || "Shopier ürünü kaydedilemedi.");
+              setFormVisible(false);
+              setFormProduct(undefined);
+              await onRefresh();
+              Alert.alert("Shopier güncellendi", editing ? "Canlı ürün bilgileri güncellendi." : "Yeni ürün canlı Shopier mağazasında oluşturuldu.");
+            } catch (error) {
+              Alert.alert("Shopier işlemi tamamlanamadı", error instanceof Error ? error.message : "Bağlantıyı kontrol edin.");
+            } finally {
+              setSaving(false);
+            }
+          }
+        }
+      ]
+    );
+  };
+
+  return <>
+    <View style={[styles.shopierHero, center?.ready && styles.shopierHeroReady]}>
+      <View style={styles.agentHeroTop}><View style={styles.shopierLogo}><Ionicons name="bag-handle" size={24} color="white" /></View><View style={{ flex: 1 }}><Text style={styles.agentHeroTitle}>Shopier Satış Merkezi</Text><Text style={styles.agentHeroText}>{center?.connected ? "Canlı katalog ve sipariş verisi bağlı." : "Canlı Shopier bağlantısı bekleniyor."}</Text></View><Pressable onPress={onRefresh}><Ionicons name="refresh" size={22} color="#F1B875" /></Pressable></View>
+      <View style={styles.agentCounts}>
+        <View style={styles.agentCount}><Text style={styles.agentCountValue}>{center?.counts?.products || 0}</Text><Text style={styles.agentCountLabel}>Canlı ürün</Text></View>
+        <View style={styles.agentCount}><Text style={styles.agentCountValue}>{center?.counts?.recentOrders || 0}</Text><Text style={styles.agentCountLabel}>30 günlük sipariş</Text></View>
+        <View style={styles.agentCount}><Text style={styles.agentCountValue}>{center?.ready ? "✓" : "!"}</Text><Text style={styles.agentCountLabel}>{center?.ready ? "Tam hazır" : "Eksik var"}</Text></View>
+      </View>
+    </View>
+
+    <Text style={styles.sectionTitle}>Bağlantı hazırlığı</Text>
+    <View style={styles.card}>
+      <ReadinessRow label="Ürünleri okuma" ready={capabilities.readProducts} />
+      <ReadinessRow label="Siparişleri okuma" ready={capabilities.readOrders} />
+      <ReadinessRow label="Ürün oluşturma" ready={capabilities.createProducts} />
+      <ReadinessRow label="Ürün ve stok güncelleme" ready={capabilities.updateProducts} />
+      <ReadinessRow label="İmzalı anlık bildirimler" ready={capabilities.signedWebhooks} />
+      {(center?.blockers || []).map((blocker: string) => <Text style={styles.shopierBlocker} key={blocker}>• {blocker}</Text>)}
+    </View>
+
+    <View style={styles.sectionHeading}><Text style={styles.sectionTitle}>Canlı Shopier ürünleri</Text><Pressable style={[styles.addButton, !capabilities.createProducts && styles.primaryDisabled]} disabled={!capabilities.createProducts} onPress={openCreate}><Ionicons name="add" size={18} color="white" /><Text style={styles.addButtonText}>Canlı ürün</Text></Pressable></View>
+    {!products.length ? <Empty icon="bag-outline" title="Canlı ürün görünmüyor" text="Shopier'e ürün eklendiğinde veya bağlantı yenilendiğinde burada görünür." /> : products.map((product: any) => <View style={styles.card} key={product.id}>
+      <View style={styles.shopierProductTop}><View style={{ flex: 1 }}><Text style={styles.cardTitle}>{product.title}</Text><Text style={styles.small}>#{product.id} · {product.stockStatus === "outOfStock" ? "Stokta yok" : `${product.stockQuantity ?? "?"} stok`}</Text></View><Pressable style={styles.editButton} onPress={() => openEdit(product)} disabled={!capabilities.updateProducts}><Ionicons name="create-outline" size={19} color={capabilities.updateProducts ? "#315B4C" : "#A8ADA9"} /></Pressable></View>
+      <Text style={styles.price}>{product.price ? `${product.price} ${product.currency || "TRY"}` : "Fiyat alınamadı"}</Text>
+      {!!product.description && <Text style={styles.evidence} numberOfLines={3}>{product.description}</Text>}
+      <View style={styles.inlineActions}>
+        {!!product.url && <Pressable style={styles.secondaryButton} onPress={() => openUrl(product.url, product.title)}><Text style={styles.secondaryButtonText}>Satış sayfası</Text></Pressable>}
+        <Pressable style={styles.secondaryButton} onPress={() => openEdit(product)} disabled={!capabilities.updateProducts}><Text style={styles.secondaryButtonText}>Fiyat / stok düzenle</Text></Pressable>
+      </View>
+    </View>)}
+
+    <Text style={styles.sectionTitle}>Son 30 günlük siparişler</Text>
+    {!orders.length ? <Empty icon="receipt-outline" title="Henüz sipariş yok" text="Yeni Shopier siparişleri imzalı olaylarla ve yenileme sırasında burada gösterilir." /> : orders.map((order: any) => <View style={styles.card} key={order.id}>
+      <View style={styles.shopierProductTop}><Text style={styles.cardTitle}>Sipariş #{order.id}</Text><Text style={styles.sourceStatus}>{order.paymentStatus || order.status || "Durum bekleniyor"}</Text></View>
+      <Text style={styles.price}>{order.total || "—"} {order.currency || "TRY"}</Text>
+      {(order.items || []).map((item: any, index: number) => <Text style={styles.small} key={`${order.id}-${index}`}>• {item.title || "Ürün"} × {item.quantity || 1}</Text>)}
+      {!!order.dateCreated && <Text style={styles.formHint}>{new Date(order.dateCreated).toLocaleString("tr-TR")}</Text>}
+    </View>)}
+    <Text style={styles.formHint}>{center?.privacy || "Müşteri kişisel bilgileri bu ekranda gösterilmez."}</Text>
+    <ShopierProductForm visible={formVisible} product={formProduct} saving={saving} onClose={() => setFormVisible(false)} onSave={commit} />
+  </>;
+}
+
+function ReadinessRow({ label, ready }: any) {
+  return <View style={styles.readinessRow}><Ionicons name={ready ? "checkmark-circle" : "alert-circle"} size={20} color={ready ? "#2B7A50" : "#B06B28"} /><Text style={styles.rowTitle}>{label}</Text><Text style={[styles.readinessState, ready && styles.connectedText]}>{ready ? "Hazır" : "Bekliyor"}</Text></View>;
+}
+
+function ShopierProductForm({ visible, product, saving, onClose, onSave }: any) {
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [imageUrl, setImageUrl] = useState("");
+  const [price, setPrice] = useState("");
+  const [shippingPrice, setShippingPrice] = useState("");
+  const [stock, setStock] = useState("1");
+  const [dispatchDuration, setDispatchDuration] = useState("1");
+  const [shippingPayer, setShippingPayer] = useState<"sellerPays" | "buyerPays">("sellerPays");
+
+  useEffect(() => {
+    if (!visible) return;
+    setTitle(product?.title || "");
+    setDescription(product?.description || "");
+    setImageUrl(product?.media?.[0]?.url || "");
+    setPrice(product?.basePrice || product?.price || "");
+    setShippingPrice(product?.shippingPrice || "");
+    setStock(String(product?.stockQuantity ?? 1));
+    setDispatchDuration(String(product?.dispatchDuration || 1));
+    setShippingPayer(product?.shippingPayer || "sellerPays");
+  }, [visible, product]);
+
+  const save = () => {
+    if (!title.trim() || !price.trim()) return Alert.alert("Eksik bilgi", "Ürün adı ve fiyat gereklidir.");
+    if (!product?.id && !imageUrl.trim()) return Alert.alert("Görsel bağlantısı gerekli", "Yeni Shopier ürünü için herkese açık HTTPS görsel bağlantısı gereklidir.");
+    const payload: any = {
+      title: title.trim(),
+      description: description.trim(),
+      priceData: { currency: "TRY", price: price.trim(), ...(shippingPrice.trim() ? { shippingPrice: shippingPrice.trim() } : {}) },
+      stockQuantity: Number(stock),
+      shippingPayer,
+      dispatchDuration: Number(dispatchDuration)
+    };
+    if (!product?.id) payload.type = "physical";
+    if (imageUrl.trim()) payload.media = [{ type: "image", url: imageUrl.trim(), placement: 1 }];
+    onSave(payload);
+  };
+
+  return <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
+    <SafeAreaView style={styles.formSafe}><ScrollView contentContainerStyle={styles.formContent}>
+      <View style={styles.formHeader}><Text style={styles.sectionTitle}>{product?.id ? "Shopier ürününü düzenle" : "Shopier'de canlı ürün oluştur"}</Text><Pressable onPress={onClose}><Ionicons name="close" size={28} color="#17221E" /></Pressable></View>
+      <Text style={styles.formHint}>Bu form yalnızca Shopier mağazasını değiştirir; Etsy'ye veri göndermez.</Text>
+      <Field label="Ürün adı" value={title} onChangeText={setTitle} placeholder="Shopier'de görünecek başlık" />
+      <Field label="Açıklama" value={description} onChangeText={setDescription} placeholder="Doğrulanmış ürün bilgileri" multiline />
+      <Field label="Herkese açık görsel URL'si" value={imageUrl} onChangeText={setImageUrl} placeholder="https://.../urun.jpg" autoCapitalize="none" />
+      <Field label="Fiyat (TRY)" value={price} onChangeText={setPrice} placeholder="2500.00" keyboardType="decimal-pad" />
+      <Field label="Kargo fiyatı (isteğe bağlı)" value={shippingPrice} onChangeText={setShippingPrice} placeholder="0.00" keyboardType="decimal-pad" />
+      <Field label="Stok" value={stock} onChangeText={setStock} placeholder="1" keyboardType="number-pad" />
+      <Text style={styles.fieldLabel}>Kargo ücretini kim öder?</Text>
+      <View style={styles.chips}><Pressable style={[styles.chip, shippingPayer === "sellerPays" && styles.chipActive]} onPress={() => setShippingPayer("sellerPays")}><Text style={[styles.chipText, shippingPayer === "sellerPays" && styles.chipTextActive]}>Satıcı</Text></Pressable><Pressable style={[styles.chip, shippingPayer === "buyerPays" && styles.chipActive]} onPress={() => setShippingPayer("buyerPays")}><Text style={[styles.chipText, shippingPayer === "buyerPays" && styles.chipTextActive]}>Alıcı</Text></Pressable></View>
+      <Text style={styles.fieldLabel}>Kargoya verme süresi</Text>
+      <View style={styles.chips}>{["1", "2", "3"].map((day) => <Pressable key={day} style={[styles.chip, dispatchDuration === day && styles.chipActive]} onPress={() => setDispatchDuration(day)}><Text style={[styles.chipText, dispatchDuration === day && styles.chipTextActive]}>{day} gün</Text></Pressable>)}</View>
+      <Pressable style={[styles.primary, saving && styles.primaryDisabled]} disabled={saving} onPress={save}>{saving ? <ActivityIndicator color="white" /> : <Ionicons name="shield-checkmark" size={20} color="white" />}<Text style={styles.primaryText}>{saving ? "Shopier kaydediliyor..." : "Kontrol et ve onaya sun"}</Text></Pressable>
+      <Text style={styles.formHint}>Sonraki ekranda canlı Shopier mağazasında yapılacak değişiklik ayrıca sorulur. Ürün silme bu uygulamada kapalıdır.</Text>
+    </ScrollView></SafeAreaView>
+  </Modal>;
 }
 
 function AgentScreen({ center, online, onRefresh }: any) {
@@ -473,6 +652,17 @@ const styles = StyleSheet.create({
   metricLabel: { color: "#68736E", fontSize: 12 },
   callout: { flexDirection: "row", gap: 12, backgroundColor: "#E7EEE9", padding: 15, borderRadius: 16, marginBottom: 12 },
   calloutIcon: { width: 40, height: 40, borderRadius: 12, backgroundColor: "white", alignItems: "center", justifyContent: "center" },
+  shopierHero: { backgroundColor: "#4A3524", borderRadius: 20, padding: 16, marginBottom: 16 },
+  shopierHeroReady: { backgroundColor: "#173E31" },
+  shopierLogo: { width: 44, height: 44, borderRadius: 14, backgroundColor: "#C88B47", alignItems: "center", justifyContent: "center" },
+  readinessRow: { flexDirection: "row", alignItems: "center", gap: 9, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: "#F0EDE6" },
+  readinessState: { marginLeft: "auto", color: "#B06B28", fontSize: 11, fontWeight: "800" },
+  shopierBlocker: { color: "#8A521F", backgroundColor: "#FFF5E8", borderRadius: 8, padding: 9, marginTop: 9, fontSize: 11, lineHeight: 16 },
+  shopierProductTop: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", gap: 10 },
+  editButton: { width: 38, height: 38, borderRadius: 11, backgroundColor: "#EDF2EF", alignItems: "center", justifyContent: "center" },
+  inlineActions: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 12 },
+  secondaryButton: { borderWidth: 1, borderColor: "#C8D2CD", borderRadius: 10, paddingHorizontal: 11, paddingVertical: 9 },
+  secondaryButtonText: { color: "#315B4C", fontWeight: "800", fontSize: 11 },
   agentHero: { backgroundColor: "#12261F", borderRadius: 20, padding: 16, marginBottom: 16 },
   agentHeroTop: { flexDirection: "row", alignItems: "center", gap: 11 },
   agentAvatar: { width: 44, height: 44, borderRadius: 14, backgroundColor: "#A86B2E", alignItems: "center", justifyContent: "center" },
@@ -572,6 +762,6 @@ const styles = StyleSheet.create({
   policyLabel: { color: "#303B36", fontSize: 12, fontWeight: "800", marginVertical: 3 },
   nav: { position: "absolute", bottom: 0, left: 0, right: 0, height: 78, backgroundColor: "white", borderTopWidth: 1, borderTopColor: "#E3E0D8", flexDirection: "row", paddingBottom: 10 },
   navItem: { flex: 1, alignItems: "center", justifyContent: "center", gap: 4 },
-  navText: { color: "#748079", fontSize: 10, fontWeight: "600" },
+  navText: { color: "#748079", fontSize: 9, fontWeight: "600" },
   navTextActive: { color: "#A86B2E" }
 });
