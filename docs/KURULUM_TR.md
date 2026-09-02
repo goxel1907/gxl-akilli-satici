@@ -17,6 +17,7 @@ Bu pakette GXL markası, iki Letgo ilanı ve Shopier satış bağlantısı örne
 3. Mobil uygulama ile sunucu arasındaki yazma işlemleri için güçlü bir `APP_ACCESS_TOKEN` oluşturun; aynı değer APK derlemesinde `EXPO_PUBLIC_GXL_APP_TOKEN` olarak kullanılmalıdır.
 4. Worker üzerindeki `POST /webhooks/shopier` adresini Shopier'de `product.created`, `product.updated`, `order.created`, `order.addressUpdated`, `order.fulfilled`, `refund.requested` ve `refund.updated` olaylarına abone edin.
 5. Shopier'in webhook oluştururken yalnızca ilk yanıtta verdiği webhook token değerini `SHOPIER_WEBHOOK_TOKEN` sırrı olarak kaydedin. Eski kurulumlarla uyumluluk için `SHOPIER_WEBHOOK_SECRET` adı da kabul edilir.
+6. Cloudflare R2'de `gxl-product-media` kovasını oluşturup Worker'a `PRODUCT_MEDIA` adıyla bağlayın. Bu depo, telefondan seçilen Shopier ürün fotoğraflarını herkese açık fakat tahmin edilemez bağlantılarla sunar.
 6. Uygulamadaki **Shopier** sekmesini yenileyin. Ürün okuma, sipariş okuma, ürün oluşturma/güncelleme ve imzalı bildirim satırlarının tamamı **Hazır** görünmelidir.
 
 Shopier üretim uçları:
@@ -24,6 +25,7 @@ Shopier üretim uçları:
 - `GET /api/shopier/center`: canlı ürünler, kişisel veriden arındırılmış 30 günlük sipariş özeti, yetenek ve eksik listesi.
 - `GET /api/shopier/products`: canlı ürün kataloğu.
 - `POST /api/shopier/products`: yeni canlı ürün; `APP_ACCESS_TOKEN` ve gövdede `confirm: true` zorunludur.
+- `POST /api/shopier/media`: telefondan seçilen JPG/PNG/BMP ürün görselini R2'ye yükler; `APP_ACCESS_TOKEN` ve gövdede `confirm: true` zorunludur.
 - `PUT /api/shopier/products/:id`: fiyat, stok ve ilan alanı güncellemesi; `APP_ACCESS_TOKEN` ve `confirm: true` zorunludur.
 - `GET /api/shopier/orders`: kişisel veri içermeyen son 30 günlük sipariş özeti.
 - `POST /webhooks/shopier`: ham gövde üzerinden HMAC-SHA256 imzası, zaman damgası ve tekrar eden webhook kimliği kontrolü.

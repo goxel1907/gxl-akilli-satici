@@ -347,6 +347,7 @@ function ShopierScreen({ center, online, onRefresh }: any) {
       <ReadinessRow label="Ürün oluşturma" ready={capabilities.createProducts} />
       <ReadinessRow label="Ürün ve stok güncelleme" ready={capabilities.updateProducts} />
       <ReadinessRow label="İmzalı anlık bildirimler" ready={capabilities.signedWebhooks} />
+      <ReadinessRow label="Telefondan fotoğraf yükleme" ready={capabilities.mediaUpload} />
       {(center?.blockers || []).map((blocker: string) => <Text style={styles.shopierBlocker} key={blocker}>• {blocker}</Text>)}
     </View>
 
@@ -369,7 +370,7 @@ function ShopierScreen({ center, online, onRefresh }: any) {
       {!!order.dateCreated && <Text style={styles.formHint}>{new Date(order.dateCreated).toLocaleString("tr-TR")}</Text>}
     </View>)}
     <Text style={styles.formHint}>{center?.privacy || "Müşteri kişisel bilgileri bu ekranda gösterilmez."}</Text>
-    <ShopierProductForm visible={formVisible} product={formProduct} saving={saving} onClose={() => setFormVisible(false)} onSave={commit} />
+    <ShopierProductForm visible={formVisible} product={formProduct} saving={saving} online={online} onClose={() => setFormVisible(false)} onSave={commit} />
   </>;
 }
 
@@ -377,7 +378,7 @@ function ReadinessRow({ label, ready }: any) {
   return <View style={styles.readinessRow}><Ionicons name={ready ? "checkmark-circle" : "alert-circle"} size={20} color={ready ? "#2B7A50" : "#B06B28"} /><Text style={styles.rowTitle}>{label}</Text><Text style={[styles.readinessState, ready && styles.connectedText]}>{ready ? "Hazır" : "Bekliyor"}</Text></View>;
 }
 
-function ShopierProductForm({ visible, product, saving, onClose, onSave }: any) {
+function ShopierProductForm({ visible, product, saving, online, onClose, onSave }: any) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [imageUrl, setImageUrl] = useState("");
@@ -386,6 +387,7 @@ function ShopierProductForm({ visible, product, saving, onClose, onSave }: any) 
   const [stock, setStock] = useState("1");
   const [dispatchDuration, setDispatchDuration] = useState("1");
   const [shippingPayer, setShippingPayer] = useState<"sellerPays" | "buyerPays">("sellerPays");
+  const [uploadingImage, setUploadingImage] = useState(false);
 
   useEffect(() => {
     if (!visible) return;
@@ -398,6 +400,29 @@ function ShopierProductForm({ visible, product, saving, onClose, onSave }: any) 
     setDispatchDuration(String(product?.dispatchDuration || 1));
     setShippingPayer(product?.shippingPayer || "sellerPays");
   }, [visible, product]);
+
+  const pickAndUploadImage = async () => {
+    if (!online || !API_URL) return Alert.alert("Sunucu bağlantısı gerekli", "Fotoğrafı Shopier için yüklemek üzere GXL sunucusu bağlı olmalıdır.");
+    const picked = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ["images"], allowsEditing: true, quality: 0.78, base64: true });
+    if (picked.canceled) return;
+    const asset = picked.assets[0];
+    if (!asset.base64) return Alert.alert("Fotoğraf okunamadı", "Başka bir JPG veya PNG fotoğraf deneyin.");
+    setUploadingImage(true);
+    try {
+      const response = await fetch(`${API_URL}/api/shopier/media`, {
+        method: "POST",
+        headers: apiHeaders(true),
+        body: JSON.stringify({ confirm: true, imageBase64: asset.base64, mimeType: asset.mimeType || "image/jpeg" })
+      });
+      const result = await response.json() as any;
+      if (!response.ok) throw new Error(result.error || "Fotoğraf yüklenemedi.");
+      setImageUrl(result.url);
+    } catch (error) {
+      Alert.alert("Fotoğraf yüklenemedi", error instanceof Error ? error.message : "Bağlantıyı kontrol edin.");
+    } finally {
+      setUploadingImage(false);
+    }
+  };
 
   const save = () => {
     if (!title.trim() || !price.trim()) return Alert.alert("Eksik bilgi", "Ürün adı ve fiyat gereklidir.");
@@ -421,7 +446,9 @@ function ShopierProductForm({ visible, product, saving, onClose, onSave }: any) 
       <Text style={styles.formHint}>Bu form yalnızca Shopier mağazasını değiştirir; Etsy'ye veri göndermez.</Text>
       <Field label="Ürün adı" value={title} onChangeText={setTitle} placeholder="Shopier'de görünecek başlık" />
       <Field label="Açıklama" value={description} onChangeText={setDescription} placeholder="Doğrulanmış ürün bilgileri" multiline />
-      <Field label="Herkese açık görsel URL'si" value={imageUrl} onChangeText={setImageUrl} placeholder="https://.../urun.jpg" autoCapitalize="none" />
+      {!!imageUrl && <Image source={{ uri: imageUrl }} style={styles.shopierImagePreview} />}
+      <Pressable style={[styles.secondaryButton, uploadingImage && styles.primaryDisabled]} disabled={uploadingImage} onPress={pickAndUploadImage}>{uploadingImage ? <ActivityIndicator color="#315B4C" /> : <Ionicons name="image-outline" size={18} color="#315B4C" />}<Text style={styles.secondaryButtonText}>{uploadingImage ? "Fotoğraf yükleniyor..." : "Telefondan fotoğraf seç"}</Text></Pressable>
+      <Field label="Görsel URL'si (isteğe bağlı alternatif)" value={imageUrl} onChangeText={setImageUrl} placeholder="https://.../urun.jpg" autoCapitalize="none" />
       <Field label="Fiyat (TRY)" value={price} onChangeText={setPrice} placeholder="2500.00" keyboardType="decimal-pad" />
       <Field label="Kargo fiyatı (isteğe bağlı)" value={shippingPrice} onChangeText={setShippingPrice} placeholder="0.00" keyboardType="decimal-pad" />
       <Field label="Stok" value={stock} onChangeText={setStock} placeholder="1" keyboardType="number-pad" />
@@ -659,6 +686,7 @@ const styles = StyleSheet.create({
   readinessState: { marginLeft: "auto", color: "#B06B28", fontSize: 11, fontWeight: "800" },
   shopierBlocker: { color: "#8A521F", backgroundColor: "#FFF5E8", borderRadius: 8, padding: 9, marginTop: 9, fontSize: 11, lineHeight: 16 },
   shopierProductTop: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", gap: 10 },
+  shopierImagePreview: { width: "100%", height: 220, borderRadius: 14, resizeMode: "cover", marginBottom: 10, backgroundColor: "#EEF0ED" },
   editButton: { width: 38, height: 38, borderRadius: 11, backgroundColor: "#EDF2EF", alignItems: "center", justifyContent: "center" },
   inlineActions: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 12 },
   secondaryButton: { borderWidth: 1, borderColor: "#C8D2CD", borderRadius: 10, paddingHorizontal: 11, paddingVertical: 9 },

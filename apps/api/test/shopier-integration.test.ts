@@ -8,6 +8,7 @@ import {
   validateShopierProductInput,
   verifyShopierWebhook
 } from "../../worker/src/shopier.js";
+import { handleRequest } from "../../worker/src/index.js";
 
 const env = { SHOPIER_ACCESS_TOKEN: "test-token" };
 
@@ -101,4 +102,27 @@ test("Shopier webhook verification rejects stale events", async () => {
   });
   const result = await verifyShopierWebhook(raw, headers, token, 2_000_000 * 1000);
   assert.equal(result.ok, false);
+});
+
+test("Shopier media upload stores a phone image and returns a public URL", async () => {
+  let stored: { key?: string; bytes?: number; contentType?: string } = {};
+  const response = await handleRequest(new Request("https://gxl.example/api/shopier/media", {
+    method: "POST",
+    headers: { authorization: "Bearer app-token", "content-type": "application/json" },
+    body: JSON.stringify({ confirm: true, mimeType: "image/jpeg", imageBase64: Buffer.alloc(1_024, 7).toString("base64") })
+  }), {
+    APP_ACCESS_TOKEN: "app-token",
+    PRODUCT_MEDIA: {
+      get: async () => null,
+      put: async (key: string, value: ArrayBuffer, options?: { httpMetadata?: { contentType?: string } }) => {
+        stored = { key, bytes: value.byteLength, contentType: options?.httpMetadata?.contentType };
+      }
+    }
+  });
+
+  assert.equal(response.status, 201);
+  const body = await response.json() as { url: string };
+  assert.match(body.url, /^https:\/\/gxl\.example\/media\/shopier\/[a-f0-9-]+\.jpg$/);
+  assert.equal(stored.bytes, 1_024);
+  assert.equal(stored.contentType, "image/jpeg");
 });
