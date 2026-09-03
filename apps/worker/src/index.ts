@@ -9,15 +9,18 @@ import type { AiRuntimeEnv } from "../../api/src/structured-ai.js";
 import type { Channel, Lead } from "../../api/src/types.js";
 import {
   createShopierProduct,
+  createShopierWebhookSubscription,
   getShopierSnapshot,
   listRedactedShopierOrders,
   listShopierProducts,
+  listShopierWebhookSubscriptions,
   ShopierIntegrationError,
   updateShopierProduct,
   verifyShopierWebhook,
   type ShopierProductInput,
   type ShopierProductPatch,
-  type ShopierRuntimeEnv
+  type ShopierRuntimeEnv,
+  type ShopierWebhookEvent
 } from "./shopier.js";
 import { createEtsyConnectSession, EtsyIntegrationError, getEtsyStatus, handleEtsyCallback, type EtsyRuntimeEnv } from "./etsy.js";
 
@@ -34,6 +37,17 @@ interface ProductMediaKv {
   put(key: string, value: ArrayBuffer): Promise<void>;
 }
 
+interface ShopierWebhookKv {
+  get(key: string): Promise<string | null>;
+  put(key: string, value: string): Promise<void>;
+}
+
+interface StoredShopierWebhook {
+  id: string;
+  event: ShopierWebhookEvent;
+  url: string;
+}
+
 const corsHeaders = {
   "access-control-allow-origin": "*",
   "access-control-allow-headers": "content-type, authorization",
@@ -42,6 +56,17 @@ const corsHeaders = {
 
 const processedShopierWebhookIds = new Set<string>();
 const shopierWebhookEvents: Array<{ id: string; event: string; resourceId?: string; receivedAt: string }> = [];
+const SHOPIER_WEBHOOK_MANIFEST_KEY = "shopier:webhooks:manifest";
+const SHOPIER_WEBHOOK_TOKEN_PREFIX = "shopier:webhook-token:";
+const SHOPIER_WEBHOOK_EVENTS: ShopierWebhookEvent[] = [
+  "order.created",
+  "order.addressUpdated",
+  "order.fulfilled",
+  "product.created",
+  "product.updated",
+  "refund.requested",
+  "refund.updated"
+];
 
 function json(status: number, value: unknown): Response {
   return Response.json(value, { status, headers: corsHeaders });
@@ -104,13 +129,83 @@ async function putProductMedia(env: Env, key: string, value: ArrayBuffer, mimeTy
   await (env.ETSY_OAUTH as unknown as ProductMediaKv).put(key, value);
 }
 
+function shopierWebhookStore(env: Env): ShopierWebhookKv | undefined {
+  return env.ETSY_OAUTH as unknown as ShopierWebhookKv | undefined;
+}
+
+async function loadShopierWebhookManifest(env: Env): Promise<StoredShopierWebhook[]> {
+  const store = shopierWebhookStore(env);
+  if (!store) return [];
+  const raw = await store.get(SHOPIER_WEBHOOK_MANIFEST_KEY);
+  if (!raw) return [];
+  try {
+    const values = JSON.parse(raw) as StoredShopierWebhook[];
+    return Array.isArray(values) ? values.filter((value) => value.id && value.event && value.url) : [];
+  } catch {
+    return [];
+  }
+}
+
+async function shopierWebhookToken(env: Env, webhookId: string): Promise<string | undefined> {
+  const configured = env.SHOPIER_WEBHOOK_TOKEN || env.SHOPIER_WEBHOOK_SECRET;
+  if (configured) return configured;
+  const store = shopierWebhookStore(env);
+  if (!store || !webhookId) return undefined;
+  return (await store.get(`${SHOPIER_WEBHOOK_TOKEN_PREFIX}${webhookId}`)) || undefined;
+}
+
+async function shopierWebhooksConfigured(env: Env): Promise<boolean> {
+  if (env.SHOPIER_WEBHOOK_TOKEN || env.SHOPIER_WEBHOOK_SECRET) return true;
+  return (await loadShopierWebhookManifest(env)).length > 0;
+}
+
+async function setupShopierWebhooks(env: Env, notificationUrl: string) {
+  const store = shopierWebhookStore(env);
+  if (!store) throw new ShopierIntegrationError("NOT_CONFIGURED", 503, "/webhooks", "storage", "Shopier webhook anahtarları için KV deposu bağlı değil.");
+  const [remote, stored] = await Promise.all([
+    listShopierWebhookSubscriptions(env),
+    loadShopierWebhookManifest(env)
+  ]);
+  const created: StoredShopierWebhook[] = [];
+  const ready = [...stored];
+  const needsRecreation: Array<{ id: string; event: ShopierWebhookEvent }> = [];
+
+  for (const event of SHOPIER_WEBHOOK_EVENTS) {
+    const existingStored = ready.find((item) => item.event === event && item.url === notificationUrl);
+    if (existingStored && await store.get(`${SHOPIER_WEBHOOK_TOKEN_PREFIX}${existingStored.id}`)) continue;
+    const existingRemote = remote.find((item) => item.event === event && item.url === notificationUrl);
+    if (existingRemote) {
+      needsRecreation.push({ id: existingRemote.id, event });
+      continue;
+    }
+    const webhook = await createShopierWebhookSubscription(env, event, notificationUrl);
+    await store.put(`${SHOPIER_WEBHOOK_TOKEN_PREFIX}${webhook.id}`, webhook.token!);
+    const safe = { id: webhook.id, event: webhook.event, url: webhook.url };
+    ready.push(safe);
+    created.push(safe);
+  }
+  await store.put(SHOPIER_WEBHOOK_MANIFEST_KEY, JSON.stringify(ready));
+  return {
+    configured: ready.length,
+    expected: SHOPIER_WEBHOOK_EVENTS.length,
+    created,
+    needsRecreation,
+    ready: ready.length === SHOPIER_WEBHOOK_EVENTS.length && needsRecreation.length === 0
+  };
+}
+
+function shopierWebhookSetupPage(): Response {
+  const html = `<!doctype html><html lang="tr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>GXL Shopier Webhook Kurulumu</title><style>body{font-family:system-ui;background:#f6f2e9;color:#17201d;margin:0}main{max-width:620px;margin:48px auto;padding:24px}section{background:#fff;border-radius:22px;padding:28px;box-shadow:0 10px 30px #0001}input,button{box-sizing:border-box;width:100%;padding:14px;border-radius:12px;font-size:16px}input{border:1px solid #bbb;margin:12px 0}button{border:0;background:#176b52;color:#fff;font-weight:700}pre{white-space:pre-wrap;background:#f2f4f3;padding:14px;border-radius:12px}</style></head><body><main><section><h1>Shopier olay bağlantısı</h1><p>Cloudflare'a kaydettiğiniz APP_ACCESS_TOKEN değerini girin. Değer yalnızca bu Worker'a gönderilir ve sayfada saklanmaz.</p><input id="token" type="password" autocomplete="off" placeholder="APP_ACCESS_TOKEN"><button id="setup">7 Shopier olayını bağla</button><pre id="result">Hazır.</pre></section></main><script>document.getElementById('setup').addEventListener('click',async()=>{const token=document.getElementById('token').value.trim();const result=document.getElementById('result');if(!token){result.textContent='Anahtarı girin.';return}result.textContent='Kuruluyor…';try{const response=await fetch('/api/shopier/webhooks/setup',{method:'POST',headers:{'authorization':'Bearer '+token,'content-type':'application/json'},body:JSON.stringify({confirm:true})});const body=await response.json();result.textContent=response.ok?(body.ready?'Tamamlandı: tüm Shopier olayları bağlı.':'Kısmen tamamlandı: '+JSON.stringify(body,null,2)):(body.error||'Kurulum başarısız.')}catch{result.textContent='Bağlantı kurulamadı.'}document.getElementById('token').value=''})</script></body></html>`;
+  return new Response(html, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" } });
+}
+
 async function shopierCenter(env: Env) {
   const [liveProducts, orders] = await Promise.all([
     listShopierProducts(env),
     listRedactedShopierOrders(env)
   ]);
   const writeEnabled = Boolean(env.SHOPIER_ACCESS_TOKEN && env.APP_ACCESS_TOKEN);
-  const webhookVerificationConfigured = Boolean(env.SHOPIER_WEBHOOK_TOKEN || env.SHOPIER_WEBHOOK_SECRET);
+  const webhookVerificationConfigured = await shopierWebhooksConfigured(env);
   const mediaStorage = productMediaStorage(env);
   const mediaUploadConfigured = Boolean(mediaStorage);
   const blockers = [
@@ -225,11 +320,12 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
         service: "gxl-akilli-satici",
         ai: env.GEMINI_API_KEY ? "gemini" : env.OPENAI_API_KEY ? "openai" : "not_configured",
         shopier: env.SHOPIER_ACCESS_TOKEN ? "configured" : "not_configured",
-        shopierWebhooks: env.SHOPIER_WEBHOOK_TOKEN || env.SHOPIER_WEBHOOK_SECRET ? "verified" : "not_configured",
+        shopierWebhooks: await shopierWebhooksConfigured(env) ? "verified" : "not_configured",
         productMedia: productMediaStorage(env) || "not_configured",
         etsy: env.ETSY_API_KEY && env.ETSY_SHARED_SECRET ? "configured" : "not_configured"
       });
     }
+    if (request.method === "GET" && url.pathname === "/setup/shopier-webhooks") return shopierWebhookSetupPage();
     if (request.method === "GET" && url.pathname === "/etsy/oauth/callback") return await handleEtsyCallback(request, env);
     if (request.method === "GET" && url.pathname.startsWith("/media/shopier/")) {
       if (!productMediaStorage(env)) return json(404, { error: "Ürün görseli bulunamadı." });
@@ -243,7 +339,7 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
     }
     if (request.method === "POST" && url.pathname === "/webhooks/shopier") {
       const rawBody = await readRawBody(request);
-      const verification = await verifyShopierWebhook(rawBody, request.headers, env.SHOPIER_WEBHOOK_TOKEN || env.SHOPIER_WEBHOOK_SECRET);
+      const verification = await verifyShopierWebhook(rawBody, request.headers, await shopierWebhookToken(env, request.headers.get("Shopier-Webhook-Id")?.trim() || ""));
       if (!verification.ok) return json(401, { accepted: false, error: verification.reason });
       if (processedShopierWebhookIds.has(verification.webhookId)) return json(200, { accepted: true, duplicate: true });
       let payload: Record<string, unknown>;
@@ -264,7 +360,7 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
     if (request.method === "GET" && url.pathname === "/api/channels/status") {
       let shopier: unknown;
       try {
-        shopier = await getShopierSnapshot(env);
+        shopier = { ...(await getShopierSnapshot(env)), webhookVerificationConfigured: await shopierWebhooksConfigured(env) };
       } catch (error) {
         const code = error instanceof ShopierIntegrationError ? error.code : "UPSTREAM_FAILED";
         const messages: Record<string, string> = {
@@ -308,6 +404,12 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
       const key = `shopier/${crypto.randomUUID()}.${image.extension}`;
       await putProductMedia(env, key, image.bytes, image.mimeType);
       return json(201, { url: `${url.origin}/media/${key}` });
+    }
+    if (request.method === "POST" && url.pathname === "/api/shopier/webhooks/setup") {
+      const input = await readBody(request);
+      const blocked = requireConfirmedShopierWrite(env, input);
+      if (blocked) return blocked;
+      return json(200, await setupShopierWebhooks(env, `${url.origin}/webhooks/shopier`));
     }
     const shopierProductMatch = url.pathname.match(/^\/api\/shopier\/products\/([^/]+)$/);
     if (request.method === "PUT" && shopierProductMatch) {
