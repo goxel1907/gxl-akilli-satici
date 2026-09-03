@@ -88,6 +88,13 @@ export type ShopierWebhookEvent =
   | "refund.requested"
   | "refund.updated";
 
+export interface ShopierWebhookSubscription {
+  id: string;
+  event: ShopierWebhookEvent;
+  url: string;
+  token?: string;
+}
+
 export class ShopierIntegrationError extends Error {
   readonly code: "NOT_CONFIGURED" | "AUTH_FAILED" | "RATE_LIMITED" | "VALIDATION_FAILED" | "UPSTREAM_FAILED";
   readonly status?: number;
@@ -125,7 +132,7 @@ function asArray<T>(value: unknown): T[] {
   if (Array.isArray(value)) return value as T[];
   if (value && typeof value === "object") {
     const record = value as Record<string, unknown>;
-    for (const key of ["data", "items", "result", "products", "orders"]) {
+    for (const key of ["data", "items", "result", "products", "orders", "webhooks"]) {
       if (Array.isArray(record[key])) return record[key] as T[];
     }
   }
@@ -346,6 +353,35 @@ export async function listRedactedShopierOrders(env: ShopierRuntimeEnv, fetcher:
     currency: order.currency || "TRY",
     items: Array.isArray(order.lineItems) ? order.lineItems.map((item) => ({ title: item.title, quantity: item.quantity })) : []
   }));
+}
+
+function normalizeWebhook(value: Record<string, unknown>): ShopierWebhookSubscription {
+  return {
+    id: String(value.id || ""),
+    event: String(value.event || "") as ShopierWebhookEvent,
+    url: String(value.url || ""),
+    token: value.token ? String(value.token) : undefined
+  };
+}
+
+export async function listShopierWebhookSubscriptions(env: ShopierRuntimeEnv, fetcher: Fetcher = fetch) {
+  const payload = await shopierRequest<unknown>(env, "/webhooks", { query: { limit: 50, page: 1 } }, fetcher);
+  return asArray<Record<string, unknown>>(payload).map(normalizeWebhook);
+}
+
+export async function createShopierWebhookSubscription(
+  env: ShopierRuntimeEnv,
+  event: ShopierWebhookEvent,
+  url: string,
+  fetcher: Fetcher = fetch
+) {
+  if (!WEBHOOK_EVENTS.has(event)) throw new ShopierIntegrationError("VALIDATION_FAILED", 400, undefined, "event", "Shopier webhook olay türü geçersiz.");
+  let notificationUrl: URL;
+  try { notificationUrl = new URL(url); } catch { throw new ShopierIntegrationError("VALIDATION_FAILED", 400, undefined, "url", "Webhook adresi geçerli bir HTTPS URL olmalıdır."); }
+  if (notificationUrl.protocol !== "https:") throw new ShopierIntegrationError("VALIDATION_FAILED", 400, undefined, "url", "Webhook adresi HTTPS olmalıdır.");
+  const webhook = normalizeWebhook(await shopierRequest<Record<string, unknown>>(env, "/webhooks", { method: "POST", body: { event, url: notificationUrl.toString() } }, fetcher));
+  if (!webhook.id || !webhook.token) throw new ShopierIntegrationError("UPSTREAM_FAILED", 502, "/webhooks", "missing_token", "Shopier webhook anahtarını ilk yanıtta döndürmedi.");
+  return webhook;
 }
 
 function signatureCandidates(bytes: Uint8Array): string[] {
