@@ -3,15 +3,15 @@
     "name": "GXL Akıllı Satıcı",
     "slug": "gxl-akilli-satici",
     "owner": "goxel34",
-    "version": "0.2.0",
+    "version": "0.3.0",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
     "android": {
       "package": "com.gxl.akillisatici",
-      "versionCode": 2,
+      "versionCode": 3,
       "adaptiveIcon": { "backgroundColor": "#12261F" }
     },
-    "plugins": [],
+    "plugins": ["expo-secure-store"],
     "extra": {
       "eas": {
         "projectId": "59b0b7f2-67d8-4c15-b106-772d936f422c"
