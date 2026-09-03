@@ -10,5 +10,11 @@
       "binding": "ETSY_OAUTH",
       "id": "a25ddefa50874df19970648274b891c7"
     }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "PRODUCT_MEDIA",
+      "bucket_name": "gxl-product-media"
+    }
   ]
 }
