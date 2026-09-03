@@ -3,13 +3,15 @@ import { ActivityIndicator, Alert, AppState, Image, Linking, Modal, Pressable, S
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as ImagePicker from "expo-image-picker";
+import * as SecureStore from "expo-secure-store";
 
-const API_URL = process.env.EXPO_PUBLIC_API_URL?.trim();
-const API_TOKEN = process.env.EXPO_PUBLIC_GXL_APP_TOKEN?.trim();
+const API_URL = process.env.EXPO_PUBLIC_API_URL?.trim() || "https://gxl-akilli-satici-api.gxl-marketstudio.workers.dev";
+const ACCESS_TOKEN_KEY = "gxl.appAccessToken";
+let activeApiToken = "";
 const SALES_EMAIL = "gxl.marketstudio@gmail.com";
 const apiHeaders = (json = false) => ({
   ...(json ? { "content-type": "application/json" } : {}),
-  ...(API_TOKEN ? { authorization: `Bearer ${API_TOKEN}` } : {})
+  ...(activeApiToken ? { authorization: `Bearer ${activeApiToken}` } : {})
 });
 type Tab = "Özet" | "Shopier" | "Ajan" | "Onaylar" | "Müşteriler" | "Ürünler";
 type ProductOrigin = "made_by_seller" | "designed_by_seller" | "vintage" | "craft_supply" | "commercial_resale" | "unknown";
@@ -85,6 +87,8 @@ export default function App() {
   });
   const [opportunityCenter, setOpportunityCenter] = useState<any>(demoOpportunityCenter);
   const [shopierCenter, setShopierCenter] = useState<any>(demoShopierCenter);
+  const [tokenReady, setTokenReady] = useState(false);
+  const [apiToken, setApiToken] = useState("");
 
   const refresh = async () => {
     if (!API_URL) {
@@ -122,7 +126,18 @@ export default function App() {
     }
   };
 
-  useEffect(() => { refresh(); }, []);
+  useEffect(() => {
+    SecureStore.getItemAsync(ACCESS_TOKEN_KEY).then((stored) => {
+      activeApiToken = stored?.trim() || "";
+      setApiToken(activeApiToken);
+      setTokenReady(true);
+    }).catch(() => setTokenReady(true));
+  }, []);
+  useEffect(() => {
+    if (!tokenReady) return;
+    if (apiToken) refresh();
+    else setLoading(false);
+  }, [tokenReady, apiToken]);
   useEffect(() => {
     const subscription = AppState.addEventListener("change", (state) => {
       if (state === "active") refresh();
@@ -182,6 +197,27 @@ export default function App() {
     }
   };
 
+  const saveApiToken = async (value: string) => {
+    const token = value.trim();
+    if (token.length < 24) return Alert.alert("Anahtar çok kısa", "Cloudflare'a kaydettiğiniz APP_ACCESS_TOKEN değerini eksiksiz girin.");
+    await SecureStore.setItemAsync(ACCESS_TOKEN_KEY, token);
+    activeApiToken = token;
+    setLoading(true);
+    setApiToken(token);
+  };
+
+  const resetApiToken = async () => {
+    await SecureStore.deleteItemAsync(ACCESS_TOKEN_KEY);
+    activeApiToken = "";
+    setApiToken("");
+    setOnline(false);
+  };
+
+  if (!tokenReady) {
+    return <SafeAreaView style={styles.safe}><ActivityIndicator style={{ marginTop: 80 }} color="#C88B47" /></SafeAreaView>;
+  }
+  if (!apiToken) return <AccessSetup onSave={saveApiToken} />;
+
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="light-content" backgroundColor="#12261F" />
@@ -194,6 +230,7 @@ export default function App() {
       </View>
       {loading ? <ActivityIndicator style={{ marginTop: 40 }} color="#C88B47" /> : (
         <ScrollView contentContainerStyle={styles.content}>
+          {!online && <Pressable style={styles.tokenReset} onPress={resetApiToken}><Ionicons name="key-outline" size={16} color="#8A521F" /><Text style={styles.tokenResetText}>Bağlantı anahtarını yeniden gir</Text></Pressable>}
           {tab === "Özet" && <Overview data={data} setTab={setTab} online={online} channels={channels} />}
           {tab === "Shopier" && <ShopierScreen center={shopierCenter} online={online} onRefresh={refresh} />}
           {tab === "Ajan" && <AgentScreen center={opportunityCenter} online={online} onRefresh={refresh} />}
@@ -209,6 +246,25 @@ export default function App() {
             <Text style={[styles.navText, tab === item && styles.navTextActive]}>{item}</Text>
           </Pressable>
         ))}
+      </View>
+    </SafeAreaView>
+  );
+}
+
+function AccessSetup({ onSave }: { onSave: (value: string) => Promise<void> }) {
+  const [value, setValue] = useState("");
+  const [saving, setSaving] = useState(false);
+  return (
+    <SafeAreaView style={styles.setupSafe}>
+      <StatusBar barStyle="light-content" backgroundColor="#12261F" />
+      <View style={styles.setupCard}>
+        <View style={styles.setupIcon}><Ionicons name="shield-checkmark" size={34} color="#F1B875" /></View>
+        <Text style={styles.setupTitle}>GXL güvenli bağlantı</Text>
+        <Text style={styles.setupText}>Cloudflare'a kaydettiğiniz APP_ACCESS_TOKEN değerini bir kez girin. Anahtar APK'ye gömülmez; yalnızca bu telefonun güvenli kasasında tutulur.</Text>
+        <TextInput value={value} onChangeText={setValue} secureTextEntry autoCapitalize="none" autoCorrect={false} placeholder="APP_ACCESS_TOKEN" style={styles.setupInput} />
+        <Pressable disabled={saving} style={[styles.setupButton, saving && styles.primaryDisabled]} onPress={async () => { setSaving(true); try { await onSave(value); } finally { setSaving(false); } }}>
+          <Text style={styles.setupButtonText}>{saving ? "Kaydediliyor…" : "Güvenli bağlan"}</Text>
+        </Pressable>
       </View>
     </SafeAreaView>
   );
@@ -659,6 +715,16 @@ function Empty({ icon, title, text }: any) { return <View style={styles.empty}><
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: "#F5F2EA" },
+  setupSafe: { flex: 1, backgroundColor: "#12261F", justifyContent: "center", padding: 22 },
+  setupCard: { backgroundColor: "white", borderRadius: 24, padding: 24 },
+  setupIcon: { width: 62, height: 62, borderRadius: 20, backgroundColor: "#1E382F", alignItems: "center", justifyContent: "center", marginBottom: 18 },
+  setupTitle: { color: "#17221E", fontSize: 25, fontWeight: "900", marginBottom: 10 },
+  setupText: { color: "#5A655F", fontSize: 14, lineHeight: 21, marginBottom: 16 },
+  setupInput: { backgroundColor: "#F7F6F2", borderWidth: 1, borderColor: "#D8D4CA", borderRadius: 13, paddingHorizontal: 14, paddingVertical: 14, color: "#17221E", marginBottom: 12 },
+  setupButton: { backgroundColor: "#315B4C", borderRadius: 13, padding: 15, alignItems: "center" },
+  setupButtonText: { color: "white", fontWeight: "900", fontSize: 15 },
+  tokenReset: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7, backgroundColor: "#FFF0D8", borderRadius: 12, padding: 11, marginBottom: 12 },
+  tokenResetText: { color: "#8A521F", fontWeight: "800", fontSize: 12 },
   header: { backgroundColor: "#12261F", paddingHorizontal: 20, paddingTop: 20, paddingBottom: 22, flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   eyebrow: { color: "#C5D2CC", fontSize: 10, letterSpacing: 2, fontWeight: "700" },
   title: { color: "white", fontSize: 26, fontWeight: "800", marginTop: 3 },
