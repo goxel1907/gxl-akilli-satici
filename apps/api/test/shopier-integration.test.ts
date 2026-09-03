@@ -3,6 +3,8 @@ import { createHmac } from "node:crypto";
 import test from "node:test";
 import {
   createShopierProduct,
+  createShopierWebhookSubscription,
+  listShopierWebhookSubscriptions,
   ShopierIntegrationError,
   updateShopierProduct,
   validateShopierProductInput,
@@ -102,6 +104,24 @@ test("Shopier webhook verification rejects stale events", async () => {
   });
   const result = await verifyShopierWebhook(raw, headers, token, 2_000_000 * 1000);
   assert.equal(result.ok, false);
+});
+
+test("Shopier webhook subscriptions use the official endpoint and preserve the one-time token", async () => {
+  const calls: Array<{ method: string; body?: Record<string, unknown> }> = [];
+  const fetcher = (async (_input: string | URL | Request, init?: RequestInit) => {
+    calls.push({ method: String(init?.method || "GET"), body: init?.body ? JSON.parse(String(init.body)) as Record<string, unknown> : undefined });
+    if ((init?.method || "GET") === "POST") {
+      return Response.json({ id: "wh-1", event: "order.created", url: "https://gxl.example/webhooks/shopier", token: "one-time-token" });
+    }
+    return Response.json([{ id: "wh-1", event: "order.created", url: "https://gxl.example/webhooks/shopier" }]);
+  }) as typeof fetch;
+
+  const created = await createShopierWebhookSubscription(env, "order.created", "https://gxl.example/webhooks/shopier", fetcher);
+  const listed = await listShopierWebhookSubscriptions(env, fetcher);
+  assert.equal(created.token, "one-time-token");
+  assert.deepEqual(calls[0], { method: "POST", body: { event: "order.created", url: "https://gxl.example/webhooks/shopier" } });
+  assert.equal(listed[0]?.id, "wh-1");
+  assert.equal(listed[0]?.token, undefined);
 });
 
 test("Shopier media upload stores a phone image and returns a public URL", async () => {
