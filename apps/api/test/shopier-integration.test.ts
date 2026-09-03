@@ -126,3 +126,33 @@ test("Shopier media upload stores a phone image and returns a public URL", async
   assert.equal(stored.bytes, 1_024);
   assert.equal(stored.contentType, "image/jpeg");
 });
+
+test("Shopier media upload falls back to the existing free KV binding", async () => {
+  const values = new Map<string, string | ArrayBuffer>();
+  const store = {
+    get: async (key: string) => {
+      const value = values.get(key);
+      return (value ?? null) as string | null;
+    },
+    put: async (key: string, value: string) => { values.set(key, value); },
+    delete: async (key: string) => { values.delete(key); }
+  };
+  const response = await handleRequest(new Request("https://gxl.example/api/shopier/media", {
+    method: "POST",
+    headers: { authorization: "Bearer app-token", "content-type": "application/json" },
+    body: JSON.stringify({ confirm: true, mimeType: "image/png", imageBase64: Buffer.alloc(1_024, 9).toString("base64") })
+  }), {
+    APP_ACCESS_TOKEN: "app-token",
+    ETSY_OAUTH: store
+  });
+
+  assert.equal(response.status, 201);
+  const body = await response.json() as { url: string };
+  const key = new URL(body.url).pathname.slice("/media/".length);
+  assert.equal((values.get(key) as ArrayBuffer).byteLength, 1_024);
+
+  const imageResponse = await handleRequest(new Request(body.url), { ETSY_OAUTH: store });
+  assert.equal(imageResponse.status, 200);
+  assert.equal(imageResponse.headers.get("content-type"), "image/png");
+  assert.equal((await imageResponse.arrayBuffer()).byteLength, 1_024);
+});
