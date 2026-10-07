@@ -243,7 +243,7 @@ function cacheKey(keyword: string): string {
   return `etsy:trend:${keyword.replace(/[^\p{L}\p{Nd}]+/gu, "-")}`;
 }
 
-async function readCached(store: TrendStore | undefined, keyword: string): Promise<TrendResult | undefined> {
+export async function readCached(store: TrendStore | undefined, keyword: string): Promise<TrendResult | undefined> {
   if (!store) return undefined;
   const raw = await store.get(cacheKey(keyword));
   if (!raw) return undefined;

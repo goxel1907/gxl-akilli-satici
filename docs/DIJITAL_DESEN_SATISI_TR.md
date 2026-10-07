@@ -24,6 +24,18 @@ Desen nişlerinde dijital ürün payı %30'un altındaysa puan %20 düşürülü
 
 Desen kartlarındaki **Bu nişte desen hazırla** düğmesi, nişin anahtar kelimesini ve etiketlerini Stüdyo'ya aktarır. Tesbih ve vintage kartlarında **Üst etiketleri kopyala** düğmesi vardır. Her kartta **ABD'de hangi eyaletlerde aranıyor?** düğmesi o aramanın son 12 aylık Google Trends eyalet haritasını açar.
 
+### Sezon fırsatları
+
+**Trend → Sezon fırsatları** önümüzdeki 6 ayda ABD'de gelen alışveriş dönemlerini listeler: Cadılar Bayramı, Şükran Günü, Hanuka, Noel, Sevgililer Günü, Ramazan, Ramazan Bayramı, Aziz Patrick Günü, Paskalya, Anneler Günü, Kurban Bayramı, Babalar Günü, 4 Temmuz ve sonbahar.
+
+- Her dönemde kalan gün ve iki son listeleme tarihi gösterilir:
+  - Fiziksel ürün: alışverişin başladığı tarih ve ABD'ye kargo süresine göre.
+  - Desen: alıcının ürünü örmesi için ek 3 hafta.
+- Aciliyet etiketi: **Hemen listele**, **Bu ay hazırla** veya **Planla**.
+- **Bu sezonu tara**, o döneme ait arama ifadelerini (ör. `christmas crochet pattern`, `eid gift for men`, `vintage christmas ornaments`) Etsy'de puanlar ve en güçlü aramayı öne çıkarır.
+- Kartlardaki Google Trends bağlantısı son 5 yılı açar; hem sezon zirvesinin hangi aylarda olduğu hem de eyalet haritası görünür.
+- Ramazan ve bayram tarihleri ay gözlemine göre bir gün kayabilir.
+
 ### ABD'de eyalet bazında hedefleme
 
 - Etsy, başlığa yazılan eyalet adına göre o eyaletteki alıcıya öncelik vermez. Ürünle ilgisi olmayan eyalet adı alakasız anahtar kelime sayılır ve sıralamaya zarar verebilir.

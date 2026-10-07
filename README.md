@@ -65,6 +65,8 @@ Depodaki `GXL Android APK` iş akışı `main` dalına yapılan her mobil uygula
 - Telefondan Shopier ürün fotoğrafı seçme ve R2 üzerinden güvenli görsel sunma
 - Etsy trend radarı: hobi desen nişlerini Etsy resmî aramasıyla 0–100 arası puanlama
 - Desen stüdyosu: sistemin seçtiği desen adı, referanstan farklılaştırma planı, Claude/ChatGPT PDF promptu, 3D render promptu ve Etsy kurallarına uygun başlık ile 13 etiket
+- ABD sezon fırsatları: yaklaşan alışveriş dönemleri, son listeleme tarihleri ve dönemlik arama puanları
+- Fiziksel ürün Etsy stüdyosu: alıcı arama ifadesi, etiket, başlık, açıklama, TL→USD fiyat analizi ve Etsy kural kapısı (`docs/ETSY_URUN_STUDYOSU_TR.md`)
 - Korumalı PDF teslimi: Etsy'ye taslak dijital ilan ve dosya yükleme, Shopier ve doğrudan satışlar için siparişe özel, süreli ve indirme sınırlı bağlantılar (`docs/DIJITAL_DESEN_SATISI_TR.md`)
 - Testler, API örnekleri ve canlıya geçiş kontrol listesi
 
