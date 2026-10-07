@@ -48,7 +48,7 @@ test("trend score rewards demand, open competition and fresh winners", () => {
 
   assert.ok(strong.score > weak.score);
   assert.equal(strong.verdict, "Yüksek fırsat");
-  assert.equal(weak.verdict, "Zor / doygun");
+  assert.equal(weak.verdict, "Talep zayıf");
   assert.equal(strong.metrics.newcomerShare, 0.75);
   assert.equal(strong.metrics.digitalShare, 1);
   assert.equal(strong.metrics.medianPriceUsd, 6.25);
@@ -66,6 +66,14 @@ test("physical tesbih and vintage niches use their own price scale and digital r
   assert.equal(silver.metrics.medianPriceUsd, 80);
   assert.equal(silver.parts.price, 59);
   assert.ok(!silver.reasons.some((reason) => reason.includes("dijital")));
+  assert.equal(silver.verdict, "Denenebilir");
+
+  const quiet = scoreTrend("amber prayer beads", {
+    count: 6_191,
+    results: [listing(5, 500, 13_600, "physical"), listing(3, 400, 15_000, "physical"), listing(4, 700, 12_000, "physical")]
+  }, NOW, "tesbih");
+  assert.equal(quiet.verdict, "Talep zayıf");
+  assert.ok(quiet.reasons.some((reason) => reason.includes("satış başına yüksek kazanç")));
 
   const digitalHeavy = scoreTrend("vintage brooch", { count: 3_000, results: [listing(40, 60, 500), listing(25, 90, 400), listing(12, 200, 300, "physical")] }, NOW, "vintage");
   assert.ok(digitalHeavy.reasons.some((reason) => reason.includes("dijital ürün")));

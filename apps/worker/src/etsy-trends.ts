@@ -58,6 +58,10 @@ export const TREND_NICHES: TrendNiche[] = [
   { id: "vintage-prayer-beads", keyword: "vintage prayer beads", labelTr: "Vintage tesbih", group: "vintage" }
 ];
 
+export function isTrendGroup(value: unknown): value is TrendGroup {
+  return typeof value === "string" && Object.prototype.hasOwnProperty.call(TREND_GROUPS, value);
+}
+
 export function inferTrendGroup(keyword: string): TrendGroup {
   if (/\b(pattern|pdf|printable|template|svg|chart)\b/i.test(keyword)) return "patterns";
   if (/\b(vintage|antique|retro)\b/i.test(keyword)) return "vintage";
@@ -85,7 +89,7 @@ export interface TrendResult {
   labelTr?: string;
   craft?: PatternCraft;
   score: number;
-  verdict: "Yüksek fırsat" | "Denenebilir" | "Zor / doygun";
+  verdict: "Yüksek fırsat" | "Denenebilir" | "Talep zayıf" | "Rekabet yoğun" | "Zor";
   parts: { demand: number; openness: number; newcomer: number; price: number };
   metrics: {
     activeListings: number;
@@ -97,6 +101,7 @@ export interface TrendResult {
   };
   reasons: string[];
   topTags: Array<{ tag: string; count: number }>;
+  risingTags?: Array<{ tag: string; weight: number }>;
   examples: TrendExample[];
   scannedAt: string;
   cached?: boolean;
@@ -186,6 +191,20 @@ export function scoreTrend(keyword: string, payload: { count?: number; results?:
     .slice(0, 20)
     .map(([tag, count]) => ({ tag, count }));
 
+  // Son 4 ayda açılıp hızla favori toplayan ilanların etiketleri yükselen arama ifadelerini gösterir.
+  const risingWeights = new Map<string, number>();
+  pageOne.forEach((listing, index) => {
+    if (ageDays(listing, now) > 120) return;
+    for (const raw of Array.isArray(listing.tags) ? listing.tags : []) {
+      const tag = String(raw).toLowerCase().trim();
+      if (tag) risingWeights.set(tag, (risingWeights.get(tag) || 0) + Math.max(0.1, velocities[index]));
+    }
+  });
+  const risingTags = [...risingWeights.entries()]
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .slice(0, 12)
+    .map(([tag, weight]) => ({ tag, weight: Math.round(weight * 10) / 10 }));
+
   const examples = pageOne
     .map((listing, index) => ({ listing, velocity: velocities[index] }))
     .sort((a, b) => b.velocity - a.velocity)
@@ -204,14 +223,20 @@ export function scoreTrend(keyword: string, payload: { count?: number; results?:
     `İlk ${pageOne.length} ilanın %${Math.round(newcomerShare * 100)} kadarı son 6 ayda açılmış; yeni mağazanın öne çıkma şansı buna bağlı.`,
     medianPriceUsd === undefined ? "Fiyat verisi alınamadı." : `Üst sıradaki ilanların ortanca fiyatı ${medianPriceUsd.toFixed(2)} USD.`,
     ...(digitalMismatch && profile.expectsDigital ? [`Bu aramada dijital desen payı yalnızca %${Math.round(digitalShare * 100)}; alıcılar çoğunlukla bitmiş ürün arıyor.`] : []),
-    ...(digitalMismatch && profile.expectsDigital === false ? [`Bu aramadaki ilanların %${Math.round(digitalShare * 100)} kadarı dijital ürün; fiziksel ürün için arama ifadesini daraltın.`] : [])
+    ...(digitalMismatch && profile.expectsDigital === false ? [`Bu aramadaki ilanların %${Math.round(digitalShare * 100)} kadarı dijital ürün; fiziksel ürün için arama ifadesini daraltın.`] : []),
+    ...(!profile.expectsDigital && parts.demand < 25 && medianPriceUsd !== undefined && medianPriceUsd >= 40 ? ["Pahalı fiziksel ürünlerde favori sayısı doğal olarak düşüktür; az satış da satış başına yüksek kazanç getirir. Puanı adet hacmi olarak okuyun."] : [])
   ];
+  const verdict: TrendResult["verdict"] = score >= 65 ? "Yüksek fırsat"
+    : score >= 45 ? "Denenebilir"
+    : parts.demand < 25 ? "Talep zayıf"
+    : parts.openness < 30 ? "Rekabet yoğun"
+    : "Zor";
 
   return {
     keyword,
     group,
     score,
-    verdict: score >= 65 ? "Yüksek fırsat" : score >= 45 ? "Denenebilir" : "Zor / doygun",
+    verdict,
     parts,
     metrics: {
       activeListings,
@@ -223,6 +248,7 @@ export function scoreTrend(keyword: string, payload: { count?: number; results?:
     },
     reasons,
     topTags,
+    risingTags,
     examples,
     scannedAt: new Date(now).toISOString()
   };
@@ -237,7 +263,7 @@ function cacheKey(keyword: string): string {
   return `etsy:trend:${keyword.replace(/[^\p{L}\p{Nd}]+/gu, "-")}`;
 }
 
-async function readCached(store: TrendStore | undefined, keyword: string): Promise<TrendResult | undefined> {
+export async function readCached(store: TrendStore | undefined, keyword: string): Promise<TrendResult | undefined> {
   if (!store) return undefined;
   const raw = await store.get(cacheKey(keyword));
   if (!raw) return undefined;
@@ -250,7 +276,7 @@ async function readCached(store: TrendStore | undefined, keyword: string): Promi
 
 export async function scanTrend(
   env: EtsyRuntimeEnv,
-  input: { nicheId?: string; keyword?: string; force?: boolean },
+  input: { nicheId?: string; keyword?: string; force?: boolean; group?: TrendGroup },
   store: TrendStore | undefined,
   fetcher: Fetcher = fetch,
   now = Date.now()
@@ -271,7 +297,7 @@ export async function scanTrend(
     query: { keywords: keyword, sort_on: "score", limit: 100, currency: "USD" }
   }, fetcher);
   const result: TrendResult = {
-    ...scoreTrend(keyword, payload, now, niche?.group || inferTrendGroup(keyword)),
+    ...scoreTrend(keyword, payload, now, niche?.group || input.group || inferTrendGroup(keyword)),
     ...(niche ? { nicheId: niche.id, labelTr: niche.labelTr, craft: niche.craft } : {})
   };
   if (store) await store.put(cacheKey(keyword), JSON.stringify(result), { expirationTtl: CACHE_TTL_SECONDS });
