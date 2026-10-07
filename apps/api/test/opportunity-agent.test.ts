@@ -29,3 +29,11 @@ test("ajan izinsiz toplu mesaj talebini reddeder", async () => {
   assert.match(result.reply, /yapamam/i);
   assert.equal(result.requiresApproval, true);
 });
+
+test("ajan aynı sonraki adımı tekrar etmez", async () => {
+  const result = await replyToAgent("Bugünkü durum ne?", {
+    shopier: { configured: true, connected: true, productCount: 2, recentOrderCount: 0, orderWindowDays: 30, products: [{ id: "p1", title: "Tesbih A" }, { id: "p2", title: "Tesbih B" }] },
+    etsy: { configured: true, connected: true }
+  });
+  assert.equal(new Set(result.suggestedActions).size, result.suggestedActions.length);
+});

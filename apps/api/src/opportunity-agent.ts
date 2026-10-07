@@ -350,7 +350,7 @@ function fallbackReply(message: string, context: OpportunityContext): AgentReply
       reply: `${shopierLine} ${etsyLine} Bunları gerçek müşteri olarak saymıyorum; şu an ${center.counts.marketSignals} doğrulanabilir pazar sinyali/test önerisi var.`,
       basis: [center.summary],
       warnings: [],
-      suggestedActions: center.opportunities.slice(0, 3).map((item) => item.nextAction),
+      suggestedActions: uniqueActions(center),
       requiresApproval: true,
     };
   }
@@ -359,11 +359,15 @@ function fallbackReply(message: string, context: OpportunityContext): AgentReply
     reply: "Evet, yalnızca Meta/WhatsApp/Instagram’a bağlı kalmayacağım. Shopier ve Etsy mağaza verileri, gelen pazar yeri soruları, izinli e-posta/formlar, toplu arama eğilimleri, topluluk ihtiyaçları ve doğrulanmış açık B2B talepleri ayrı kaynaklar olarak izlenecek. Şu an gerçek veya izinli müşteri kaydı yoksa bunu açıkça söyler, pazar sinyallerinden satış testi üretirim.",
     basis: [center.summary, `${center.sources.length} farklı kaynak sınıfı tanımlı.`],
     warnings: ["Pazar sinyali müşteri değildir; kişiye mesaj atmak için gerçek talep veya açık izin gerekir."],
-    suggestedActions: center.opportunities.slice(0, 3).map((item) => item.nextAction),
+    suggestedActions: uniqueActions(center),
     requiresApproval: true,
   };
 }
 
+
+function uniqueActions(center: { opportunities: Array<{ nextAction: string }> }): string[] {
+  return [...new Set(center.opportunities.map((item) => item.nextAction))].slice(0, 3);
+}
 export async function replyToAgent(
   message: string,
   context: OpportunityContext,
