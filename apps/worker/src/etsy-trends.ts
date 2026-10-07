@@ -85,7 +85,7 @@ export interface TrendResult {
   labelTr?: string;
   craft?: PatternCraft;
   score: number;
-  verdict: "Yüksek fırsat" | "Denenebilir" | "Zor / doygun";
+  verdict: "Yüksek fırsat" | "Denenebilir" | "Talep zayıf" | "Rekabet yoğun" | "Zor";
   parts: { demand: number; openness: number; newcomer: number; price: number };
   metrics: {
     activeListings: number;
@@ -204,14 +204,20 @@ export function scoreTrend(keyword: string, payload: { count?: number; results?:
     `İlk ${pageOne.length} ilanın %${Math.round(newcomerShare * 100)} kadarı son 6 ayda açılmış; yeni mağazanın öne çıkma şansı buna bağlı.`,
     medianPriceUsd === undefined ? "Fiyat verisi alınamadı." : `Üst sıradaki ilanların ortanca fiyatı ${medianPriceUsd.toFixed(2)} USD.`,
     ...(digitalMismatch && profile.expectsDigital ? [`Bu aramada dijital desen payı yalnızca %${Math.round(digitalShare * 100)}; alıcılar çoğunlukla bitmiş ürün arıyor.`] : []),
-    ...(digitalMismatch && profile.expectsDigital === false ? [`Bu aramadaki ilanların %${Math.round(digitalShare * 100)} kadarı dijital ürün; fiziksel ürün için arama ifadesini daraltın.`] : [])
+    ...(digitalMismatch && profile.expectsDigital === false ? [`Bu aramadaki ilanların %${Math.round(digitalShare * 100)} kadarı dijital ürün; fiziksel ürün için arama ifadesini daraltın.`] : []),
+    ...(!profile.expectsDigital && parts.demand < 25 && medianPriceUsd !== undefined && medianPriceUsd >= 40 ? ["Pahalı fiziksel ürünlerde favori sayısı doğal olarak düşüktür; az satış da satış başına yüksek kazanç getirir. Puanı adet hacmi olarak okuyun."] : [])
   ];
+  const verdict: TrendResult["verdict"] = score >= 65 ? "Yüksek fırsat"
+    : score >= 45 ? "Denenebilir"
+    : parts.demand < 25 ? "Talep zayıf"
+    : parts.openness < 30 ? "Rekabet yoğun"
+    : "Zor";
 
   return {
     keyword,
     group,
     score,
-    verdict: score >= 65 ? "Yüksek fırsat" : score >= 45 ? "Denenebilir" : "Zor / doygun",
+    verdict,
     parts,
     metrics: {
       activeListings,
