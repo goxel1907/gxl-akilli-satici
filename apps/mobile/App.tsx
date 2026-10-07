@@ -61,7 +61,7 @@ const demoShopierCenter = {
   recentWebhookEvents: []
 };
 
-const navigationTabs: Tab[] = ["Özet", "Shopier", "Etsy", "Ajan", "Onaylar", "Müşteriler", "Ürünler"];
+const navigationTabs: Tab[] = ["Etsy", "Özet", "Shopier", "Ajan", "Onaylar", "Müşteriler", "Ürünler"];
 const navigationIcons: Record<Tab, any> = {
   "Özet": "grid",
   "Shopier": "bag-handle",
@@ -79,7 +79,7 @@ const productImages: Record<string, any> = {
 };
 
 export default function App() {
-  const [tab, setTab] = useState<Tab>("Özet");
+  const [tab, setTab] = useState<Tab>("Etsy");
   const [data, setData] = useState<any>(demo);
   const [loading, setLoading] = useState(true);
   const [online, setOnline] = useState(false);
@@ -751,23 +751,28 @@ function errorText(error: unknown) {
   return error instanceof Error ? error.message : "Bağlantıyı kontrol edin.";
 }
 
+type EtsySection = "Trend" | "Stüdyo" | "Dijital" | "Kılavuz";
+
 function EtsyScreen({ online, channels }: any) {
-  const [section, setSection] = useState<"Trend" | "Stüdyo" | "Dijital">("Trend");
+  const [section, setSection] = useState<EtsySection>("Trend");
   const [studioSeed, setStudioSeed] = useState<any>();
   const [uploadPrefill, setUploadPrefill] = useState<any>();
   const etsy = channels?.etsy || {};
   const shopReady = Boolean(etsy.shopReady || etsy.shopId);
+  const authorized = Boolean(etsy.authorized || etsy.connected);
   return <>
     <View style={styles.agentHero}>
-      <View style={styles.agentHeroTop}><View style={styles.shopierLogo}><Ionicons name="color-palette" size={22} color="white" /></View><View style={{ flex: 1 }}><Text style={styles.agentHeroTitle}>Etsy Desen Merkezi</Text><Text style={styles.agentHeroText}>{shopReady ? `Mağaza bağlı${etsy.shopName ? ` · ${etsy.shopName}` : ""}` : "Trend ve stüdyo mağaza açılmadan da çalışır; Etsy'ye yükleme mağaza açılınca etkinleşir."}</Text></View></View>
+      <View style={styles.agentHeroTop}><View style={styles.shopierLogo}><Ionicons name="color-palette" size={22} color="white" /></View><View style={{ flex: 1 }}><Text style={styles.agentHeroTitle}>Etsy Merkezi</Text><Text style={styles.agentHeroText}>{shopReady ? `Mağaza bağlı${etsy.shopName ? ` · ${etsy.shopName}` : ""} · otomatik keşif açık` : "Trend, otomatik keşif ve stüdyo mağaza açılmadan da çalışır. Taslak ve yayınlama mağaza açılınca etkinleşir."}</Text></View></View>
     </View>
+    {!shopReady && section !== "Kılavuz" && <Pressable style={styles.guardrail} onPress={() => setSection("Kılavuz")}><Ionicons name="storefront-outline" size={20} color="#315B4C" /><Text style={[styles.guardrailText, { flex: 1 }]}>{authorized ? "Etsy hesabı yetkili, mağaza açılışı bekleniyor. Adımlar için dokunun: Kılavuz → Mağaza açılışı." : "Etsy mağazası henüz bağlı değil. Adımlar için dokunun: Kılavuz → Mağaza açılışı."}</Text><Ionicons name="chevron-forward" size={18} color="#315B4C" /></Pressable>}
     <View style={styles.segment}>
-      {(["Trend", "Stüdyo", "Dijital"] as const).map((item) => <Pressable key={item} style={[styles.segmentItem, section === item && styles.segmentActive]} onPress={() => setSection(item)}><Text style={[styles.segmentText, section === item && styles.segmentTextActive]}>{item}</Text></Pressable>)}
+      {(["Trend", "Stüdyo", "Dijital", "Kılavuz"] as const).map((item) => <Pressable key={item} style={[styles.segmentItem, section === item && styles.segmentActive]} onPress={() => setSection(item)}><Text style={[styles.segmentText, section === item && styles.segmentTextActive]}>{item}</Text></Pressable>)}
     </View>
-    {!online && <Text style={styles.shopierBlocker}>Sunucu bağlantısı yok. Trend tarama, prompt üretimi ve PDF yükleme için uygulamanın sunucuya bağlı olması gerekir.</Text>}
+    {!online && section !== "Kılavuz" && <Text style={styles.shopierBlocker}>Sunucu bağlantısı yok. Trend tarama, prompt üretimi ve PDF yükleme için uygulamanın sunucuya bağlı olması gerekir.</Text>}
     {section === "Trend" && <TrendPanel online={online} onUse={(seed: any) => { setStudioSeed(seed); setSection("Stüdyo"); }} />}
     {section === "Stüdyo" && <StudioPanel online={online} seed={studioSeed} onUpload={(prefill: any) => { setUploadPrefill(prefill); setSection("Dijital"); }} />}
     {section === "Dijital" && <DigitalPanel online={online} shopReady={shopReady} prefill={uploadPrefill} onPrefillUsed={() => setUploadPrefill(undefined)} />}
+    {section === "Kılavuz" && <EtsyGuide shopReady={shopReady} authorized={authorized} />}
   </>;
 }
 
@@ -791,6 +796,11 @@ function TrendCard({ title, result, expanded, onToggle, onUse, scanning, group, 
         {result.reasons.map((reason: string) => <Text style={styles.evidence} key={reason}>• {reason}</Text>)}
         <Text style={styles.warningTitle}>Üst ilanlarda en çok geçen etiketler</Text>
         <View style={styles.chips}>{result.topTags.slice(0, 14).map((tag: any) => <View style={styles.chip} key={tag.tag}><Text style={styles.chipText}>{tag.tag} · {tag.count}</Text></View>)}</View>
+        {!!result.risingTags?.length && <>
+          <Text style={styles.warningTitle}>Yeni ilanlarda yükselen etiketler</Text>
+          <View style={styles.chips}>{result.risingTags.slice(0, 10).map((tag: any) => <View style={[styles.chip, styles.risingChip]} key={tag.tag}><Text style={styles.chipText}>↑ {tag.tag}</Text></View>)}</View>
+        </>}
+        {!!result.discovered?.length && <Text style={styles.evidence}>Keşif listesine eklenen yeni aramalar: {result.discovered.join(", ")}</Text>}
         <Text style={styles.warningTitle}>Öne çıkan rakip ilanlar</Text>
         {result.examples.map((example: any, index: number) => <Pressable key={`${example.url}-${index}`} onPress={() => example.url && openUrl(example.url, "Etsy ilanı")}><Text style={styles.linkNote} numberOfLines={2}>{example.favorites} favori · {example.ageDays} gün · {example.priceUsd ? `${example.priceUsd.toFixed(2)} USD · ` : ""}{example.title}</Text></Pressable>)}
         <Pressable style={[styles.secondaryButton, { marginTop: 12 }]} onPress={() => openUrl(`https://trends.google.com/trends/explore?geo=US&date=${encodeURIComponent(trendsRange)}&q=${encodeURIComponent(keyword)}`, "Google Trends")}><Text style={styles.secondaryButtonText}>{trendsRange === "today 5-y" ? "ABD eyaletleri ve sezon zirveleri (Google Trends)" : "ABD'de hangi eyaletlerde aranıyor? (Google Trends)"}</Text></Pressable>
@@ -857,7 +867,7 @@ function TrendPanel({ online, onUse }: any) {
   const [keyword, setKeyword] = useState("");
   const [custom, setCustom] = useState<any[]>([]);
   const [group, setGroup] = useState("patterns");
-  const groups = [...(board?.groups || [{ id: "patterns", labelTr: "Hobi desenleri" }, { id: "tesbih", labelTr: "Tesbih ve gümüş" }, { id: "vintage", labelTr: "Vintage" }]), { id: "season", labelTr: "Sezon fırsatları" }];
+  const groups = [...(board?.groups || [{ id: "patterns", labelTr: "Hobi desenleri" }, { id: "tesbih", labelTr: "Tesbih ve gümüş" }, { id: "vintage", labelTr: "Vintage" }]), { id: "discovered", labelTr: "Keşfedilenler" }, { id: "season", labelTr: "Sezon fırsatları" }];
   const topOverall = (board?.niches || []).filter((row: any) => row.result).sort((a: any, b: any) => b.result.score - a.result.score).slice(0, 5);
   const visibleNiches = (board?.niches || []).filter((row: any) => (row.group || "patterns") === group);
   const sortNiches = (rows: any[]) => [...rows].sort((a, b) => (b.result?.score ?? -1) - (a.result?.score ?? -1));
@@ -886,7 +896,7 @@ function TrendPanel({ online, onUse }: any) {
     if (keyword.trim().length < 3) return Alert.alert("Anahtar kelime", "İngilizce bir arama yazın (ör. crochet bag pattern).");
     setScanning("custom");
     try {
-      const result = await scan({ keyword: keyword.trim() });
+      const result = await scan({ keyword: keyword.trim(), track: true });
       setCustom((current) => [result, ...current.filter((item) => item.keyword !== result.keyword)].slice(0, 5));
       setExpanded(`custom:${result.keyword}`);
     } catch (error) { Alert.alert("Tarama yapılamadı", errorText(error)); }
@@ -903,12 +913,12 @@ function TrendPanel({ online, onUse }: any) {
     <View style={styles.guardrail}><Ionicons name="information-circle-outline" size={20} color="#315B4C" /><Text style={[styles.guardrailText, { flex: 1 }]}>{board?.method || "Etsy resmî aramasındaki üst ilanlar puanlanır. Etsy satış adedini paylaşmadığı için puan tahmindir."}</Text></View>
     {board && !board.configured && <Text style={styles.shopierBlocker}>Etsy API anahtarı (keystring ve shared secret) sunucuya eklenince tarama başlar.</Text>}
     <View style={styles.chatInputRow}>
-      <TextInput style={styles.chatInput} value={keyword} onChangeText={setKeyword} placeholder="Kendi aramanı tara: crochet bag pattern, misbaha, vintage brooch" placeholderTextColor="#9AA39F" autoCapitalize="none" />
+      <TextInput style={styles.chatInput} value={keyword} onChangeText={setKeyword} placeholder="Arama tara (Google Trends ifadesi de olur): crochet bag pattern, misbaha" placeholderTextColor="#9AA39F" autoCapitalize="none" />
       <Pressable style={styles.sendButton} onPress={scanKeyword} disabled={!online || Boolean(scanning)}><Ionicons name="search" size={19} color="white" /></Pressable>
     </View>
     {custom.map((result) => <TrendCard key={`custom:${result.keyword}`} title={`Arama: ${result.keyword}`} result={result} expanded={expanded === `custom:${result.keyword}`} onToggle={() => setExpanded(expanded === `custom:${result.keyword}` ? undefined : `custom:${result.keyword}`)} onUse={() => use({ keyword: result.keyword }, result)} />)}
     <View style={[styles.chips, { marginTop: 14 }]}>{groups.map((item: any) => <Pressable key={item.id} style={[styles.chip, group === item.id && styles.chipActive]} onPress={() => setGroup(item.id)}><Text style={[styles.chipText, group === item.id && styles.chipTextActive]}>{item.labelTr}</Text></Pressable>)}</View>
-    {group === "season" ? <SeasonalPanel online={online} onUse={use} /> : <>
+    {group === "season" ? <SeasonalPanel online={online} onUse={use} /> : group === "discovered" ? <DiscoveryPanel online={online} onUse={use} /> : <>
     {!!topOverall.length && <View style={styles.analysisCard}>
       <Text style={styles.cardTitle}>Taranan nişlerde en yüksek puanlar</Text>
       {topOverall.map((row: any) => <Text style={styles.analysisLine} key={row.id}>{row.result.score} · {row.labelTr} ({row.result.verdict})</Text>)}
@@ -917,6 +927,70 @@ function TrendPanel({ online, onUse }: any) {
     {loading && <ActivityIndicator color="#C88B47" />}
     {visibleNiches.map((row: any) => <TrendCard key={row.id} title={row.labelTr} group={row.group} result={row.result} scanning={scanning === row.id} expanded={expanded === row.id} onToggle={() => setExpanded(expanded === row.id ? undefined : row.id)} onUse={() => use(row, row.result)} />)}
     </>}
+  </>;
+}
+
+const GROUP_LABELS: Record<string, string> = { patterns: "Desen", tesbih: "Tesbih", vintage: "Vintage", other: "Diğer" };
+
+function timeAgo(value?: string) {
+  if (!value) return "henüz çalışmadı";
+  const minutes = Math.max(0, Math.round((Date.now() - Date.parse(value)) / 60000));
+  if (minutes < 60) return `${minutes} dk önce`;
+  const hours = Math.round(minutes / 60);
+  return hours < 48 ? `${hours} saat önce` : `${Math.round(hours / 24)} gün önce`;
+}
+
+function DiscoveryPanel({ online, onUse }: any) {
+  const [data, setData] = useState<any>();
+  const [loading, setLoading] = useState(false);
+  const [filter, setFilter] = useState("all");
+  const [results, setResults] = useState<Record<string, any>>({});
+  const [scanning, setScanning] = useState<string>();
+  const [expanded, setExpanded] = useState<string>();
+  const load = async () => {
+    setLoading(true);
+    try { setData(await apiJson("/api/etsy/discoveries", { headers: apiHeaders() })); }
+    catch (error) { Alert.alert("Keşifler alınamadı", errorText(error)); }
+    finally { setLoading(false); }
+  };
+  useEffect(() => { if (online) load(); }, [online]);
+  const all = data?.items || [];
+  const items = all.filter((item: any) => filter === "all" || item.group === filter);
+  const filters = [{ id: "all", label: "Tümü" }, ...["patterns", "tesbih", "vintage", "other"].filter((id) => all.some((item: any) => item.group === id)).map((id) => ({ id, label: GROUP_LABELS[id] }))];
+  const autopilot = data?.autopilot;
+  const toggle = (key: string) => setExpanded(expanded === key ? undefined : key);
+  const open = async (item: any) => {
+    if (results[item.keyword]) return toggle(item.keyword);
+    setScanning(item.keyword);
+    try {
+      const result = await apiJson("/api/etsy/trends/scan", { method: "POST", headers: apiHeaders(true), body: JSON.stringify({ keyword: item.keyword, group: item.group }) });
+      setResults((current) => ({ ...current, [item.keyword]: result }));
+      setExpanded(item.keyword);
+    } catch (error) { Alert.alert("Tarama yapılamadı", errorText(error)); }
+    finally { setScanning(undefined); }
+  };
+  return <>
+    <View style={styles.analysisCard}>
+      <View style={styles.shopierProductTop}><Ionicons name="sync-circle-outline" size={22} color="#315B4C" /><Text style={[styles.cardTitle, { flex: 1 }]}>Otomatik keşif</Text><Pressable style={styles.secondaryButton} disabled={loading || !online} onPress={load}><Text style={styles.secondaryButtonText}>Yenile</Text></Pressable></View>
+      <Text style={styles.analysisLine}>{!autopilot ? "Durum alınıyor…" : autopilot.enabled ? `Son çalışma: ${timeAgo(autopilot.lastRunAt)}${autopilot.lastKeyword ? ` · ${autopilot.lastKeyword}` : ""}` : "Otomatik keşif için sunucu deposu bağlı değil."}</Text>
+      {!!autopilot?.runs && <Text style={styles.analysisLine}>{autopilot.runs} otomatik tarama · {autopilot.tracked} arama izleniyor · {all.length} keşfedilen arama</Text>}
+      {!!autopilot?.lastError && <Text style={styles.warningText}>Son hata: {autopilot.lastError}</Text>}
+      <Text style={styles.evidence}>Sunucu her 30 dakikada bir sıradaki aramayı Etsy'de tarar. Son 120 günde açılıp hızla favori toplayan ilanların etiketlerinden alıcıların kullandığı yeni arama ifadelerini çıkarır ve buraya ekler. Liste sabit kelimelerle sınırlı kalmaz.</Text>
+    </View>
+    {filters.length > 2 && <ChipGroup options={filters} value={filter} onChange={setFilter} />}
+    {loading && <ActivityIndicator color="#C88B47" />}
+    {!loading && !items.length && <Empty icon="compass-outline" title="Henüz keşif yok" text="İlk keşifler otomatik taramalarla birkaç saat içinde gelir. Hızlandırmak için diğer gruplarda 'Tümünü tara' düğmesine basın." />}
+    {items.map((item: any) => results[item.keyword]
+      ? <TrendCard key={item.keyword} title={item.keyword} group={item.group} result={results[item.keyword]} expanded={expanded === item.keyword} onToggle={() => toggle(item.keyword)} onUse={() => onUse({ keyword: item.keyword, group: item.group }, results[item.keyword])} />
+      : <Pressable key={item.keyword} style={styles.card} disabled={!online || Boolean(scanning)} onPress={() => open(item)}>
+        <View style={styles.shopierProductTop}>
+          <View style={{ flex: 1 }}><Text style={styles.cardTitle}>{item.keyword}</Text><Text style={styles.small}>{GROUP_LABELS[item.group] || "Diğer"}{item.rising ? " · ↑ yükselen" : ""} · kaynak: {item.from}</Text></View>
+          {scanning === item.keyword ? <ActivityIndicator color="#A86B2E" /> : <View style={[styles.scoreBadge, scoreStyle(item.summary?.score)]}><Text style={styles.scoreBadgeText}>{item.summary ? item.summary.score : "—"}</Text></View>}
+        </View>
+        {item.summary
+          ? <><Text style={styles.trendVerdict}>{item.summary.verdict}</Text><Text style={styles.small}>Rakip: {Number(item.summary.activeListings).toLocaleString("tr-TR")} ilan · Talep: {item.summary.favoritesPerMonth} favori/ay{item.summary.medianPriceUsd ? ` · Ortanca ${item.summary.medianPriceUsd} USD` : ""} · {timeAgo(item.summary.scannedAt)}</Text></>
+          : <Text style={styles.small}>Henüz puanlanmadı. Dokunun, Etsy'de taransın.</Text>}
+      </Pressable>)}
   </>;
 }
 
@@ -1220,6 +1294,94 @@ function DigitalPanel({ online, shopReady, prefill, onPrefillUsed }: any) {
   </>;
 }
 
+const ETSY_GUIDE: Array<{ id: string; title: string; icon: any; steps: string[] }> = [
+  { id: "daily", title: "Her gün 10 dakika", icon: "today-outline", steps: [
+    "Uygulama Etsy sekmesiyle açılır. Trend → Keşfedilenler'e bakın. Sunucu siz uygulamayı açmasanız da her 30 dakikada bir Etsy'yi tarar.",
+    "65 ve üstü puan (Yüksek fırsat) olan aramaları açın. 'Talep zayıf' ve 'Rekabet yoğun' yazanları şimdilik atlayın.",
+    "Sezon fırsatları'nda 'Hemen listele' yazan bir dönem varsa önce ona hazırlanın.",
+    "Desen aramasında 'Bu nişte desen hazırla' düğmesine basın. Fiziksel ürün için Shopier sekmesinde ürünün 'Etsy ilanı hazırla' düğmesini kullanın.",
+    "Siparişleri ve mesajları Etsy'nin 'Sell on Etsy' uygulamasından takip edin. Mesajlara 24 saat içinde dönmek Star Seller rozetini korur."
+  ] },
+  { id: "discovery", title: "Otomatik keşif nasıl çalışır?", icon: "sync-circle-outline", steps: [
+    "Başlangıç listesi: 28 sabit niş ve yaklaşan ABD sezonlarının aramaları.",
+    "Her taramada Etsy'de son 120 günde açılıp hızla favori toplayan ilanların etiketleri okunur. Bu etiketlerdeki 2+ kelimelik arama ifadeleri 'Keşfedilenler' listesine eklenir. Böylece liste sabit kalıpta kalmaz; alıcıların yeni kullanmaya başladığı ifadelerle büyür.",
+    "Sunucu her 30 dakikada bir, en uzun süredir taranmamış aramayı tarar (günde 48 tarama). Liste en çok 80 arama tutar; puanı düşenler sona düşer.",
+    "Google Trends'in herkese açık bir API'si yoktur. Kartlardaki Google Trends düğmesi ABD eyaletlerini ve 'İlgili sorgular'ı gösterir. Orada gördüğünüz ifadeyi Trend'deki arama kutusuna yazıp taratın; ifade otomatik keşif listesine de girer ve düzenli taranır."
+  ] },
+  { id: "score", title: "Puanlar ne anlama gelir?", icon: "speedometer-outline", steps: [
+    "Puan 0–100 arasıdır: talep (aylık favori) %40, açıklık (rakip ilan sayısı) %25, yeni ilanların başarısı %20, fiyat seviyesi %15.",
+    "65+ Yüksek fırsat · 45–64 Denenebilir · 'Talep zayıf' alıcı az demektir · 'Rekabet yoğun' ilan çok demektir.",
+    "Etsy satış adedini paylaşmaz. Puan favori ve ilan verisinden yapılan bir tahmindir. Karar vermeden önce kartı açıp rakip ilanlara bakın.",
+    "Pahalı fiziksel ürünlerde (gümüş tesbih vb.) favori sayısı doğal olarak düşüktür. Az satış da yüksek kazanç demektir."
+  ] },
+  { id: "pattern", title: "PDF desen satışı adım adım", icon: "document-text-outline", steps: [
+    "Trend'de bir desen araması açın → 'Bu nişte desen hazırla'.",
+    "Stüdyo'da tekniği, ürün tipini ve seviyeyi seçin. İlham aldığınız modelden nasıl farklılaşacağınızı yazın. Sistem özgün bir ad, Claude/ChatGPT için PDF promptu ve 3D render promptu üretir. Desen seçtiğiniz modelin aynısı olmaz.",
+    "Promptu 'Kopyala / gönder' ile Claude veya ChatGPT'ye verin. PDF'i ve render görsellerini telefona kaydedin.",
+    "Kalite kapısındaki maddeleri kontrol edin: ölçüler, ilmek sayıları, kısaltmalar, en az bir deneme örneği.",
+    "Dijital → PDF'i ve görselleri yükleyin → 'Etsy taslağı oluştur'. Başlık, 13 etiket ve açıklama otomatik gelir.",
+    "Etsy'de taslağı açın, yapay zekâ beyanını ve kategoriyi kontrol edip yayınlayın. Dijital desenlerde bu beyan Etsy'de elle işaretlendiği için son adım Etsy'dedir."
+  ] },
+  { id: "physical", title: "Tesbih, gümüş, vintage (fiziksel ürün)", icon: "diamond-outline", steps: [
+    "Ürünü fotoğraf, TL fiyat ve açıklamayla Shopier'e ekleyin. Shopier sekmesinde ürünün 'Etsy ilanı hazırla' düğmesine basın.",
+    "'Bu ürünü kim yaptı?' sorusunu doğru cevaplayın. Hazır alınıp yeniden satılan ürün Etsy'de yasaktır; sistem yayınlamaz. Ustaya yaptırılan tasarım üretim ortağıyla listelenir. Vintage ürün en az 20 yıllık olmalıdır.",
+    "925 damgası veya ayar belgesi yoksa ilanda 'gümüş' yazılmaz; sistem uyarır.",
+    "Ağırlık, tane sayısı ve ABD kargo ücretini girin → 'Etsy'de araştır ve hazırla'. Sistem arama ifadelerini bulur, rakipleri ve etiketleri okur, TL fiyatı güncel kurla USD'ye çevirir, Etsy kesintileri ve kargoyla birlikte ortanca fiyatla karşılaştırır.",
+    "Başlığı, etiketleri ve fiyatı isterseniz düzeltin → 'Etsy taslağı oluştur' → 'Taslağı kontrol et' → 'Etsy'de yayınla'. Yayınlamada Etsy 0,20 USD ilan ücreti keser."
+  ] },
+  { id: "delivery", title: "PDF teslimi ve koruma", icon: "lock-closed-outline", steps: [
+    "Etsy satışında PDF'i Etsy teslim eder. Alıcı ödeme yaptıktan sonra dosyayı Etsy'deki 'Purchases' sayfasından indirir. Ödeme yapmayan erişemez.",
+    "Shopier veya doğrudan satışta: ödeme gelince Dijital → ürün → 'Satış bağlantısı' ile siparişe özel bir bağlantı oluşturun (varsayılan 3 indirme, 14 gün) ve alıcıya gönderin.",
+    "İade olursa veya bağlantının paylaşıldığından şüphelenirseniz bağlantıyı 'Bağlantılar' bölümünden kapatın.",
+    "İndirilmiş bir dosyanın kopyalanmasını hiçbir sistem tamamen engelleyemez. PDF'teki telif altbilgisi ve lisans sayfası caydırıcıdır. Kopyayı görürseniz Etsy'nin fikrî mülkiyet bildirim formunu kullanın."
+  ] },
+  { id: "rules", title: "Etsy kuralları: dikkat edilecekler", icon: "shield-checkmark-outline", steps: [
+    "Hazır alınıp yeniden satılan ürün listelenmez (vintage ve el işi malzemesi hariç).",
+    "Başkasının desenini, fotoğrafını veya metnini kopyalamayın. Stüdyo her desen için bir farklılaştırma planı üretir.",
+    "Başlıkta başka markaların adını ve abartılı iddiaları kullanmayın, aynı kelimeyi üst üste tekrarlamayın. Sistem başlığın uzunluğunu ve özel karakterlerini Etsy kurallarına göre düzeltir.",
+    "Yapay zekâyla üretilen görselleri ve desenleri ilanda belirtin.",
+    "Fiziksel üründe gerçek ürün fotoğrafı kullanın. Render tek başına alıcıyı yanıltabilir.",
+    "Başlıklara eyalet adı doldurmayın. Etsy ilanı tüm ABD'de gösterir; bölge hedeflemesi doğru arama ifadesi ve sezon seçimiyle yapılır."
+  ] },
+  { id: "setup", title: "Mağaza açılışı ve bir kez yapılacak ayarlar", icon: "storefront-outline", steps: [
+    "etsy.com/sell adresinde mağaza açılışını tamamlayın. Mağaza adı GXLMarketStudio'dur. Kimlik, banka ve kart bilgilerini yalnızca Etsy'nin kendi sayfasına girin.",
+    "Kargo profili: Shop Manager → Settings → Shipping settings. ABD için ücretsiz kargo seçin; kargo bedeli fiyata zaten dahil edilir.",
+    "Üretim ortağı: ustaya yaptırdığınız ürünler için Shop Manager → Settings → Production partners bölümünden usta veya atölyeyi ekleyin.",
+    "Mağaza politikaları: iade koşullarını yazın ve dijital ürünlerin iade edilmediğini belirtin.",
+    "Açılıştan sonra Özet sekmesindeki Etsy kanalı 'Bağlı' görünür. Taslak ve yayınlama düğmeleri o zaman açılır."
+  ] },
+  { id: "trouble", title: "Sorun giderme", icon: "construct-outline", steps: [
+    "'Etsy mağazası hazır değil': mağaza açılışı bitmemiş ya da yetki yenilenmesi gerekiyor. Aşağıdaki düğmelerle kuruluma devam edin.",
+    "'Tarama durdu' veya 'çok fazla istek': Etsy'nin istek sınırına takıldınız. Birkaç dakika sonra tekrar deneyin; otomatik keşif kendi hızında devam eder.",
+    "'Yayınlanamadı': ilanda en az bir fotoğraf, bir kargo profili ve fiyat olmalıdır. Taslağı Etsy'de açıp eksik alanı tamamlayın.",
+    "'Keşfedilenler' boş görünüyorsa ilk otomatik taramalar birkaç saat sürer. Hızlandırmak için gruplarda 'Tümünü tara' düğmesine basın.",
+    "Üstte 'Yerel mod' görünüyorsa sunucuya bağlanılamıyordur. 'Bağlantı anahtarını yeniden gir' ile anahtarı tekrar girin."
+  ] }
+];
+
+function EtsyGuide({ shopReady, authorized }: any) {
+  const [open, setOpen] = useState<string>(shopReady ? "daily" : "setup");
+  return <>
+    <View style={styles.guardrail}><Ionicons name="book-outline" size={20} color="#315B4C" /><Text style={[styles.guardrailText, { flex: 1 }]}>Etsy önceliklidir; Shopier ve Letgo ikinci plandadır. Sistem trendleri bulur, arama ifadelerini keşfeder, başlığı, etiketleri ve fiyatı hazırlar. Yayınlama gibi para harcatan adımlar tek dokunuşla sizin onayınızla yapılır.</Text></View>
+    {ETSY_GUIDE.map((section) => <View style={styles.card} key={section.id}>
+      <Pressable style={styles.shopierProductTop} onPress={() => setOpen(open === section.id ? "" : section.id)}>
+        <Ionicons name={section.icon} size={20} color="#315B4C" />
+        <Text style={[styles.cardTitle, { flex: 1 }]}>{section.title}</Text>
+        <Ionicons name={open === section.id ? "chevron-up" : "chevron-down"} size={18} color="#68736E" />
+      </Pressable>
+      {open === section.id && <>
+        {section.steps.map((step, index) => <Text style={styles.analysisLine} key={index}>{index + 1}. {step}</Text>)}
+        {(section.id === "setup" || section.id === "trouble") && <View style={[styles.chips, { marginTop: 10 }]}>
+          {!authorized && <Pressable style={styles.secondaryButton} onPress={connectEtsy}><Text style={styles.secondaryButtonText}>Etsy'yi bağla</Text></Pressable>}
+          {!shopReady && <Pressable style={styles.secondaryButton} onPress={() => openUrl("https://www.etsy.com/sell", "Etsy mağaza kurulumu")}><Text style={styles.secondaryButtonText}>Mağaza kurulumuna devam et</Text></Pressable>}
+          <Pressable style={styles.secondaryButton} onPress={() => openUrl("https://www.etsy.com/your/shops/me/dashboard", "Etsy mağaza yöneticisi")}><Text style={styles.secondaryButtonText}>Mağaza yöneticisi</Text></Pressable>
+        </View>}
+        {section.id === "rules" && <Pressable style={[styles.secondaryButton, { marginTop: 10, alignSelf: "flex-start" }]} onPress={() => openUrl("https://www.etsy.com/legal/sellers/", "Etsy satıcı kuralları")}><Text style={styles.secondaryButtonText}>Etsy satıcı kurallarını aç</Text></Pressable>}
+      </>}
+    </View>)}
+  </>;
+}
+
 const ORIGIN_OPTIONS = [
   { id: "made_by_seller", label: "Ben / atölyem yaptı" },
   { id: "designed_by_seller", label: "Tasarım benim, ustaya yaptırdım" },
@@ -1245,8 +1407,13 @@ function EtsyProductPlanner({ product, etsyReady, onClose }: any) {
   const [tags, setTags] = useState("");
   const [priceUsd, setPriceUsd] = useState("");
   const [saving, setSaving] = useState(false);
+  const [draft, setDraft] = useState<any>();
+  const [published, setPublished] = useState<any>();
+  const [publishing, setPublishing] = useState(false);
   useEffect(() => {
     setPlan(undefined);
+    setDraft(undefined);
+    setPublished(undefined);
     setProgress("");
     const weight = String(product?.title || "").match(/(\d+(?:[.,]\d+)?)\s*(?:g|gr|gram)\b/i);
     setWeightGrams(weight ? weight[1].replace(",", ".") : "");
@@ -1292,15 +1459,32 @@ function EtsyProductPlanner({ product, etsyReady, onClose }: any) {
   };
   const createDraft = () => {
     if (!etsyReady) return Alert.alert("Etsy mağazası hazır değil", "Mağaza açılıp Etsy bağlantısı 'Bağlı' görünene kadar taslak oluşturulamaz.");
-    Alert.alert("Etsy'de taslak ilan oluşturulsun mu?", "İlan yayına girmez. Etsy'de kontrol edip siz yayınlarsınız.", [
+    Alert.alert("Etsy'de taslak ilan oluşturulsun mu?", "İlan önce taslak olarak oluşturulur, yayına girmez. Kontrol ettikten sonra buradan veya Etsy'den yayınlayabilirsiniz.", [
       { text: "Vazgeç", style: "cancel" },
       { text: "Taslak oluştur", onPress: async () => {
         setSaving(true);
         try {
           const result = await apiJson("/api/products/etsy-draft", { method: "POST", headers: apiHeaders(true), body: JSON.stringify({ confirm: true, product: payload, listing: { title, tags: tags.split(",").map((tag) => tag.trim()).filter(Boolean), description: plan.description, materials: plan.materials, priceUsd: Number(priceUsd.replace(",", ".")) } }) });
-          Alert.alert(result.alreadyCreated ? "Taslak zaten var" : "Etsy taslağı hazır", [...(result.warnings || []), "Taslağı açıp kontrol ettikten sonra yayınlayın."].join("\n"), [{ text: "Taslağı aç", onPress: () => openUrl(result.editUrl, "Etsy taslak ilanı") }, { text: "Tamam" }]);
+          setDraft(result);
+          Alert.alert(result.alreadyCreated ? "Taslak zaten var" : "Etsy taslağı hazır", [...(result.warnings || []), "Taslağı kontrol ettikten sonra 'Etsy'de yayınla' düğmesine basın."].join("\n"), [{ text: "Taslağı aç", onPress: () => openUrl(result.editUrl, "Etsy taslak ilanı") }, { text: "Tamam" }]);
         } catch (error) { Alert.alert("Taslak oluşturulamadı", errorText(error)); }
         finally { setSaving(false); }
+      } }
+    ]);
+  };
+  const publish = () => {
+    if (!draft) return;
+    Alert.alert("Etsy'de yayınlansın mı?", "İlan alıcılara açılır ve Etsy 0,20 USD ilan ücreti keser. Fotoğrafları, fiyatı ve kargo profilini taslakta kontrol ettiyseniz devam edin.", [
+      { text: "Vazgeç", style: "cancel" },
+      { text: "Taslağı aç", onPress: () => openUrl(draft.editUrl, "Etsy taslak ilanı") },
+      { text: "Yayınla", onPress: async () => {
+        setPublishing(true);
+        try {
+          const result = await apiJson("/api/products/etsy-publish", { method: "POST", headers: apiHeaders(true), body: JSON.stringify({ confirm: true, listingId: draft.listingId }) });
+          setPublished(result);
+          Alert.alert("İlan yayında", "Etsy ilanı alıcılara açıldı.", [{ text: "İlanı aç", onPress: () => openUrl(result.url, "Etsy ilanı") }, { text: "Tamam" }]);
+        } catch (error) { Alert.alert("Yayınlanamadı", `${errorText(error)}\nTaslağı Etsy'de açıp eksik alanı tamamlayın, sonra tekrar deneyin.`); }
+        finally { setPublishing(false); }
       } }
     ]);
   };
@@ -1363,7 +1547,13 @@ function EtsyProductPlanner({ product, etsyReady, onClose }: any) {
           {plan.competitors.map((item: any, index: number) => <Pressable key={`${item.url}-${index}`} onPress={() => item.url && openUrl(item.url, "Etsy ilanı")}><Text style={styles.linkNote} numberOfLines={2}>{item.priceUsd ? `${item.priceUsd.toFixed(2)} USD · ` : ""}{item.favorites} favori · {item.title}</Text></Pressable>)}
         </View>}
         {plan.warnings.map((warning: string) => <Text style={styles.warningText} key={warning}>• {warning}</Text>)}
-        <Pressable style={[styles.analyzeButton, { marginTop: 14 }, (eligibility.status !== "allowed" || saving) && styles.primaryDisabled]} disabled={eligibility.status !== "allowed" || saving} onPress={createDraft}>{saving ? <ActivityIndicator color="white" /> : <Ionicons name="storefront-outline" size={18} color="white" />}<Text style={styles.primaryText}>{eligibility.status === "blocked" ? "Etsy'de yayınlanamaz" : "Etsy taslağı oluştur"}</Text></Pressable>
+        <Pressable style={[styles.analyzeButton, { marginTop: 14 }, (eligibility.status !== "allowed" || saving || Boolean(draft)) && styles.primaryDisabled]} disabled={eligibility.status !== "allowed" || saving || Boolean(draft)} onPress={createDraft}>{saving ? <ActivityIndicator color="white" /> : <Ionicons name="storefront-outline" size={18} color="white" />}<Text style={styles.primaryText}>{eligibility.status === "blocked" ? "Etsy'de yayınlanamaz" : draft ? "Taslak oluşturuldu" : "Etsy taslağı oluştur"}</Text></Pressable>
+        {draft && <View style={[styles.policyBox, published ? styles.policyAllowed : styles.policyReview, { marginTop: 14 }]}>
+          <Text style={styles.policyName}>ETSY İLANI #{draft.listingId}</Text>
+          <Text style={styles.policyLabel}>{published ? "Yayında" : "Taslak hazır · henüz yayında değil"}</Text>
+          <Pressable style={[styles.secondaryButton, { alignSelf: "flex-start", marginTop: 6 }]} onPress={() => published ? openUrl(published.url, "Etsy ilanı") : openUrl(draft.editUrl, "Etsy taslak ilanı")}><Text style={styles.secondaryButtonText}>{published ? "İlanı aç" : "Taslağı kontrol et"}</Text></Pressable>
+          {!published && <Pressable style={[styles.analyzeButton, { marginTop: 12 }, publishing && styles.primaryDisabled]} disabled={publishing} onPress={publish}>{publishing ? <ActivityIndicator color="white" /> : <Ionicons name="rocket-outline" size={18} color="white" />}<Text style={styles.primaryText}>Etsy'de yayınla</Text></Pressable>}
+        </View>}
       </>}
     </ScrollView></SafeAreaView>
   </Modal>;
@@ -1498,6 +1688,7 @@ const styles = StyleSheet.create({
   chips: { flexDirection: "row", flexWrap: "wrap", gap: 7, marginBottom: 14 },
   chip: { borderWidth: 1, borderColor: "#D8D4CA", borderRadius: 99, paddingHorizontal: 10, paddingVertical: 7, backgroundColor: "white" },
   chipActive: { backgroundColor: "#315B4C", borderColor: "#315B4C" },
+  risingChip: { backgroundColor: "#FBEFD9", borderColor: "#E2B676" },
   chipText: { color: "#56615C", fontSize: 11, fontWeight: "700" },
   chipTextActive: { color: "white" },
   analysisCard: { backgroundColor: "white", borderRadius: 16, padding: 15, marginBottom: 16, borderWidth: 1, borderColor: "#DCD8CF" },

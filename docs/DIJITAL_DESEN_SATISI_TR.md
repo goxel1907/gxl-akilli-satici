@@ -1,8 +1,8 @@
 # Dijital desen satışı: Trend → Stüdyo → Korumalı PDF
 
-GXL'nin Etsy kanalı, kadınların hobilerine yönelik dijital PDF desenleri (tığ işi, şiş örgü, nakış, kanaviçe, dikiş, makrome, punch) için çalışır. Tesbihler bu akışa girmez; Shopier'de ayrı satılmaya devam eder.
+GXL'nin önceliği Etsy'dir; Shopier ve Letgo ikinci plandadır. Bu belge hobi PDF desenlerinin (tığ işi, şiş örgü, nakış, kanaviçe, dikiş, makrome, punch) akışını anlatır. Tesbih, gümüş ve vintage gibi fiziksel ürünler için bkz. [ETSY_URUN_STUDYOSU_TR.md](ETSY_URUN_STUDYOSU_TR.md).
 
-Uygulamada **Etsy** sekmesi üç bölümden oluşur.
+Uygulama **Etsy** sekmesiyle açılır. Sekme dört bölümden oluşur: **Trend**, **Stüdyo**, **Dijital** ve **Kılavuz**. Kılavuz, günlük akışı, satış adımlarını, teslimatı, Etsy kurallarını, mağaza ayarlarını ve sorun gidermeyi uygulamanın içinde anlatır.
 
 ## 1. Trend: Etsy'de ne popüler?
 
@@ -19,10 +19,26 @@ Desen nişlerinde dijital ürün payı %30'un altındaysa puan %20 düşürülü
 
 - Etsy satış adedini API ile paylaşmaz. Bu yüzden puan kesin satış verisi değil, bir tahmindir.
 - Her nişin kartında üst ilanlarda en çok geçen etiketler ve incelenecek rakip ilanların bağlantıları bulunur.
-- Kendi aramanızı da yazıp tarayabilirsiniz (ör. `crochet bag pattern`).
+- Kendi aramanızı da yazıp tarayabilirsiniz (ör. `crochet bag pattern`). Elle taranan arama otomatik keşif listesine de eklenir ve sonra düzenli olarak taranır.
 - Sonuçlar 6 saat saklanır. Tarama için yalnızca Etsy API anahtarı gerekir; mağazanın açık olması gerekmez.
 
 Desen kartlarındaki **Bu nişte desen hazırla** düğmesi, nişin anahtar kelimesini ve etiketlerini Stüdyo'ya aktarır. Tesbih ve vintage kartlarında **Üst etiketleri kopyala** düğmesi vardır. Her kartta **ABD'de hangi eyaletlerde aranıyor?** düğmesi o aramanın son 12 aylık Google Trends eyalet haritasını açar.
+
+### Otomatik keşif (Keşfedilenler)
+
+Taranan aramalar 28 sabit nişle sınırlı kalmaz. Sistem alıcıların gerçekten kullandığı yeni arama ifadelerini kendisi bulur:
+
+1. Her taramada üst ilanlardan **son 120 günde açılmış** olanların etiketleri, ilanın aylık favori hızıyla ağırlıklandırılır. Bunlar kartta **Yeni ilanlarda yükselen etiketler** olarak görünür.
+2. Bu etiketlerden ve üst ilanların en sık etiketlerinden en az 2 kelimelik, gruba uygun ifadeler seçilir:
+   - Desenlerde ifade bir el işi tekniği ya da aranan kelimeyle ortak bir kelime içermelidir. Sonunda "pattern" yoksa eklenir, ör. `pineapple doily` → `pineapple doily pattern`.
+   - Tesbihte ifade tesbih/dua/İslami hediye kelimelerinden birini içermelidir.
+   - Genel ifadeler (`digital download`, `gift for her` vb.) alınmaz.
+3. Yeni ifadeler **Trend → Keşfedilenler** listesine eklenir (en çok 80 ifade, puana göre sıralı).
+4. **Otopilot:** Cloudflare her 30 dakikada bir Worker'ı tetikler. Her çalışmada sabit nişler, yaklaşan sezon aramaları ve keşfedilen ifadeler arasından en uzun süredir taranmamış olan taranır. Ücretsiz planın istek başına 10 ms işlemci sınırı nedeniyle her çalışmada tek arama taranır; bu da günde 48 tarama eder. Uygulamanın açık olması gerekmez.
+
+Keşfedilenler kartında otopilotun son çalışma zamanı, son taranan arama ve varsa son hata görünür. Henüz puanlanmamış bir ifadeye dokunulunca o ifade hemen taranır.
+
+Google Trends'in herkese açık bir API'si yoktur ve sunucudan yapılan istekleri engeller. Bu yüzden sistem ilgili aramaları Etsy'nin kendi verisinden çıkarır. Google Trends'teki "İlgili sorgular"da gördüğünüz bir ifadeyi Trend'deki arama kutusuna yazarsanız o ifade de takibe alınır.
 
 ### Sezon fırsatları
 
@@ -102,12 +118,14 @@ Etsy'de en çok satan desen mağazalarında ortak olan uygulamalar:
 | `APP_ACCESS_TOKEN` | Cloudflare Worker sırrı | Yükleme ve bağlantı oluşturma |
 | `GEMINI_API_KEY` (isteğe bağlı) | Cloudflare Worker sırrı | Başlık ve etiketlerin yapay zekâyla iyileştirilmesi |
 
-Ücretsiz KV kotası 1 GB depolama ve günde 1.000 yazmadır. 3 MB'lık PDF'lerle yaklaşık 300 desen saklanabilir; her indirme 1 yazma harcar.
+Ücretsiz KV kotası 1 GB depolama ve günde 1.000 yazmadır. Otopilot her çalışmada en çok 3 yazma yapar, yani günde yaklaşık 144 yazma harcar. 3 MB'lık PDF'lerle yaklaşık 300 desen saklanabilir; her indirme 1 yazma harcar.
 
 ### API uçları
 
 - `GET /api/etsy/trends`: niş listesi ve önbellekteki puanlar
-- `POST /api/etsy/trends/scan`: `{ nicheId }` veya `{ keyword }` ile tek bir niş ya da arama taraması
+- `POST /api/etsy/trends/scan`: `{ nicheId }` veya `{ keyword }` ile tek bir niş ya da arama taraması. İsteğe bağlı `group` (patterns/tesbih/vintage/other) puanlama grubunu belirler. `track: true` aramayı otomatik keşif listesine ekler. Yanıttaki `discovered` alanı bu taramadan çıkan yeni ifadeleri verir.
+- `GET /api/etsy/discoveries`: otopilot durumu ve keşfedilen arama ifadeleri
+- Cron (`*/30 * * * *`, `wrangler.jsonc`): her çalışmada tek bir arama tarayan otopilot
 - `POST /api/patterns/plan`: desen adı, farklılaştırma planı, PDF ve render promptları, fotoğraf planı ve Etsy ilanı
 - `GET/POST /api/digital/products`: dijital ürün listesi ve multipart PDF yükleme (`confirm: true`)
 - `POST /api/digital/products/:id/etsy-draft`: Etsy'de taslak dijital ilan, görseller ve PDF (`confirm: true`)

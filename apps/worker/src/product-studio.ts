@@ -618,3 +618,14 @@ export async function createEtsyPhysicalDraft(
   if (!input.imageUrls.length) warnings.push("Fotoğraf yok; Etsy'de taslağa en az 5 fotoğraf ekleyin.");
   return { listingId, editUrl: `https://www.etsy.com/your/shops/me/listing-editor/edit/${listingId}`, alreadyCreated: false, warnings };
 }
+
+// Taslağı yayına alır; Etsy yayın için en az bir görsel ister ve ilan ücreti bu adımda alınır.
+export async function publishEtsyListing(env: EtsyRuntimeEnv, listingId: number, fetcher: Fetcher = fetch) {
+  if (!Number.isInteger(listingId) || listingId <= 0) throw new EtsyIntegrationError("VALIDATION_FAILED", "Geçersiz Etsy ilan numarası.", 400);
+  const shop = await getConnectedShop(env, fetcher);
+  const updated = await etsyRequest<{ state?: string; url?: string }>(env, `/application/shops/${shop.shopId}/listings/${listingId}`, {
+    method: "PATCH",
+    form: new URLSearchParams({ state: "active" })
+  }, fetcher);
+  return { listingId, state: updated.state || "active", url: updated.url || `https://www.etsy.com/listing/${listingId}` };
+}

@@ -58,6 +58,10 @@ export const TREND_NICHES: TrendNiche[] = [
   { id: "vintage-prayer-beads", keyword: "vintage prayer beads", labelTr: "Vintage tesbih", group: "vintage" }
 ];
 
+export function isTrendGroup(value: unknown): value is TrendGroup {
+  return typeof value === "string" && Object.prototype.hasOwnProperty.call(TREND_GROUPS, value);
+}
+
 export function inferTrendGroup(keyword: string): TrendGroup {
   if (/\b(pattern|pdf|printable|template|svg|chart)\b/i.test(keyword)) return "patterns";
   if (/\b(vintage|antique|retro)\b/i.test(keyword)) return "vintage";
@@ -97,6 +101,7 @@ export interface TrendResult {
   };
   reasons: string[];
   topTags: Array<{ tag: string; count: number }>;
+  risingTags?: Array<{ tag: string; weight: number }>;
   examples: TrendExample[];
   scannedAt: string;
   cached?: boolean;
@@ -186,6 +191,20 @@ export function scoreTrend(keyword: string, payload: { count?: number; results?:
     .slice(0, 20)
     .map(([tag, count]) => ({ tag, count }));
 
+  // Son 4 ayda açılıp hızla favori toplayan ilanların etiketleri yükselen arama ifadelerini gösterir.
+  const risingWeights = new Map<string, number>();
+  pageOne.forEach((listing, index) => {
+    if (ageDays(listing, now) > 120) return;
+    for (const raw of Array.isArray(listing.tags) ? listing.tags : []) {
+      const tag = String(raw).toLowerCase().trim();
+      if (tag) risingWeights.set(tag, (risingWeights.get(tag) || 0) + Math.max(0.1, velocities[index]));
+    }
+  });
+  const risingTags = [...risingWeights.entries()]
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .slice(0, 12)
+    .map(([tag, weight]) => ({ tag, weight: Math.round(weight * 10) / 10 }));
+
   const examples = pageOne
     .map((listing, index) => ({ listing, velocity: velocities[index] }))
     .sort((a, b) => b.velocity - a.velocity)
@@ -229,6 +248,7 @@ export function scoreTrend(keyword: string, payload: { count?: number; results?:
     },
     reasons,
     topTags,
+    risingTags,
     examples,
     scannedAt: new Date(now).toISOString()
   };
@@ -256,7 +276,7 @@ export async function readCached(store: TrendStore | undefined, keyword: string)
 
 export async function scanTrend(
   env: EtsyRuntimeEnv,
-  input: { nicheId?: string; keyword?: string; force?: boolean },
+  input: { nicheId?: string; keyword?: string; force?: boolean; group?: TrendGroup },
   store: TrendStore | undefined,
   fetcher: Fetcher = fetch,
   now = Date.now()
@@ -277,7 +297,7 @@ export async function scanTrend(
     query: { keywords: keyword, sort_on: "score", limit: 100, currency: "USD" }
   }, fetcher);
   const result: TrendResult = {
-    ...scoreTrend(keyword, payload, now, niche?.group || inferTrendGroup(keyword)),
+    ...scoreTrend(keyword, payload, now, niche?.group || input.group || inferTrendGroup(keyword)),
     ...(niche ? { nicheId: niche.id, labelTr: niche.labelTr, craft: niche.craft } : {})
   };
   if (store) await store.put(cacheKey(keyword), JSON.stringify(result), { expirationTtl: CACHE_TTL_SECONDS });

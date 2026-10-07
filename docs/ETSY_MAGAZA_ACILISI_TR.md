@@ -74,10 +74,12 @@ Ekranda gösterilen kurulum ücretini kontrol edin ve **Open your shop** düğme
 1. **Kanallar → Etsy** satırını yenileyin. Durum `Bağlı · <MağazaAdı>` olmalıdır.
 2. Durum `Etsy hesabı henüz bağlanmadı` diyorsa Etsy satırına dokunup izni yeniden verin.
 3. Mağaza adı görünüyorsa **Etsy → Dijital** bölümünde yüklenen desenler için **Etsy taslağı oluştur** düğmesi çalışır.
+4. Shopier ürünlerinde **Etsy ilanı hazırla → Etsy taslağı oluştur → Etsy'de yayınla** akışı açılır.
+5. Günlük kullanım, kurallar ve sorun giderme uygulamada **Etsy → Kılavuz** bölümündedir.
 
 ## Ek: Tesbih Etsy'de satılacaksa
 
-Tesbihler şimdilik Shopier'de ayrı satılıyor. İleride Etsy'de satılacaksa yukarıdaki "Ürünü kim yaptı?" tablosu geçerlidir. Aşağıdaki taslak `GXL-GMS-024` (24 g, ay-yıldızlı, oksitli) içindir. Köşeli parantezli alanları ürünü ölçerek doldurun. Doğrulanmamış bilgiyi silin, tahminle doldurmayın.
+Tesbih ve gümüş ürünler Etsy'de **Shopier → Etsy ilanı hazırla** akışıyla listelenir (bkz. [ETSY_URUN_STUDYOSU_TR.md](ETSY_URUN_STUDYOSU_TR.md)). Yukarıdaki "Ürünü kim yaptı?" tablosu geçerlidir. Aşağıdaki taslak `GXL-GMS-024` (24 g, ay-yıldızlı, oksitli) içindir. Köşeli parantezli alanları ürünü ölçerek doldurun. Doğrulanmamış bilgiyi silin, tahminle doldurmayın.
 
 **Fotoğraflar:** Uygulamadaki `gxl-24g-1/2/3` fotoğrafları. Bunlara ek olarak 925 damgasının yakın çekimi ve elde ya da cetvel yanında boyut gösteren bir kare ekleyin. Etsy kare küçük resim kullanır; ürünü ortalayın.
 

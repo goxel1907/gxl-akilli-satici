@@ -24,7 +24,8 @@ Tesbih, gümüş, vintage ve benzeri fiziksel ürünlerde Etsy ilanını sistem 
    - Tasarım senin, üretim ustanınsa Etsy'de üretim ortağıyla listelenir.
    - Vintage ürün, üretim yılına göre doğru dönemle listelenir.
    - 925/altın iddiasında ayar damgası veya belge yoksa taslak oluşturulmaz.
-7. **Taslak:** Etsy'de taslak fiziksel ilan açar ve Shopier fotoğraflarını yükler. Mağazadaki kargo profilini, hazırlık süresi profilini ve gerekiyorsa üretim ortağını kullanır. İlan yayına girmez; Etsy'de kontrol edip sen yayınlarsın.
+7. **Taslak:** Etsy'de taslak fiziksel ilan açar ve Shopier fotoğraflarını yükler. Mağazadaki kargo profilini, hazırlık süresi profilini ve gerekiyorsa üretim ortağını kullanır. İlan bu aşamada yayına girmez.
+8. **Yayınlama:** Taslak oluşunca planlayıcıda **Taslağı kontrol et** ve **Etsy'de yayınla** düğmeleri çıkar. Yayınla'ya basıp onaylayınca ilan Etsy'de aktif olur (`POST /api/products/etsy-publish`, `confirm: true`). Etsy her yayında 0,20 USD ilan ücreti keser. Bu yüzden düğme tek dokunuşluk bir onay ister. Fotoğrafı olmayan ya da kargo profili eksik ilanı Etsy yayınlamaz; hata mesajıyla birlikte taslağı açma seçeneği gösterilir.
 
 ## Etsy'de bir kez yapılacak ayarlar
 

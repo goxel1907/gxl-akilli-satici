@@ -5,6 +5,7 @@
   "compatibility_date": "2026-08-12",
   "compatibility_flags": ["nodejs_compat"],
   "observability": { "enabled": true },
+  "triggers": { "crons": ["*/30 * * * *"] },
   "kv_namespaces": [
     {
       "binding": "ETSY_OAUTH",

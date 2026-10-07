@@ -36,10 +36,11 @@ Shopier bu sistemde ödeme/sipariş hedefidir; ajan ödeme kartı verisi almaz.
 
 ### Kanal önceliği
 
-1. Shopier bağımsız canlı satış merkezi olarak tamamen hazır hale getirilir.
-2. Etsy mağaza kurulumu ödeme düğmesine kadar tamamlanır; nihai kurulum ücreti ve mağaza açma işlemi yalnızca hesap sahibi tarafından yapılır. Adım adım liste ve ilk ilan taslağı: `docs/ETSY_MAGAZA_ACILISI_TR.md`; kopyala-yapıştır mağaza metinleri: `docs/ETSY_MAGAZA_METINLERI.md`.
-3. Etsy mağazası kadınların hobilerine yönelik dijital PDF desenleri satar; tesbihler Shopier'de ayrı kalır. Trend tarama ve desen stüdyosu mağaza açılmadan çalışır. Mağaza açılıp Etsy OAuth bağlandıktan sonra uygulama, desenleri PDF ve görselleriyle birlikte Etsy'ye taslak dijital ilan olarak gönderir. Ayrıntılar: `docs/DIJITAL_DESEN_SATISI_TR.md`.
-4. Letgo ücretli ilan nedeniyle beklemede kalır; Meta/WhatsApp/Instagram sonraki aşamadır.
+1. **Etsy önceliklidir.** Uygulama Etsy sekmesiyle açılır. Trend tarama, otomatik keşif ve desen stüdyosu mağaza açılmadan çalışır. Mağaza kurulumu ödeme düğmesine kadar hazırlanır; nihai kurulum ücreti ve mağaza açma işlemi yalnızca hesap sahibi tarafından yapılır. Adım adım liste ve ilk ilan taslağı: `docs/ETSY_MAGAZA_ACILISI_TR.md`; kopyala-yapıştır mağaza metinleri: `docs/ETSY_MAGAZA_METINLERI.md`.
+2. Etsy mağazası hobi PDF desenleri (`docs/DIJITAL_DESEN_SATISI_TR.md`), tesbih ve gümüş ürünler ve vintage ürünler (`docs/ETSY_URUN_STUDYOSU_TR.md`) satar. Mağaza açılıp Etsy OAuth bağlandıktan sonra uygulama ilanları taslak olarak gönderir; fiziksel ürünler tek onayla uygulamadan yayınlanır.
+3. **Otomatik keşif:** `wrangler.jsonc` içindeki `triggers.crons` (`*/30 * * * *`) Workers Builds ile birlikte yayınlanır; ek ayar gerekmez. Cloudflare panelinde Worker → Settings → Trigger Events altında görünür. Ücretsiz planda çalışır.
+4. Shopier ikinci kanal olarak canlı satış merkezi görevini sürdürür.
+5. Letgo ücretli ilan nedeniyle beklemede kalır; Meta/WhatsApp/Instagram sonraki aşamadır.
 
 ## 3. Letgo
 

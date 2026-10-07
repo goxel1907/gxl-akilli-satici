@@ -23,9 +23,10 @@ import {
   type ShopierWebhookEvent
 } from "./shopier.js";
 import { createEtsyConnectSession, EtsyIntegrationError, getConnectedShop, getEtsyStatus, handleEtsyCallback, type EtsyRuntimeEnv } from "./etsy.js";
-import { getTrendBoard, normalizeKeyword, readCached, scanTrend, type TrendResult, type TrendStore } from "./etsy-trends.js";
+import { getTrendBoard, isTrendGroup, normalizeKeyword, readCached, scanTrend, type TrendResult, type TrendStore } from "./etsy-trends.js";
 import { seasonalBoard } from "./seasonal.js";
-import { buildProductPlan, createEtsyPhysicalDraft, detectProductSignals, getUsdTryRate, keywordCandidates, normalizeProductInput, type KeyValueStore } from "./product-studio.js";
+import { autopilotStatus, listDiscoveries, recordScan, runAutopilot } from "./discovery.js";
+import { buildProductPlan, createEtsyPhysicalDraft, detectProductSignals, getUsdTryRate, keywordCandidates, normalizeProductInput, publishEtsyListing, type KeyValueStore } from "./product-studio.js";
 import { buildPatternBrief, createDigitalListing, normalizeDigitalListingInput, normalizePatternPlanInput } from "./pattern-studio.js";
 import {
   createDigitalProduct,
@@ -436,11 +437,19 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
     }
     if (request.method === "POST" && url.pathname === "/api/etsy/trends/scan") {
       const input = await readBody(request);
-      return json(200, await scanTrend(env, {
+      const store = env.ETSY_OAUTH as unknown as TrendStore | undefined;
+      const result = await scanTrend(env, {
         nicheId: input.nicheId ? String(input.nicheId) : undefined,
         keyword: input.keyword ? String(input.keyword) : undefined,
-        force: input.force === true
-      }, env.ETSY_OAUTH as unknown as TrendStore | undefined));
+        force: input.force === true,
+        group: isTrendGroup(input.group) ? input.group : undefined
+      }, store);
+      const discovered = result.cached && input.track !== true ? [] : await recordScan(store, result, Date.now(), { track: input.track === true });
+      return json(200, { ...result, discovered: discovered.map((item) => item.keyword) });
+    }
+    if (request.method === "GET" && url.pathname === "/api/etsy/discoveries") {
+      const store = env.ETSY_OAUTH as unknown as TrendStore | undefined;
+      return json(200, { autopilot: await autopilotStatus(store), items: await listDiscoveries(store) });
     }
 
     if (request.method === "POST" && url.pathname === "/api/patterns/plan") {
@@ -474,6 +483,12 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
       let shopCurrency: string | undefined;
       try { shopCurrency = (await getConnectedShop(env)).currencyCode; } catch { shopCurrency = undefined; }
       return json(200, { plan: buildProductPlan(product, keywords, scans, { usdTryRate, shopCurrency, signals: detectProductSignals(product) }), shopCurrency });
+    }
+    if (request.method === "POST" && url.pathname === "/api/products/etsy-publish") {
+      const input = await readBody(request);
+      const blocked = requireConfirmedWrite(env, input, "Etsy ilanını yayınlama");
+      if (blocked) return blocked;
+      return json(200, await publishEtsyListing(env, Number(input.listingId)));
     }
     if (request.method === "POST" && url.pathname === "/api/products/etsy-draft") {
       const input = await readBody(request);
@@ -779,4 +794,13 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
   }
 }
 
-export default { fetch: handleRequest };
+export async function handleScheduled(env: Env) {
+  return await runAutopilot(env, env.ETSY_OAUTH as unknown as TrendStore | undefined);
+}
+
+export default {
+  fetch: handleRequest,
+  scheduled(_event: unknown, env: Env, context: { waitUntil(promise: Promise<unknown>): void }) {
+    context.waitUntil(handleScheduled(env));
+  }
+};
