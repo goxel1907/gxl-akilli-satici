@@ -1,0 +1,93 @@
+# Dijital desen satışı: Trend → Stüdyo → Korumalı PDF
+
+GXL'nin Etsy kanalı, kadınların hobilerine yönelik dijital PDF desenleri (tığ işi, şiş örgü, nakış, kanaviçe, dikiş, makrome, punch) için çalışır. Tesbihler bu akışa girmez; Shopier'de ayrı satılmaya devam eder.
+
+Uygulamada **Etsy** sekmesi üç bölümden oluşur.
+
+## 1. Trend: Etsy'de ne popüler?
+
+**Etsy → Trend → Tümünü tara** 16 hobi nişini Etsy'nin resmî arama API'siyle tarar. Her niş 0–100 arası puan alır:
+
+| Bileşen | Ağırlık | Ne ölçer |
+| --- | --- | --- |
+| Talep | %40 | Arama sonucunda üst sıradaki 48 ilanın aylık ortanca favori hızı |
+| Rekabet | %25 | Aktif ilan sayısı; ilan sayısı azaldıkça puan yükselir |
+| Yeni ilan payı | %20 | Üst ilanların ne kadarı son 6 ayda açılmış; yeni mağazanın öne çıkma şansını gösterir |
+| Fiyat bandı | %15 | Üst ilanların ortanca USD fiyatı |
+
+Aramada dijital desen payı %30'un altındaysa puan %20 düşürülür. Bu durum, alıcıların o aramada çoğunlukla bitmiş ürün aradığını gösterir.
+
+- Etsy satış adedini API ile paylaşmaz. Bu yüzden puan kesin satış verisi değil, bir tahmindir.
+- Her nişin kartında üst ilanlarda en çok geçen etiketler ve incelenecek rakip ilanların bağlantıları bulunur.
+- Kendi aramanızı da yazıp tarayabilirsiniz (ör. `crochet bag pattern`).
+- Sonuçlar 6 saat saklanır. Tarama için yalnızca Etsy API anahtarı gerekir; mağazanın açık olması gerekmez.
+
+Kartta **Bu nişte desen hazırla** düğmesi, nişin anahtar kelimesini ve etiketlerini Stüdyo'ya aktarır.
+
+## 2. Stüdyo: prompt ve ilan
+
+Formu doldurun: el işi türü, ürün türü (İngilizce), seçtiğiniz modelde neyi beğendiğiniz, modeldeki tekrar sayısı ve renkler. Sistem şunları üretir:
+
+1. **Desen adı:** Sistem kendisi seçer. Beğenmezseniz "Yeni isimle yeniden hazırla" düğmesine basın.
+2. **Farklılaştırma planı:** Tasarımın referans modelden açıkça farklı olması için kurallar üretir. Bunlar tekrar sayısı, motif şekli, kenar tekniği ve renk paletinin değişmesi; referansın yazısının, fotoğrafının ve şemasının kullanılmamasıdır.
+3. **PDF desen promptu:** Claude veya ChatGPT için hazırlanır. Model üç aşamada çalışır: tasarım tablosu, sayı ve geometri denetimi, son PDF. Prompt şunları zorunlu kılar: her sıranın sonunda ilmek sayısı, şema, malzeme ve metraj, sorun giderme, hızlı başvuru sayfası, lisans sayfası ve her sayfada telif altbilgisi. Giyilebilir ürünlerde en az 3 beden istenir.
+4. **3D render promptu:** PDF'in sonunda çıkan "Design spec" JSON'u bu prompta yapıştırılır. Böylece render, desendeki motif sayısı ve renklerle birebir aynı olur.
+5. **Etsy fotoğraf planı** (10 görsel) ve satış öncesi **kalite kapısı.**
+6. **Etsy ilanı:** Başlık (en fazla 140 karakter, ana arama ifadesi başta), her biri en fazla 20 karakter olan 13 etiket ve açıklama. Açıklamada "dijital ürün" uyarısı, render ve yapay zekâ bildirimi ile telif metni bulunur. Etsy'nin karakter kuralları otomatik uygulanır. Sunucuda Gemini anahtarı varsa başlık ve etiketler yapay zekâyla iyileştirilir, sonra yine kurallardan geçirilir.
+
+Prompt kutularındaki **Kopyala / gönder** düğmesi Android paylaşım menüsünü açar. Metni doğrudan Claude veya ChatGPT uygulamasına gönderebilirsiniz.
+
+## 3. Dijital: PDF yükleme ve korumalı teslim
+
+1. **PDF yükle:** PDF'i (en fazla 20 MB) ve render ya da ürün fotoğraflarını (en fazla 10) seçin. Fiyatı ve "test edildi / render / yapay zekâ" işaretlerini girin.
+2. Dosya Cloudflare'deki özel depoya kaydedilir ve herkese açık bir adresi yoktur.
+3. **Etsy taslağı oluştur:** Başlık, açıklama, etiketler, görseller ve PDF Etsy'ye *taslak* dijital ilan olarak gönderilir. İlan kendiliğinden yayına girmez. Etsy'de taslağı açıp yapay zekâ kutusunu, kategoriyi ve fiyatı kontrol ettikten sonra yayınlarsınız. Etsy, PDF'i yalnızca ödeme yapan alıcıya verir.
+4. **Satış bağlantısı** (Shopier veya doğrudan satış): Ödeme geldikten sonra sipariş numarasıyla kişiye özel bir bağlantı oluşturun. Varsayılan sınır 3 indirme ve 14 gündür. Bağlantı paylaşım menüsüyle alıcıya gönderilir. İade olursa **Bağlantılar** bölümünden kapatılır.
+
+### Koruma neyi sağlar, neyi sağlamaz
+
+- **Ödemesiz erişim yok.** PDF'in açık bir adresi yoktur. Etsy'de dosyayı Etsy teslim eder; diğer kanallarda yalnızca sizin oluşturduğunuz bağlantı çalışır.
+- **Bağlantı paylaşımı sınırlı.** Her bağlantı tek siparişe aittir; indirme sayısı ve süresi sınırlıdır ve kapatılabilir. Bağlantı başkasıyla paylaşılırsa kalan indirme hakkı hızla biter.
+- **İndirilmiş dosyanın kopyalanmasını hiçbir sistem tamamen engelleyemez.** Caydırıcı önlemler şunlardır: her sayfadaki telif altbilgisi, lisans sayfası ve Etsy'nin fikrî mülkiyet bildirim formu.
+- Her sayfaya alıcının adını veya sipariş numarasını basan görünür filigran, Cloudflare ücretsiz planının istek başına 10 ms işlemci sınırında güvenilir çalışmaz. Aylık 5 USD'lik ücretli Workers planına geçilirse eklenebilir.
+
+## Öne çıkmak için
+
+Etsy'de en çok satan desen mağazalarında ortak olan uygulamalar:
+
+- Desen satıştan önce en az bir kez örülür. Etsy'deki kötü yorumların ana nedeni, çalışmayan veya fotoğrafla uyuşmayan yapay zekâ desenleridir.
+- Kapak görseli gerçek ürün fotoğrafıdır; render yalnızca ek görsel olur ve üzerinde "Digital render" yazar.
+- İlana 5–15 saniyelik ürün videosu eklenir.
+- Her sıranın sonunda ilmek sayısı, şema, bol fotoğraflı adımlar ve giyilebilirlerde çoklu beden bulunur.
+- Mağaza tek bir alana odaklanır (ör. dantel ve ev dekoru); düzenli olarak yeni ilan eklenir.
+- Mesajlara hızlı cevap verilir; Etsy'nin Star Seller ölçütleri buna bakar.
+- Kendi desenlerinizden 2–3'lü setler hazırlanabilir. Başkalarının desenlerinden oluşan "binlerce desen" paketleri genellikle izinsiz kopyadır; bunlardan uzak durun.
+
+## Kurallar
+
+- Etsy'nin ocak 2026'da güncellenen politikasına göre, yapay zekâ kullanıldıysa ilan formundaki kutu işaretlenmeli ve açıklamada belirtilmelidir. Sistem açıklamaya bildirimi otomatik ekler; kutuyu Etsy'de taslağı yayınlarken siz işaretlersiniz.
+- Başkasının videosundan veya fotoğrafından alınmış kareler PDF'te kullanılmaz.
+- Başkasının desen metni çevrilip veya yeniden yazılıp satılmaz.
+
+## Sunucu ayarları
+
+| Ayar | Nerede | Ne için |
+| --- | --- | --- |
+| `ETSY_API_KEY`, `ETSY_SHARED_SECRET` | Cloudflare Worker sırları | Trend tarama ve Etsy bağlantısı |
+| Etsy uygulaması geri dönüş adresi | Etsy geliştirici paneli | `https://gxl-akilli-satici-api.gxl-marketstudio.workers.dev/etsy/oauth/callback` |
+| `ETSY_OAUTH` KV | `wrangler.jsonc` (mevcut) | PDF'ler, görseller, bağlantılar ve trend önbelleği |
+| `APP_ACCESS_TOKEN` | Cloudflare Worker sırrı | Yükleme ve bağlantı oluşturma |
+| `GEMINI_API_KEY` (isteğe bağlı) | Cloudflare Worker sırrı | Başlık ve etiketlerin yapay zekâyla iyileştirilmesi |
+
+Ücretsiz KV kotası 1 GB depolama ve günde 1.000 yazmadır. 3 MB'lık PDF'lerle yaklaşık 300 desen saklanabilir; her indirme 1 yazma harcar.
+
+### API uçları
+
+- `GET /api/etsy/trends`: niş listesi ve önbellekteki puanlar
+- `POST /api/etsy/trends/scan`: `{ nicheId }` veya `{ keyword }` ile tek bir niş ya da arama taraması
+- `POST /api/patterns/plan`: desen adı, farklılaştırma planı, PDF ve render promptları, fotoğraf planı ve Etsy ilanı
+- `GET/POST /api/digital/products`: dijital ürün listesi ve multipart PDF yükleme (`confirm: true`)
+- `POST /api/digital/products/:id/etsy-draft`: Etsy'de taslak dijital ilan, görseller ve PDF (`confirm: true`)
+- `POST /api/digital/products/:id/grants`: siparişe özel indirme bağlantısı (`confirm: true`)
+- `POST /api/digital/grants/:id/revoke`: bağlantıyı kapatma (`confirm: true`)
+- `GET /d/:id`: alıcının indirme sayfası; `GET /d/:id/file` PDF'i indirir

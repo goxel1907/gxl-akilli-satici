@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, Alert, AppState, Image, Linking, Modal, Pressable, SafeAreaView, ScrollView, Share, StatusBar, StyleSheet, Text, TextInput, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as DocumentPicker from "expo-document-picker";
 import * as ImagePicker from "expo-image-picker";
 import * as SecureStore from "expo-secure-store";
 
@@ -13,7 +14,7 @@ const apiHeaders = (json = false) => ({
   ...(json ? { "content-type": "application/json" } : {}),
   ...(activeApiToken ? { authorization: `Bearer ${activeApiToken}` } : {})
 });
-type Tab = "Özet" | "Shopier" | "Ajan" | "Onaylar" | "Müşteriler" | "Ürünler";
+type Tab = "Özet" | "Shopier" | "Etsy" | "Ajan" | "Onaylar" | "Müşteriler" | "Ürünler";
 type ProductOrigin = "made_by_seller" | "designed_by_seller" | "vintage" | "craft_supply" | "commercial_resale" | "unknown";
 
 const demo = {
@@ -60,10 +61,11 @@ const demoShopierCenter = {
   recentWebhookEvents: []
 };
 
-const navigationTabs: Tab[] = ["Özet", "Shopier", "Ajan", "Onaylar", "Müşteriler", "Ürünler"];
+const navigationTabs: Tab[] = ["Özet", "Shopier", "Etsy", "Ajan", "Onaylar", "Müşteriler", "Ürünler"];
 const navigationIcons: Record<Tab, any> = {
   "Özet": "grid",
   "Shopier": "bag-handle",
+  "Etsy": "color-palette",
   "Ajan": "sparkles",
   "Onaylar": "checkmark-circle",
   "Müşteriler": "people",
@@ -233,6 +235,7 @@ export default function App() {
           {!online && <Pressable style={styles.tokenReset} onPress={resetApiToken}><Ionicons name="key-outline" size={16} color="#8A521F" /><Text style={styles.tokenResetText}>Bağlantı anahtarını yeniden gir</Text></Pressable>}
           {tab === "Özet" && <Overview data={data} setTab={setTab} online={online} channels={channels} />}
           {tab === "Shopier" && <ShopierScreen center={shopierCenter} online={online} onRefresh={refresh} />}
+          {tab === "Etsy" && <EtsyScreen online={online} channels={channels} />}
           {tab === "Ajan" && <AgentScreen center={opportunityCenter} online={online} onRefresh={refresh} />}
           {tab === "Onaylar" && <Approvals items={pending} decide={decide} />}
           {tab === "Müşteriler" && <Leads items={data.leads} />}
@@ -713,6 +716,439 @@ function Field({ label, ...props }: any) { return <View style={styles.field}><Te
 
 function Empty({ icon, title, text }: any) { return <View style={styles.empty}><Ionicons name={icon} size={42} color="#315B4C" /><Text style={styles.cardTitle}>{title}</Text><Text style={styles.muted}>{text}</Text></View>; }
 
+const CRAFT_OPTIONS = [
+  { id: "crochet", label: "Tığ işi" },
+  { id: "knitting", label: "Şiş örgü" },
+  { id: "embroidery", label: "Nakış" },
+  { id: "cross_stitch", label: "Kanaviçe" },
+  { id: "sewing", label: "Dikiş" },
+  { id: "macrame", label: "Makrome" },
+  { id: "punch_needle", label: "Punch" }
+];
+const SKILL_OPTIONS = [
+  { id: "beginner", label: "Başlangıç" },
+  { id: "easy", label: "Kolay" },
+  { id: "intermediate", label: "Orta" },
+  { id: "experienced", label: "İleri" }
+];
+const CRAFT_WORDS = /\b(crochet|knitting|knit|embroidery|cross stitch|sewing|macrame|punch needle|amigurumi|pattern|pdf)\b/gi;
+
+async function apiJson(path: string, init: RequestInit = {}) {
+  const response = await fetch(`${API_URL}${path}`, init);
+  const body = await response.json().catch(() => ({})) as any;
+  if (!response.ok) throw new Error(body.error || "İstek tamamlanamadı.");
+  return body;
+}
+
+function errorText(error: unknown) {
+  return error instanceof Error ? error.message : "Bağlantıyı kontrol edin.";
+}
+
+function EtsyScreen({ online, channels }: any) {
+  const [section, setSection] = useState<"Trend" | "Stüdyo" | "Dijital">("Trend");
+  const [studioSeed, setStudioSeed] = useState<any>();
+  const [uploadPrefill, setUploadPrefill] = useState<any>();
+  const etsy = channels?.etsy || {};
+  const shopReady = Boolean(etsy.shopReady || etsy.shopId);
+  return <>
+    <View style={styles.agentHero}>
+      <View style={styles.agentHeroTop}><View style={styles.shopierLogo}><Ionicons name="color-palette" size={22} color="white" /></View><View style={{ flex: 1 }}><Text style={styles.agentHeroTitle}>Etsy Desen Merkezi</Text><Text style={styles.agentHeroText}>{shopReady ? `Mağaza bağlı${etsy.shopName ? ` · ${etsy.shopName}` : ""}` : "Trend ve stüdyo mağaza açılmadan da çalışır; Etsy'ye yükleme mağaza açılınca etkinleşir."}</Text></View></View>
+    </View>
+    <View style={styles.segment}>
+      {(["Trend", "Stüdyo", "Dijital"] as const).map((item) => <Pressable key={item} style={[styles.segmentItem, section === item && styles.segmentActive]} onPress={() => setSection(item)}><Text style={[styles.segmentText, section === item && styles.segmentTextActive]}>{item}</Text></Pressable>)}
+    </View>
+    {!online && <Text style={styles.shopierBlocker}>Sunucu bağlantısı yok. Trend tarama, prompt üretimi ve PDF yükleme için uygulamanın sunucuya bağlı olması gerekir.</Text>}
+    {section === "Trend" && <TrendPanel online={online} onUse={(seed: any) => { setStudioSeed(seed); setSection("Stüdyo"); }} />}
+    {section === "Stüdyo" && <StudioPanel online={online} seed={studioSeed} onUpload={(prefill: any) => { setUploadPrefill(prefill); setSection("Dijital"); }} />}
+    {section === "Dijital" && <DigitalPanel online={online} shopReady={shopReady} prefill={uploadPrefill} onPrefillUsed={() => setUploadPrefill(undefined)} />}
+  </>;
+}
+
+function scoreStyle(score?: number) {
+  if (score === undefined) return styles.scoreNone;
+  return score >= 65 ? styles.scoreHigh : score >= 45 ? styles.scoreMid : styles.scoreLow;
+}
+
+function TrendCard({ title, result, expanded, onToggle, onUse, scanning }: any) {
+  return <View style={styles.card}>
+    <Pressable style={styles.shopierProductTop} onPress={onToggle}>
+      <View style={{ flex: 1 }}><Text style={styles.cardTitle}>{title}</Text><Text style={styles.small}>{result?.keyword || ""}{result?.cached ? " · önbellek" : ""}</Text></View>
+      {scanning ? <ActivityIndicator color="#A86B2E" /> : <View style={[styles.scoreBadge, scoreStyle(result?.score)]}><Text style={styles.scoreBadgeText}>{result ? result.score : "—"}</Text></View>}
+    </Pressable>
+    {!!result && <>
+      <Text style={styles.trendVerdict}>{result.verdict}</Text>
+      <Text style={styles.small}>Rakip: {Number(result.metrics.activeListings).toLocaleString("tr-TR")} ilan · Talep: {result.metrics.favoritesPerMonth} favori/ay · Yeni ilan payı: %{Math.round(result.metrics.newcomerShare * 100)}{result.metrics.medianPriceUsd ? ` · Ortanca ${result.metrics.medianPriceUsd} USD` : ""}</Text>
+      {expanded && <>
+        {result.reasons.map((reason: string) => <Text style={styles.evidence} key={reason}>• {reason}</Text>)}
+        <Text style={styles.warningTitle}>Üst ilanlarda en çok geçen etiketler</Text>
+        <View style={styles.chips}>{result.topTags.slice(0, 14).map((tag: any) => <View style={styles.chip} key={tag.tag}><Text style={styles.chipText}>{tag.tag} · {tag.count}</Text></View>)}</View>
+        <Text style={styles.warningTitle}>Öne çıkan rakip ilanlar</Text>
+        {result.examples.map((example: any, index: number) => <Pressable key={`${example.url}-${index}`} onPress={() => example.url && openUrl(example.url, "Etsy ilanı")}><Text style={styles.linkNote} numberOfLines={2}>{example.favorites} favori · {example.ageDays} gün · {example.priceUsd ? `${example.priceUsd.toFixed(2)} USD · ` : ""}{example.title}</Text></Pressable>)}
+        <Pressable style={[styles.primary, { marginTop: 14, marginBottom: 0 }]} onPress={onUse}><Text style={styles.primaryText}>Bu nişte desen hazırla</Text><Ionicons name="arrow-forward" size={18} color="white" /></Pressable>
+      </>}
+    </>}
+  </View>;
+}
+
+function TrendPanel({ online, onUse }: any) {
+  const [board, setBoard] = useState<any>();
+  const [loading, setLoading] = useState(false);
+  const [scanning, setScanning] = useState<string>();
+  const [expanded, setExpanded] = useState<string>();
+  const [keyword, setKeyword] = useState("");
+  const [custom, setCustom] = useState<any[]>([]);
+  const sortNiches = (rows: any[]) => [...rows].sort((a, b) => (b.result?.score ?? -1) - (a.result?.score ?? -1));
+  const load = async () => {
+    setLoading(true);
+    try { setBoard(await apiJson("/api/etsy/trends", { headers: apiHeaders() })); }
+    catch (error) { Alert.alert("Trendler alınamadı", errorText(error)); }
+    finally { setLoading(false); }
+  };
+  useEffect(() => { if (online) load(); }, [online]);
+  const scan = (body: any) => apiJson("/api/etsy/trends/scan", { method: "POST", headers: apiHeaders(true), body: JSON.stringify(body) });
+  const scanAll = async () => {
+    for (const niche of board?.niches || []) {
+      setScanning(niche.id);
+      try {
+        const result = await scan({ nicheId: niche.id });
+        setBoard((current: any) => ({ ...current, niches: sortNiches(current.niches.map((row: any) => row.id === niche.id ? { ...row, result } : row)) }));
+      } catch (error) {
+        Alert.alert("Tarama durdu", errorText(error));
+        break;
+      }
+    }
+    setScanning(undefined);
+  };
+  const scanKeyword = async () => {
+    if (keyword.trim().length < 3) return Alert.alert("Anahtar kelime", "İngilizce bir arama yazın (ör. crochet bag pattern).");
+    setScanning("custom");
+    try {
+      const result = await scan({ keyword: keyword.trim() });
+      setCustom((current) => [result, ...current.filter((item) => item.keyword !== result.keyword)].slice(0, 5));
+      setExpanded(`custom:${result.keyword}`);
+    } catch (error) { Alert.alert("Tarama yapılamadı", errorText(error)); }
+    finally { setScanning(undefined); }
+  };
+  const use = (row: any, result: any) => onUse({
+    craft: row.craft || result?.craft || "crochet",
+    keyword: result?.keyword || row.keyword,
+    productType: String(result?.keyword || row.keyword).replace(CRAFT_WORDS, " ").replace(/\s+/g, " ").trim(),
+    trendTags: (result?.topTags || []).map((tag: any) => tag.tag)
+  });
+  return <>
+    <View style={styles.guardrail}><Ionicons name="information-circle-outline" size={20} color="#315B4C" /><Text style={[styles.guardrailText, { flex: 1 }]}>{board?.method || "Etsy resmî aramasındaki üst ilanlar puanlanır. Etsy satış adedini paylaşmadığı için puan tahmindir."}</Text></View>
+    {board && !board.configured && <Text style={styles.shopierBlocker}>Etsy API anahtarı (keystring ve shared secret) sunucuya eklenince tarama başlar.</Text>}
+    <View style={styles.chatInputRow}>
+      <TextInput style={styles.chatInput} value={keyword} onChangeText={setKeyword} placeholder="Kendi aramanı tara: crochet bag pattern" placeholderTextColor="#9AA39F" autoCapitalize="none" />
+      <Pressable style={styles.sendButton} onPress={scanKeyword} disabled={!online || Boolean(scanning)}><Ionicons name="search" size={19} color="white" /></Pressable>
+    </View>
+    {custom.map((result) => <TrendCard key={`custom:${result.keyword}`} title={`Arama: ${result.keyword}`} result={result} expanded={expanded === `custom:${result.keyword}`} onToggle={() => setExpanded(expanded === `custom:${result.keyword}` ? undefined : `custom:${result.keyword}`)} onUse={() => use({ keyword: result.keyword }, result)} />)}
+    <View style={[styles.sectionHeading, { marginTop: 14 }]}><Text style={styles.sectionTitle}>Hobi nişleri</Text><Pressable style={[styles.addButton, (!online || !board?.configured || Boolean(scanning)) && styles.primaryDisabled]} disabled={!online || !board?.configured || Boolean(scanning)} onPress={scanAll}><Ionicons name="pulse" size={16} color="white" /><Text style={styles.addButtonText}>{scanning ? "Taranıyor…" : "Tümünü tara"}</Text></Pressable></View>
+    {loading && <ActivityIndicator color="#C88B47" />}
+    {(board?.niches || []).map((row: any) => <TrendCard key={row.id} title={row.labelTr} result={row.result} scanning={scanning === row.id} expanded={expanded === row.id} onToggle={() => setExpanded(expanded === row.id ? undefined : row.id)} onUse={() => use(row, row.result)} />)}
+  </>;
+}
+
+function ChipGroup({ options, value, onChange }: any) {
+  return <View style={styles.chips}>{options.map((option: any) => <Pressable key={option.id} style={[styles.chip, value === option.id && styles.chipActive]} onPress={() => onChange(option.id)}><Text style={[styles.chipText, value === option.id && styles.chipTextActive]}>{option.label}</Text></Pressable>)}</View>;
+}
+
+function PromptBox({ title, text, shareTitle }: any) {
+  return <View style={styles.analysisCard}>
+    <View style={styles.shopierProductTop}><Text style={[styles.cardTitle, { flex: 1 }]}>{title}</Text><Pressable style={styles.secondaryButton} onPress={() => Share.share({ message: text, title: shareTitle })}><Text style={styles.secondaryButtonText}>Kopyala / gönder</Text></Pressable></View>
+    <Text style={styles.promptText} numberOfLines={8}>{text}</Text>
+  </View>;
+}
+
+function StudioPanel({ online, seed, onUpload }: any) {
+  const [craft, setCraft] = useState("crochet");
+  const [productType, setProductType] = useState("");
+  const [referenceNotes, setReferenceNotes] = useState("");
+  const [referenceRepeatCount, setReferenceRepeatCount] = useState("");
+  const [referenceColors, setReferenceColors] = useState("");
+  const [skillLevel, setSkillLevel] = useState("easy");
+  const [sizeNote, setSizeNote] = useState("");
+  const [yarnNote, setYarnNote] = useState("");
+  const [colors, setColors] = useState("");
+  const [keyword, setKeyword] = useState("");
+  const [trendTags, setTrendTags] = useState<string[]>([]);
+  const [plan, setPlan] = useState<any>();
+  const [working, setWorking] = useState(false);
+  useEffect(() => {
+    if (!seed) return;
+    setCraft(seed.craft || "crochet");
+    setProductType(seed.productType || "");
+    setKeyword(seed.keyword || "");
+    setTrendTags(seed.trendTags || []);
+    setPlan(undefined);
+  }, [seed]);
+  const generate = async () => {
+    if (productType.trim().length < 3) return Alert.alert("Ürün türü", "Ürün türünü İngilizce yazın (ör. doily, ballet slippers, tote bag).");
+    setWorking(true);
+    try {
+      setPlan(await apiJson("/api/patterns/plan", {
+        method: "POST",
+        headers: apiHeaders(true),
+        body: JSON.stringify({ craft, productType, referenceNotes, referenceRepeatCount: referenceRepeatCount ? Number(referenceRepeatCount) : undefined, referenceColors, skillLevel, sizeNote, yarnNote, colors, keyword, trendTags, seed: String(Date.now()) })
+      }));
+    } catch (error) { Alert.alert("Hazırlanamadı", errorText(error)); }
+    finally { setWorking(false); }
+  };
+  const brief = plan?.brief;
+  const listing = plan?.listing;
+  return <>
+    <Text style={styles.sectionTitle}>Yeni desen fikri</Text>
+    <Text style={styles.fieldLabel}>El işi türü</Text>
+    <ChipGroup options={CRAFT_OPTIONS} value={craft} onChange={setCraft} />
+    <Field label="Ürün türü (İngilizce)" value={productType} onChangeText={setProductType} placeholder="doily, ballet slippers, tote bag" autoCapitalize="none" />
+    <Field label="Seçtiğin modelde neyi beğendin?" value={referenceNotes} onChangeText={setReferenceNotes} placeholder="8 yeşil yaprak, turuncu küçük çiçekler, beyaz dantel yelpazeler" multiline />
+    <Field label="Modeldeki tekrar sayısı (varsa)" value={referenceRepeatCount} onChangeText={setReferenceRepeatCount} placeholder="8" keyboardType="number-pad" />
+    <Field label="Modelin renkleri" value={referenceColors} onChangeText={setReferenceColors} placeholder="white, green, orange" autoCapitalize="none" />
+    <Text style={styles.fieldLabel}>Zorluk</Text>
+    <ChipGroup options={SKILL_OPTIONS} value={skillLevel} onChange={setSkillLevel} />
+    <Field label="Hedef ölçü / beden" value={sizeNote} onChangeText={setSizeNote} placeholder="16 in / 41 cm veya EU 36-41" />
+    <Field label="İplik / malzeme" value={yarnNote} onChangeText={setYarnNote} placeholder="Size 10 cotton crochet thread" />
+    <Field label="İstediğin renkler (boşsa sistem önerir)" value={colors} onChangeText={setColors} placeholder="sage, honey, cream" autoCapitalize="none" />
+    <Field label="Hedef Etsy araması" value={keyword} onChangeText={setKeyword} placeholder="crochet doily pattern" autoCapitalize="none" />
+    {!!trendTags.length && <Text style={styles.formHint}>Trendden {trendTags.length} etiket sinyali eklendi.</Text>}
+    <Pressable style={[styles.analyzeButton, (working || !online) && styles.primaryDisabled]} disabled={working || !online} onPress={generate}>{working ? <ActivityIndicator color="white" /> : <Ionicons name="sparkles" size={18} color="white" />}<Text style={styles.primaryText}>{plan ? "Yeni isimle yeniden hazırla" : "Prompt ve ilanı hazırla"}</Text></Pressable>
+    {brief && <>
+      <View style={styles.analysisCard}>
+        <Text style={styles.small}>Sistemin seçtiği desen adı</Text>
+        <Text style={styles.studioName}>{brief.name}</Text>
+        <Text style={styles.warningTitle}>Modelden farklılaştırma planı</Text>
+        {brief.originalityPlan.map((line: string) => <Text style={styles.analysisLine} key={line}>• {line}</Text>)}
+      </View>
+      <PromptBox title="1) PDF desen promptu (Claude / ChatGPT)" text={brief.patternPrompt} shareTitle={`${brief.name} pattern prompt`} />
+      <PromptBox title="2) 3D render promptu" text={brief.renderPrompt} shareTitle={`${brief.name} render prompt`} />
+      <View style={styles.analysisCard}>
+        <Text style={styles.cardTitle}>Etsy fotoğraf planı (10 görsel)</Text>
+        {brief.photoPlan.map((item: any) => <Text style={styles.analysisLine} key={item.slot}>{item.slot}. {item.title}: {item.detail}</Text>)}
+      </View>
+      <View style={styles.analysisCard}>
+        <Text style={styles.cardTitle}>Satışa açmadan önce kalite kapısı</Text>
+        {brief.qualityGate.map((line: string) => <Text style={styles.warningText} key={line}>• {line}</Text>)}
+      </View>
+    </>}
+    {listing && <View style={styles.analysisCard}>
+      <View style={styles.shopierProductTop}><Text style={[styles.cardTitle, { flex: 1 }]}>Etsy ilanı ({listing.source === "ai" ? "yapay zekâ + kurallar" : "kurallar"})</Text><Text style={[styles.readinessState, listing.checks.ok && styles.connectedText]}>{listing.checks.ok ? "Etsy kurallarına uygun" : "Kontrol et"}</Text></View>
+      <Text style={styles.listingTitle}>{listing.title}</Text>
+      <Text style={styles.small}>{listing.checks.titleLength}/140 karakter · {listing.checks.tagCount}/13 etiket</Text>
+      <View style={[styles.chips, { marginTop: 8 }]}>{listing.tags.map((tag: string) => <View style={styles.chip} key={tag}><Text style={styles.chipText}>{tag}</Text></View>)}</View>
+      {listing.checks.issues.map((issue: string) => <Text style={styles.warningText} key={issue}>• {issue}</Text>)}
+      {listing.warnings.map((warning: string) => <Text style={styles.warningText} key={warning}>• {warning}</Text>)}
+      <View style={styles.inlineActions}>
+        <Pressable style={styles.secondaryButton} onPress={() => Share.share({ message: `${listing.title}\n\n${listing.description}\n\nTags: ${listing.tags.join(", ")}` })}><Text style={styles.secondaryButtonText}>İlan metnini kopyala</Text></Pressable>
+        <Pressable style={styles.secondaryButton} onPress={() => onUpload({ name: brief?.name, craft, productType, listing })}><Text style={styles.secondaryButtonText}>PDF hazırsa yükle →</Text></Pressable>
+      </View>
+    </View>}
+  </>;
+}
+
+function Toggle({ label, value, onChange }: any) {
+  return <Pressable style={styles.readinessRow} onPress={() => onChange(!value)}><Ionicons name={value ? "checkbox" : "square-outline"} size={21} color={value ? "#315B4C" : "#8A948F"} /><Text style={[styles.rowTitle, { flex: 1 }]}>{label}</Text></Pressable>;
+}
+
+function DigitalUploadForm({ visible, prefill, onClose, onSaved }: any) {
+  const [name, setName] = useState("");
+  const [craft, setCraft] = useState("crochet");
+  const [productType, setProductType] = useState("");
+  const [title, setTitle] = useState("");
+  const [tags, setTags] = useState("");
+  const [description, setDescription] = useState("");
+  const [materials, setMaterials] = useState<string[]>([]);
+  const [priceUsd, setPriceUsd] = useState("");
+  const [priceTry, setPriceTry] = useState("");
+  const [testMade, setTestMade] = useState(false);
+  const [photosAreRenders, setPhotosAreRenders] = useState(true);
+  const [aiAssisted, setAiAssisted] = useState(true);
+  const [pdf, setPdf] = useState<any>();
+  const [images, setImages] = useState<any[]>([]);
+  const [saving, setSaving] = useState(false);
+  useEffect(() => {
+    if (!visible) return;
+    setName(prefill?.name || "");
+    setCraft(prefill?.craft || "crochet");
+    setProductType(prefill?.productType || "");
+    setTitle(prefill?.listing?.title || "");
+    setTags((prefill?.listing?.tags || []).join(", "));
+    setDescription(prefill?.listing?.description || "");
+    setMaterials(prefill?.listing?.materials || []);
+    setPdf(undefined);
+    setImages([]);
+  }, [visible, prefill]);
+  const pickPdf = async () => {
+    const result = await DocumentPicker.getDocumentAsync({ type: "application/pdf", copyToCacheDirectory: true });
+    if (result.canceled) return;
+    const asset = result.assets[0];
+    if (asset.size && asset.size > 20 * 1024 * 1024) return Alert.alert("PDF çok büyük", "Etsy en fazla 20 MB dosya kabul eder.");
+    setPdf(asset);
+  };
+  const pickImages = async () => {
+    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ["images"], allowsMultipleSelection: true, selectionLimit: 10, quality: 0.7 });
+    if (!result.canceled) setImages(result.assets.slice(0, 10));
+  };
+  const save = () => {
+    if (!name.trim() || !productType.trim() || !title.trim() || !description.trim()) return Alert.alert("Eksik bilgi", "Desen adı, ürün türü, başlık ve açıklama gerekli. Önce Stüdyo'da ilanı hazırlayın.");
+    if (!pdf) return Alert.alert("PDF seçin", "Satılacak desen PDF'ini seçin.");
+    if (!priceUsd && !priceTry) return Alert.alert("Fiyat", "Etsy mağaza para birimine göre USD veya TL fiyatı girin.");
+    Alert.alert("PDF güvenli depoya yüklensin mi?", "Dosya herkese açık değildir. Müşteri yalnızca Etsy'de ödeme yaptıktan sonra Etsy üzerinden veya sizin oluşturduğunuz kişiye özel bağlantıyla indirebilir.", [
+      { text: "Vazgeç", style: "cancel" },
+      { text: "Yükle", onPress: async () => {
+        setSaving(true);
+        try {
+          const form = new FormData();
+          form.append("metadata", JSON.stringify({
+            confirm: true,
+            name: name.trim(),
+            craft,
+            productType: productType.trim(),
+            prices: { usd: priceUsd, try: priceTry },
+            flags: { testMade, photosAreRenders, aiAssisted },
+            listing: { title: title.trim(), description: description.trim(), tags: tags.split(",").map((tag) => tag.trim()).filter(Boolean), materials }
+          }));
+          form.append("pdf", { uri: pdf.uri, name: pdf.name || "pattern.pdf", type: "application/pdf" } as any);
+          images.forEach((image, index) => form.append("images", { uri: image.uri, name: image.fileName || `render-${index + 1}.jpg`, type: image.mimeType || "image/jpeg" } as any));
+          const response = await fetch(`${API_URL}/api/digital/products`, { method: "POST", headers: apiHeaders(), body: form });
+          const body = await response.json().catch(() => ({})) as any;
+          if (!response.ok) throw new Error(body.error || "Yükleme tamamlanamadı.");
+          onSaved(body.product);
+        } catch (error) { Alert.alert("Yüklenemedi", errorText(error)); }
+        finally { setSaving(false); }
+      } }
+    ]);
+  };
+  return <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
+    <SafeAreaView style={styles.formSafe}><ScrollView contentContainerStyle={styles.formContent}>
+      <View style={styles.formHeader}><Text style={styles.sectionTitle}>Dijital desen yükle</Text><Pressable onPress={onClose}><Ionicons name="close" size={26} color="#315B4C" /></Pressable></View>
+      <Pressable style={styles.uploadRow} onPress={pickPdf}><Ionicons name="document-text-outline" size={22} color="#315B4C" /><Text style={[styles.rowTitle, { flex: 1 }]}>{pdf ? `${pdf.name} · ${Math.round((pdf.size || 0) / 1024)} KB` : "PDF seç (en fazla 20 MB)"}</Text></Pressable>
+      <Pressable style={styles.uploadRow} onPress={pickImages}><Ionicons name="images-outline" size={22} color="#315B4C" /><Text style={[styles.rowTitle, { flex: 1 }]}>{images.length ? `${images.length} görsel seçildi` : "3D render / ürün fotoğrafları (en fazla 10)"}</Text></Pressable>
+      {!!images.length && <ScrollView horizontal style={{ marginBottom: 12 }}>{images.map((image) => <Image key={image.uri} source={{ uri: image.uri }} style={styles.thumb} />)}</ScrollView>}
+      <Field label="Desen adı" value={name} onChangeText={setName} />
+      <Text style={styles.fieldLabel}>El işi türü</Text>
+      <ChipGroup options={CRAFT_OPTIONS} value={craft} onChange={setCraft} />
+      <Field label="Ürün türü (İngilizce)" value={productType} onChangeText={setProductType} autoCapitalize="none" />
+      <Field label="Etsy fiyatı (USD)" value={priceUsd} onChangeText={setPriceUsd} keyboardType="decimal-pad" placeholder="6.50" />
+      <Field label="Etsy fiyatı (TL, mağaza TL ise)" value={priceTry} onChangeText={setPriceTry} keyboardType="decimal-pad" placeholder="249" />
+      <Field label={`Başlık (${title.length}/140)`} value={title} onChangeText={setTitle} multiline />
+      <Field label="Etiketler (virgülle, 13 adet, her biri en fazla 20 karakter)" value={tags} onChangeText={setTags} multiline autoCapitalize="none" />
+      <Field label="Açıklama" value={description} onChangeText={setDescription} multiline style={[styles.input, { minHeight: 160, textAlignVertical: "top" }]} />
+      <View style={styles.card}>
+        <Toggle label="Desen bizzat örülerek / yapılarak test edildi" value={testMade} onChange={setTestMade} />
+        <Toggle label="Görseller render (gerçek fotoğraf değil)" value={photosAreRenders} onChange={setPhotosAreRenders} />
+        <Toggle label="PDF hazırlanırken yapay zekâ kullanıldı" value={aiAssisted} onChange={setAiAssisted} />
+      </View>
+      {!testMade && <Text style={styles.warningText}>Test edilmemiş desenler Etsy'de en çok kötü yorum alan ürünlerdir. Satışa açmadan önce bir kez örmeniz önerilir.</Text>}
+      <Pressable style={[styles.analyzeButton, { marginTop: 14 }, saving && styles.primaryDisabled]} disabled={saving} onPress={save}>{saving ? <ActivityIndicator color="white" /> : <Ionicons name="cloud-upload-outline" size={18} color="white" />}<Text style={styles.primaryText}>Güvenli depoya yükle</Text></Pressable>
+    </ScrollView></SafeAreaView>
+  </Modal>;
+}
+
+function GrantForm({ product, onClose }: any) {
+  const [orderRef, setOrderRef] = useState("");
+  const [channel, setChannel] = useState("shopier");
+  const [maxDownloads, setMaxDownloads] = useState("3");
+  const [expiresInDays, setExpiresInDays] = useState("14");
+  const [saving, setSaving] = useState(false);
+  const create = async () => {
+    if (!orderRef.trim()) return Alert.alert("Sipariş numarası", "Ödemesi alınmış siparişin numarasını girin.");
+    setSaving(true);
+    try {
+      const { grant } = await apiJson(`/api/digital/products/${product.id}/grants`, { method: "POST", headers: apiHeaders(true), body: JSON.stringify({ confirm: true, orderRef, channel, maxDownloads: Number(maxDownloads), expiresInDays: Number(expiresInDays) }) });
+      onClose(true);
+      await Share.share({ message: `Merhaba, ${product.name} desen PDF'iniz hazır: ${grant.url}\nBu bağlantı size özeldir; ${grant.maxDownloads} kez indirilebilir ve ${new Date(grant.expiresAt).toLocaleDateString("tr-TR")} tarihine kadar geçerlidir. İyi örgüler!` });
+    } catch (error) { Alert.alert("Bağlantı oluşturulamadı", errorText(error)); }
+    finally { setSaving(false); }
+  };
+  return <Modal visible={Boolean(product)} animationType="slide" transparent onRequestClose={() => onClose(false)}>
+    <View style={styles.modalBackdrop}><View style={styles.modalCard}>
+      <Text style={styles.cardTitle}>Ödeme sonrası indirme bağlantısı</Text>
+      <Text style={styles.small}>Yalnızca ödemesi alınmış sipariş için oluşturun. Bağlantı sipariş numarasına bağlanır, indirme sayısı ve süresi sınırlıdır; iade olursa kapatabilirsiniz.</Text>
+      <Field label="Sipariş numarası" value={orderRef} onChangeText={setOrderRef} placeholder="Shopier sipariş no" />
+      <ChipGroup options={[{ id: "shopier", label: "Shopier" }, { id: "etsy", label: "Etsy" }, { id: "direct", label: "Doğrudan" }]} value={channel} onChange={setChannel} />
+      <View style={{ flexDirection: "row", gap: 10 }}>
+        <View style={{ flex: 1 }}><Field label="İndirme hakkı" value={maxDownloads} onChangeText={setMaxDownloads} keyboardType="number-pad" /></View>
+        <View style={{ flex: 1 }}><Field label="Geçerlilik (gün)" value={expiresInDays} onChangeText={setExpiresInDays} keyboardType="number-pad" /></View>
+      </View>
+      <View style={styles.actions}>
+        <Pressable style={styles.reject} onPress={() => onClose(false)}><Text style={styles.rejectText}>Vazgeç</Text></Pressable>
+        <Pressable style={[styles.approve, saving && styles.primaryDisabled]} disabled={saving} onPress={create}><Text style={styles.primaryText}>Oluştur ve paylaş</Text></Pressable>
+      </View>
+    </View></View>
+  </Modal>;
+}
+
+function DigitalPanel({ online, shopReady, prefill, onPrefillUsed }: any) {
+  const [products, setProducts] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [formVisible, setFormVisible] = useState(false);
+  const [grantProduct, setGrantProduct] = useState<any>();
+  const [details, setDetails] = useState<Record<string, any>>({});
+  const [busy, setBusy] = useState<string>();
+  const load = async () => {
+    setLoading(true);
+    try { setProducts((await apiJson("/api/digital/products", { headers: apiHeaders() })).products || []); }
+    catch (error) { Alert.alert("Dijital ürünler alınamadı", errorText(error)); }
+    finally { setLoading(false); }
+  };
+  useEffect(() => { if (online) load(); }, [online]);
+  useEffect(() => { if (prefill) setFormVisible(true); }, [prefill]);
+  const loadDetail = async (id: string) => {
+    try { const detail = await apiJson(`/api/digital/products/${id}`, { headers: apiHeaders() }); setDetails((current) => ({ ...current, [id]: detail })); }
+    catch (error) { Alert.alert("Bağlantılar alınamadı", errorText(error)); }
+  };
+  const etsyDraft = (product: any) => {
+    if (product.etsy?.fileUploaded) return openUrl(product.etsy.editUrl, "Etsy taslak ilanı");
+    if (!shopReady) return Alert.alert("Etsy mağazası hazır değil", "Mağaza açılıp uygulamada Etsy bağlantısı 'Bağlı' görünene kadar taslak oluşturulamaz.");
+    Alert.alert("Etsy'de taslak ilan oluşturulsun mu?", "Başlık, açıklama, etiketler, görseller ve PDF Etsy'ye taslak olarak gönderilir. İlan yayına girmez; kontrol edip Etsy'de siz yayınlarsınız. Yayınlarken Etsy ilan ücreti alır.", [
+      { text: "Vazgeç", style: "cancel" },
+      { text: "Taslak oluştur", onPress: async () => {
+        setBusy(product.id);
+        try {
+          const result = await apiJson(`/api/digital/products/${product.id}/etsy-draft`, { method: "POST", headers: apiHeaders(true), body: JSON.stringify({ confirm: true }) });
+          await load();
+          Alert.alert("Etsy taslağı hazır", "Taslağı açıp yapay zekâ kutusunu, kategoriyi ve fiyatı kontrol ettikten sonra yayınlayın.", [{ text: "Taslağı aç", onPress: () => openUrl(result.editUrl, "Etsy taslak ilanı") }, { text: "Tamam" }]);
+        } catch (error) { Alert.alert("Etsy taslağı oluşturulamadı", errorText(error)); await load(); }
+        finally { setBusy(undefined); }
+      } }
+    ]);
+  };
+  const revoke = (grant: any, productId: string) => Alert.alert("Bağlantı kapatılsın mı?", `${grant.orderRef} siparişinin indirme bağlantısı hemen çalışmaz hale gelir.`, [
+    { text: "Vazgeç", style: "cancel" },
+    { text: "Kapat", style: "destructive", onPress: async () => {
+      try { await apiJson(`/api/digital/grants/${grant.id}/revoke`, { method: "POST", headers: apiHeaders(true), body: JSON.stringify({ confirm: true }) }); await loadDetail(productId); }
+      catch (error) { Alert.alert("Kapatılamadı", errorText(error)); }
+    } }
+  ]);
+  return <>
+    <View style={styles.guardrail}><Ionicons name="lock-closed-outline" size={20} color="#315B4C" /><Text style={[styles.guardrailText, { flex: 1 }]}>PDF herkese açık değildir. Etsy'de dosyayı Etsy yalnızca ödeme yapan alıcıya verir. Shopier ve doğrudan satışlarda her sipariş için sınırlı indirmeli, süreli ve kapatılabilir özel bağlantı oluşturulur.</Text></View>
+    <View style={styles.sectionHeading}><Text style={styles.sectionTitle}>Dijital desenler</Text><Pressable style={[styles.addButton, !online && styles.primaryDisabled]} disabled={!online} onPress={() => setFormVisible(true)}><Ionicons name="add" size={18} color="white" /><Text style={styles.addButtonText}>PDF yükle</Text></Pressable></View>
+    {loading && <ActivityIndicator color="#C88B47" />}
+    {!loading && !products.length && <Empty icon="document-text-outline" title="Henüz dijital desen yok" text="Stüdyo'da ilanı hazırlayıp PDF ve render görsellerini buradan yükleyin." />}
+    {products.map((product) => <View style={styles.card} key={product.id}>
+      <View style={styles.shopierProductTop}>
+        {product.images?.[0] ? <Image source={{ uri: product.images[0].url }} style={styles.productImagePhoto} /> : <View style={styles.productImage}><Ionicons name="document-text" size={26} color="#C88B47" /></View>}
+        <View style={{ flex: 1 }}><Text style={styles.cardTitle}>{product.name}</Text><Text style={styles.small}>{product.fileName} · {Math.round(product.fileSize / 1024)} KB · {product.images?.length || 0} görsel</Text><Text style={styles.price}>{[product.prices?.usd ? `${product.prices.usd} USD` : "", product.prices?.try ? `${product.prices.try} TL` : ""].filter(Boolean).join(" · ")}</Text></View>
+      </View>
+      <Text style={styles.small} numberOfLines={2}>{product.listing?.title}</Text>
+      {!product.flags?.testMade && <Text style={styles.warningText}>• Test edilmedi</Text>}
+      {!!product.etsy?.error && <Text style={styles.warningText}>• Etsy: {product.etsy.error}</Text>}
+      <View style={styles.inlineActions}>
+        <Pressable style={[styles.secondaryButton, busy === product.id && styles.primaryDisabled]} disabled={busy === product.id} onPress={() => etsyDraft(product)}><Text style={styles.secondaryButtonText}>{product.etsy?.fileUploaded ? "Etsy taslağını aç" : product.etsy?.listingId ? "Etsy yüklemesini tamamla" : "Etsy taslağı oluştur"}</Text></Pressable>
+        <Pressable style={styles.secondaryButton} onPress={() => setGrantProduct(product)}><Text style={styles.secondaryButtonText}>Satış bağlantısı</Text></Pressable>
+        <Pressable style={styles.secondaryButton} onPress={() => loadDetail(product.id)}><Text style={styles.secondaryButtonText}>Bağlantılar</Text></Pressable>
+      </View>
+      {(details[product.id]?.grants || []).map((grant: any) => <View style={styles.grantRow} key={grant.id}>
+        <View style={{ flex: 1 }}><Text style={styles.rowTitle}>{grant.orderRef} · {grant.channel}</Text><Text style={styles.small}>{grant.revoked ? "Kapatıldı" : `${grant.downloads}/${grant.maxDownloads} indirme · ${new Date(grant.expiresAt).toLocaleDateString("tr-TR")} tarihine kadar`}</Text></View>
+        {!grant.revoked && <Pressable onPress={() => Share.share({ message: grant.url })}><Ionicons name="share-outline" size={20} color="#315B4C" /></Pressable>}
+        {!grant.revoked && <Pressable onPress={() => revoke(grant, product.id)}><Ionicons name="close-circle-outline" size={21} color="#A84A3A" /></Pressable>}
+      </View>)}
+    </View>)}
+    <DigitalUploadForm visible={formVisible} prefill={prefill} onClose={() => { setFormVisible(false); onPrefillUsed(); }} onSaved={async () => { setFormVisible(false); onPrefillUsed(); await load(); Alert.alert("Yüklendi", "PDF güvenli depoya alındı. Etsy mağazası hazırsa 'Etsy taslağı oluştur' ile ilana dönüştürebilirsiniz."); }} />
+    <GrantForm product={grantProduct} onClose={async (created: boolean) => { const id = grantProduct?.id; setGrantProduct(undefined); if (created && id) await loadDetail(id); }} />
+  </>;
+}
+
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: "#F5F2EA" },
   setupSafe: { flex: 1, backgroundColor: "#12261F", justifyContent: "center", padding: 22 },
@@ -856,6 +1292,26 @@ const styles = StyleSheet.create({
   policyLabel: { color: "#303B36", fontSize: 12, fontWeight: "800", marginVertical: 3 },
   nav: { position: "absolute", bottom: 0, left: 0, right: 0, height: 78, backgroundColor: "white", borderTopWidth: 1, borderTopColor: "#E3E0D8", flexDirection: "row", paddingBottom: 10 },
   navItem: { flex: 1, alignItems: "center", justifyContent: "center", gap: 4 },
+  segment: { flexDirection: "row", backgroundColor: "#E7E3D9", borderRadius: 13, padding: 4, marginBottom: 14 },
+  segmentItem: { flex: 1, alignItems: "center", paddingVertical: 9, borderRadius: 10 },
+  segmentActive: { backgroundColor: "white" },
+  segmentText: { color: "#68736E", fontWeight: "800", fontSize: 12 },
+  segmentTextActive: { color: "#17221E" },
+  scoreBadge: { minWidth: 46, height: 46, borderRadius: 23, alignItems: "center", justifyContent: "center", paddingHorizontal: 6 },
+  scoreHigh: { backgroundColor: "#DDF3E5" },
+  scoreMid: { backgroundColor: "#FFF0D8" },
+  scoreLow: { backgroundColor: "#F8E1DC" },
+  scoreNone: { backgroundColor: "#EEF0ED" },
+  scoreBadgeText: { color: "#17221E", fontSize: 17, fontWeight: "900" },
+  trendVerdict: { color: "#315B4C", fontWeight: "900", fontSize: 12, marginTop: 4, marginBottom: 3 },
+  promptText: { color: "#3B4641", fontSize: 11, lineHeight: 17, backgroundColor: "#F7F6F2", padding: 10, borderRadius: 10, marginTop: 8, fontFamily: "monospace" },
+  studioName: { color: "#17221E", fontSize: 22, fontWeight: "900", marginTop: 2 },
+  listingTitle: { color: "#17221E", fontSize: 14, fontWeight: "800", lineHeight: 20, marginTop: 8 },
+  uploadRow: { flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: "#EDF2EF", borderRadius: 14, padding: 14, marginBottom: 10, borderWidth: 1, borderStyle: "dashed", borderColor: "#AEB9B4" },
+  thumb: { width: 84, height: 84, borderRadius: 12, marginRight: 8 },
+  grantRow: { flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 10, borderTopWidth: 1, borderTopColor: "#F0EDE6", marginTop: 6 },
+  modalBackdrop: { flex: 1, backgroundColor: "#00000066", justifyContent: "flex-end" },
+  modalCard: { backgroundColor: "#F5F2EA", borderTopLeftRadius: 22, borderTopRightRadius: 22, padding: 20, paddingBottom: 34 },
   navText: { color: "#748079", fontSize: 9, fontWeight: "600" },
   navTextActive: { color: "#A86B2E" }
 });

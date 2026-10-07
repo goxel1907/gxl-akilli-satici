@@ -5,6 +5,8 @@ const OAUTH_STATE_PREFIX = "etsy:oauth:";
 const TOKEN_KEY = "etsy:tokens";
 const OAUTH_SCOPES = ["shops_r", "listings_r", "listings_w", "transactions_r"];
 
+type Fetcher = typeof fetch;
+
 interface EtsyTokenStore {
   get(key: string): Promise<string | null>;
   put(key: string, value: string, options?: { expirationTtl?: number }): Promise<void>;
@@ -42,7 +44,7 @@ interface EtsyTokenResponse {
 
 export class EtsyIntegrationError extends Error {
   constructor(
-    public code: "NOT_CONFIGURED" | "STORAGE_NOT_CONFIGURED" | "NOT_CONNECTED" | "AUTH_FAILED" | "UPSTREAM_FAILED",
+    public code: "NOT_CONFIGURED" | "STORAGE_NOT_CONFIGURED" | "NOT_CONNECTED" | "AUTH_FAILED" | "NOT_FOUND" | "RATE_LIMITED" | "VALIDATION_FAILED" | "UPSTREAM_FAILED",
     message: string,
     public status = 500
   ) {
@@ -145,34 +147,78 @@ async function validAccessToken(env: EtsyRuntimeEnv): Promise<{ token: string; u
   return { token: tokens.accessToken, userId: tokens.userId };
 }
 
-async function etsyApi(env: EtsyRuntimeEnv, path: string): Promise<unknown> {
-  const { apiKey, sharedSecret } = requireConfiguration(env);
-  const { token } = await validAccessToken(env);
-  const response = await fetch(`${ETSY_API_ROOT}${path}`, {
-    headers: {
-      authorization: `Bearer ${token}`,
-      "x-api-key": `${apiKey}:${sharedSecret}`
-    }
-  });
-  const payload = await response.json().catch(() => ({}));
+export interface EtsyRequestOptions {
+  method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
+  query?: Record<string, string | number | boolean | undefined>;
+  form?: URLSearchParams;
+  multipart?: FormData;
+  authenticated?: boolean;
+}
+
+function apiKeyHeader(env: EtsyRuntimeEnv): string {
+  if (!env.ETSY_API_KEY || !env.ETSY_SHARED_SECRET) {
+    throw new EtsyIntegrationError("NOT_CONFIGURED", "Etsy API anahtarları yapılandırılmadı.", 503);
+  }
+  return `${env.ETSY_API_KEY}:${env.ETSY_SHARED_SECRET}`;
+}
+
+export async function etsyRequest<T>(env: EtsyRuntimeEnv, path: string, options: EtsyRequestOptions = {}, fetcher: Fetcher = fetch): Promise<T> {
+  const headers: Record<string, string> = { "x-api-key": apiKeyHeader(env), accept: "application/json" };
+  if (options.authenticated !== false) {
+    const { token } = await validAccessToken(env);
+    headers.authorization = `Bearer ${token}`;
+  }
+  const url = new URL(`${ETSY_API_ROOT}${path}`);
+  for (const [key, value] of Object.entries(options.query || {})) {
+    if (value !== undefined) url.searchParams.set(key, String(value));
+  }
+  let body: BodyInit | undefined;
+  if (options.form) {
+    headers["content-type"] = "application/x-www-form-urlencoded";
+    body = options.form;
+  } else if (options.multipart) {
+    body = options.multipart;
+  }
+  const response = await fetcher(url.toString(), { method: options.method || "GET", headers, body });
+  const payload = await response.json().catch(() => ({})) as Record<string, unknown>;
   if (response.status === 401 || response.status === 403) {
     throw new EtsyIntegrationError("AUTH_FAILED", "Etsy hesap yetkisi geçersiz veya süresi dolmuş.", response.status);
+  }
+  if (response.status === 404) throw new EtsyIntegrationError("NOT_FOUND", "Etsy kaydı bulunamadı.", 404);
+  if (response.status === 429) throw new EtsyIntegrationError("RATE_LIMITED", "Etsy istek sınırına ulaşıldı. Biraz sonra tekrar deneyin.", 429);
+  if (response.status === 400) {
+    const detail = typeof payload.error === "string" ? payload.error.slice(0, 240) : "";
+    throw new EtsyIntegrationError("VALIDATION_FAILED", detail ? `Etsy isteği reddetti: ${detail}` : "Etsy isteği reddetti.", 400);
   }
   if (!response.ok) {
     throw new EtsyIntegrationError("UPSTREAM_FAILED", "Etsy geçici olarak yanıt vermedi.", response.status);
   }
-  return payload;
+  return payload as T;
 }
 
-function safeShopSummary(payload: unknown): { shopId?: number; shopName?: string; title?: string } {
+function safeShopSummary(payload: unknown): { shopId?: number; shopName?: string; title?: string; currencyCode?: string } {
   const root = payload && typeof payload === "object" ? payload as Record<string, unknown> : {};
   const rows = Array.isArray(root.results) ? root.results : [];
   const shop = rows[0] && typeof rows[0] === "object" ? rows[0] as Record<string, unknown> : root;
   return {
     shopId: shop.shop_id ? Number(shop.shop_id) : undefined,
     shopName: shop.shop_name ? String(shop.shop_name) : undefined,
-    title: shop.title ? String(shop.title) : undefined
+    title: shop.title ? String(shop.title) : undefined,
+    currencyCode: shop.currency_code ? String(shop.currency_code) : undefined
   };
+}
+
+export async function getConnectedShop(env: EtsyRuntimeEnv, fetcher: Fetcher = fetch): Promise<{ shopId: number; shopName?: string; currencyCode?: string }> {
+  const { userId } = await validAccessToken(env);
+  let shop: ReturnType<typeof safeShopSummary>;
+  try {
+    shop = safeShopSummary(await etsyRequest(env, `/application/users/${encodeURIComponent(userId)}/shops`, {}, fetcher));
+  } catch (error) {
+    if (error instanceof EtsyIntegrationError && error.code === "NOT_FOUND") shop = {};
+    else throw error;
+  }
+  if (!shop.shopId) throw new EtsyIntegrationError("NOT_CONNECTED", "Etsy mağazası henüz açılmadı.", 409);
+  return { shopId: shop.shopId, shopName: shop.shopName, currencyCode: shop.currencyCode };
 }
 
 export async function getEtsyStatus(env: EtsyRuntimeEnv) {
@@ -186,7 +232,13 @@ export async function getEtsyStatus(env: EtsyRuntimeEnv) {
   if (!tokens) return { configured: true, storageConfigured: true, connected: false };
 
   try {
-    const shop = safeShopSummary(await etsyApi(env, `/application/users/${encodeURIComponent(tokens.userId)}/shops`));
+    let shop: ReturnType<typeof safeShopSummary>;
+    try {
+      shop = safeShopSummary(await etsyRequest(env, `/application/users/${encodeURIComponent(tokens.userId)}/shops`));
+    } catch (error) {
+      if (error instanceof EtsyIntegrationError && error.code === "NOT_FOUND") shop = {};
+      else throw error;
+    }
     if (!shop.shopId) {
       return {
         configured: true,
