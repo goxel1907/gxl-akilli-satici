@@ -1017,16 +1017,50 @@ function StudioPanel({ online, seed, onUpload }: any) {
   const [colors, setColors] = useState("");
   const [keyword, setKeyword] = useState("");
   const [trendTags, setTrendTags] = useState<string[]>([]);
+  const [trendFeatures, setTrendFeatures] = useState<string[]>([]);
+  const [trendBasis, setTrendBasis] = useState<string[]>([]);
+  const [fromTrend, setFromTrend] = useState(false);
+  const [seeding, setSeeding] = useState(false);
   const [plan, setPlan] = useState<any>();
   const [working, setWorking] = useState(false);
-  useEffect(() => {
-    if (!seed) return;
-    setCraft(seed.craft || "crochet");
-    setProductType(seed.productType || "");
-    setKeyword(seed.keyword || "");
-    setTrendTags(seed.trendTags || []);
+  // Trendden gelindiğinde tüm alanlar sunucunun trend verisinden çıkardığı değerlerle dolar; her çağrı yeni bir kombinasyon getirir.
+  const fillFromTrend = async (source: any) => {
+    if (!source?.keyword) return;
+    setSeeding(true);
     setPlan(undefined);
-  }, [seed]);
+    try {
+      const filled = await apiJson("/api/patterns/seed", { method: "POST", headers: apiHeaders(true), body: JSON.stringify({ keyword: source.keyword, craft: source.craft }) });
+      setCraft(filled.craft);
+      setProductType(filled.productType);
+      setReferenceNotes(filled.referenceNotes);
+      setReferenceRepeatCount("");
+      setReferenceColors((filled.referenceColors || []).join(", "));
+      setSkillLevel(filled.skillLevel);
+      setSizeNote(filled.sizeNote || "");
+      setYarnNote(filled.yarnNote || "");
+      setColors((filled.colors || []).join(", "));
+      setKeyword(filled.keyword);
+      setTrendTags(filled.trendTags || []);
+      setTrendFeatures(filled.trendFeatures || []);
+      setTrendBasis(filled.basis || []);
+      setFromTrend(true);
+    } catch (error) {
+      setCraft(source.craft || "crochet");
+      setProductType(source.productType || "");
+      setKeyword(source.keyword || "");
+      setTrendTags(source.trendTags || []);
+      setFromTrend(false);
+      Alert.alert("Trend verisi alınamadı", `${errorText(error)}\nAlanları elle tamamlayabilirsiniz.`);
+    } finally { setSeeding(false); }
+  };
+  useEffect(() => { if (seed) fillFromTrend(seed); }, [seed]);
+  const useOwnModel = () => {
+    setFromTrend(false);
+    setTrendFeatures([]);
+    setTrendBasis([]);
+    setReferenceNotes("");
+    setReferenceColors("");
+  };
   const generate = async () => {
     if (productType.trim().length < 3) return Alert.alert("Ürün türü", "Ürün türünü İngilizce yazın (ör. doily, ballet slippers, tote bag).");
     setWorking(true);
@@ -1034,7 +1068,7 @@ function StudioPanel({ online, seed, onUpload }: any) {
       setPlan(await apiJson("/api/patterns/plan", {
         method: "POST",
         headers: apiHeaders(true),
-        body: JSON.stringify({ craft, productType, referenceNotes, referenceRepeatCount: referenceRepeatCount ? Number(referenceRepeatCount) : undefined, referenceColors, skillLevel, sizeNote, yarnNote, colors, keyword, trendTags, seed: String(Date.now()) })
+        body: JSON.stringify({ craft, productType, referenceNotes, referenceRepeatCount: referenceRepeatCount ? Number(referenceRepeatCount) : undefined, referenceColors, skillLevel, sizeNote, yarnNote, colors, keyword, trendTags, seed: String(Date.now()), ...(fromTrend ? { referenceSource: "trend", trendFeatures } : {}) })
       }));
     } catch (error) { Alert.alert("Hazırlanamadı", errorText(error)); }
     finally { setWorking(false); }
@@ -1043,20 +1077,30 @@ function StudioPanel({ online, seed, onUpload }: any) {
   const listing = plan?.listing;
   return <>
     <Text style={styles.sectionTitle}>Yeni desen fikri</Text>
+    {seeding && <View style={styles.guardrail}><ActivityIndicator color="#315B4C" /><Text style={[styles.guardrailText, { flex: 1 }]}>Etsy trend verisi okunuyor; tüm alanlar otomatik dolduruluyor…</Text></View>}
+    {fromTrend && !seeding && <View style={styles.analysisCard}>
+      <Text style={styles.cardTitle}>Trendden otomatik dolduruldu: {keyword}</Text>
+      {trendBasis.map((line) => <Text style={styles.analysisLine} key={line}>• {line}</Text>)}
+      <Text style={styles.formHint}>İsterseniz alanları değiştirin; değilse doğrudan "Prompt ve ilanı hazırla"ya basın.</Text>
+      <View style={styles.inlineActions}>
+        <Pressable style={styles.secondaryButton} disabled={!online} onPress={() => fillFromTrend({ keyword, craft })}><Text style={styles.secondaryButtonText}>Başka trend kombinasyonu</Text></Pressable>
+        <Pressable style={styles.secondaryButton} onPress={useOwnModel}><Text style={styles.secondaryButtonText}>Kendi modelimden hazırla</Text></Pressable>
+      </View>
+    </View>}
     <Text style={styles.fieldLabel}>El işi türü</Text>
     <ChipGroup options={CRAFT_OPTIONS} value={craft} onChange={setCraft} />
     <Field label="Ürün türü (İngilizce)" value={productType} onChangeText={setProductType} placeholder="doily, ballet slippers, tote bag" autoCapitalize="none" />
-    <Field label="Seçtiğin modelde neyi beğendin?" value={referenceNotes} onChangeText={setReferenceNotes} placeholder="8 yeşil yaprak, turuncu küçük çiçekler, beyaz dantel yelpazeler" multiline />
-    <Field label="Modeldeki tekrar sayısı (varsa)" value={referenceRepeatCount} onChangeText={setReferenceRepeatCount} placeholder="8" keyboardType="number-pad" />
-    <Field label="Modelin renkleri" value={referenceColors} onChangeText={setReferenceColors} placeholder="white, green, orange" autoCapitalize="none" />
+    <Field label={fromTrend ? "Trend özeti (Etsy üst ilanlarından)" : "Seçtiğin modelde neyi beğendin?"} value={referenceNotes} onChangeText={setReferenceNotes} placeholder="8 yeşil yaprak, turuncu küçük çiçekler, beyaz dantel yelpazeler" multiline />
+    {!fromTrend && <Field label="Modeldeki tekrar sayısı (varsa)" value={referenceRepeatCount} onChangeText={setReferenceRepeatCount} placeholder="8" keyboardType="number-pad" />}
+    <Field label={fromTrend ? "Trendde görülen renkler" : "Modelin renkleri"} value={referenceColors} onChangeText={setReferenceColors} placeholder={fromTrend ? "Trendde renk sinyali yok" : "white, green, orange"} autoCapitalize="none" />
     <Text style={styles.fieldLabel}>Zorluk</Text>
     <ChipGroup options={SKILL_OPTIONS} value={skillLevel} onChange={setSkillLevel} />
-    <Field label="Hedef ölçü / beden" value={sizeNote} onChangeText={setSizeNote} placeholder="16 in / 41 cm veya EU 36-41" />
+    <Field label="Hedef ölçü / beden" value={sizeNote} onChangeText={setSizeNote} placeholder={fromTrend ? "Trendde ölçü yok; promptta yapay zekâ standart ölçüyü seçer" : "16 in / 41 cm veya EU 36-41"} />
     <Field label="İplik / malzeme" value={yarnNote} onChangeText={setYarnNote} placeholder="Size 10 cotton crochet thread" />
     <Field label="İstediğin renkler (boşsa sistem önerir)" value={colors} onChangeText={setColors} placeholder="sage, honey, cream" autoCapitalize="none" />
     <Field label="Hedef Etsy araması" value={keyword} onChangeText={setKeyword} placeholder="crochet doily pattern" autoCapitalize="none" />
     {!!trendTags.length && <Text style={styles.formHint}>Trendden {trendTags.length} etiket sinyali eklendi.</Text>}
-    <Pressable style={[styles.analyzeButton, (working || !online) && styles.primaryDisabled]} disabled={working || !online} onPress={generate}>{working ? <ActivityIndicator color="white" /> : <Ionicons name="sparkles" size={18} color="white" />}<Text style={styles.primaryText}>{plan ? "Yeni isimle yeniden hazırla" : "Prompt ve ilanı hazırla"}</Text></Pressable>
+    <Pressable style={[styles.analyzeButton, (working || seeding || !online) && styles.primaryDisabled]} disabled={working || seeding || !online} onPress={generate}>{working ? <ActivityIndicator color="white" /> : <Ionicons name="sparkles" size={18} color="white" />}<Text style={styles.primaryText}>{plan ? "Yeni isimle yeniden hazırla" : "Prompt ve ilanı hazırla"}</Text></Pressable>
     {brief && <>
       <View style={styles.analysisCard}>
         <Text style={styles.small}>Sistemin seçtiği desen adı</Text>
@@ -1316,7 +1360,8 @@ const ETSY_GUIDE: Array<{ id: string; title: string; icon: any; steps: string[] 
   ] },
   { id: "pattern", title: "PDF desen satışı adım adım", icon: "document-text-outline", steps: [
     "Trend'de bir desen araması açın → 'Bu nişte desen hazırla'.",
-    "Stüdyo'da tekniği, ürün tipini ve seviyeyi seçin. İlham aldığınız modelden nasıl farklılaşacağınızı yazın. Sistem özgün bir ad, Claude/ChatGPT için PDF promptu ve 3D render promptu üretir. Desen seçtiğiniz modelin aynısı olmaz.",
+    "Stüdyo tüm alanları o aramanın güncel Etsy verisinden kendisi doldurur: ürün, trend özellikleri, renkler, zorluk, malzeme ve varsa ölçü. Siz yalnızca 'Prompt ve ilanı hazırla'ya basarsınız.",
+    "Her seferinde o arama için daha önce kullanılmamış bir özellik kombinasyonu, yeni bir palet ve daha önce verilmemiş bir desen adı seçilir. Trendin en güçlü özelliği ve ana rengi korunur. 'Başka trend kombinasyonu' yeni seçenek getirir; kendi modeliniz varsa 'Kendi modelimden hazırla'ya basın.",
     "Promptu 'Kopyala / gönder' ile Claude veya ChatGPT'ye verin. PDF'i ve render görsellerini telefona kaydedin.",
     "Kalite kapısındaki maddeleri kontrol edin: ölçüler, ilmek sayıları, kısaltmalar, en az bir deneme örneği.",
     "Dijital → PDF'i ve görselleri yükleyin → 'Etsy taslağı oluştur'. Başlık, 13 etiket ve açıklama otomatik gelir.",

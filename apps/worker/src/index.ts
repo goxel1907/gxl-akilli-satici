@@ -28,6 +28,7 @@ import { seasonalBoard } from "./seasonal.js";
 import { autopilotStatus, listDiscoveries, recordScan, runAutopilot } from "./discovery.js";
 import { buildProductPlan, createEtsyPhysicalDraft, detectProductSignals, getUsdTryRate, keywordCandidates, normalizeProductInput, publishEtsyListing, type KeyValueStore } from "./product-studio.js";
 import { buildPatternBrief, createDigitalListing, normalizeDigitalListingInput, normalizePatternPlanInput } from "./pattern-studio.js";
+import { createPatternSeed, readUsedNames, rememberName } from "./pattern-seed.js";
 import {
   createDigitalProduct,
   createEtsyDigitalDraft,
@@ -452,10 +453,17 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
       return json(200, { autopilot: await autopilotStatus(store), items: await listDiscoveries(store) });
     }
 
+    if (request.method === "POST" && url.pathname === "/api/patterns/seed") {
+      const input = await readBody(request);
+      return json(200, await createPatternSeed(env, env.ETSY_OAUTH as unknown as TrendStore | undefined, { keyword: String(input.keyword || ""), craft: input.craft ? String(input.craft) : undefined }));
+    }
     if (request.method === "POST" && url.pathname === "/api/patterns/plan") {
       const input = await readBody(request);
+      const store = env.ETSY_OAUTH as unknown as TrendStore | undefined;
       const plan = normalizePatternPlanInput(input);
-      const brief = buildPatternBrief(plan);
+      const usedNames = await readUsedNames(store);
+      const brief = buildPatternBrief({ ...plan, avoidNames: usedNames });
+      await rememberName(store, brief.name, usedNames);
       const listing = await createDigitalListing(normalizeDigitalListingInput({ ...input, name: input.name || brief.name }), env);
       return json(200, { brief, listing });
     }
@@ -771,6 +779,7 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
     if (code === "INVALID_IMAGE_INPUT") return json(400, { error: "Görsel biçimi veya boyutu uygun değil." });
     if (code === "PATTERN_CRAFT_INVALID") return json(400, { error: "El işi türünü seçin." });
     if (code === "PRODUCT_TITLE_REQUIRED") return json(400, { error: "Ürün adı gerekli." });
+    if (code === "PATTERN_KEYWORD_REQUIRED") return json(400, { error: "Desen için bir Etsy araması seçin." });
     if (code === "PATTERN_PRODUCT_REQUIRED") return json(400, { error: "Ürün türünü yazın (ör. doily, slippers)." });
     if (error instanceof DigitalDeliveryError) return json(error.status, { error: error.message });
     if (error instanceof EtsyIntegrationError) {
