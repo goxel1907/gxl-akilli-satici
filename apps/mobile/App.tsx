@@ -336,7 +336,11 @@ function Overview({ data, setTab, online, channels }: any) {
       <Channel name="Instagram / Facebook" status="Meta gelen kutusunu aç" icon="logo-instagram" onPress={() => openUrl("https://business.facebook.com/latest/inbox/all/", "Meta Business Suite")} />
       <Channel name="Shopier" status={shopierStatus} icon="bag-handle" connected={Boolean(shopier?.connected)} onPress={() => openUrl("https://www.shopier.com/goxsel/49555980", "Shopier")} />
       <Channel name="Letgo" status="İlanı aç · manuel devralma" icon="open-outline" onPress={() => openUrl("https://www.letgo.com/ad/1732503836", "Letgo")} />
-      <Channel name="Etsy" status={etsyStatus} icon="storefront-outline" connected={etsyAuthorized} onPress={() => etsyShopReady ? openUrl("https://www.etsy.com/your/shops/me/dashboard", "Etsy mağaza yöneticisi") : etsyAuthorized ? openUrl("https://www.etsy.com/sell", "Etsy mağaza kurulumu") : connectEtsy()} />
+      <Channel name="Etsy" status={etsyStatus} icon="storefront-outline" connected={etsyAuthorized} onPress={() => etsyShopReady ? Alert.alert("Etsy mağazası", "Mağaza henüz açılmadıysa kuruluma devam edin; açıldıysa mağaza yöneticisine gidin.", [
+        { text: "Vazgeç", style: "cancel" },
+        { text: "Kuruluma devam et", onPress: () => openUrl("https://www.etsy.com/sell", "Etsy mağaza kurulumu") },
+        { text: "Mağaza yöneticisi", onPress: () => openUrl("https://www.etsy.com/your/shops/me/dashboard", "Etsy mağaza yöneticisi") }
+      ]) : etsyAuthorized ? openUrl("https://www.etsy.com/sell", "Etsy mağaza kurulumu") : connectEtsy()} />
       <Channel name="E-posta" status={SALES_EMAIL} icon="mail-outline" onPress={() => openUrl(`mailto:${SALES_EMAIL}?subject=${encodeURIComponent("GXL Market Studio")}`, "E-posta")} />
     </View>
   </>;
@@ -769,7 +773,9 @@ function scoreStyle(score?: number) {
   return score >= 65 ? styles.scoreHigh : score >= 45 ? styles.scoreMid : styles.scoreLow;
 }
 
-function TrendCard({ title, result, expanded, onToggle, onUse, scanning }: any) {
+function TrendCard({ title, result, expanded, onToggle, onUse, scanning, group }: any) {
+  const isPattern = (result?.group || group || "patterns") === "patterns";
+  const keyword = result?.keyword || "";
   return <View style={styles.card}>
     <Pressable style={styles.shopierProductTop} onPress={onToggle}>
       <View style={{ flex: 1 }}><Text style={styles.cardTitle}>{title}</Text><Text style={styles.small}>{result?.keyword || ""}{result?.cached ? " · önbellek" : ""}</Text></View>
@@ -784,7 +790,10 @@ function TrendCard({ title, result, expanded, onToggle, onUse, scanning }: any) 
         <View style={styles.chips}>{result.topTags.slice(0, 14).map((tag: any) => <View style={styles.chip} key={tag.tag}><Text style={styles.chipText}>{tag.tag} · {tag.count}</Text></View>)}</View>
         <Text style={styles.warningTitle}>Öne çıkan rakip ilanlar</Text>
         {result.examples.map((example: any, index: number) => <Pressable key={`${example.url}-${index}`} onPress={() => example.url && openUrl(example.url, "Etsy ilanı")}><Text style={styles.linkNote} numberOfLines={2}>{example.favorites} favori · {example.ageDays} gün · {example.priceUsd ? `${example.priceUsd.toFixed(2)} USD · ` : ""}{example.title}</Text></Pressable>)}
-        <Pressable style={[styles.primary, { marginTop: 14, marginBottom: 0 }]} onPress={onUse}><Text style={styles.primaryText}>Bu nişte desen hazırla</Text><Ionicons name="arrow-forward" size={18} color="white" /></Pressable>
+        <Pressable style={[styles.secondaryButton, { marginTop: 12 }]} onPress={() => openUrl(`https://trends.google.com/trends/explore?geo=US&date=today%2012-m&q=${encodeURIComponent(keyword)}`, "Google Trends")}><Text style={styles.secondaryButtonText}>ABD'de hangi eyaletlerde aranıyor? (Google Trends)</Text></Pressable>
+        {isPattern
+          ? <Pressable style={[styles.primary, { marginTop: 14, marginBottom: 0 }]} onPress={onUse}><Text style={styles.primaryText}>Bu nişte desen hazırla</Text><Ionicons name="arrow-forward" size={18} color="white" /></Pressable>
+          : <Pressable style={[styles.primary, { marginTop: 14, marginBottom: 0 }]} onPress={() => Share.share({ message: result.topTags.map((tag: any) => tag.tag).slice(0, 13).join(", "), title: `${keyword} etiketleri` })}><Text style={styles.primaryText}>Üst etiketleri kopyala</Text><Ionicons name="copy-outline" size={18} color="white" /></Pressable>}
       </>}
     </>}
   </View>;
@@ -797,6 +806,9 @@ function TrendPanel({ online, onUse }: any) {
   const [expanded, setExpanded] = useState<string>();
   const [keyword, setKeyword] = useState("");
   const [custom, setCustom] = useState<any[]>([]);
+  const [group, setGroup] = useState("patterns");
+  const groups = board?.groups || [{ id: "patterns", labelTr: "Hobi desenleri" }, { id: "tesbih", labelTr: "Tesbih ve gümüş" }, { id: "vintage", labelTr: "Vintage" }];
+  const visibleNiches = (board?.niches || []).filter((row: any) => (row.group || "patterns") === group);
   const sortNiches = (rows: any[]) => [...rows].sort((a, b) => (b.result?.score ?? -1) - (a.result?.score ?? -1));
   const load = async () => {
     setLoading(true);
@@ -807,7 +819,7 @@ function TrendPanel({ online, onUse }: any) {
   useEffect(() => { if (online) load(); }, [online]);
   const scan = (body: any) => apiJson("/api/etsy/trends/scan", { method: "POST", headers: apiHeaders(true), body: JSON.stringify(body) });
   const scanAll = async () => {
-    for (const niche of board?.niches || []) {
+    for (const niche of visibleNiches) {
       setScanning(niche.id);
       try {
         const result = await scan({ nicheId: niche.id });
@@ -839,13 +851,14 @@ function TrendPanel({ online, onUse }: any) {
     <View style={styles.guardrail}><Ionicons name="information-circle-outline" size={20} color="#315B4C" /><Text style={[styles.guardrailText, { flex: 1 }]}>{board?.method || "Etsy resmî aramasındaki üst ilanlar puanlanır. Etsy satış adedini paylaşmadığı için puan tahmindir."}</Text></View>
     {board && !board.configured && <Text style={styles.shopierBlocker}>Etsy API anahtarı (keystring ve shared secret) sunucuya eklenince tarama başlar.</Text>}
     <View style={styles.chatInputRow}>
-      <TextInput style={styles.chatInput} value={keyword} onChangeText={setKeyword} placeholder="Kendi aramanı tara: crochet bag pattern" placeholderTextColor="#9AA39F" autoCapitalize="none" />
+      <TextInput style={styles.chatInput} value={keyword} onChangeText={setKeyword} placeholder="Kendi aramanı tara: crochet bag pattern, misbaha, vintage brooch" placeholderTextColor="#9AA39F" autoCapitalize="none" />
       <Pressable style={styles.sendButton} onPress={scanKeyword} disabled={!online || Boolean(scanning)}><Ionicons name="search" size={19} color="white" /></Pressable>
     </View>
     {custom.map((result) => <TrendCard key={`custom:${result.keyword}`} title={`Arama: ${result.keyword}`} result={result} expanded={expanded === `custom:${result.keyword}`} onToggle={() => setExpanded(expanded === `custom:${result.keyword}` ? undefined : `custom:${result.keyword}`)} onUse={() => use({ keyword: result.keyword }, result)} />)}
-    <View style={[styles.sectionHeading, { marginTop: 14 }]}><Text style={styles.sectionTitle}>Hobi nişleri</Text><Pressable style={[styles.addButton, (!online || !board?.configured || Boolean(scanning)) && styles.primaryDisabled]} disabled={!online || !board?.configured || Boolean(scanning)} onPress={scanAll}><Ionicons name="pulse" size={16} color="white" /><Text style={styles.addButtonText}>{scanning ? "Taranıyor…" : "Tümünü tara"}</Text></Pressable></View>
+    <View style={[styles.chips, { marginTop: 14 }]}>{groups.map((item: any) => <Pressable key={item.id} style={[styles.chip, group === item.id && styles.chipActive]} onPress={() => setGroup(item.id)}><Text style={[styles.chipText, group === item.id && styles.chipTextActive]}>{item.labelTr}</Text></Pressable>)}</View>
+    <View style={styles.sectionHeading}><Text style={styles.sectionTitle}>{groups.find((item: any) => item.id === group)?.labelTr || "Nişler"}</Text><Pressable style={[styles.addButton, (!online || !board?.configured || Boolean(scanning)) && styles.primaryDisabled]} disabled={!online || !board?.configured || Boolean(scanning)} onPress={scanAll}><Ionicons name="pulse" size={16} color="white" /><Text style={styles.addButtonText}>{scanning ? "Taranıyor…" : "Tümünü tara"}</Text></Pressable></View>
     {loading && <ActivityIndicator color="#C88B47" />}
-    {(board?.niches || []).map((row: any) => <TrendCard key={row.id} title={row.labelTr} result={row.result} scanning={scanning === row.id} expanded={expanded === row.id} onToggle={() => setExpanded(expanded === row.id ? undefined : row.id)} onUse={() => use(row, row.result)} />)}
+    {visibleNiches.map((row: any) => <TrendCard key={row.id} title={row.labelTr} group={row.group} result={row.result} scanning={scanning === row.id} expanded={expanded === row.id} onToggle={() => setExpanded(expanded === row.id ? undefined : row.id)} onUse={() => use(row, row.result)} />)}
   </>;
 }
 

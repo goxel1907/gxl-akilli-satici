@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { getEtsyStatus } from "../../worker/src/etsy.js";
-import { getTrendBoard, HOBBY_NICHES, scanTrend, scoreTrend } from "../../worker/src/etsy-trends.js";
+import { getTrendBoard, inferTrendGroup, scanTrend, scoreTrend, TREND_NICHES } from "../../worker/src/etsy-trends.js";
 import { buildDigitalListing, buildPatternBrief, normalizeEtsyTitle, validateEtsyListingText } from "../../worker/src/pattern-studio.js";
 import { createEtsyDigitalDraft, type DigitalStore } from "../../worker/src/digital-delivery.js";
 import { handleRequest } from "../../worker/src/index.js";
@@ -57,6 +57,26 @@ test("trend score rewards demand, open competition and fresh winners", () => {
   assert.ok(weak.reasons.some((reason) => reason.includes("dijital desen payı")));
 });
 
+test("physical tesbih and vintage niches use their own price scale and digital rules", () => {
+  const silver = scoreTrend("sterling silver prayer beads", {
+    count: 3_000,
+    results: [listing(40, 60, 8_000, "physical"), listing(25, 90, 9_500, "physical"), listing(12, 200, 7_000, "physical")]
+  }, NOW, "tesbih");
+  assert.equal(silver.group, "tesbih");
+  assert.equal(silver.metrics.medianPriceUsd, 80);
+  assert.equal(silver.parts.price, 59);
+  assert.ok(!silver.reasons.some((reason) => reason.includes("dijital")));
+
+  const digitalHeavy = scoreTrend("vintage brooch", { count: 3_000, results: [listing(40, 60, 500), listing(25, 90, 400), listing(12, 200, 300, "physical")] }, NOW, "vintage");
+  assert.ok(digitalHeavy.reasons.some((reason) => reason.includes("dijital ürün")));
+
+  assert.equal(inferTrendGroup("crochet bag pattern"), "patterns");
+  assert.equal(inferTrendGroup("antique silver ring"), "vintage");
+  assert.equal(inferTrendGroup("misbaha gift"), "tesbih");
+  assert.equal(inferTrendGroup("wooden bowl"), "other");
+  assert.ok(TREND_NICHES.some((niche) => niche.group === "tesbih") && TREND_NICHES.some((niche) => niche.group === "vintage"));
+});
+
 test("trend scan uses the public Etsy search with the API key only and caches the result", async () => {
   const kv = memoryKv();
   let calls = 0;
@@ -85,7 +105,8 @@ test("trend scan uses the public Etsy search with the API key only and caches th
   assert.equal(second.cached, true);
 
   const board = await getTrendBoard(env, kv.store);
-  assert.equal(board.niches.length, HOBBY_NICHES.length);
+  assert.equal(board.niches.length, TREND_NICHES.length);
+  assert.deepEqual(board.groups.map((group) => group.id), ["patterns", "tesbih", "vintage"]);
   assert.equal(board.niches[0].id, "crochet-doily");
 });
 

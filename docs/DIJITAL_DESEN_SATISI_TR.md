@@ -6,23 +6,34 @@ Uygulamada **Etsy** sekmesi üç bölümden oluşur.
 
 ## 1. Trend: Etsy'de ne popüler?
 
-**Etsy → Trend → Tümünü tara** 16 hobi nişini Etsy'nin resmî arama API'siyle tarar. Her niş 0–100 arası puan alır:
+**Etsy → Trend** bölümü üç grup halinde 28 nişi Etsy'nin resmî arama API'siyle tarar: **Hobi desenleri** (16), **Tesbih ve gümüş** (6) ve **Vintage** (6). Grup çipine dokunup **Tümünü tara**'ya basınca o gruptaki nişler taranır. Her niş 0–100 arası puan alır:
 
 | Bileşen | Ağırlık | Ne ölçer |
 | --- | --- | --- |
 | Talep | %40 | Arama sonucunda üst sıradaki 48 ilanın aylık ortanca favori hızı |
 | Rekabet | %25 | Aktif ilan sayısı; ilan sayısı azaldıkça puan yükselir |
 | Yeni ilan payı | %20 | Üst ilanların ne kadarı son 6 ayda açılmış; yeni mağazanın öne çıkma şansını gösterir |
-| Fiyat bandı | %15 | Üst ilanların ortanca USD fiyatı |
+| Fiyat bandı | %15 | Üst ilanların ortanca USD fiyatı; desenlerde 2–12 USD, tesbih ve vintage ürünlerde 15–250 USD aralığına göre |
 
-Aramada dijital desen payı %30'un altındaysa puan %20 düşürülür. Bu durum, alıcıların o aramada çoğunlukla bitmiş ürün aradığını gösterir.
+Desen nişlerinde dijital ürün payı %30'un altındaysa puan %20 düşürülür; alıcılar o aramada çoğunlukla bitmiş ürün arıyordur. Tesbih ve vintage nişlerinde ise sonuçların yarısından fazlası dijital ürünse puan düşer.
 
 - Etsy satış adedini API ile paylaşmaz. Bu yüzden puan kesin satış verisi değil, bir tahmindir.
 - Her nişin kartında üst ilanlarda en çok geçen etiketler ve incelenecek rakip ilanların bağlantıları bulunur.
 - Kendi aramanızı da yazıp tarayabilirsiniz (ör. `crochet bag pattern`).
 - Sonuçlar 6 saat saklanır. Tarama için yalnızca Etsy API anahtarı gerekir; mağazanın açık olması gerekmez.
 
-Kartta **Bu nişte desen hazırla** düğmesi, nişin anahtar kelimesini ve etiketlerini Stüdyo'ya aktarır.
+Desen kartlarındaki **Bu nişte desen hazırla** düğmesi, nişin anahtar kelimesini ve etiketlerini Stüdyo'ya aktarır. Tesbih ve vintage kartlarında **Üst etiketleri kopyala** düğmesi vardır. Her kartta **ABD'de hangi eyaletlerde aranıyor?** düğmesi o aramanın son 12 aylık Google Trends eyalet haritasını açar.
+
+### ABD'de eyalet bazında hedefleme
+
+- Etsy, başlığa yazılan eyalet adına göre o eyaletteki alıcıya öncelik vermez. Ürünle ilgisi olmayan eyalet adı alakasız anahtar kelime sayılır ve sıralamaya zarar verebilir.
+- Eyalet adı yalnızca ürün gerçekten o eyaletle ilgiliyse başlığa girer, ör. `Texas Bluebonnet Crochet Doily Pattern`.
+- Google Trends eyalet haritası şu işlere yarar:
+  1. İlginin yoğun olduğu eyalete özel tema tasarlamak (o eyaletin çiçeği, sembolü, renkleri).
+  2. Pinterest ve Instagram reklamlarında eyalet hedeflemek. Etsy reklamları konum hedeflemesi sunmaz.
+  3. Mevsimi yakalamak: zaman grafiği, ör. `christmas doily` aramasının hangi aylarda yükseldiğini gösterir; ilan o dönemden 4–6 hafta önce açılır.
+- Tesbih ve vintage gibi fiziksel ürünlerde ABD'li alıcılar ücretsiz kargo filtresini sık kullanır. Kargoyu fiyata dahil edip "free shipping" sunmak görünürlüğe yardımcı olur.
+- Vintage ilanlarında Etsy en az 20 yıllık olma şartı arar; üretim yılını gösteren fotoğraf veya belge saklanmalıdır. Tesbihlerde "Who made it?" cevabı Etsy yaratıcılık standartlarına uymalıdır.
 
 ## 2. Stüdyo: prompt ve ilan
 
