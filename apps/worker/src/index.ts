@@ -23,6 +23,21 @@ import {
   type ShopierWebhookEvent
 } from "./shopier.js";
 import { createEtsyConnectSession, EtsyIntegrationError, getEtsyStatus, handleEtsyCallback, type EtsyRuntimeEnv } from "./etsy.js";
+import { getTrendBoard, scanTrend, type TrendStore } from "./etsy-trends.js";
+import { buildPatternBrief, createDigitalListing, normalizeDigitalListingInput, normalizePatternPlanInput } from "./pattern-studio.js";
+import {
+  createDigitalProduct,
+  createEtsyDigitalDraft,
+  createGrant,
+  DigitalDeliveryError,
+  getDigitalProduct,
+  grantDownload,
+  grantLandingPage,
+  listDigitalProducts,
+  listGrants,
+  revokeGrant,
+  type DigitalStore
+} from "./digital-delivery.js";
 
 interface Env extends AiRuntimeEnv, ShopierRuntimeEnv, EtsyRuntimeEnv {
   APP_ACCESS_TOKEN?: string;
@@ -102,6 +117,26 @@ function requireConfirmedShopierWrite(env: Env, input: Record<string, unknown>):
   if (!env.APP_ACCESS_TOKEN) return json(503, { error: "Shopier yazma işlemleri için uygulama erişim anahtarı zorunludur." });
   if (input.confirm !== true) return json(409, { error: "Shopier mağazasında değişiklik yapmak için açık onay gereklidir.", requiresConfirmation: true });
   return undefined;
+}
+
+function requireConfirmedWrite(env: Env, input: Record<string, unknown>, action: string): Response | undefined {
+  if (!env.APP_ACCESS_TOKEN) return json(503, { error: `${action} için uygulama erişim anahtarı zorunludur.` });
+  if (input.confirm !== true) return json(409, { error: `${action} için açık onay gereklidir.`, requiresConfirmation: true });
+  return undefined;
+}
+
+function digitalStore(env: Env): DigitalStore {
+  if (!env.ETSY_OAUTH) throw new DigitalDeliveryError("STORAGE_NOT_CONFIGURED", "Dijital ürünler için ücretsiz KV deposu bağlı değil.", 503);
+  return env.ETSY_OAUTH as unknown as DigitalStore;
+}
+
+async function readMultipart(request: Request): Promise<FormData> {
+  const contentLength = Number(request.headers.get("content-length") || 0);
+  if (contentLength > 45_000_000) throw new Error("PAYLOAD_TOO_LARGE");
+  if (!(request.headers.get("content-type") || "").includes("multipart/form-data")) {
+    throw new DigitalDeliveryError("VALIDATION_FAILED", "Dosya yüklemesi multipart/form-data olarak gönderilmelidir.");
+  }
+  return await request.formData();
 }
 
 function productMediaStorage(env: Env): "r2" | "kv" | undefined {
@@ -327,10 +362,10 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
     }
     if (request.method === "GET" && url.pathname === "/setup/shopier-webhooks") return shopierWebhookSetupPage();
     if (request.method === "GET" && url.pathname === "/etsy/oauth/callback") return await handleEtsyCallback(request, env);
-    if (request.method === "GET" && url.pathname.startsWith("/media/shopier/")) {
+    if (request.method === "GET" && (url.pathname.startsWith("/media/shopier/") || url.pathname.startsWith("/media/digital/"))) {
       if (!productMediaStorage(env)) return json(404, { error: "Ürün görseli bulunamadı." });
       const key = url.pathname.slice("/media/".length);
-      if (!/^shopier\/[a-f0-9-]+\.(jpg|png|bmp)$/.test(key)) return json(404, { error: "Ürün görseli bulunamadı." });
+      if (!/^(shopier|digital)\/[a-f0-9-]+\.(jpg|png|bmp)$/.test(key)) return json(404, { error: "Ürün görseli bulunamadı." });
       const object = await getProductMedia(env, key);
       if (!object) return json(404, { error: "Ürün görseli bulunamadı." });
       const extension = key.split(".").at(-1);
@@ -354,6 +389,11 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
       });
       if (shopierWebhookEvents.length > 100) shopierWebhookEvents.splice(0, shopierWebhookEvents.length - 100);
       return json(200, { accepted: true, duplicate: false, event: verification.event });
+    }
+    const downloadMatch = url.pathname.match(/^\/d\/([A-Za-z0-9_-]{32})(\/file)?$/);
+    if (request.method === "GET" && downloadMatch) {
+      if (!env.ETSY_OAUTH) return json(404, { error: "İndirme bağlantısı bulunamadı." });
+      return downloadMatch[2] ? await grantDownload(digitalStore(env), downloadMatch[1]) : await grantLandingPage(digitalStore(env), downloadMatch[1]);
     }
     if (url.pathname.startsWith("/api/") && !authorized(request, env)) return json(401, { error: "Uygulama erişim anahtarı geçersiz." });
 
@@ -384,6 +424,70 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
 
     if (request.method === "POST" && url.pathname === "/api/etsy/connect-session") {
       return json(200, await createEtsyConnectSession(request, env));
+    }
+
+    if (request.method === "GET" && url.pathname === "/api/etsy/trends") {
+      return json(200, await getTrendBoard(env, env.ETSY_OAUTH as unknown as TrendStore | undefined));
+    }
+    if (request.method === "POST" && url.pathname === "/api/etsy/trends/scan") {
+      const input = await readBody(request);
+      return json(200, await scanTrend(env, {
+        nicheId: input.nicheId ? String(input.nicheId) : undefined,
+        keyword: input.keyword ? String(input.keyword) : undefined,
+        force: input.force === true
+      }, env.ETSY_OAUTH as unknown as TrendStore | undefined));
+    }
+
+    if (request.method === "POST" && url.pathname === "/api/patterns/plan") {
+      const input = await readBody(request);
+      const plan = normalizePatternPlanInput(input);
+      const brief = buildPatternBrief(plan);
+      const listing = await createDigitalListing(normalizeDigitalListingInput({ ...input, name: input.name || brief.name }), env);
+      return json(200, { brief, listing });
+    }
+
+    if (request.method === "GET" && url.pathname === "/api/digital/products") {
+      return json(200, { products: await listDigitalProducts(digitalStore(env)) });
+    }
+    if (request.method === "POST" && url.pathname === "/api/digital/products") {
+      const form = await readMultipart(request);
+      let metadata: Record<string, unknown> = {};
+      try { metadata = JSON.parse(String(form.get("metadata") || "{}")) as Record<string, unknown>; } catch { /* createDigitalProduct reports it */ }
+      const blocked = requireConfirmedWrite(env, metadata, "Dijital ürün yükleme");
+      if (blocked) return blocked;
+      const store = digitalStore(env);
+      return json(201, { product: await createDigitalProduct(store, form, url.origin, (key, bytes, mimeType) => putProductMedia(env, key, bytes, mimeType)) });
+    }
+    const digitalProductMatch = url.pathname.match(/^\/api\/digital\/products\/([a-f0-9-]{36})(?:\/(grants|etsy-draft))?$/);
+    if (digitalProductMatch && request.method === "GET" && !digitalProductMatch[2]) {
+      const store = digitalStore(env);
+      const product = await getDigitalProduct(store, digitalProductMatch[1]);
+      const grants = (await listGrants(store, product.id)).map((grant) => ({ ...grant, url: `${url.origin}/d/${grant.id}` }));
+      return json(200, { product, grants });
+    }
+    if (digitalProductMatch && request.method === "POST" && digitalProductMatch[2] === "grants") {
+      const input = await readBody(request);
+      const blocked = requireConfirmedWrite(env, input, "İndirme bağlantısı oluşturma");
+      if (blocked) return blocked;
+      const grant = await createGrant(digitalStore(env), digitalProductMatch[1], input);
+      return json(201, { grant: { ...grant, url: `${url.origin}/d/${grant.id}` } });
+    }
+    if (digitalProductMatch && request.method === "POST" && digitalProductMatch[2] === "etsy-draft") {
+      const input = await readBody(request);
+      const blocked = requireConfirmedWrite(env, input, "Etsy taslak ilanı oluşturma");
+      if (blocked) return blocked;
+      const result = await createEtsyDigitalDraft(env, digitalStore(env), digitalProductMatch[1], async (key) => {
+        const media = await getProductMedia(env, key);
+        return media ? await new Response(media.body).arrayBuffer() : null;
+      });
+      return json(result.alreadyCreated ? 200 : 201, result);
+    }
+    const grantRevokeMatch = url.pathname.match(/^\/api\/digital\/grants\/([A-Za-z0-9_-]{32})\/revoke$/);
+    if (grantRevokeMatch && request.method === "POST") {
+      const input = await readBody(request);
+      const blocked = requireConfirmedWrite(env, input, "İndirme bağlantısını kapatma");
+      if (blocked) return blocked;
+      return json(200, { grant: await revokeGrant(digitalStore(env), grantRevokeMatch[1]) });
     }
 
     if (request.method === "GET" && url.pathname === "/api/shopier/products") {
@@ -599,16 +703,22 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
   } catch (error) {
     console.error(error);
     const code = error instanceof Error ? error.message : "";
-    if (code === "PAYLOAD_TOO_LARGE") return json(413, { error: "Fotoğraf isteği çok büyük; en fazla 4 sıkıştırılmış görsel gönderin." });
+    if (code === "PAYLOAD_TOO_LARGE") return json(413, { error: "İstek çok büyük; PDF en fazla 20 MB, görseller sıkıştırılmış olmalıdır." });
     if (code === "AI_PROVIDER_NOT_CONFIGURED") return json(503, { error: "Gemini anahtarı henüz sunucuya eklenmedi." });
     if (code === "AI_FREE_QUOTA_EXCEEDED") return json(429, { error: "Ücretsiz Gemini kotası doldu. Kota yenilenince tekrar deneyin; ücretli işlem yapılmadı." });
     if (code === "AI_PROVIDER_REQUEST_FAILED") return json(502, { error: "Gemini geçici olarak yanıt vermedi. Bir süre sonra tekrar deneyin." });
     if (code === "INVALID_IMAGE_INPUT") return json(400, { error: "Görsel biçimi veya boyutu uygun değil." });
+    if (code === "PATTERN_CRAFT_INVALID") return json(400, { error: "El işi türünü seçin." });
+    if (code === "PATTERN_PRODUCT_REQUIRED") return json(400, { error: "Ürün türünü yazın (ör. doily, slippers)." });
+    if (error instanceof DigitalDeliveryError) return json(error.status, { error: error.message });
     if (error instanceof EtsyIntegrationError) {
       if (error.code === "NOT_CONFIGURED") return json(503, { error: "Etsy keystring ve shared secret henüz sunucuya eklenmedi." });
       if (error.code === "STORAGE_NOT_CONFIGURED") return json(503, { error: "Etsy güvenli token deposu henüz bağlanmadı." });
-      if (error.code === "NOT_CONNECTED") return json(401, { error: "Etsy hesabı henüz bağlanmadı." });
+      if (error.code === "NOT_CONNECTED") return json(error.status === 409 ? 409 : 401, { error: error.status === 409 ? "Etsy mağazası henüz açılmadı." : "Etsy hesabı henüz bağlanmadı." });
       if (error.code === "AUTH_FAILED") return json(401, { error: error.message });
+      if (error.code === "RATE_LIMITED") return json(429, { error: error.message });
+      if (error.code === "VALIDATION_FAILED") return json(400, { error: error.message });
+      if (error.code === "NOT_FOUND") return json(404, { error: error.message });
       return json(502, { error: "Etsy geçici olarak yanıt vermedi." });
     }
     if (error instanceof ShopierIntegrationError) {

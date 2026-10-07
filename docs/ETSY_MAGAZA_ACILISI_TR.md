@@ -4,9 +4,13 @@ Durum (7 Ekim 2026): Etsy hesabı oluşturuldu ve GXL uygulaması Etsy hesap izn
 
 Kurulum ücreti ve "Mağazayı aç" onayı yalnızca hesap sahibi tarafından yapılır. Kimlik, IBAN, kart veya şifre bilgileri sohbete, GitHub'a ya da uygulamaya yazılmaz.
 
+**Mağazanın yönü:** Etsy mağazası, kadınların hobilerine yönelik dijital PDF desenleri satar. Tesbihler Shopier'de ayrı satılır. Desen üretimi ve yükleme akışı `docs/DIJITAL_DESEN_SATISI_TR.md` dosyasında anlatılıyor.
+
 ## Başlamadan önce tek karar: Ürünü kim yaptı?
 
-Etsy ilan formunda "Who made it?" sorusu zorunludur ve Etsy yaratıcılık standartlarına bağlıdır. Uygulamadaki politika kilidi de aynı kuralı uygular.
+Dijital desenlerde cevap basittir: Deseni siz tasarladıysanız `I did` seçilir. Yapay zekâ desteği kullandıysanız ilan formundaki yapay zekâ kutusu işaretlenir ve açıklamada belirtilir; sistem açıklamaya bu bildirimi otomatik ekler. Başkasının deseni, videosu veya fotoğrafı kullanılarak hazırlanmış PDF Etsy'de satılamaz.
+
+Fiziksel ürünlerde (ör. tesbih) "Who made it?" cevabı Etsy yaratıcılık standartlarına bağlıdır; uygulamadaki politika kilidi de aynı kuralı uygular:
 
 | Durum | Etsy'deki cevap | Etsy'de satılabilir mi? |
 | --- | --- | --- |
@@ -15,7 +19,7 @@ Etsy ilan formunda "Who made it?" sorusu zorunludur ve Etsy yaratıcılık stand
 | Hazır alınıp yeniden satılıyor, 20 yıldan yeni | — | Hayır. Shopier'de kalmalı |
 | 20 yıldan eski | `Another company or person` + `Vintage` | Evet, yaş kanıtıyla |
 
-İlk ilan için bu tablodan "Evet" çıkan bir ürün seçin.
+İlk ilan olarak test edilmiş bir dijital desen önerilir. Dijital ilanda kargo profili gerekmez, bu yüzden sihirbaz daha kısa sürer.
 
 ## 1. Mağaza tercihleri (Shop preferences)
 
@@ -28,14 +32,52 @@ Etsy ilan formunda "Who made it?" sorusu zorunludur ve Etsy yaratıcılık stand
 
 Kurallar: 4–20 karakter, boşluk, Türkçe karakter ve özel işaret kullanılamaz. Alınmışsa sıradakini deneyin:
 
-1. `GXLMarketStudio`
-2. `GXLSilverStudio`
-3. `GXLStudioTR`
-4. `GXLSilverTR`
+1. `GXLPatternStudio`
+2. `GXLStitchStudio`
+3. `GXLCraftPatterns`
+4. `GXLMarketStudio`
 
 ## 3. İlk ilan (Stock your shop)
 
-Sihirbaz devam etmek için en az bir ilan ister. Aşağıdaki taslak `GXL-GMS-024` (24 g, ay-yıldızlı, oksitli) içindir. Köşeli parantezli alanları ürünü ölçerek doldurun. Doğrulanmamış bilgiyi silin, tahminle doldurmayın.
+Sihirbaz devam etmek için en az bir ilan ister. İlk ilanı dijital desen olarak açmak için:
+
+1. GXL uygulamasında **Etsy → Stüdyo** bölümünde ilanı hazırlayın. **İlan metnini kopyala** düğmesi başlığı, açıklamayı ve 13 etiketi verir.
+2. Etsy formunda şu seçimleri yapın: `Type: Digital files`, `Who made it? I did`, `What is it? A supply or tool to make things`, `When was it made? 2020 - 2026`.
+3. Category kutusuna ürünün desen kategorisini yazın (ör. `crochet patterns`) ve Etsy'nin önerisini seçin.
+4. Yapay zekâ kullandıysanız ilgili kutuyu işaretleyin.
+5. Görsellere gerçek ürün fotoğrafını koyun; render kullanıyorsanız üzerinde "Digital render" yazsın. PDF'i "Digital files" bölümüne yükleyin.
+
+Mağaza açıldıktan sonraki desenler, uygulamadaki **Etsy taslağı oluştur** düğmesiyle otomatik taslak olarak gönderilir.
+
+## 4. Ödeme alma (How you'll get paid)
+
+- Türkiye'de Etsy Payments zorunludur. Alıcı kartla veya PayPal ile öder, para Türkiye'deki banka hesabınıza yatar.
+- Satıcı türü: Şirketiniz yoksa `Individual / sole proprietor`.
+- Etsy'nin istediği kimlik, adres ve banka (IBAN) bilgilerini doğrudan Etsy formuna girin. Hesap sahibi adı kimlikteki adla aynı olmalıdır.
+- Yeni mağazalarda ilk ödemeler bekletilebilir veya ek kimlik doğrulaması istenebilir. Bu normaldir.
+
+## 5. Faturalandırma (Set up billing)
+
+- İlan ücreti ve varsa tek seferlik kurulum ücreti bu karttan çekilir. Ücret Etsy'nin ilk açılış ekranında gösterilir ve iade edilmez.
+- Türk kartlarında en sık hata: Banka uygulamasından **internet alışverişi** ve **yurt dışı alışveriş** izinlerini açın. Sanal kart da kullanılabilir.
+
+## 6. Mağaza güvenliği
+
+İki adımlı doğrulamayı (2FA) bir doğrulama uygulamasıyla açın ve yedek kodları güvenli bir yerde saklayın.
+
+## 7. Mağazayı aç
+
+Ekranda gösterilen kurulum ücretini kontrol edin ve **Open your shop** düğmesine yalnızca kendiniz basın.
+
+## 8. Açıldıktan sonra GXL uygulamasında
+
+1. **Kanallar → Etsy** satırını yenileyin. Durum `Bağlı · <MağazaAdı>` olmalıdır.
+2. Durum `Etsy hesabı henüz bağlanmadı` diyorsa Etsy satırına dokunup izni yeniden verin.
+3. Mağaza adı görünüyorsa **Etsy → Dijital** bölümünde yüklenen desenler için **Etsy taslağı oluştur** düğmesi çalışır.
+
+## Ek: Tesbih Etsy'de satılacaksa
+
+Tesbihler şimdilik Shopier'de ayrı satılıyor. İleride Etsy'de satılacaksa yukarıdaki "Ürünü kim yaptı?" tablosu geçerlidir. Aşağıdaki taslak `GXL-GMS-024` (24 g, ay-yıldızlı, oksitli) içindir. Köşeli parantezli alanları ürünü ölçerek doldurun. Doğrulanmamış bilgiyi silin, tahminle doldurmayın.
 
 **Fotoğraflar:** Uygulamadaki `gxl-24g-1/2/3` fotoğrafları. Bunlara ek olarak 925 damgasının yakın çekimi ve elde ya da cetvel yanında boyut gösteren bir kare ekleyin. Etsy kare küçük resim kullanır; ürünü ortalayın.
 
@@ -82,7 +124,7 @@ silver prayer beads, 925 silver tesbih, sterling tasbih, misbaha, turkish tesbih
 
 **Materials:** `sterling silver`
 
-**Price:** Bunu siz belirleyin. Türkiye satıcıları için Etsy kesintileri yaklaşık olarak şöyledir: işlem ücreti %6,5, ödeme işleme ücreti %6,5 + 14 TL, düzenleyici işletim ücreti %2,27 ve ilan başına 0,20 USD. Toplam kesinti %15–18 bandına çıkar. Fiyatı belirlemeden önce güncel oranları `https://www.etsy.com/legal/fees/` sayfasından teyit edin.
+**Price:** Bunu siz belirleyin. Dijital desenler için uygulamadaki trend kartı, üst ilanların ortanca fiyatını gösterir. Türkiye satıcıları için Etsy kesintileri yaklaşık olarak şöyledir: işlem ücreti %6,5, ödeme işleme ücreti %6,5 + 14 TL, düzenleyici işletim ücreti %2,27 ve ilan başına 0,20 USD. Toplam kesinti %15–18 bandına çıkar. Fiyatı belirlemeden önce güncel oranları `https://www.etsy.com/legal/fees/` sayfasından teyit edin.
 
 **Quantity:** `1`
 
@@ -95,31 +137,5 @@ silver prayer beads, 925 silver tesbih, sterling tasbih, misbaha, turkish tesbih
 - Kargo firması ve ücreti: Gerçek PTT veya kargo firması fiyatını girin. Gümüş ürün için takip numaralı gönderi seçin.
 
 **Return policy:** Ne kabul edeceğinizi bilinçli seçin. İade kabul ediyorsanız süreyi ve kargoyu kimin ödeyeceğini belirtin.
-
-## 4. Ödeme alma (How you'll get paid)
-
-- Türkiye'de Etsy Payments zorunludur. Alıcı kartla veya PayPal ile öder, para Türkiye'deki banka hesabınıza yatar.
-- Satıcı türü: Şirketiniz yoksa `Individual / sole proprietor`.
-- Etsy'nin istediği kimlik, adres ve banka (IBAN) bilgilerini doğrudan Etsy formuna girin. Hesap sahibi adı kimlikteki adla aynı olmalıdır.
-- Yeni mağazalarda ilk ödemeler bekletilebilir veya ek kimlik doğrulaması istenebilir. Bu normaldir.
-
-## 5. Faturalandırma (Set up billing)
-
-- İlan ücreti ve varsa tek seferlik kurulum ücreti bu karttan çekilir. Ücret Etsy'nin ilk açılış ekranında gösterilir ve iade edilmez.
-- Türk kartlarında en sık hata: Banka uygulamasından **internet alışverişi** ve **yurt dışı alışveriş** izinlerini açın. Sanal kart da kullanılabilir.
-
-## 6. Mağaza güvenliği
-
-İki adımlı doğrulamayı (2FA) bir doğrulama uygulamasıyla açın ve yedek kodları güvenli bir yerde saklayın.
-
-## 7. Mağazayı aç
-
-Ekranda gösterilen kurulum ücretini kontrol edin ve **Open your shop** düğmesine yalnızca kendiniz basın.
-
-## 8. Açıldıktan sonra GXL uygulamasında
-
-1. **Kanallar → Etsy** satırını yenileyin. Durum `Bağlı · <MağazaAdı>` olmalıdır.
-2. Durum `Etsy hesabı henüz bağlanmadı` diyorsa Etsy satırına dokunup izni yeniden verin.
-3. Mağaza adı görünüyorsa sıradaki geliştirme adımı başlayabilir: Etsy ilan ve sipariş senkronizasyonu.
 
 Kaynaklar: Etsy ücret ve kural sayfaları (`https://www.etsy.com/legal/fees/`, `https://www.etsy.com/legal/creativity/`, `https://www.etsy.com/legal/prohibited/`). Türkiye ücret oranları üçüncü taraf özetlerinden alınmıştır ve fiyatlamadan önce Etsy'nin kendi sayfasında teyit edilmelidir.

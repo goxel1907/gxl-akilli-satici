@@ -38,7 +38,7 @@ Shopier bu sistemde ödeme/sipariş hedefidir; ajan ödeme kartı verisi almaz.
 
 1. Shopier bağımsız canlı satış merkezi olarak tamamen hazır hale getirilir.
 2. Etsy mağaza kurulumu ödeme düğmesine kadar tamamlanır; nihai kurulum ücreti ve mağaza açma işlemi yalnızca hesap sahibi tarafından yapılır. Adım adım liste ve ilk ilan taslağı: `docs/ETSY_MAGAZA_ACILISI_TR.md`.
-3. Etsy mağazası açıldıktan sonra Etsy OAuth, ilan ve sipariş senkronizasyonu devreye alınır.
+3. Etsy mağazası kadınların hobilerine yönelik dijital PDF desenleri satar; tesbihler Shopier'de ayrı kalır. Trend tarama ve desen stüdyosu mağaza açılmadan çalışır. Mağaza açılıp Etsy OAuth bağlandıktan sonra uygulama, desenleri PDF ve görselleriyle birlikte Etsy'ye taslak dijital ilan olarak gönderir. Ayrıntılar: `docs/DIJITAL_DESEN_SATISI_TR.md`.
 4. Letgo ücretli ilan nedeniyle beklemede kalır; Meta/WhatsApp/Instagram sonraki aşamadır.
 
 ## 3. Letgo
