@@ -151,3 +151,13 @@ test("pinterest endpoints report status, queue a listing link and require confir
   const bad = await handleRequest(new Request("https://gxl.example/api/pinterest/queue", { method: "POST", headers, body: JSON.stringify({ confirm: true, listingUrl: "nope" }) }), env(kv.store));
   assert.equal(bad.status, 400);
 });
+
+test("public privacy policy page explains Pinterest data use without app authentication", async () => {
+  const response = await handleRequest(new Request("https://gxl.example/privacy"), {});
+  assert.equal(response.status, 200);
+  assert.match(response.headers.get("content-type") || "", /text\/html/);
+  const html = await response.text();
+  assert.match(html, /Privacy Policy/);
+  assert.match(html, /Pinterest/);
+  assert.match(html, /disconnect/i);
+});

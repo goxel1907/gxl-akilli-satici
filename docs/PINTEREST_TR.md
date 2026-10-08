@@ -28,8 +28,14 @@ Etsy'de yayına giren her ürün, kendi satış linki, görseli, başlığı, a�
 ## Kurulum (bir kez)
 
 1. **Pinterest işletme hesabı:** `pinterest.com/business` adresinden ücretsiz bir işletme hesabı açın veya mevcut hesabınızı işletme hesabına çevirin.
-2. **Pinterest uygulaması:** `developers.pinterest.com` → **My apps** → **Connect app** ile bir uygulama oluşturun.
-   - **Redirect URI:** `https://gxl-akilli-satici-api.gxl-marketstudio.workers.dev/pinterest/oauth/callback`
+2. **Pinterest uygulaması:** `developers.pinterest.com/apps/connect/` formunu doldurun:
+   - **App name:** GXL Market Studio Pin Publisher
+   - **App description:** Publishes Pins for GXL Market Studio's own Etsy listings (digital printables and handmade products). Each Pin links to the matching Etsy listing. Used only by the shop owner.
+   - **Website / Company website:** `https://www.etsy.com/shop/GXLMarketStudio`
+   - **Privacy policy URL:** `https://gxl-akilli-satici-api.gxl-marketstudio.workers.dev/privacy` (sunucudaki herkese açık sayfa)
+   - **Uygulama amacı:** Pin oluşturma / içerik yayınlama seçeneği. Reklam ve analiz seçenekleri gerekmez.
+
+   Pinterest başvuruyu inceler (Trial access). Onaydan sonra uygulama sayfasında **Redirect URI** olarak şunu ekleyin: `https://gxl-akilli-satici-api.gxl-marketstudio.workers.dev/pinterest/oauth/callback`
 3. **Cloudflare gizli değerleri:** Cloudflare → Workers → `gxl-akilli-satici-api` → **Settings → Variables and Secrets** bölümüne şunları **Secret** olarak ekleyin:
    - `PINTEREST_APP_ID`
    - `PINTEREST_APP_SECRET`
