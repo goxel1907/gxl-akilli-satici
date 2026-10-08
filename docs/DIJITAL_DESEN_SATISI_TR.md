@@ -1,6 +1,6 @@
 # Dijital desen satışı: Trend → Stüdyo → Korumalı PDF
 
-GXL'nin önceliği Etsy'dir; Shopier ve Letgo ikinci plandadır. Bu belge hobi PDF desenlerinin (tığ işi, şiş örgü, nakış, kanaviçe, dikiş, makrome, punch) akışını anlatır. Tesbih, gümüş ve vintage gibi fiziksel ürünler için bkz. [ETSY_URUN_STUDYOSU_TR.md](ETSY_URUN_STUDYOSU_TR.md).
+GXL'nin önceliği Etsy'dir; Shopier ve Letgo ikinci plandadır. Bu belge hobi PDF desenlerinin (tığ işi, şiş örgü, nakış, kanaviçe, dikiş, makrome, punch) akışını anlatır. Planlayıcı, boyama, duvar sanatı gibi diğer PDF ürünleri için bkz. [PDF_URUN_STUDYOSU_TR.md](PDF_URUN_STUDYOSU_TR.md). Tesbih, gümüş ve vintage gibi fiziksel ürünler için bkz. [ETSY_URUN_STUDYOSU_TR.md](ETSY_URUN_STUDYOSU_TR.md).
 
 Uygulama **Etsy** sekmesiyle açılır. Sekme dört bölümden oluşur: **Trend**, **Stüdyo**, **Dijital** ve **Kılavuz**. Kılavuz, günlük akışı, satış adımlarını, teslimatı, Etsy kurallarını, mağaza ayarlarını ve sorun gidermeyi uygulamanın içinde anlatır.
 
@@ -65,14 +65,41 @@ Google Trends'in herkese açık bir API'si yoktur ve sunucudan yapılan istekler
 
 ## 2. Stüdyo: prompt ve ilan
 
-Formu doldurun: el işi türü, ürün türü (İngilizce), seçtiğiniz modelde neyi beğendiğiniz, modeldeki tekrar sayısı ve renkler. Sistem şunları üretir:
+### Trendden otomatik doldurma
 
-1. **Desen adı:** Sistem kendisi seçer. Beğenmezseniz "Yeni isimle yeniden hazırla" düğmesine basın.
+Trend kartında **Bu nişte desen hazırla**'ya basınca Stüdyo'daki alanları sistem doldurur (`POST /api/patterns/seed`). Sizin yapmanız gereken tek şey **Prompt ve ilanı hazırla** düğmesine basmaktır. Hiçbir alan sabit bir listeden veya kalıptan gelmez; hepsi o aramanın güncel Etsy verisinden çıkarılır:
+
+| Alan | Nereden gelir |
+| --- | --- |
+| El işi türü | Aramadaki veya etiketlerdeki teknik adı |
+| Ürün türü | Aramada ürün adı varsa o; yoksa üst ilan etiketlerinin baş ismi (ör. `sewing pattern pdf` → `tote bag`) |
+| Trend özeti | Ürün adından önce gelen kelimeler (ör. `granny square`, `cropped`) ve yeni ilanlarda yükselen özellikler |
+| Renkler | Üst ilanlarda geçen renkler korunur; eksik renkler ton uyumuna göre tamamlanır |
+| Zorluk | Etiket ve başlıklardaki seviye kelimeleri |
+| Malzeme ve ölçü | Yalnızca o ürünün ilanlarında geçen malzeme ve ölçüler. Ölçü sinyali yoksa alan boş kalır; promptta yapay zekâ standart ölçüyü seçer |
+
+**Her seferinde özgün:**
+- Her **desen hazırla** dokunuşunda, o arama için daha önce kullanılmamış bir özellik kombinasyonu ve palet seçilir. Kullanılanlar sunucuda saklanır (`pattern:seed:<arama>`, en çok 40).
+- Trendin en güçlü özelliği ve ana trend rengi her seferinde korunur; diğer özellikler ve renkler değişir.
+- **Başka trend kombinasyonu** düğmesi yeni bir seçenek getirir. Kendi bulduğunuz bir modelden çalışmak için **Kendi modelimden hazırla**'ya basın.
+- Trend modunda prompt tek bir modeli değil bir **pazar brifini** anlatır. Yapay zekâdan trend özelliklerini kendi oranlarıyla birleştirmesi ve üst ilanlarda olmayan imza bir ayrıntı eklemesi istenir.
+
+### Kendi modelinizden
+
+Formu doldurun: el işi türü, ürün türü (İngilizce), seçtiğiniz modelde neyi beğendiğiniz, modeldeki tekrar sayısı ve renkler.
+
+### Sistemin ürettikleri
+
+1. **Desen adı:** Hazır kelime listesinden seçilmez. Trendden gelen bir özellik veya renk ile hecelerden yeni türetilen bir sözcük birleştirilir (ör. "Sage Nallara Cardigan"). Daha önce verilen adlar sunucuda saklanır (son 300) ve tekrar kullanılmaz. Beğenmezseniz "Yeni isimle yeniden hazırla" düğmesine basın.
 2. **Farklılaştırma planı:** Tasarımın referans modelden açıkça farklı olması için kurallar üretir. Bunlar tekrar sayısı, motif şekli, kenar tekniği ve renk paletinin değişmesi; referansın yazısının, fotoğrafının ve şemasının kullanılmamasıdır.
 3. **PDF desen promptu:** Claude veya ChatGPT için hazırlanır. Model üç aşamada çalışır: tasarım tablosu, sayı ve geometri denetimi, son PDF. Prompt şunları zorunlu kılar: her sıranın sonunda ilmek sayısı, şema, malzeme ve metraj, sorun giderme, hızlı başvuru sayfası, lisans sayfası ve her sayfada telif altbilgisi. Giyilebilir ürünlerde en az 3 beden istenir.
 4. **3D render promptu:** PDF'in sonunda çıkan "Design spec" JSON'u bu prompta yapıştırılır. Böylece render, desendeki motif sayısı ve renklerle birebir aynı olur.
 5. **Etsy fotoğraf planı** (10 görsel) ve satış öncesi **kalite kapısı.**
-6. **Etsy ilanı:** Başlık (en fazla 140 karakter, ana arama ifadesi başta), her biri en fazla 20 karakter olan 13 etiket ve açıklama. Açıklamada "dijital ürün" uyarısı, render ve yapay zekâ bildirimi ile telif metni bulunur. Etsy'nin karakter kuralları otomatik uygulanır. Sunucuda Gemini anahtarı varsa başlık ve etiketler yapay zekâyla iyileştirilir, sonra yine kurallardan geçirilir.
+6. **Etsy ilanı:** Başlık (en fazla 140 karakter, ana arama ifadesi başta), her biri en fazla 20 karakter olan 13 etiket ve açıklama.
+   - Başlık, ana arama ifadesinden ve desen adından sonra o seferki trend özelliklerini içeren alıcı ifadeleriyle uzar. Bu yüzden her desenin başlığı farklıdır.
+   - Arama ürün adı içermiyorsa başlık ürünle başlar (ör. `Tote Bag Sewing Pattern PDF`).
+   - "Beginner Friendly", "US Terms" ve "Instant Download" ancak trend verisinde geçiyorsa eklenir.
+   - Etiketler önce trendin ürünle ilgili alıcı ifadelerinden seçilir. Genel ifadeler yalnızca 13'ü tamamlamak için kullanılır. Açıklamada "dijital ürün" uyarısı, render ve yapay zekâ bildirimi ile telif metni bulunur. Etsy'nin karakter kuralları otomatik uygulanır. Sunucuda Gemini anahtarı varsa başlık ve etiketler yapay zekâyla iyileştirilir, sonra yine kurallardan geçirilir.
 
 Prompt kutularındaki **Kopyala / gönder** düğmesi Android paylaşım menüsünü açar. Metni doğrudan Claude veya ChatGPT uygulamasına gönderebilirsiniz.
 
@@ -126,7 +153,8 @@ Etsy'de en çok satan desen mağazalarında ortak olan uygulamalar:
 - `POST /api/etsy/trends/scan`: `{ nicheId }` veya `{ keyword }` ile tek bir niş ya da arama taraması. İsteğe bağlı `group` (patterns/tesbih/vintage/other) puanlama grubunu belirler. `track: true` aramayı otomatik keşif listesine ekler. Yanıttaki `discovered` alanı bu taramadan çıkan yeni ifadeleri verir.
 - `GET /api/etsy/discoveries`: otopilot durumu ve keşfedilen arama ifadeleri
 - Cron (`*/30 * * * *`, `wrangler.jsonc`): her çalışmada tek bir arama tarayan otopilot
-- `POST /api/patterns/plan`: desen adı, farklılaştırma planı, PDF ve render promptları, fotoğraf planı ve Etsy ilanı
+- `POST /api/patterns/seed`: `{ keyword, craft? }` ile Stüdyo alanlarını trend verisinden doldurur. Her çağrı o arama için kullanılmamış bir kombinasyon döndürür.
+- `POST /api/patterns/plan`: desen adı, farklılaştırma planı, PDF ve render promptları, fotoğraf planı ve Etsy ilanı. `referenceSource: "trend"` ve `trendFeatures` ile pazar brifi modunda çalışır; daha önce kullanılan desen adlarını atlar.
 - `GET/POST /api/digital/products`: dijital ürün listesi ve multipart PDF yükleme (`confirm: true`)
 - `POST /api/digital/products/:id/etsy-draft`: Etsy'de taslak dijital ilan, görseller ve PDF (`confirm: true`)
 - `POST /api/digital/products/:id/grants`: siparişe özel indirme bağlantısı (`confirm: true`)

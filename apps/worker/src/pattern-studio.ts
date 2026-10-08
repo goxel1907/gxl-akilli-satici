@@ -1,4 +1,5 @@
 import { generateStructuredObject, hasAiProvider, type AiRuntimeEnv } from "../../api/src/structured-ai.js";
+import { buildAdVisuals, type AdVisual } from "./ad-visuals.js";
 import type { PatternCraft } from "./etsy-trends.js";
 
 export type SkillLevel = "beginner" | "easy" | "intermediate" | "experienced";
@@ -16,6 +17,9 @@ export interface PatternPlanInput {
   keyword?: string;
   trendTags?: string[];
   seed?: string;
+  referenceSource?: "trend";
+  trendFeatures?: string[];
+  avoidNames?: string[];
 }
 
 export interface PatternBrief {
@@ -25,6 +29,7 @@ export interface PatternBrief {
   renderPrompt: string;
   photoPlan: Array<{ slot: number; title: string; detail: string }>;
   qualityGate: string[];
+  adVisuals: AdVisual[];
 }
 
 export interface DigitalListingInput {
@@ -85,8 +90,11 @@ const SKILL_LABELS: Record<SkillLevel, { en: string; title: string; tag: string 
   experienced: { en: "Advanced", title: "Advanced Level", tag: "advanced" }
 };
 
-const NAME_FIRST = ["Meadow", "Willow", "Juniper", "Amber", "Clover", "Fernlight", "Honeybloom", "Moonpetal", "Seaglass", "Wildrose", "Linen", "Starling", "Saffron", "Ivy", "Marigold", "Rosehip", "Bramble", "Lumen", "Larkspur", "Thistle", "Hazel", "Primrose", "Driftwood", "Quince"];
-const NAME_SECOND = ["Halo", "Crown", "Lantern", "Garden", "Wreath", "Bloom", "Whisper", "Medallion", "Glow", "Harbor", "Ribbon", "Promenade", "Cascade", "Haven", "Petal", "Compass", "Sonnet", "Orchard"];
+// Desen adı hazır kelime listesinden seçilmez: hecelerden her seferinde yeni bir sözcük türetilir.
+const NAME_ONSETS = ["b", "c", "d", "f", "g", "l", "m", "n", "p", "r", "s", "t", "v", "z", "br", "cl", "fl", "gl", "sh", "st", "w"];
+const NAME_VOWELS = ["a", "e", "i", "o", "u"];
+const NAME_MIDDLES = ["l", "n", "r", "v", "m", "s", "th", "ll", "nn", "d", "z"];
+const NAME_ENDINGS = ["a", "ia", "elle", "ora", "ine", "is", "en", "yn", "ette", "ara", "ina", "ery", "o", "ie"];
 const WEARABLE = /(slipper|sock|sweater|cardigan|\btop\b|hat|beanie|dress|vest|mitten|glove|bootie|shoe|pullover|skirt|shawl|shrug|tee|jumper)/i;
 const CIRCULAR = /(doily|mandala|coaster|placemat|round|circle|rug|centerpiece)/i;
 
@@ -103,7 +111,7 @@ function hash(value: string): number {
   return result >>> 0;
 }
 
-function titleCase(value: string): string {
+export function titleCase(value: string): string {
   return value.trim().replace(/\s+/g, " ").split(" ").map((word) => word ? word[0].toUpperCase() + word.slice(1).toLowerCase() : word).join(" ");
 }
 
@@ -135,15 +143,53 @@ export function normalizePatternPlanInput(raw: Record<string, unknown>): Pattern
     colors: cleanList(raw.colors, 6, 30),
     keyword: cleanText(raw.keyword, 60).toLowerCase() || undefined,
     trendTags: cleanList(raw.trendTags, 20, 40).map((tag) => tag.toLowerCase()),
-    seed: cleanText(raw.seed, 60) || undefined
+    seed: cleanText(raw.seed, 60) || undefined,
+    referenceSource: raw.referenceSource === "trend" ? "trend" : undefined,
+    trendFeatures: cleanList(raw.trendFeatures, 6, 40).map((feature) => feature.toLowerCase())
   };
 }
 
-export function choosePatternName(input: Pick<PatternPlanInput, "productType" | "referenceNotes" | "craft" | "seed">): string {
-  const value = hash(`${input.seed || ""}|${input.craft}|${input.productType}|${input.referenceNotes || ""}`);
-  const first = NAME_FIRST[value % NAME_FIRST.length];
-  const second = NAME_SECOND[Math.floor(value / NAME_FIRST.length) % NAME_SECOND.length];
-  return `${first} ${second} ${titleCase(input.productType)}`;
+export function craftDefaultMaterial(craft: PatternCraft): string {
+  return CRAFTS[craft].defaultMaterial;
+}
+
+function coinWord(value: number): string {
+  let state = value >>> 0;
+  const next = (length: number) => {
+    state = (Math.imul(state ^ (state >>> 13), 1103515245) + 12345) >>> 0;
+    return state % length;
+  };
+  const pick = (list: string[]) => list[next(list.length)];
+  const lead = next(3) === 0 ? pick(NAME_VOWELS) : "";
+  const word = `${lead}${pick(NAME_ONSETS)}${pick(NAME_VOWELS)}${pick(NAME_MIDDLES)}${pick(NAME_ENDINGS)}`;
+  return word[0].toUpperCase() + word.slice(1);
+}
+
+// Ad: trendden gelen bir özellik veya renk + türetilmiş özgün sözcük + ürün. Daha önce kullanılan adlar atlanır.
+export function coinProductName(input: { productType: string; salt: string; accents?: string[]; avoidNames?: string[] }): string {
+  const avoid = new Set((input.avoidNames || []).map((name) => name.toLowerCase()));
+  const productWords = new Set(input.productType.toLowerCase().split(/\s+/));
+  const accents = (input.accents || [])
+    .map((value) => value.toLowerCase().trim())
+    .filter((value) => /^[a-z][a-z -]{1,15}$/.test(value) && !value.split(" ").some((word) => productWords.has(word)));
+  const product = titleCase(input.productType);
+  let name = "";
+  for (let attempt = 0; attempt < 50; attempt += 1) {
+    const value = hash(`${input.salt}|${attempt}`);
+    const accent = accents.length && value % 3 !== 0 ? `${titleCase(accents[value % accents.length])} ` : "";
+    name = `${accent}${coinWord(value)} ${product}`;
+    if (!avoid.has(name.toLowerCase())) break;
+  }
+  return name;
+}
+
+export function choosePatternName(input: Pick<PatternPlanInput, "productType" | "referenceNotes" | "craft" | "seed" | "trendFeatures" | "colors" | "avoidNames">): string {
+  return coinProductName({
+    productType: input.productType,
+    salt: `${input.seed || ""}|${input.craft}|${input.productType}|${input.referenceNotes || ""}`,
+    accents: [...(input.trendFeatures || []), ...(input.colors || [])],
+    avoidNames: input.avoidNames
+  });
 }
 
 function alternativeRepeat(reference: number): number {
@@ -151,7 +197,34 @@ function alternativeRepeat(reference: number): number {
   return options.sort((a, b) => Math.abs(a - reference) - Math.abs(b - reference) || b - a)[0];
 }
 
+function trendOriginalityRules(input: PatternPlanInput): { tr: string[]; en: string[] } {
+  const product = input.productType;
+  const features = input.trendFeatures?.length ? input.trendFeatures.join(", ") : "";
+  const tr = [
+    `Tek bir model kopyalanmadı; trend özellikleri${features ? ` (${features})` : ""} özgün bir tasarımda birleştirilecek.`,
+    "Tasarıma üst sıradaki ilanlarda olmayan imza bir ayrıntı (motif, yapım hilesi veya bitiş) eklenecek.",
+    input.colors?.length ? `Renk paleti: ${input.colors.join(", ")}.` : "Renk paletini yapay zekâ özgün olarak önerecek."
+  ];
+  const en = [
+    `Build the buyer-favored features${features ? ` (${features})` : ""} into one coherent design with your own proportions, layout and construction order.`,
+    "Add one signature detail that the top-ranking listings do not have (a motif, a construction trick or a finishing detail) and name it in the cover promise.",
+    input.colors?.length ? `Use this palette: ${input.colors.join(", ")}.` : "Propose a fresh 3-color palette with color names and hex codes."
+  ];
+  if (CIRCULAR.test(product)) {
+    tr.push("Tekrar sayısı tasarıma göre seçilip her tur yeniden hesaplanacak.");
+    en.push("Choose the radial repeat count that best suits the design and recalculate every round for it.");
+  }
+  if (WEARABLE.test(product)) {
+    tr.push("En az 3 beden kendi ölçü tablosuna göre hesaplanacak.");
+    en.push("Grade at least 3 sizes from your own size chart.");
+  }
+  tr.push("Hiçbir yayımlanmış desenin yazısı, şeması, fotoğrafı, sayfa düzeni veya adı kullanılmayacak.");
+  en.push("Do not reproduce any text, chart, photo, diagram, page layout, or name from any published pattern or listing.");
+  return { tr, en };
+}
+
 function originalityRules(input: PatternPlanInput): { tr: string[]; en: string[] } {
+  if (input.referenceSource === "trend") return trendOriginalityRules(input);
   const tr: string[] = [];
   const en: string[] = [];
   const product = input.productType;
@@ -199,8 +272,16 @@ function buildPatternPrompt(input: PatternPlanInput, name: string, rules: string
     `- Colors: ${input.colors?.length ? input.colors.join(", ") : "propose a 3-color palette with names and hex codes"}`,
     `- Terminology: ${craft.terms}. Give every measurement in inches and centimeters.`,
     "",
-    "## Originality rules (mandatory)",
-    `The shop owner liked a reference design${input.referenceNotes ? `: "${input.referenceNotes}"` : ""}. Use it only as a mood reference. Your design must be clearly different:`,
+    ...(input.referenceSource === "trend" ? [
+      "## Market brief (Etsy research)",
+      input.referenceNotes || `Buyers are searching Etsy for "${input.keyword || input.productType}".`,
+      "There is no single reference model. Design for what these buyers want, in your own original way.",
+      "",
+      "## Originality rules (mandatory)"
+    ] : [
+      "## Originality rules (mandatory)",
+      `The shop owner liked a reference design${input.referenceNotes ? `: "${input.referenceNotes}"` : ""}. Use it only as a mood reference. Your design must be clearly different:`
+    ]),
     ...rules.map((rule, index) => `${index + 1}. ${rule}`),
     "Common public-domain techniques (picots, shells, granny squares, basic knots) are allowed, but the overall design, proportions and every written sentence must be your own.",
     "",
@@ -286,6 +367,7 @@ export function buildPatternBrief(input: PatternPlanInput): PatternBrief {
     patternPrompt: buildPatternPrompt(input, name, rules.en),
     renderPrompt: buildRenderPrompt(input, name),
     photoPlan: PHOTO_PLAN.map((item, index) => ({ slot: index + 1, ...item })),
+    adVisuals: buildAdVisuals({ craft: input.craft, productType: input.productType, name, colors: input.colors, features: input.trendFeatures, formats: input.sizeNote ? [input.sizeNote] : undefined, seed: input.seed }),
     qualityGate: [
       "Deseni satışa açmadan önce en az bir kez bizzat ör/yap ya da test ördür; sayıları, metrajı ve ölçüyü buna göre düzelt.",
       "Ana fotoğraf mümkünse gerçek üründen olsun. Render kullanılıyorsa görselde 'Digital render' yazsın; ilan açıklaması bunu otomatik belirtir.",
@@ -356,20 +438,51 @@ export function validateEtsyListingText(listing: { title: string; tags: string[]
 
 function primaryPhrase(input: DigitalListingInput): string {
   const craft = CRAFTS[input.craft];
-  if (input.keyword && /pattern/i.test(input.keyword)) return titleCase(input.keyword.replace(/\bpdf\b/gi, ""));
+  const productHead = input.productType.toLowerCase().split(/\s+/).at(-1)!.replace(/s$/, "");
+  if (input.keyword && /pattern/i.test(input.keyword) && input.keyword.toLowerCase().includes(productHead)) return titleCase(input.keyword.replace(/\bpdf\b/gi, ""));
   const product = titleCase(input.productType);
   return craft.order === "craft-first" ? `${craft.label} ${product} Pattern` : `${product} ${craft.label} Pattern`;
 }
 
+const GENERIC_TAGS = new Set(["instant download", "digital download", "printable pattern", "digital pattern", "pdf pattern", "pattern pdf"]);
+
+function relevantTrendTags(input: DigitalListingInput): string[] {
+  const craft = CRAFTS[input.craft];
+  const productWords = input.productType.toLowerCase().split(/\s+/);
+  const lastWord = productWords.at(-1) || input.productType;
+  const craftWords = new Set([...craft.tag.split(" "), ...craft.short.split(" "), "pattern", "patterns", "pdf"]);
+  const vocabulary = new Set([...productWords, lastWord.replace(/s$/, ""), ...(input.features || []).flatMap((feature) => feature.toLowerCase().split(/\s+/))].filter((word) => !craftWords.has(word)));
+  const relevant = (input.trendTags || []).filter((tag) => !GENERIC_TAGS.has(tag) && tag.toLowerCase().split(/\s+/).some((word) => vocabulary.has(word) || vocabulary.has(word.replace(/s$/, ""))));
+  // Bu seferki trend özelliklerini içeren ifadeler öne alınır; böylece her desenin başlığı ve etiket sırası farklı olur.
+  const features = (input.features || []).map((feature) => feature.toLowerCase());
+  const featureRank = (tag: string) => { const index = features.findIndex((feature) => tag.includes(feature)); return index === -1 ? features.length : index; };
+  return relevant.map((tag, index) => ({ tag, index })).sort((a, b) => featureRank(a.tag) - featureRank(b.tag) || a.index - b.index).map((item) => item.tag);
+}
+
+// Başlık sabit dolgu ifadeleriyle değil, trendde alıcıların kullandığı ifadelerle uzar.
+// "US Terms" ve "Instant Download" yalnızca trend verisinde geçiyorsa (veya trend verisi yoksa) eklenir.
 function buildTitle(input: DigitalListingInput, primary?: string): string {
-  const skill = SKILL_LABELS[input.skillLevel || "easy"].title;
+  const skill = SKILL_LABELS[input.skillLevel || "easy"];
+  const lead = `${primary || primaryPhrase(input)} PDF`;
+  const trend = input.trendTags || [];
+  const inTrend = (phrase: string) => !trend.length || trend.some((tag) => tag.includes(phrase));
+  const coveredWords = new Set(lead.toLowerCase().split(/\s+/));
+  const trendPhrases: string[] = [];
+  for (const tag of relevantTrendTags(input)) {
+    const words = tag.split(/\s+/);
+    if (words.every((word) => coveredWords.has(word))) continue;
+    words.forEach((word) => coveredWords.add(word));
+    trendPhrases.push(titleCase(tag));
+    if (trendPhrases.length === 2) break;
+  }
   const segments = [
-    `${primary || primaryPhrase(input)} PDF`,
+    lead,
     input.name,
+    ...trendPhrases,
     ...(input.sizeNote && input.sizeNote.length <= 28 ? [input.sizeNote] : []),
-    skill,
-    "US Terms",
-    "Instant Download"
+    ...(inTrend(skill.tag) || inTrend(skill.en.toLowerCase()) ? [skill.title] : []),
+    ...(inTrend("us terms") ? ["US Terms"] : []),
+    ...(inTrend("instant download") ? ["Instant Download"] : [])
   ];
   let title = "";
   for (const segment of segments) {
@@ -380,18 +493,20 @@ function buildTitle(input: DigitalListingInput, primary?: string): string {
   return normalizeEtsyTitle(title);
 }
 
+// Etiketler önce trendin alıcı ifadelerinden gelir; ürün ifadeleri ve genel ifadeler yalnızca 13'ü tamamlamak için kullanılır.
 function buildTags(input: DigitalListingInput): string[] {
   const craft = CRAFTS[input.craft];
   const product = input.productType.toLowerCase();
   const productWords = product.split(/\s+/);
   const lastWord = productWords.at(-1) || product;
-  const vocabulary = new Set([...productWords, ...craft.tag.split(" "), ...craft.short.split(" "), "pattern", "pdf", "diy", "tutorial", lastWord.replace(/s$/, "")]);
-  const relevantTrendTags = (input.trendTags || []).filter((tag) => tag.toLowerCase().split(/\s+/).some((word) => vocabulary.has(word) || vocabulary.has(word.replace(/s$/, ""))));
   const skillWord = SKILL_LABELS[input.skillLevel || "easy"].tag;
   const skillTags = input.skillLevel === "easy" || !input.skillLevel ? [`easy ${craft.short} pattern`] : [`${skillWord} ${craft.tag}`, `${skillWord} ${craft.short}`];
   const colorTags = (input.colors || []).slice(0, 2).map((color) => `${color.toLowerCase()} ${lastWord}`);
+  const featureTags = (input.features || []).map((feature) => `${feature.toLowerCase()} ${lastWord}`);
   return normalizeEtsyTags([
     ...(input.keyword ? [input.keyword] : []),
+    ...relevantTrendTags(input),
+    ...featureTags,
     ...(productWords.length > 1 ? [product] : []),
     `${product} pattern`,
     `${craft.short} ${product}`,
@@ -400,7 +515,6 @@ function buildTags(input: DigitalListingInput): string[] {
     `${craft.short} ${lastWord}`,
     `${product} pattern pdf`,
     `${lastWord} pattern pdf`,
-    ...relevantTrendTags,
     `${craft.tag} pattern`,
     ...skillTags,
     `${craft.tag} pattern pdf`,
@@ -435,7 +549,7 @@ function buildDescription(input: DigitalListingInput, hook?: string): string {
     "This is a digital file. Because files cannot be returned, all sales are final, but please message us with any question about the pattern and we will help."
   ];
   return [
-    `${input.name} - ${hook || `an original ${craft.label.toLowerCase()} ${product} pattern with clear, step-by-step instructions.`}`,
+    `${input.name} - ${hook || `an original ${craft.label.toLowerCase()} ${product} pattern${input.features?.length ? ` built around ${input.features.slice(0, 3).join(", ")}` : ""}, with clear, step-by-step instructions.`}`,
     "",
     `THIS IS A DIGITAL PDF PATTERN, NOT A FINISHED ${product.toUpperCase()}.`,
     "",
@@ -477,7 +591,7 @@ export function normalizeDigitalListingInput(raw: Record<string, unknown>): Digi
     keyword: base.keyword,
     trendTags: base.trendTags,
     pageCount: Number.isInteger(pageCount) && pageCount > 0 && pageCount < 500 ? pageCount : undefined,
-    features: cleanList(raw.features, 6, 80),
+    features: cleanList(raw.features ?? raw.trendFeatures, 6, 80),
     aiAssisted: raw.aiAssisted !== false,
     photosAreRenders: raw.photosAreRenders !== false,
     testMade: raw.testMade === true
@@ -520,7 +634,7 @@ export async function createDigitalListing(input: DigitalListingInput, env: AiRu
   try {
     const suggestion = await generateStructuredObject<AiListingSuggestion>({
       schemaName: "gxl_etsy_pattern_listing",
-      prompt: `You are an Etsy SEO specialist for digital craft patterns. Write for buyers searching Etsy in the US.\nPattern: ${JSON.stringify({ name: input.name, craft: input.craft, item: input.productType, skill: input.skillLevel, size: input.sizeNote, material: input.yarnNote, colors: input.colors })}\nTags that currently appear on top-ranking Etsy listings for this search: ${JSON.stringify(input.trendTags || [])}.\nReturn: hook = one warm sentence (max 160 characters) describing what makes the design special, without claiming it was tested, bestselling or handmade; primaryPhrase = the exact phrase most buyers type for this item, ending with the word Pattern, max 45 characters; tags = 13 unique lowercase multi-word buyer phrases, each 20 characters or fewer, only letters, numbers, spaces, hyphens and apostrophes, no brand names, no repeated tag.`,
+      prompt: `You are an Etsy SEO specialist for digital craft patterns. Write for buyers searching Etsy in the US.\nPattern: ${JSON.stringify({ name: input.name, craft: input.craft, item: input.productType, skill: input.skillLevel, size: input.sizeNote, material: input.yarnNote, colors: input.colors, trendFeatures: input.features })}\nTags that currently appear on top-ranking Etsy listings for this search: ${JSON.stringify(input.trendTags || [])}.\nWrite fresh wording for this specific design; do not reuse stock phrases. Return: hook = one warm sentence (max 160 characters) describing what makes the design special, without claiming it was tested, bestselling or handmade; primaryPhrase = the exact phrase most buyers type for this item, ending with the word Pattern, max 45 characters; tags = 13 unique lowercase multi-word buyer phrases, each 20 characters or fewer, only letters, numbers, spaces, hyphens and apostrophes, no brand names, no repeated tag.`,
       schema: {
         type: "object",
         additionalProperties: false,

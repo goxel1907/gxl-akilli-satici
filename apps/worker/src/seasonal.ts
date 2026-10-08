@@ -1,6 +1,6 @@
 import { normalizeKeyword, readCached, type TrendResult, type TrendStore } from "./etsy-trends.js";
 
-type KeywordGroup = "patterns" | "tesbih" | "vintage";
+type KeywordGroup = "printables" | "patterns" | "tesbih" | "vintage";
 
 interface SeasonDefinition {
   id: string;
@@ -48,13 +48,13 @@ export const US_SEASONS: SeasonDefinition[] = [
   {
     id: "halloween", nameTr: "Cadılar Bayramı", nameEn: "Halloween", leadDays: 45,
     tipTr: "Kabak, hayalet ve sonbahar temalı ürünler Eylül'den itibaren aranır.",
-    keywords: { patterns: ["halloween crochet pattern", "crochet pumpkin pattern", "halloween cross stitch pattern"], vintage: ["vintage halloween decor"] },
+    keywords: { printables: ["halloween printables", "halloween coloring pages"], patterns: ["halloween crochet pattern", "crochet pumpkin pattern", "halloween cross stitch pattern"], vintage: ["vintage halloween decor"] },
     date: (year) => utc(year, 9, 31)
   },
   {
     id: "thanksgiving", nameTr: "Şükran Günü", nameEn: "Thanksgiving", leadDays: 45,
     tipTr: "Sonbahar sofrası, hindi ve şükran temaları; masa örtüsü ve sehpa örtüsü desenleri öne çıkar.",
-    keywords: { patterns: ["thanksgiving crochet pattern", "fall crochet pattern", "autumn doily pattern"], vintage: ["vintage thanksgiving decor"] },
+    keywords: { printables: ["thanksgiving printables", "thanksgiving games printable"], patterns: ["thanksgiving crochet pattern", "fall crochet pattern", "autumn doily pattern"], vintage: ["vintage thanksgiving decor"] },
     date: (year) => nthWeekday(year, 10, 4, 4)
   },
   {
@@ -66,13 +66,13 @@ export const US_SEASONS: SeasonDefinition[] = [
   {
     id: "christmas", nameTr: "Noel / Yılbaşı", nameEn: "Christmas", leadDays: 75,
     tipTr: "Yılın en büyük alışveriş dönemi. Süs, ağaç süsü, çorap ve hediye ürünleri Ekim'den itibaren aranır; ABD'ye kargo süresini hesaba katın.",
-    keywords: { patterns: ["christmas crochet pattern", "crochet ornament pattern", "christmas cross stitch pattern", "christmas knitting pattern"], tesbih: ["christmas gift for him"], vintage: ["vintage christmas ornaments", "vintage christmas decor"] },
+    keywords: { printables: ["christmas printables", "christmas coloring pages", "christmas games printable"], patterns: ["christmas crochet pattern", "crochet ornament pattern", "christmas cross stitch pattern", "christmas knitting pattern"], tesbih: ["christmas gift for him"], vintage: ["vintage christmas ornaments", "vintage christmas decor"] },
     date: (year) => utc(year, 11, 25)
   },
   {
     id: "valentines", nameTr: "Sevgililer Günü", nameEn: "Valentine's Day", leadDays: 45,
     tipTr: "Kalp temalı ürünler, takı ve kişiye özel hediyeler.",
-    keywords: { patterns: ["valentine crochet pattern", "crochet heart pattern"], vintage: ["vintage valentine", "vintage heart necklace"] },
+    keywords: { printables: ["valentine printable cards", "valentines day printables"], patterns: ["valentine crochet pattern", "crochet heart pattern"], vintage: ["vintage valentine", "vintage heart necklace"] },
     date: (year) => utc(year, 1, 14)
   },
   {
@@ -96,13 +96,13 @@ export const US_SEASONS: SeasonDefinition[] = [
   {
     id: "easter", nameTr: "Paskalya", nameEn: "Easter", leadDays: 40,
     tipTr: "Tavşan, yumurta ve bahar çiçekleri; amigurumi tavşan desenleri çok aranır.",
-    keywords: { patterns: ["easter crochet pattern", "crochet bunny pattern", "easter cross stitch pattern"], vintage: ["vintage easter decor"] },
+    keywords: { printables: ["easter coloring pages", "easter printables"], patterns: ["easter crochet pattern", "crochet bunny pattern", "easter cross stitch pattern"], vintage: ["vintage easter decor"] },
     date: table({ 2026: [3, 5], 2027: [2, 28], 2028: [3, 16] })
   },
   {
     id: "mothers-day", nameTr: "Anneler Günü", nameEn: "Mother's Day", leadDays: 45,
     tipTr: "Çiçek buketi desenleri, takı ve broş gibi hediyeler.",
-    keywords: { patterns: ["mothers day crochet pattern", "crochet flower bouquet pattern"], vintage: ["vintage brooch", "vintage sterling silver jewelry"] },
+    keywords: { printables: ["mothers day printable card", "mothers day coloring pages"], patterns: ["mothers day crochet pattern", "crochet flower bouquet pattern"], vintage: ["vintage brooch", "vintage sterling silver jewelry"] },
     date: (year) => nthWeekday(year, 4, 0, 2)
   },
   {
@@ -114,20 +114,38 @@ export const US_SEASONS: SeasonDefinition[] = [
   {
     id: "fathers-day", nameTr: "Babalar Günü", nameEn: "Father's Day", leadDays: 40,
     tipTr: "Erkek hediyeleri: gümüş tesbih, worry beads ve vintage aksesuarlar.",
-    keywords: { tesbih: ["fathers day gift", "gift for dad", "worry beads"], vintage: ["vintage gift for him"] },
+    keywords: { printables: ["fathers day printable card"], tesbih: ["fathers day gift", "gift for dad", "worry beads"], vintage: ["vintage gift for him"] },
     date: (year) => nthWeekday(year, 5, 0, 3)
   },
   {
     id: "july-4", nameTr: "Bağımsızlık Günü", nameEn: "4th of July", leadDays: 30,
     tipTr: "Kırmızı-beyaz-mavi, yıldız ve bayrak temaları.",
-    keywords: { patterns: ["4th of july crochet pattern", "patriotic crochet pattern"] },
+    keywords: { printables: ["4th of july printables"], patterns: ["4th of july crochet pattern", "patriotic crochet pattern"] },
     date: (year) => utc(year, 6, 4)
   },
   {
     id: "fall", nameTr: "Sonbahar sezonu", nameEn: "Fall season", leadDays: 45,
     tipTr: "Sonbahar renkleri, yaprak ve kabak motifleri; ev dekoru desenleri yükselişe geçer.",
-    keywords: { patterns: ["fall crochet pattern", "autumn crochet pattern", "crochet leaf pattern"] },
+    keywords: { printables: ["fall wall art printable", "fall printables"], patterns: ["fall crochet pattern", "autumn crochet pattern", "crochet leaf pattern"] },
     date: (year) => utc(year, 8, 22)
+  },
+  {
+    id: "new-year", nameTr: "Yeni yıl planlama sezonu", nameEn: "New Year planning", leadDays: 60,
+    tipTr: "Planlayıcı, takip sayfası ve hedef günlükleri Ekim-Ocak arasında zirve yapar. Dijital ve yazdırılabilir planlayıcıları Kasım başına kadar listele.",
+    keywords: { printables: ["new year planner printable", "digital planner", "goal planner printable", "habit tracker printable"] },
+    date: (year) => utc(year, 0, 1)
+  },
+  {
+    id: "wedding-season", nameTr: "Düğün sezonu", nameEn: "Wedding season", leadDays: 90,
+    tipTr: "ABD'de düğünler Mayıs-Ekim arasında yoğunlaşır; planlayıcı ve bridal shower oyunları kış sonundan itibaren aranır.",
+    keywords: { printables: ["wedding planner printable", "bridal shower games", "wedding welcome sign"] },
+    date: (year) => utc(year, 4, 1)
+  },
+  {
+    id: "back-to-school", nameTr: "Okula dönüş", nameEn: "Back to school", leadDays: 45,
+    tipTr: "Öğretmen planlayıcıları, evde eğitim ve çocuk çalışma kâğıtları Temmuz-Ağustos'ta zirve yapar.",
+    keywords: { printables: ["teacher planner printable", "homeschool planner", "back to school printables"] },
+    date: (year) => utc(year, 7, 15)
   }
 ];
 

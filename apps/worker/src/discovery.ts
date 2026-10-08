@@ -1,5 +1,6 @@
 import type { EtsyRuntimeEnv } from "./etsy.js";
 import { inferTrendGroup, normalizeKeyword, scanTrend, TREND_NICHES, type TrendGroup, type TrendResult, type TrendStore } from "./etsy-trends.js";
+import { isIpRisky } from "./ip-guard.js";
 import { upcomingSeasons } from "./seasonal.js";
 
 type Fetcher = typeof fetch;
@@ -37,6 +38,7 @@ const PER_SCAN_LIMIT = 4;
 const GENERIC = new Set(["digital download", "instant download", "pdf pattern", "digital pattern", "printable pattern", "gift for her", "gift for him", "gift for mom", "gift idea", "handmade gift", "christmas gift", "birthday gift", "pattern pdf"]);
 const CRAFT_WORDS = /\b(crochet|knit|knitting|cross stitch|embroidery|sewing|macrame|punch needle|amigurumi|granny square|quilt|quilting|needlepoint|tunisian|tatting|doily)\b/;
 const TESBIH_WORDS = /\b(prayer|beads|tasbih|tesbih|misbaha|worry|islamic|muslim|eid|ramadan|dhikr|subha|rosary|mala)\b/;
+const PRINTABLE_WORDS = /\b(printables?|planner|journal|coloring|wall art|worksheets?|tracker|template|games|recipe|kit|pages|paper|invitation|cards|checklist|schedule|binder|workbook|stickers|clipart)\b/;
 const STOP = new Set(["pattern", "pdf", "pattern pdf", "vintage", "for", "and", "the", "with", "gift"]);
 
 function summarize(result: TrendResult): DiscoverySummary {
@@ -60,13 +62,15 @@ export function extractDiscoveries(result: TrendResult): Array<Omit<DiscoveredPh
   for (const raw of pool) {
     const tag = normalizeKeyword(raw);
     const words = tag.split(" ");
-    if (words.length < 2 || tag.length > 40 || GENERIC.has(tag)) continue;
+    if (words.length < 2 || tag.length > 40 || GENERIC.has(tag) || isIpRisky(tag)) continue;
     let phrase = tag;
     if (group === "patterns") {
       if (!CRAFT_WORDS.test(tag) && !words.some((word) => seedWords.has(word))) continue;
       if (!/\b(pattern|pdf|chart|template)\b/.test(tag)) phrase = `${tag} pattern`;
     } else if (group === "tesbih") {
       if (!TESBIH_WORDS.test(tag)) continue;
+    } else if (group === "printables") {
+      if (!PRINTABLE_WORDS.test(tag) && !words.some((word) => seedWords.has(word))) continue;
     } else if (group === "vintage") {
       if (!/\b(vintage|antique|retro)\b/.test(tag) && !words.some((word) => seedWords.has(word))) continue;
     } else if (!words.some((word) => seedWords.has(word))) {
