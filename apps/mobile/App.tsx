@@ -751,7 +751,7 @@ function errorText(error: unknown) {
   return error instanceof Error ? error.message : "Bağlantıyı kontrol edin.";
 }
 
-type EtsySection = "Trend" | "Stüdyo" | "Dijital" | "Kılavuz";
+type EtsySection = "Trend" | "Stüdyo" | "Dijital" | "Pinterest" | "Kılavuz";
 
 function EtsyScreen({ online, channels }: any) {
   const [section, setSection] = useState<EtsySection>("Trend");
@@ -766,12 +766,13 @@ function EtsyScreen({ online, channels }: any) {
     </View>
     {!shopReady && section !== "Kılavuz" && <Pressable style={styles.guardrail} onPress={() => setSection("Kılavuz")}><Ionicons name="storefront-outline" size={20} color="#315B4C" /><Text style={[styles.guardrailText, { flex: 1 }]}>{authorized ? "Etsy hesabı yetkili, mağaza açılışı bekleniyor. Adımlar için dokunun: Kılavuz → Mağaza açılışı." : "Etsy mağazası henüz bağlı değil. Adımlar için dokunun: Kılavuz → Mağaza açılışı."}</Text><Ionicons name="chevron-forward" size={18} color="#315B4C" /></Pressable>}
     <View style={styles.segment}>
-      {(["Trend", "Stüdyo", "Dijital", "Kılavuz"] as const).map((item) => <Pressable key={item} style={[styles.segmentItem, section === item && styles.segmentActive]} onPress={() => setSection(item)}><Text style={[styles.segmentText, section === item && styles.segmentTextActive]}>{item}</Text></Pressable>)}
+      {(["Trend", "Stüdyo", "Dijital", "Pinterest", "Kılavuz"] as const).map((item) => <Pressable key={item} style={[styles.segmentItem, section === item && styles.segmentActive]} onPress={() => setSection(item)}><Text style={[styles.segmentText, section === item && styles.segmentTextActive]}>{item}</Text></Pressable>)}
     </View>
     {!online && section !== "Kılavuz" && <Text style={styles.shopierBlocker}>Sunucu bağlantısı yok. Trend tarama, prompt üretimi ve PDF yükleme için uygulamanın sunucuya bağlı olması gerekir.</Text>}
     {section === "Trend" && <TrendPanel online={online} onUse={(seed: any) => { setStudioSeed(seed); setSection("Stüdyo"); }} />}
     {section === "Stüdyo" && <StudioPanel online={online} seed={studioSeed} onUpload={(prefill: any) => { setUploadPrefill(prefill); setSection("Dijital"); }} />}
     {section === "Dijital" && <DigitalPanel online={online} shopReady={shopReady} prefill={uploadPrefill} onPrefillUsed={() => setUploadPrefill(undefined)} />}
+    {section === "Pinterest" && <PinterestPanel online={online} />}
     {section === "Kılavuz" && <EtsyGuide shopReady={shopReady} authorized={authorized} />}
   </>;
 }
@@ -1160,7 +1161,7 @@ function PrintableStudio({ online, seed, seeding, onReseed, onUpload }: any) {
       {listing.warnings.map((warning: string) => <Text style={styles.warningText} key={warning}>• {warning}</Text>)}
       <View style={styles.inlineActions}>
         <Pressable style={styles.secondaryButton} onPress={() => Share.share({ message: `${listing.title}\n\n${listing.description}\n\nTags: ${listing.tags.join(", ")}` })}><Text style={styles.secondaryButtonText}>İlan metnini kopyala</Text></Pressable>
-        <Pressable style={styles.secondaryButton} onPress={() => onUpload({ name: brief?.name, kind, productType, listing })}><Text style={styles.secondaryButtonText}>PDF hazırsa yükle →</Text></Pressable>
+        <Pressable style={styles.secondaryButton} onPress={() => onUpload({ name: brief?.name, kind, productType, listing, pins: brief?.pins })}><Text style={styles.secondaryButtonText}>PDF hazırsa yükle →</Text></Pressable>
       </View>
     </View>}
   </>;
@@ -1380,7 +1381,8 @@ function DigitalUploadForm({ visible, prefill, onClose, onSaved }: any) {
             productType: productType.trim(),
             prices: { usd: priceUsd, try: priceTry },
             flags: { testMade, photosAreRenders, aiAssisted },
-            listing: { title: title.trim(), description: description.trim(), tags: tags.split(",").map((tag) => tag.trim()).filter(Boolean), materials }
+            listing: { title: title.trim(), description: description.trim(), tags: tags.split(",").map((tag) => tag.trim()).filter(Boolean), materials },
+            pins: prefill?.pins || []
           }));
           form.append("pdf", { uri: pdf.uri, name: pdf.name || "pattern.pdf", type: "application/pdf" } as any);
           images.forEach((image, index) => form.append("images", { uri: image.uri, name: image.fileName || `render-${index + 1}.jpg`, type: image.mimeType || "image/jpeg" } as any));
@@ -1483,7 +1485,7 @@ function DigitalPanel({ online, shopReady, prefill, onPrefillUsed }: any) {
         try {
           const result = await apiJson(`/api/digital/products/${product.id}/etsy-draft`, { method: "POST", headers: apiHeaders(true), body: JSON.stringify({ confirm: true }) });
           await load();
-          Alert.alert("Etsy taslağı hazır", "Taslağı açıp yapay zekâ kutusunu, kategoriyi ve fiyatı kontrol ettikten sonra yayınlayın.", [{ text: "Taslağı aç", onPress: () => openUrl(result.editUrl, "Etsy taslak ilanı") }, { text: "Tamam" }]);
+          Alert.alert("Etsy taslağı hazır", `Taslağı açıp yapay zekâ kutusunu, kategoriyi ve fiyatı kontrol ettikten sonra yayınlayın.${result.pinsQueued ? `\n\nPinterest: ${result.pinsQueued} pin planlandı; ilan yayına girince satış linkiyle otomatik atılacak.` : ""}`, [{ text: "Taslağı aç", onPress: () => openUrl(result.editUrl, "Etsy taslak ilanı") }, { text: "Tamam" }]);
         } catch (error) { Alert.alert("Etsy taslağı oluşturulamadı", errorText(error)); await load(); }
         finally { setBusy(undefined); }
       } }
@@ -1525,6 +1527,98 @@ function DigitalPanel({ online, shopReady, prefill, onPrefillUsed }: any) {
   </>;
 }
 
+const PIN_STATUS: Record<string, string> = { scheduled: "Zamanlandı", waiting_listing: "Etsy'de yayına girmesi bekleniyor", posted: "Pinlendi", failed: "Hata" };
+
+// Pinterest: Etsy ilanı yayına girince ilanın görseli ve satış linkiyle otomatik pin atılır.
+function PinterestPanel({ online }: any) {
+  const [status, setStatus] = useState<any>();
+  const [jobs, setJobs] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [listingUrl, setListingUrl] = useState("");
+  const [customLink, setCustomLink] = useState("");
+  const [busy, setBusy] = useState<string>();
+  const load = async () => {
+    setLoading(true);
+    try {
+      const [nextStatus, queue] = await Promise.all([apiJson("/api/pinterest/status", { headers: apiHeaders() }), apiJson("/api/pinterest/queue", { headers: apiHeaders() })]);
+      setStatus(nextStatus);
+      setJobs(queue.jobs || []);
+    } catch (error) { Alert.alert("Pinterest durumu alınamadı", errorText(error)); }
+    finally { setLoading(false); }
+  };
+  useEffect(() => { if (online) load(); }, [online]);
+  const connect = async () => {
+    try {
+      const session = await apiJson("/api/pinterest/connect-session", { method: "POST", headers: apiHeaders(true), body: "{}" });
+      await openUrl(session.authorizationUrl, "Pinterest bağlantısı");
+    } catch (error) { Alert.alert("Bağlantı başlatılamadı", errorText(error)); }
+  };
+  const toggleAuto = async (value: boolean) => {
+    try {
+      const result = await apiJson("/api/pinterest/settings", { method: "POST", headers: apiHeaders(true), body: JSON.stringify({ auto: value }) });
+      setStatus((current: any) => ({ ...current, settings: result.settings }));
+    } catch (error) { Alert.alert("Ayar kaydedilemedi", errorText(error)); }
+  };
+  const queueListing = async () => {
+    if (!listingUrl.trim()) return Alert.alert("Etsy ilanı", "Etsy ilan linkini veya ilan numarasını girin.");
+    setBusy("queue");
+    try {
+      const result = await apiJson("/api/pinterest/queue", { method: "POST", headers: apiHeaders(true), body: JSON.stringify({ confirm: true, listingUrl: listingUrl.trim(), link: customLink.trim() || undefined }) });
+      Alert.alert(result.alreadyQueued ? "Zaten planlı" : "Pinler planlandı", result.alreadyQueued ? "Bu ilan için pinler zaten sırada." : "3 pin 0., 2. ve 5. günlerde atılacak. İlan Etsy'de yayında değilse yayına girmesi beklenir.");
+      setListingUrl("");
+      setCustomLink("");
+      await load();
+    } catch (error) { Alert.alert("Planlanamadı", errorText(error)); }
+    finally { setBusy(undefined); }
+  };
+  const runNow = async (job: any) => {
+    setBusy(job.id);
+    try {
+      const result = await apiJson(`/api/pinterest/queue/${job.id}/run`, { method: "POST", headers: apiHeaders(true), body: JSON.stringify({ confirm: true }) });
+      if (result.skipped) Alert.alert("Gönderilemedi", result.skipped === "not_connected" ? "Önce Pinterest hesabını bağlayın." : "Pinterest veya Etsy anahtarları sunucuda eksik.");
+      else Alert.alert(result.status === "posted" ? "Pinlendi" : PIN_STATUS[result.status] || "Durum", result.status === "posted" ? "Pin satış linkiyle oluşturuldu." : result.error || "");
+      await load();
+    } catch (error) { Alert.alert("Gönderilemedi", errorText(error)); }
+    finally { setBusy(undefined); }
+  };
+  const dateText = (value: string) => new Date(value).toLocaleString("tr-TR", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+  return <>
+    <View style={styles.guardrail}><Ionicons name="logo-pinterest" size={20} color="#B5333D" /><Text style={[styles.guardrailText, { flex: 1 }]}>Etsy taslağı oluşan her ürün için 3 pin planlanır. İlan Etsy'de yayına girince pinler ilanın görseli, satış linki, başlığı, açıklaması, anahtar kelimeleri ve hashtag'leriyle 0., 2. ve 5. günlerde otomatik atılır.</Text></View>
+    {loading && <ActivityIndicator color="#C88B47" />}
+    {status && !status.configured && <Text style={styles.shopierBlocker}>Pinterest uygulama anahtarları (PINTEREST_APP_ID ve PINTEREST_APP_SECRET) sunucuya eklenmedi. Adımlar: Kılavuz → Pinterest.</Text>}
+    {status && <View style={styles.card}>
+      <View style={styles.shopierProductTop}>
+        <View style={{ flex: 1 }}><Text style={styles.cardTitle}>Pinterest hesabı</Text><Text style={styles.small}>{status.connected ? `Bağlı${status.username ? ` · @${status.username}` : ""}` : "Bağlı değil"}</Text></View>
+        <Pressable style={[styles.secondaryButton, !status.configured && styles.primaryDisabled]} disabled={!status.configured || !online} onPress={connect}><Text style={styles.secondaryButtonText}>{status.connected ? "Yeniden bağla" : "Bağla"}</Text></Pressable>
+      </View>
+      <Toggle label="Etsy taslağı oluşan her ürünü otomatik pinle (satış linkiyle)" value={status.settings?.auto !== false} onChange={toggleAuto} />
+      <Text style={styles.small}>Zamanlandı {status.queue?.scheduled || 0} · Yayın bekleniyor {status.queue?.waiting || 0} · Pinlendi {status.queue?.posted || 0} · Hata {status.queue?.failed || 0}</Text>
+      <Text style={styles.warningText}>{status.note}</Text>
+    </View>}
+    <View style={styles.analysisCard}>
+      <Text style={styles.cardTitle}>Mevcut bir Etsy ilanını pinle</Text>
+      <Field label="Etsy ilan linki veya numarası" value={listingUrl} onChangeText={setListingUrl} placeholder="https://www.etsy.com/listing/1234567890/..." autoCapitalize="none" />
+      <Field label="Farklı satış linki (isteğe bağlı, ör. Shopier)" value={customLink} onChangeText={setCustomLink} placeholder="Boşsa Etsy ilan linki kullanılır" autoCapitalize="none" />
+      <Pressable style={[styles.analyzeButton, (busy === "queue" || !online) && styles.primaryDisabled]} disabled={busy === "queue" || !online} onPress={queueListing}>{busy === "queue" ? <ActivityIndicator color="white" /> : <Ionicons name="logo-pinterest" size={18} color="white" />}<Text style={styles.primaryText}>3 pin planla</Text></Pressable>
+    </View>
+    <View style={styles.sectionHeading}><Text style={styles.sectionTitle}>Pin sırası</Text><Pressable style={styles.secondaryButton} disabled={loading || !online} onPress={load}><Text style={styles.secondaryButtonText}>Yenile</Text></Pressable></View>
+    {!loading && !jobs.length && <Empty icon="logo-pinterest" title="Henüz pin yok" text="Stüdyo'da hazırladığınız ürünü Dijital bölümünden Etsy taslağına gönderdiğinizde pinler buraya otomatik eklenir." />}
+    {jobs.map((job) => <View style={styles.card} key={job.id}>
+      <Text style={styles.cardTitle} numberOfLines={2}>{job.listingTitle || `Etsy ilanı #${job.listingId}`}</Text>
+      <Text style={styles.small}>Pin {job.pinIndex + 1}/3 · {job.boardName}{job.link ? " · özel satış linki" : ""}</Text>
+      <Text style={[styles.trendVerdict, job.status === "failed" && { color: "#A83232" }]}>{PIN_STATUS[job.status] || job.status}{job.status !== "posted" ? ` · ${dateText(job.dueAt)}` : ""}</Text>
+      {!!job.pin?.title && <Text style={styles.evidence}>Başlık: {job.pin.title}</Text>}
+      {!!job.error && job.status !== "posted" && <Text style={styles.warningText}>{job.error}</Text>}
+      <View style={styles.inlineActions}>
+        {job.status === "posted" && job.pinUrl
+          ? <Pressable style={styles.secondaryButton} onPress={() => openUrl(job.pinUrl, "Pinterest pini")}><Text style={styles.secondaryButtonText}>Pini aç</Text></Pressable>
+          : <Pressable style={[styles.secondaryButton, (busy === job.id || !online) && styles.primaryDisabled]} disabled={busy === job.id || !online} onPress={() => runNow(job)}><Text style={styles.secondaryButtonText}>{busy === job.id ? "Gönderiliyor…" : "Şimdi gönder"}</Text></Pressable>}
+        <Pressable style={styles.secondaryButton} onPress={() => openUrl(`https://www.etsy.com/listing/${job.listingId}`, "Etsy ilanı")}><Text style={styles.secondaryButtonText}>Etsy ilanı</Text></Pressable>
+      </View>
+    </View>)}
+  </>;
+}
+
 const ETSY_GUIDE: Array<{ id: string; title: string; icon: any; steps: string[] }> = [
   { id: "daily", title: "Her gün 10 dakika", icon: "today-outline", steps: [
     "Uygulama Etsy sekmesiyle açılır. Trend → PDF ürünleri'ndeki 'İlgi sıralaması'na ve Keşfedilenler'e bakın. Sunucu siz uygulamayı açmasanız da her 30 dakikada bir Etsy'yi tarar.",
@@ -1563,6 +1657,16 @@ const ETSY_GUIDE: Array<{ id: string; title: string; icon: any; steps: string[] 
     "Düzenli yeni ürün ekleyin: yeni ilanlar aramada kısa süreli görünürlük kazanır ve mağazanız daha çok aramada yer alır.",
     "Marka, karakter ve ünlü adı kullanmayın; sistem bu kelimeleri ilanlarınızdan otomatik çıkarır. İhlal, ilan kaldırma ve mağaza kapanmasının en sık nedenidir.",
     "PDF'in içine 'Nasıl yazdırılır' sayfası ve teşekkür sayfası koyun; satıştan sonra kısa bir teşekkür mesajı gönderin. Etsy kuralları gereği yorum karşılığında indirim veya hediye vermeyin."
+  ] },
+  { id: "pinterest", title: "Pinterest otomatik pin (kurulum ve kullanım)", icon: "logo-pinterest", steps: [
+    "pinterest.com/business adresinden ücretsiz bir Pinterest işletme hesabı açın (veya mevcut hesabınızı işletme hesabına çevirin).",
+    "developers.pinterest.com → My apps → Connect app ile uygulama oluşturun. Redirect URI olarak şunu ekleyin: https://gxl-akilli-satici-api.gxl-marketstudio.workers.dev/pinterest/oauth/callback",
+    "Uygulamanın App ID ve App secret değerlerini Cloudflare → Workers → gxl-akilli-satici-api → Settings → Variables and Secrets bölümüne PINTEREST_APP_ID ve PINTEREST_APP_SECRET adıyla gizli değer olarak ekleyin. Bu değerleri sohbete veya uygulamaya yazmayın.",
+    "Uygulamada Etsy → Pinterest → 'Bağla' ile hesabı bağlayın ve 'otomatik pinle' anahtarını açık bırakın.",
+    "Yeni Pinterest uygulamaları 'Trial access' ile başlar; bu aşamada pinleri yalnızca siz görürsünüz. Herkese açık pin için developers.pinterest.com'da uygulamanızdan Standard access başvurusu yapın. Başvuruya bağlanma ekranını ve bir pinin oluşturulup panoda göründüğünü gösteren kısa bir ekran kaydı ekleyin; bu uygulamanın Pinterest bölümü bunu göstermek için yeterlidir.",
+    "Sonrası otomatiktir: Etsy taslağı oluşan her ürün için 3 pin planlanır; ilan Etsy'de yayına girince pinler ilanın görseli, satış linki, başlığı, açıklaması, anahtar kelimeleri ve hashtag'leriyle 0., 2. ve 5. günlerde atılır. Pinler ürün türüne göre otomatik açılan panolara (ör. 'Printable Planners & Trackers') eklenir.",
+    "Pinterest'te ayrı bir etiket alanı yoktur; aramada bulunmayı başlıktaki, açıklamadaki ve alt metindeki anahtar kelimeler ile pano adı sağlar. Etsy etiketlerinden en fazla 5 hashtag açıklamanın sonuna eklenir; marka/telif riski taşıyanlar eklenmez.",
+    "Mevcut bir Etsy ilanını da pinleyebilirsiniz: Pinterest bölümüne ilan linkini yapıştırın; isterseniz Shopier gibi farklı bir satış linki girin."
   ] },
   { id: "pattern", title: "El işi deseni satışı adım adım", icon: "document-text-outline", steps: [
     "Trend'de bir desen araması açın → 'Bu nişte desen hazırla'.",
@@ -1717,7 +1821,7 @@ function EtsyProductPlanner({ product, etsyReady, onClose }: any) {
         try {
           const result = await apiJson("/api/products/etsy-draft", { method: "POST", headers: apiHeaders(true), body: JSON.stringify({ confirm: true, product: payload, listing: { title, tags: tags.split(",").map((tag) => tag.trim()).filter(Boolean), description: plan.description, materials: plan.materials, priceUsd: Number(priceUsd.replace(",", ".")) } }) });
           setDraft(result);
-          Alert.alert(result.alreadyCreated ? "Taslak zaten var" : "Etsy taslağı hazır", [...(result.warnings || []), "Taslağı kontrol ettikten sonra 'Etsy'de yayınla' düğmesine basın."].join("\n"), [{ text: "Taslağı aç", onPress: () => openUrl(result.editUrl, "Etsy taslak ilanı") }, { text: "Tamam" }]);
+          Alert.alert(result.alreadyCreated ? "Taslak zaten var" : "Etsy taslağı hazır", [...(result.warnings || []), "Taslağı kontrol ettikten sonra 'Etsy'de yayınla' düğmesine basın.", ...(result.pinsQueued ? [`Pinterest: ${result.pinsQueued} pin planlandı; ilan yayına girince satış linkiyle otomatik atılacak.`] : [])].join("\n"), [{ text: "Taslağı aç", onPress: () => openUrl(result.editUrl, "Etsy taslak ilanı") }, { text: "Tamam" }]);
         } catch (error) { Alert.alert("Taslak oluşturulamadı", errorText(error)); }
         finally { setSaving(false); }
       } }
@@ -1971,7 +2075,7 @@ const styles = StyleSheet.create({
   segment: { flexDirection: "row", backgroundColor: "#E7E3D9", borderRadius: 13, padding: 4, marginBottom: 14 },
   segmentItem: { flex: 1, alignItems: "center", paddingVertical: 9, borderRadius: 10 },
   segmentActive: { backgroundColor: "white" },
-  segmentText: { color: "#68736E", fontWeight: "800", fontSize: 12 },
+  segmentText: { color: "#68736E", fontWeight: "800", fontSize: 11 },
   segmentTextActive: { color: "#17221E" },
   scoreBadge: { minWidth: 46, height: 46, borderRadius: 23, alignItems: "center", justifyContent: "center", paddingHorizontal: 6 },
   scoreHigh: { backgroundColor: "#DDF3E5" },

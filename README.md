@@ -66,6 +66,7 @@ Depodaki `GXL Android APK` iş akışı `main` dalına yapılan her mobil uygula
 - Etsy trend radarı: hobi deseni, tesbih/gümüş ve vintage nişlerini Etsy resmî aramasıyla 0–100 arası puanlama
 - Otomatik keşif (otopilot): her 30 dakikada bir Etsy taraması; yeni ilanlarda yükselen etiketlerden yeni arama ifadeleri çıkarıp takibe alma
 - Uygulama içi Etsy kullanım kılavuzu (Etsy → Kılavuz)
+- Pinterest otomatik pin: Etsy'de yayına giren her ürün; satış linki, ilan görseli, başlık, açıklama, anahtar kelimeler ve hashtag'lerle 3 pin olarak günlere yayılıp otomatik pinlenir (`docs/PINTEREST_TR.md`)
 - PDF ürün stüdyosu: 9 PDF türü için ilgi sıralaması, veriye dayalı "öne geçme" önerileri (format boşluğu, paket, fiyat, yükselen özellikler), marka/telif koruması, türe özel PDF promptu, sayfa görseli promptları, kullanım yerini gösteren reklam tadında 10 görsel, Pinterest pinleri ve paket fikri (`docs/PDF_URUN_STUDYOSU_TR.md`)
 - Desen stüdyosu: sistemin seçtiği desen adı, referanstan farklılaştırma planı, Claude/ChatGPT PDF promptu, 3D render promptu ve Etsy kurallarına uygun başlık ile 13 etiket
 - ABD sezon fırsatları: yaklaşan alışveriş dönemleri, son listeleme tarihleri ve dönemlik arama puanları

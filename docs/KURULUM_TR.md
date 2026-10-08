@@ -39,8 +39,9 @@ Shopier bu sistemde ödeme/sipariş hedefidir; ajan ödeme kartı verisi almaz.
 1. **Etsy önceliklidir.** Uygulama Etsy sekmesiyle açılır. Trend tarama, otomatik keşif ve desen stüdyosu mağaza açılmadan çalışır. Mağaza kurulumu ödeme düğmesine kadar hazırlanır; nihai kurulum ücreti ve mağaza açma işlemi yalnızca hesap sahibi tarafından yapılır. Adım adım liste ve ilk ilan taslağı: `docs/ETSY_MAGAZA_ACILISI_TR.md`; kopyala-yapıştır mağaza metinleri: `docs/ETSY_MAGAZA_METINLERI.md`.
 2. Etsy mağazası hobi PDF desenleri (`docs/DIJITAL_DESEN_SATISI_TR.md`), tesbih ve gümüş ürünler ve vintage ürünler (`docs/ETSY_URUN_STUDYOSU_TR.md`) satar. Mağaza açılıp Etsy OAuth bağlandıktan sonra uygulama ilanları taslak olarak gönderir; fiziksel ürünler tek onayla uygulamadan yayınlanır.
 3. **Otomatik keşif:** `wrangler.jsonc` içindeki `triggers.crons` (`*/30 * * * *`) Workers Builds ile birlikte yayınlanır; ek ayar gerekmez. Cloudflare panelinde Worker → Settings → Trigger Events altında görünür. Ücretsiz planda çalışır.
-4. Shopier ikinci kanal olarak canlı satış merkezi görevini sürdürür.
-5. Letgo ücretli ilan nedeniyle beklemede kalır; Meta/WhatsApp/Instagram sonraki aşamadır.
+4. **Pinterest otomatik pin:** Cloudflare'a `PINTEREST_APP_ID` ve `PINTEREST_APP_SECRET` gizli değerleri eklenip uygulamadan hesap bağlanınca, Etsy'de yayına giren ürünler satış linkiyle otomatik pinlenir. Adımlar ve Standard access başvurusu: `docs/PINTEREST_TR.md`.
+5. Shopier ikinci kanal olarak canlı satış merkezi görevini sürdürür.
+6. Letgo ücretli ilan nedeniyle beklemede kalır; Meta/WhatsApp/Instagram sonraki aşamadır.
 
 ## 3. Letgo
 

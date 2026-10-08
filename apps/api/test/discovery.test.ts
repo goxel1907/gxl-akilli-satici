@@ -195,5 +195,5 @@ test("scheduled worker event runs the autopilot in the background", async () => 
   const pending: Array<Promise<unknown>> = [];
   worker.scheduled({}, {} as never, { waitUntil: (promise) => { pending.push(promise); } });
   assert.equal(pending.length, 1);
-  assert.deepEqual(await pending[0], { skipped: true });
+  assert.deepEqual(await pending[0], { autopilot: { skipped: true }, pinterest: { skipped: "not_configured" } });
 });

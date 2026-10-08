@@ -31,6 +31,22 @@ import { buildPatternBrief, createDigitalListing, normalizeDigitalListingInput, 
 import { createPatternSeed, readUsedNames, rememberName } from "./pattern-seed.js";
 import { buildPrintableBrief, createPrintableListing, normalizePrintablePlanInput } from "./printable-studio.js";
 import {
+  autoEnqueuePins,
+  boardNameFor,
+  createPinterestConnectSession,
+  disconnectPinterest,
+  enqueueListingPins,
+  getPinterestStatus,
+  handlePinterestCallback,
+  listPinJobs,
+  parseListingId,
+  PinterestError,
+  processPinQueue,
+  writePinterestSettings,
+  type PinterestRuntimeEnv,
+  type PinterestStore
+} from "./pinterest.js";
+import {
   createDigitalProduct,
   createEtsyDigitalDraft,
   createGrant,
@@ -44,7 +60,7 @@ import {
   type DigitalStore
 } from "./digital-delivery.js";
 
-interface Env extends AiRuntimeEnv, ShopierRuntimeEnv, EtsyRuntimeEnv {
+interface Env extends AiRuntimeEnv, ShopierRuntimeEnv, EtsyRuntimeEnv, PinterestRuntimeEnv {
   APP_ACCESS_TOKEN?: string;
   PRODUCT_MEDIA?: {
     get(key: string): Promise<{ body: ReadableStream; httpEtag?: string } | null>;
@@ -367,6 +383,7 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
     }
     if (request.method === "GET" && url.pathname === "/setup/shopier-webhooks") return shopierWebhookSetupPage();
     if (request.method === "GET" && url.pathname === "/etsy/oauth/callback") return await handleEtsyCallback(request, env);
+    if (request.method === "GET" && url.pathname === "/pinterest/oauth/callback") return await handlePinterestCallback(request, env);
     if (request.method === "GET" && (url.pathname.startsWith("/media/shopier/") || url.pathname.startsWith("/media/digital/"))) {
       if (!productMediaStorage(env)) return json(404, { error: "Ürün görseli bulunamadı." });
       const key = url.pathname.slice("/media/".length);
@@ -478,6 +495,45 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
       return json(200, { brief, listing: await createPrintableListing(input, brief.name, env) });
     }
 
+    if (request.method === "GET" && url.pathname === "/api/pinterest/status") return json(200, await getPinterestStatus(env));
+    if (request.method === "POST" && url.pathname === "/api/pinterest/connect-session") return json(200, await createPinterestConnectSession(request, env));
+    if (request.method === "POST" && url.pathname === "/api/pinterest/settings") {
+      if (!env.ETSY_OAUTH) return json(503, { error: "Güvenli KV deposu bağlı değil." });
+      return json(200, { settings: await writePinterestSettings(env.ETSY_OAUTH as unknown as PinterestStore, await readBody(request)) });
+    }
+    if (request.method === "POST" && url.pathname === "/api/pinterest/disconnect") {
+      const input = await readBody(request);
+      const blocked = requireConfirmedWrite(env, input, "Pinterest bağlantısını kaldırma");
+      if (blocked) return blocked;
+      if (env.ETSY_OAUTH) await disconnectPinterest(env.ETSY_OAUTH as unknown as PinterestStore);
+      return json(200, { disconnected: true });
+    }
+    if (request.method === "GET" && url.pathname === "/api/pinterest/queue") {
+      const jobs = await listPinJobs(env.ETSY_OAUTH as unknown as PinterestStore | undefined);
+      return json(200, { jobs: [...jobs].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)).slice(0, 60) });
+    }
+    if (request.method === "POST" && url.pathname === "/api/pinterest/queue") {
+      const input = await readBody(request);
+      const blocked = requireConfirmedWrite(env, input, "Pinterest pin planlama");
+      if (blocked) return blocked;
+      if (!env.ETSY_OAUTH) return json(503, { error: "Güvenli KV deposu bağlı değil." });
+      const listingId = parseListingId(input.listingId ?? input.listingUrl);
+      if (!listingId) return json(400, { error: "Geçerli bir Etsy ilan linki veya numarası girin." });
+      const jobs = await enqueueListingPins(env.ETSY_OAUTH as unknown as PinterestStore, {
+        listingId,
+        boardName: String(input.boardName || "").trim() || "GXL Market Studio",
+        link: input.link ? String(input.link) : undefined
+      });
+      return json(201, { jobs, alreadyQueued: jobs.length === 0 });
+    }
+    const pinRunMatch = url.pathname.match(/^\/api\/pinterest\/queue\/([A-Za-z0-9_-]{8,32})\/run$/);
+    if (pinRunMatch && request.method === "POST") {
+      const input = await readBody(request);
+      const blocked = requireConfirmedWrite(env, input, "Pini şimdi gönderme");
+      if (blocked) return blocked;
+      return json(200, await processPinQueue(env, env.ETSY_OAUTH as unknown as PinterestStore | undefined, fetch, Date.now(), { jobId: pinRunMatch[1] }));
+    }
+
     if (request.method === "POST" && url.pathname === "/api/products/etsy-keywords") {
       const product = normalizeProductInput(await readBody(request));
       return json(200, await keywordCandidates(product, env));
@@ -522,7 +578,8 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
         materials: Array.isArray(listing.materials) ? listing.materials.map(String) : [],
         priceUsd: Number(listing.priceUsd || 0)
       });
-      return json(result.alreadyCreated ? 200 : 201, result);
+      const pinsQueued = result.alreadyCreated ? 0 : await autoEnqueuePins(env.ETSY_OAUTH as unknown as PinterestStore, { listingId: result.listingId, boardName: boardNameFor({ noun: detectProductSignals(product).noun }), listingTitle: String(listing.title || "") });
+      return json(result.alreadyCreated ? 200 : 201, { ...result, pinsQueued });
     }
 
     if (request.method === "GET" && url.pathname === "/api/digital/products") {
@@ -559,7 +616,14 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
         const media = await getProductMedia(env, key);
         return media ? await new Response(media.body).arrayBuffer() : null;
       });
-      return json(result.alreadyCreated ? 200 : 201, result);
+      const pinsQueued = result.alreadyCreated ? 0 : await autoEnqueuePins(env.ETSY_OAUTH as unknown as PinterestStore, {
+        listingId: result.listingId,
+        boardName: boardNameFor({ kind: result.product.kind, craft: result.product.craft }),
+        pins: result.product.pins,
+        aiAssisted: result.product.flags.aiAssisted && result.product.flags.photosAreRenders,
+        listingTitle: result.product.listing.title
+      });
+      return json(result.alreadyCreated ? 200 : 201, { ...result, pinsQueued });
     }
     const grantRevokeMatch = url.pathname.match(/^\/api\/digital\/grants\/([A-Za-z0-9_-]{32})\/revoke$/);
     if (grantRevokeMatch && request.method === "POST") {
@@ -793,6 +857,7 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
     if (code === "PATTERN_KEYWORD_REQUIRED") return json(400, { error: "Desen için bir Etsy araması seçin." });
     if (code === "PATTERN_PRODUCT_REQUIRED") return json(400, { error: "Ürün türünü yazın (ör. doily, slippers)." });
     if (error instanceof DigitalDeliveryError) return json(error.status, { error: error.message });
+    if (error instanceof PinterestError) return json(error.status, { error: error.message, code: error.code });
     if (error instanceof EtsyIntegrationError) {
       if (error.code === "NOT_CONFIGURED") return json(503, { error: "Etsy keystring ve shared secret henüz sunucuya eklenmedi." });
       if (error.code === "STORAGE_NOT_CONFIGURED") return json(503, { error: "Etsy güvenli token deposu henüz bağlanmadı." });
@@ -814,8 +879,13 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
   }
 }
 
+// Cron: Etsy trend otopilotu ve zamanı gelmiş Pinterest pini aynı tetiklemede çalışır.
 export async function handleScheduled(env: Env) {
-  return await runAutopilot(env, env.ETSY_OAUTH as unknown as TrendStore | undefined);
+  const [autopilot, pinterest] = await Promise.all([
+    runAutopilot(env, env.ETSY_OAUTH as unknown as TrendStore | undefined),
+    processPinQueue(env, env.ETSY_OAUTH as unknown as PinterestStore | undefined).catch((error) => ({ error: error instanceof Error ? error.message : "Pinterest kuyruğu çalışmadı." }))
+  ]);
+  return { autopilot, pinterest };
 }
 
 export default {

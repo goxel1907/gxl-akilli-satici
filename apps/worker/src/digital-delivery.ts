@@ -31,6 +31,7 @@ export interface DigitalProduct {
   fileSize: number;
   images: DigitalImage[];
   listing: { title: string; description: string; tags: string[]; materials: string[] };
+  pins?: Array<{ title: string; description: string; overlay?: string }>;
   prices: { usd?: number; try?: number };
   flags: { aiAssisted: boolean; photosAreRenders: boolean; testMade: boolean };
   etsy?: { listingId: number; editUrl: string; createdAt: string; imagesUploaded: number; fileUploaded: boolean; error?: string };
@@ -173,6 +174,12 @@ export async function createDigitalProduct(store: DigitalStore, form: FormData, 
     images.push({ key, url: `${origin}/media/${key}`, mimeType: type.mimeType, size: bytes.byteLength });
   }
 
+  // Stüdyonun hazırladığı Pinterest pin metinleri ürünle saklanır; pin kuyruğu bunları kullanır.
+  const pins = (Array.isArray(metadata.pins) ? metadata.pins : [])
+    .map((pin) => pin && typeof pin === "object" ? pin as Record<string, unknown> : {})
+    .map((pin) => ({ title: String(pin.title || "").trim().slice(0, 100), description: String(pin.description || "").trim().slice(0, 700), ...(pin.overlay ? { overlay: String(pin.overlay).slice(0, 60) } : {}) }))
+    .filter((pin) => pin.title && pin.description)
+    .slice(0, 3);
   const prices = metadata.prices && typeof metadata.prices === "object" ? metadata.prices as Record<string, unknown> : {};
   const flags = metadata.flags && typeof metadata.flags === "object" ? metadata.flags as Record<string, unknown> : {};
   const product: DigitalProduct = {
@@ -184,6 +191,7 @@ export async function createDigitalProduct(store: DigitalStore, form: FormData, 
     fileSize: pdfBytes.byteLength,
     images,
     listing,
+    ...(pins.length ? { pins } : {}),
     prices: { usd: positivePrice(prices.usd), try: positivePrice(prices.try) },
     flags: { aiAssisted: flags.aiAssisted !== false, photosAreRenders: flags.photosAreRenders !== false, testMade: flags.testMade === true },
     createdAt: new Date().toISOString()

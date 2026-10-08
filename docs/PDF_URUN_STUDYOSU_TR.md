@@ -107,7 +107,7 @@ Size kalan tek şey **Prompt, görsel ve ilanı hazırla** düğmesine basmaktı
    - **Promptlar görselde yazı istemez.** Görsel modelleri yazıyı bozar; görsel üstü yazıyı Canva ile ekleyin.
    - **Gerçek sayfaları referans verin.** Görselleri üretirken bitmiş PDF sayfalarını referans görsel olarak yükleyin; mockup gerçek ürünü göstermelidir.
    - **El işi desenleri de aynı seti alır.** Desen stüdyosunda bitmiş ürün kullanım sahneleri (giyilmiş hırka, pazarda çanta vb.) üretilir.
-5. **Pinterest pinleri:** Üç pin. Başlıklar sabit sloganlardan değil, o aramanın alıcı ifadelerinden ve ürünün trend özelliklerinden kurulur.
+5. **Pinterest pinleri:** Üç pin. Başlıklar sabit sloganlardan değil, o aramanın alıcı ifadelerinden ve ürünün trend özelliklerinden kurulur. Ürün yüklenince bu metinler saklanır; Etsy ilanı yayına girince satış linkiyle otomatik pinlenir (bkz. [PINTEREST_TR.md](PINTEREST_TR.md)).
 6. **Paket fikri:** Trend etiketlerindeki tamamlayıcı ürünlerden bir set ve set fiyatı önerisi.
 7. **Kalite kapısı:** Letter ve A4'te %100 test baskısı, yazım denetimi, font lisansı, marka kontrolü ve Etsy dosya sınırları (en fazla 5 dosya, her biri 20 MB).
 8. **Etsy ilanı:**
