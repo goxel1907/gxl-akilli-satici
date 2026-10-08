@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, Alert, AppState, Image, Linking, Modal, Pressable, SafeAreaView, ScrollView, Share, StatusBar, StyleSheet, Text, TextInput, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -1073,7 +1073,7 @@ function CompetitionCard({ competition }: any) {
   return <View style={styles.adviceBox}>
     <Text style={styles.cardTitle}>Rakipleri geçmek için</Text>
     {!!competition.launchPriceUsd && <Text style={styles.listingTitle}>Önerilen fiyat: {competition.launchPriceUsd.toFixed(2)} USD · set: {competition.bundlePriceUsd?.toFixed(2)} USD</Text>}
-    {competition.planTr.map((line: string) => <Text style={styles.analysisLine} key={line}>• {line}</Text>)}
+    {(competition.planTr || []).map((line: string) => <Text style={styles.analysisLine} key={line}>• {line}</Text>)}
     {!!competition.topCompetitors?.length && <>
       <Text style={styles.warningTitle}>Geçilecek rakipler</Text>
       {competition.topCompetitors.map((item: any, index: number) => <Text style={styles.small} key={`${item.title}-${index}`}>{item.favorites} favori · {item.ageDays} gün{item.priceUsd ? ` · ${item.priceUsd.toFixed(2)} USD` : ""} · {item.title}</Text>)}
@@ -1221,12 +1221,16 @@ function StudioPanel({ online, active, seed, onUpload }: any) {
   const [initialized, setInitialized] = useState(false);
   // Trendden gelindiğinde tüm alanlar sunucunun trend verisinden çıkardığı değerlerle dolar; her çağrı yeni bir kombinasyon getirir.
   // Arama verilmezse (Stüdyo doğrudan açıldığında veya tür seçildiğinde) sunucu o türde en güçlü trendi kendisi seçer.
+  // Art arda dokunuşlarda yalnızca en son isteğin yanıtı uygulanır; geç dönen eski yanıt yeni seçimi ezmez.
+  const seedRequest = useRef(0);
   const fillFromTrend = async (source: any) => {
     if (!source?.keyword && !source?.studio) return;
+    const requestId = ++seedRequest.current;
     setSeeding(true);
     setPlan(undefined);
     try {
       const filled = await apiJson("/api/patterns/seed", { method: "POST", headers: apiHeaders(true), body: JSON.stringify({ keyword: source.keyword, craft: source.craft, group: source.group, kind: source.kind, studio: source.studio }) });
+      if (requestId !== seedRequest.current) return;
       if (filled.studio === "printable") {
         setPrintableSeed(filled);
         setMode("printable");
@@ -1249,6 +1253,7 @@ function StudioPanel({ online, active, seed, onUpload }: any) {
       setCompetition(filled.competition);
       setFromTrend(true);
     } catch (error) {
+      if (requestId !== seedRequest.current) return;
       if (source.group === "printables" || source.studio === "printable") {
         setPrintableSeed({ kind: source.kind || "planner", productType: source.productType || "", keyword: source.keyword || "", trendTags: source.trendTags || [], basis: [] });
         setMode("printable");
@@ -1261,7 +1266,7 @@ function StudioPanel({ online, active, seed, onUpload }: any) {
       setTrendTags(source.trendTags || []);
       setFromTrend(false);
       Alert.alert("Trend verisi alınamadı", `${errorText(error)}\nAlanları elle tamamlayabilirsiniz.`);
-    } finally { setSeeding(false); }
+    } finally { if (requestId === seedRequest.current) setSeeding(false); }
   };
   useEffect(() => { if (seed) { setInitialized(true); fillFromTrend(seed); } }, [seed]);
   // Stüdyo ilk kez açıldığında boş kalmasın: seçili modda en güçlü trend otomatik doldurulur.
@@ -1275,9 +1280,10 @@ function StudioPanel({ online, active, seed, onUpload }: any) {
     if (next === "printable" && !printableSeed) fillFromTrend({ studio: "printable" });
     if (next === "pattern" && !fromTrend && !productType) fillFromTrend({ studio: "pattern" });
   };
+  // Kendi modelinizle çalışırken el işi türünü değiştirmek girdiklerinizi trend verisiyle ezmez.
   const changeCraft = (next: string) => {
     setCraft(next);
-    fillFromTrend({ studio: "pattern", craft: next });
+    if (fromTrend || !productType.trim()) fillFromTrend({ studio: "pattern", craft: next });
   };
   const useOwnModel = () => {
     setFromTrend(false);

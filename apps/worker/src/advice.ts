@@ -17,7 +17,8 @@ export const RELEVANT_FORMATS: Record<PrintableKind | "pattern", string[]> = {
   journal: ["letter", "a5", "tablet", "printer_friendly"],
   kids: ["letter", "a4", "printer_friendly"],
   paper_craft: ["commercial", "scrapbook_size", "letter"],
-  pattern: ["video", "letter", "a4"]
+  // Desen PDF'leri zaten Letter ve A4'e uygun hazırlanır; desende anlamlı boşluk video eğitimdir.
+  pattern: ["video"]
 };
 
 const percent = (value: number) => `%${Math.round(value * 100)}`;
