@@ -147,3 +147,54 @@ test("printable plan endpoint and kind-aware digital products", async () => {
   const fetcher = (async () => Response.json({ results: [{ id: 1, name: "Paper & Party Supplies", children: [{ id: 2, name: "Paper", children: [{ id: 3, name: "Calendars & Planners", children: [] }] }] }] })) as typeof fetch;
   assert.equal(await findKindTaxonomyId({ ETSY_API_KEY: "key", ETSY_SHARED_SECRET: "secret" }, "planner", store, fetcher), 3);
 });
+
+test("studio auto-picks the strongest search for a kind and fills a competitive plan", async () => {
+  const { createPatternSeed } = await import("../../worker/src/pattern-seed.js");
+  const values = new Map<string, string>();
+  const store = { async get(key: string) { return values.get(key) ?? null; }, async put(key: string, value: string) { values.set(key, value); }, async delete(key: string) { values.delete(key); } };
+  const junkPayload = { count: 64_000, results: [
+    listing("Enchanted Moss Junk Journal Kit, Dark Academia Grimoire, Botanical Ephemera", ["junk journal kit", "dark academia", "botanical ephemera", "crafters gift"], 253, 40, 546),
+    listing("Vintage Soda Fountain Junk Journal Kit 60 pages", ["junk journal kit", "vintage ephemera", "junk journal"], 200, 60, 260),
+    listing("Botanical Junk Journal Kit for crafters 60 pages", ["botanical journal", "junk journal kit", "crafters gift"], 150, 30, 450),
+    listing("Halloween Junk Journal Kit 40 pages", ["junk journal kit", "halloween ephemera"], 62, 80, 373)
+  ] };
+  const junk = { ...scoreTrend("junk journal kit", junkPayload, Date.now(), "printables"), nicheId: "junk-journal", kind: "paper_craft" };
+  const paper = { ...scoreTrend("digital paper pack", { count: 90_000, results: [listing("Digital Paper Pack", ["digital paper"], 5, 900, 300)] }, Date.now(), "printables"), kind: "paper_craft" };
+  values.set("etsy:trend:junk-journal-kit", JSON.stringify(junk));
+  values.set("etsy:trend:digital-paper-pack", JSON.stringify(paper));
+
+  const first = await createPatternSeed({}, store, { studio: "printable", kind: "paper_craft" });
+  assert.equal(first.studio, "printable");
+  assert.equal(first.kind, "paper_craft");
+  assert.equal(first.keyword, junk.score >= paper.score ? "junk journal kit" : "digital paper pack");
+  assert.match(first.basis[0], /^Otomatik seçilen arama/);
+  assert.equal(first.audience, "crafters");
+  assert.ok(first.competition.launchPriceUsd! < first.competition.medianPriceUsd!);
+  assert.ok(first.competition.bundlePriceUsd! > first.competition.medianPriceUsd!);
+  assert.ok(first.competition.ourPages! > first.competition.competitorPages!);
+  assert.ok(first.competition.planTr.some((line) => line.startsWith("Fiyat:")));
+  assert.match(first.referenceNotes, /To outsell the top listings/);
+  assert.ok(!first.formats.some((format) => /lisans/.test(format)));
+  const second = await createPatternSeed({}, store, { studio: "printable", kind: "paper_craft" });
+  assert.notEqual(second.keyword, first.keyword);
+
+  const pattern = await createPatternSeed({}, store, { studio: "pattern", craft: "sewing" });
+  assert.equal(pattern.studio, "pattern");
+  assert.ok(["sewing pattern pdf", "quilt pattern pdf"].includes(pattern.keyword));
+  await assert.rejects(createPatternSeed({}, store, {}), /PATTERN_KEYWORD_REQUIRED/);
+});
+
+test("an unscanned printable search is scanned as a printable, with a style-matched palette", async () => {
+  const { createPatternSeed } = await import("../../worker/src/pattern-seed.js");
+  const values = new Map<string, string>();
+  const store = { async get(key: string) { return values.get(key) ?? null; }, async put(key: string, value: string) { values.set(key, value); }, async delete(key: string) { values.delete(key); } };
+  const fetcher = (async () => Response.json({ count: 3_000, results: [
+    listing("Dark Academia Wedding Shower Games Bundle", ["wedding shower games", "dark academia", "bridal games"], 120, 30, 899),
+    listing("Gothic Wedding Shower Games Printable", ["wedding shower games", "dark academia", "gothic wedding"], 80, 50, 799)
+  ] })) as typeof fetch;
+  const seed = await createPatternSeed({ ETSY_API_KEY: "key", ETSY_SHARED_SECRET: "secret" }, store, { keyword: "wedding shower games" }, fetcher);
+  assert.equal(seed.studio, "printable");
+  assert.equal(seed.kind, "party");
+  assert.ok([["burgundy", "forest green", "gold"], ["plum", "olive", "cream"], ["charcoal", "wine", "camel"]].some((palette) => palette.join() === seed.colors.join()));
+  assert.equal(JSON.parse(values.get("etsy:trend:wedding-shower-games")!).group, "printables");
+});

@@ -7,7 +7,7 @@ export interface TrendAdvice {
 }
 
 // Hangi format o PDF türünde alıcı için önemli: rakiplerde az görülen önemli format bir boşluktur.
-const RELEVANT_FORMATS: Record<PrintableKind | "pattern", string[]> = {
+export const RELEVANT_FORMATS: Record<PrintableKind | "pattern", string[]> = {
   planner: ["letter", "a4", "a5", "half_letter", "printer_friendly", "tablet"],
   digital_planner: ["tablet", "letter"],
   coloring: ["letter", "a4", "printer_friendly"],

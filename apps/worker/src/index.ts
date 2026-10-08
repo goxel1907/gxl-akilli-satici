@@ -476,7 +476,8 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
 
     if (request.method === "POST" && url.pathname === "/api/patterns/seed") {
       const input = await readBody(request);
-      return json(200, await createPatternSeed(env, env.ETSY_OAUTH as unknown as TrendStore | undefined, { keyword: String(input.keyword || ""), craft: input.craft ? String(input.craft) : undefined }));
+      const text = (value: unknown) => value ? String(value) : undefined;
+      return json(200, await createPatternSeed(env, env.ETSY_OAUTH as unknown as TrendStore | undefined, { keyword: text(input.keyword), craft: text(input.craft), group: text(input.group), kind: text(input.kind), studio: text(input.studio) }));
     }
     if (request.method === "POST" && url.pathname === "/api/patterns/plan") {
       const input = await readBody(request);
