@@ -1,5 +1,6 @@
 // Pinterest (ve diğer platform) uygulama başvurularında istenen herkese açık gizlilik politikası.
 const CONTACT_EMAIL = "gxl.marketstudio@gmail.com";
+export const PRIVACY_PATHS = new Set(["/privacy", "/gxlmarketstudio/privacy", "/gxlmarketstudio/privacy-policy", "/gxlmarketstudio-privacy-policy", "/gxl-market-studio/privacy", "/gxl-market-studio/privacy-policy"]);
 
 export function privacyPolicyPage(): Response {
   const updated = "2026-10-08";

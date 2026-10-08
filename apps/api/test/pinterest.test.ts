@@ -160,4 +160,7 @@ test("public privacy policy page explains Pinterest data use without app authent
   assert.match(html, /Privacy Policy/);
   assert.match(html, /Pinterest/);
   assert.match(html, /disconnect/i);
+  for (const path of ["/GXLMarketStudio/privacy-policy", "/gxl-market-studio/privacy", "/GXLMarketStudio-privacy-policy/"]) {
+    assert.equal((await handleRequest(new Request(`https://gxl.example${path}`), {})).status, 200, path);
+  }
 });

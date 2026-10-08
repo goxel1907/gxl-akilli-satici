@@ -28,7 +28,7 @@ import { seasonalBoard } from "./seasonal.js";
 import { autopilotStatus, listDiscoveries, recordScan, runAutopilot } from "./discovery.js";
 import { buildProductPlan, createEtsyPhysicalDraft, detectProductSignals, getUsdTryRate, keywordCandidates, normalizeProductInput, publishEtsyListing, type KeyValueStore } from "./product-studio.js";
 import { buildPatternBrief, createDigitalListing, normalizeDigitalListingInput, normalizePatternPlanInput } from "./pattern-studio.js";
-import { privacyPolicyPage } from "./legal-pages.js";
+import { PRIVACY_PATHS, privacyPolicyPage } from "./legal-pages.js";
 import { createPatternSeed, readUsedNames, rememberName } from "./pattern-seed.js";
 import { buildPrintableBrief, createPrintableListing, normalizePrintablePlanInput } from "./printable-studio.js";
 import {
@@ -383,7 +383,8 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
       });
     }
     if (request.method === "GET" && url.pathname === "/setup/shopier-webhooks") return shopierWebhookSetupPage();
-    if (request.method === "GET" && url.pathname === "/privacy") return privacyPolicyPage();
+    // Pinterest başvurusu gizlilik adresinde şirket adını arar; aynı sayfa şirket adlı yollardan da açılır.
+    if (request.method === "GET" && PRIVACY_PATHS.has(url.pathname.toLowerCase().replace(/\/+$/, ""))) return privacyPolicyPage();
     if (request.method === "GET" && url.pathname === "/etsy/oauth/callback") return await handleEtsyCallback(request, env);
     if (request.method === "GET" && url.pathname === "/pinterest/oauth/callback") return await handlePinterestCallback(request, env);
     if (request.method === "GET" && (url.pathname.startsWith("/media/shopier/") || url.pathname.startsWith("/media/digital/"))) {

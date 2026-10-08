@@ -32,7 +32,7 @@ Etsy'de yayına giren her ürün, kendi satış linki, görseli, başlığı, a�
    - **App name:** GXL Market Studio Pin Publisher
    - **App description:** Publishes Pins for GXL Market Studio's own Etsy listings (digital printables and handmade products). Each Pin links to the matching Etsy listing. Used only by the shop owner.
    - **Website / Company website:** `https://www.etsy.com/shop/GXLMarketStudio`
-   - **Privacy policy URL:** `https://gxl-akilli-satici-api.gxl-marketstudio.workers.dev/privacy` (sunucudaki herkese açık sayfa)
+   - **Privacy policy URL:** `https://gxl-akilli-satici-api.gxl-marketstudio.workers.dev/GXLMarketStudio/privacy-policy` (sunucudaki herkese açık sayfa; Pinterest adreste şirket adını arar, şirket adı alanına da `GXLMarketStudio` yazın)
    - **Uygulama amacı:** Pin oluşturma / içerik yayınlama seçeneği. Reklam ve analiz seçenekleri gerekmez.
 
    Pinterest başvuruyu inceler (Trial access). Onaydan sonra uygulama sayfasında **Redirect URI** olarak şunu ekleyin: `https://gxl-akilli-satici-api.gxl-marketstudio.workers.dev/pinterest/oauth/callback`
