@@ -56,6 +56,23 @@ Kartta ayrıca rakiplerin format kapsamı (ör. "US Letter %17 · A5 %17 · Pake
 
 ## 3. Trendden otomatik doldurma
 
+**Trende gitmeden de çalışır:** Stüdyo'yu açtığınızda, "PDF ürünü / El işi deseni" seçimini değiştirdiğinizde veya bir PDF türüne ya da el işi türüne bastığınızda, sistem o türde önbellekteki en yüksek puanlı aramayı (sabit nişler ve keşfedilen aramalar arasından) kendisi seçer ve alanları doldurur. Son seçilen aramalar atlanır; **Başka arama seç** sıradaki güçlü aramayı getirir.
+
+**Rakipleri geçmek için** kartı:
+- **Fiyat:** Rakip ortanca fiyatı; ilk yorumlara kadar %12 altı başlangıç fiyatı (.49/.99 biten) ve set fiyatı (yaklaşık 2,3 katı). Önerilen fiyat yükleme formuna otomatik gelir.
+- **İçerik:** Rakiplerin ortanca sayfa sayısı ve bizim sayfa sayımız.
+- **Format boşlukları:** Rakiplerin %25'inden azının sunduğu formatlar ürüne otomatik eklenir. Rakiplerin yarısından fazlasının sunduğu "mutlaka olacak" formatlar ayrıca listelenir.
+- **Diğer:** Paket boşluğu veya set fırsatı, yükselen özellikler, yeni ilan payı, telif riski.
+- **Geçilecek rakipler:** İlk 3 rakip ilan.
+
+Bu plan PDF promptuna da "To outsell the top listings: …" olarak eklenir.
+
+**Renkler:** Trendde renk yoksa trendin stil özelliğine uygun palet seçilir (ör. dark academia → burgundy, forest green, gold; botanical → sage green, terracotta, cream).
+
+**Hedef kitle:** Etiket ve başlıklarda geçen alıcı grubundan (ör. crafters, teachers, busy moms) otomatik doldurulur.
+
+### Trend kartından
+
 PDF kartında **Bu nişte PDF hazırla**'ya basınca Stüdyo **PDF ürünü** modunda açılır ve şu alanları trend verisinden doldurur:
 - PDF türü ve ürün (ör. `coloring pages for kids` → `kids coloring pages`, tür: boyama)
 - Trend özellikleri: her seferinde o arama için kullanılmamış bir kombinasyon

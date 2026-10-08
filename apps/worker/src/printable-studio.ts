@@ -207,7 +207,7 @@ export function normalizePrintablePlanInput(raw: Record<string, unknown>): Print
     kind,
     productType,
     keyword: cleanText(raw.keyword, 60).toLowerCase() || undefined,
-    referenceNotes: cleanText(raw.referenceNotes, 700) || undefined,
+    referenceNotes: cleanText(raw.referenceNotes, 1000) || undefined,
     trendFeatures: cleanList(raw.trendFeatures, 6, 40).map((item) => item.toLowerCase()).filter((item) => !isIpRisky(item)),
     trendTags: cleanList(raw.trendTags, 20, 40).map((item) => item.toLowerCase()).filter((item) => !isIpRisky(item)),
     colors: cleanList(raw.colors, 6, 30),

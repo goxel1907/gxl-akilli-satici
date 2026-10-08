@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, Alert, AppState, Image, Linking, Modal, Pressable, SafeAreaView, ScrollView, Share, StatusBar, StyleSheet, Text, TextInput, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -770,7 +770,7 @@ function EtsyScreen({ online, channels }: any) {
     </View>
     {!online && section !== "Kılavuz" && <Text style={styles.shopierBlocker}>Sunucu bağlantısı yok. Trend tarama, prompt üretimi ve PDF yükleme için uygulamanın sunucuya bağlı olması gerekir.</Text>}
     {section === "Trend" && <TrendPanel online={online} onUse={(seed: any) => { setStudioSeed(seed); setSection("Stüdyo"); }} />}
-    {section === "Stüdyo" && <StudioPanel online={online} seed={studioSeed} onUpload={(prefill: any) => { setUploadPrefill(prefill); setSection("Dijital"); }} />}
+    <View style={section === "Stüdyo" ? undefined : styles.hidden}><StudioPanel online={online} active={section === "Stüdyo"} seed={studioSeed} onUpload={(prefill: any) => { setUploadPrefill(prefill); setSection("Dijital"); }} /></View>
     {section === "Dijital" && <DigitalPanel online={online} shopReady={shopReady} prefill={uploadPrefill} onPrefillUsed={() => setUploadPrefill(undefined)} />}
     {section === "Pinterest" && <PinterestPanel online={online} />}
     {section === "Kılavuz" && <EtsyGuide shopReady={shopReady} authorized={authorized} />}
@@ -1067,7 +1067,21 @@ const STUDIO_MODES = [
   { id: "pattern", label: "El işi deseni" }
 ];
 
-function PrintableStudio({ online, seed, seeding, onReseed, onUpload }: any) {
+// Rakipleri geçmek için plan: fiyat, içerik miktarı, format boşlukları, paket ve öne çıkan rakipler.
+function CompetitionCard({ competition }: any) {
+  if (!competition || (!competition.planTr?.length && !competition.topCompetitors?.length)) return null;
+  return <View style={styles.adviceBox}>
+    <Text style={styles.cardTitle}>Rakipleri geçmek için</Text>
+    {!!competition.launchPriceUsd && <Text style={styles.listingTitle}>Önerilen fiyat: {competition.launchPriceUsd.toFixed(2)} USD · set: {competition.bundlePriceUsd?.toFixed(2)} USD</Text>}
+    {(competition.planTr || []).map((line: string) => <Text style={styles.analysisLine} key={line}>• {line}</Text>)}
+    {!!competition.topCompetitors?.length && <>
+      <Text style={styles.warningTitle}>Geçilecek rakipler</Text>
+      {competition.topCompetitors.map((item: any, index: number) => <Text style={styles.small} key={`${item.title}-${index}`}>{item.favorites} favori · {item.ageDays} gün{item.priceUsd ? ` · ${item.priceUsd.toFixed(2)} USD` : ""} · {item.title}</Text>)}
+    </>}
+  </View>;
+}
+
+function PrintableStudio({ online, seed, seeding, onReseed, onPickKind, onUpload }: any) {
   const [kind, setKind] = useState("planner");
   const [productType, setProductType] = useState("");
   const [referenceNotes, setReferenceNotes] = useState("");
@@ -1093,6 +1107,7 @@ function PrintableStudio({ online, seed, seeding, onReseed, onUpload }: any) {
     setTrendTags(seed.trendTags || []);
     setTrendFeatures(seed.trendFeatures || []);
     setBasis(seed.basis || []);
+    setAudience(seed.audience || "");
     setPlan(undefined);
   }, [seed]);
   const generate = async () => {
@@ -1110,10 +1125,14 @@ function PrintableStudio({ online, seed, seeding, onReseed, onUpload }: any) {
       <Text style={styles.cardTitle}>Trendden otomatik dolduruldu: {keyword}</Text>
       {basis.map((line) => <Text style={styles.analysisLine} key={line}>• {line}</Text>)}
       <Text style={styles.formHint}>İsterseniz alanları değiştirin; değilse doğrudan aşağıdaki düğmeye basın.</Text>
-      <View style={styles.inlineActions}><Pressable style={styles.secondaryButton} disabled={!online} onPress={onReseed}><Text style={styles.secondaryButtonText}>Başka trend kombinasyonu</Text></Pressable></View>
+      <View style={styles.inlineActions}>
+        <Pressable style={styles.secondaryButton} disabled={!online} onPress={onReseed}><Text style={styles.secondaryButtonText}>Başka trend kombinasyonu</Text></Pressable>
+        <Pressable style={styles.secondaryButton} disabled={!online} onPress={() => onPickKind(kind)}><Text style={styles.secondaryButtonText}>Başka arama seç</Text></Pressable>
+      </View>
     </View>}
+    {!seeding && <CompetitionCard competition={seed?.competition} />}
     <Text style={styles.fieldLabel}>PDF türü</Text>
-    <ChipGroup options={PRINTABLE_KIND_OPTIONS} value={kind} onChange={setKind} />
+    <ChipGroup options={PRINTABLE_KIND_OPTIONS} value={kind} onChange={(next: string) => { setKind(next); onPickKind(next); }} />
     <Field label="Ürün (İngilizce)" value={productType} onChangeText={setProductType} placeholder="budget planner, adult coloring pages, recipe cards" autoCapitalize="none" />
     <Field label="Trend özeti (Etsy üst ilanlarından)" value={referenceNotes} onChangeText={setReferenceNotes} placeholder="Trendden gelince otomatik dolar" multiline />
     <Field label="Renkler" value={colors} onChangeText={setColors} placeholder="sage green, cream, terracotta" autoCapitalize="none" />
@@ -1161,7 +1180,7 @@ function PrintableStudio({ online, seed, seeding, onReseed, onUpload }: any) {
       {listing.warnings.map((warning: string) => <Text style={styles.warningText} key={warning}>• {warning}</Text>)}
       <View style={styles.inlineActions}>
         <Pressable style={styles.secondaryButton} onPress={() => Share.share({ message: `${listing.title}\n\n${listing.description}\n\nTags: ${listing.tags.join(", ")}` })}><Text style={styles.secondaryButtonText}>İlan metnini kopyala</Text></Pressable>
-        <Pressable style={styles.secondaryButton} onPress={() => onUpload({ name: brief?.name, kind, productType, listing, pins: brief?.pins })}><Text style={styles.secondaryButtonText}>PDF hazırsa yükle →</Text></Pressable>
+        <Pressable style={styles.secondaryButton} onPress={() => onUpload({ name: brief?.name, kind, productType, listing, pins: brief?.pins, priceUsd: seed?.competition?.launchPriceUsd })}><Text style={styles.secondaryButtonText}>PDF hazırsa yükle →</Text></Pressable>
       </View>
     </View>}
   </>;
@@ -1178,7 +1197,7 @@ function PromptBox({ title, text, shareTitle }: any) {
   </View>;
 }
 
-function StudioPanel({ online, seed, onUpload }: any) {
+function StudioPanel({ online, active, seed, onUpload }: any) {
   const [craft, setCraft] = useState("crochet");
   const [productType, setProductType] = useState("");
   const [referenceNotes, setReferenceNotes] = useState("");
@@ -1196,15 +1215,22 @@ function StudioPanel({ online, seed, onUpload }: any) {
   const [seeding, setSeeding] = useState(false);
   const [mode, setMode] = useState<"pattern" | "printable">("printable");
   const [printableSeed, setPrintableSeed] = useState<any>();
+  const [competition, setCompetition] = useState<any>();
   const [plan, setPlan] = useState<any>();
   const [working, setWorking] = useState(false);
+  const [initialized, setInitialized] = useState(false);
   // Trendden gelindiğinde tüm alanlar sunucunun trend verisinden çıkardığı değerlerle dolar; her çağrı yeni bir kombinasyon getirir.
+  // Arama verilmezse (Stüdyo doğrudan açıldığında veya tür seçildiğinde) sunucu o türde en güçlü trendi kendisi seçer.
+  // Art arda dokunuşlarda yalnızca en son isteğin yanıtı uygulanır; geç dönen eski yanıt yeni seçimi ezmez.
+  const seedRequest = useRef(0);
   const fillFromTrend = async (source: any) => {
-    if (!source?.keyword) return;
+    if (!source?.keyword && !source?.studio) return;
+    const requestId = ++seedRequest.current;
     setSeeding(true);
     setPlan(undefined);
     try {
-      const filled = await apiJson("/api/patterns/seed", { method: "POST", headers: apiHeaders(true), body: JSON.stringify({ keyword: source.keyword, craft: source.craft }) });
+      const filled = await apiJson("/api/patterns/seed", { method: "POST", headers: apiHeaders(true), body: JSON.stringify({ keyword: source.keyword, craft: source.craft, group: source.group, kind: source.kind, studio: source.studio }) });
+      if (requestId !== seedRequest.current) return;
       if (filled.studio === "printable") {
         setPrintableSeed(filled);
         setMode("printable");
@@ -1224,17 +1250,41 @@ function StudioPanel({ online, seed, onUpload }: any) {
       setTrendTags(filled.trendTags || []);
       setTrendFeatures(filled.trendFeatures || []);
       setTrendBasis(filled.basis || []);
+      setCompetition(filled.competition);
       setFromTrend(true);
     } catch (error) {
+      if (requestId !== seedRequest.current) return;
+      if (source.group === "printables" || source.studio === "printable") {
+        setPrintableSeed({ kind: source.kind || "planner", productType: source.productType || "", keyword: source.keyword || "", trendTags: source.trendTags || [], basis: [] });
+        setMode("printable");
+        Alert.alert("Trend verisi alınamadı", `${errorText(error)}\nAlanları elle tamamlayabilirsiniz.`);
+        return;
+      }
       setCraft(source.craft || "crochet");
       setProductType(source.productType || "");
       setKeyword(source.keyword || "");
       setTrendTags(source.trendTags || []);
       setFromTrend(false);
       Alert.alert("Trend verisi alınamadı", `${errorText(error)}\nAlanları elle tamamlayabilirsiniz.`);
-    } finally { setSeeding(false); }
+    } finally { if (requestId === seedRequest.current) setSeeding(false); }
   };
-  useEffect(() => { if (seed) fillFromTrend(seed); }, [seed]);
+  useEffect(() => { if (seed) { setInitialized(true); fillFromTrend(seed); } }, [seed]);
+  // Stüdyo ilk kez açıldığında boş kalmasın: seçili modda en güçlü trend otomatik doldurulur.
+  useEffect(() => {
+    if (!active || initialized || seed || !online) return;
+    setInitialized(true);
+    fillFromTrend({ studio: mode });
+  }, [active, online]);
+  const changeMode = (next: "pattern" | "printable") => {
+    setMode(next);
+    if (next === "printable" && !printableSeed) fillFromTrend({ studio: "printable" });
+    if (next === "pattern" && !fromTrend && !productType) fillFromTrend({ studio: "pattern" });
+  };
+  // Kendi modelinizle çalışırken el işi türünü değiştirmek girdiklerinizi trend verisiyle ezmez.
+  const changeCraft = (next: string) => {
+    setCraft(next);
+    if (fromTrend || !productType.trim()) fillFromTrend({ studio: "pattern", craft: next });
+  };
   const useOwnModel = () => {
     setFromTrend(false);
     setTrendFeatures([]);
@@ -1258,20 +1308,22 @@ function StudioPanel({ online, seed, onUpload }: any) {
   const listing = plan?.listing;
   return <>
     <Text style={styles.sectionTitle}>Yeni ürün fikri</Text>
-    <ChipGroup options={STUDIO_MODES} value={mode} onChange={setMode} />
+    <ChipGroup options={STUDIO_MODES} value={mode} onChange={changeMode} />
     {seeding && <View style={styles.guardrail}><ActivityIndicator color="#315B4C" /><Text style={[styles.guardrailText, { flex: 1 }]}>Etsy trend verisi okunuyor; tüm alanlar otomatik dolduruluyor…</Text></View>}
-    {mode === "printable" ? <PrintableStudio online={online} seed={printableSeed} seeding={seeding} onReseed={() => printableSeed?.keyword && fillFromTrend({ keyword: printableSeed.keyword })} onUpload={onUpload} /> : <>
+    {mode === "printable" ? <PrintableStudio online={online} seed={printableSeed} seeding={seeding} onReseed={() => printableSeed?.keyword && fillFromTrend({ keyword: printableSeed.keyword, studio: "printable" })} onPickKind={(kind: string) => fillFromTrend({ studio: "printable", kind })} onUpload={onUpload} /> : <>
     {fromTrend && !seeding && <View style={styles.analysisCard}>
       <Text style={styles.cardTitle}>Trendden otomatik dolduruldu: {keyword}</Text>
       {trendBasis.map((line) => <Text style={styles.analysisLine} key={line}>• {line}</Text>)}
       <Text style={styles.formHint}>İsterseniz alanları değiştirin; değilse doğrudan "Prompt ve ilanı hazırla"ya basın.</Text>
       <View style={styles.inlineActions}>
-        <Pressable style={styles.secondaryButton} disabled={!online} onPress={() => fillFromTrend({ keyword, craft })}><Text style={styles.secondaryButtonText}>Başka trend kombinasyonu</Text></Pressable>
+        <Pressable style={styles.secondaryButton} disabled={!online} onPress={() => fillFromTrend({ keyword, craft, studio: "pattern" })}><Text style={styles.secondaryButtonText}>Başka trend kombinasyonu</Text></Pressable>
+        <Pressable style={styles.secondaryButton} disabled={!online} onPress={() => fillFromTrend({ studio: "pattern", craft })}><Text style={styles.secondaryButtonText}>Başka arama seç</Text></Pressable>
         <Pressable style={styles.secondaryButton} onPress={useOwnModel}><Text style={styles.secondaryButtonText}>Kendi modelimden hazırla</Text></Pressable>
       </View>
     </View>}
+    {fromTrend && !seeding && <CompetitionCard competition={competition} />}
     <Text style={styles.fieldLabel}>El işi türü</Text>
-    <ChipGroup options={CRAFT_OPTIONS} value={craft} onChange={setCraft} />
+    <ChipGroup options={CRAFT_OPTIONS} value={craft} onChange={changeCraft} />
     <Field label="Ürün türü (İngilizce)" value={productType} onChangeText={setProductType} placeholder="doily, ballet slippers, tote bag" autoCapitalize="none" />
     <Field label={fromTrend ? "Trend özeti (Etsy üst ilanlarından)" : "Seçtiğin modelde neyi beğendin?"} value={referenceNotes} onChangeText={setReferenceNotes} placeholder="8 yeşil yaprak, turuncu küçük çiçekler, beyaz dantel yelpazeler" multiline />
     {!fromTrend && <Field label="Modeldeki tekrar sayısı (varsa)" value={referenceRepeatCount} onChangeText={setReferenceRepeatCount} placeholder="8" keyboardType="number-pad" />}
@@ -1312,7 +1364,7 @@ function StudioPanel({ online, seed, onUpload }: any) {
       {listing.warnings.map((warning: string) => <Text style={styles.warningText} key={warning}>• {warning}</Text>)}
       <View style={styles.inlineActions}>
         <Pressable style={styles.secondaryButton} onPress={() => Share.share({ message: `${listing.title}\n\n${listing.description}\n\nTags: ${listing.tags.join(", ")}` })}><Text style={styles.secondaryButtonText}>İlan metnini kopyala</Text></Pressable>
-        <Pressable style={styles.secondaryButton} onPress={() => onUpload({ name: brief?.name, craft, productType, listing })}><Text style={styles.secondaryButtonText}>PDF hazırsa yükle →</Text></Pressable>
+        <Pressable style={styles.secondaryButton} onPress={() => onUpload({ name: brief?.name, craft, productType, listing, priceUsd: competition?.launchPriceUsd })}><Text style={styles.secondaryButtonText}>PDF hazırsa yükle →</Text></Pressable>
       </View>
     </View>}
     </>}
@@ -1350,6 +1402,7 @@ function DigitalUploadForm({ visible, prefill, onClose, onSaved }: any) {
     setTags((prefill?.listing?.tags || []).join(", "));
     setDescription(prefill?.listing?.description || "");
     setMaterials(prefill?.listing?.materials || []);
+    setPriceUsd(prefill?.priceUsd ? String(prefill.priceUsd) : "");
     setPdf(undefined);
     setImages([]);
   }, [visible, prefill]);
@@ -1642,7 +1695,8 @@ const ETSY_GUIDE: Array<{ id: string; title: string; icon: any; steps: string[] 
   { id: "printables", title: "PDF ürün satışı adım adım (planlayıcı, boyama, duvar sanatı…)", icon: "document-attach-outline", steps: [
     "Trend → PDF ürünleri: planlayıcı, dijital planlayıcı, boyama, duvar sanatı, tarif kartı, parti oyunları, günlük, çocuk etkinlikleri ve kâğıt işi nişleri puanlanır. 'İlgi sıralaması' alıcı ilgisini çubukla gösterir.",
     "Bir kartı açıp 'Öne geçmek için ne yapmalı?' önerilerini okuyun, sonra 'Bu nişte PDF hazırla'ya basın.",
-    "Stüdyo PDF türünü, ürünü, trend özelliklerini, renkleri, formatları ve sayfa sayısını kendisi doldurur. Sayfa sayısı rakiplerin ortancasından biraz fazladır. Siz 'Prompt, görsel ve ilanı hazırla'ya basarsınız.",
+    "Stüdyo'yu açtığınızda veya bir PDF türüne bastığınızda sistem o türde en güçlü Etsy aramasını kendisi seçer ve tüm alanları doldurur: ürün, trend özellikleri, renkler (trend rengi yoksa trend stiline uygun palet), formatlar (rakiplerin az sunduğu formatlar eklenir), sayfa sayısı (rakip ortancasının %20 fazlası) ve hedef kitle. 'Başka arama seç' sıradaki güçlü aramayı getirir.",
+    "'Rakipleri geçmek için' kartı rakip ortanca fiyatını, önerilen başlangıç ve set fiyatını, format boşluklarını ve geçilecek rakipleri gösterir; önerilen fiyat yükleme formuna otomatik gelir. Siz 'Prompt, görsel ve ilanı hazırla'ya basarsınız.",
     "1) PDF promptunu Claude veya ChatGPT'ye verin; prompt yazdırmaya hazır dosyaları her format için ayrı üretir. Boyama, duvar sanatı ve kâğıt işinde 2) sayfa görseli promptlarıyla görselleri üretin.",
     "Reklam tadında 10 görselin her birinde nerede kullanılacağı (Etsy kapak, galeri, Pinterest, Instagram), ölçüsü ve üstüne yazılacak kısa metin yazar. Görseli üretirken PDF sayfalarınızı referans olarak yükleyin, yazıyı Canva ile ekleyin.",
     "Pinterest pinlerini farklı günlerde paylaşın. Paket fikriyle aynı stilde bir set hazırlayın.",
@@ -2044,6 +2098,7 @@ const styles = StyleSheet.create({
   chip: { borderWidth: 1, borderColor: "#D8D4CA", borderRadius: 99, paddingHorizontal: 10, paddingVertical: 7, backgroundColor: "white" },
   chipActive: { backgroundColor: "#315B4C", borderColor: "#315B4C" },
   risingChip: { backgroundColor: "#FBEFD9", borderColor: "#E2B676" },
+  hidden: { display: "none" },
   adviceBox: { backgroundColor: "#F6F2EA", borderRadius: 13, padding: 12, marginTop: 12 },
   adviceRow: { flexDirection: "row", gap: 10, marginTop: 9 },
   adviceDot: { width: 10, height: 10, borderRadius: 5, marginTop: 4 },

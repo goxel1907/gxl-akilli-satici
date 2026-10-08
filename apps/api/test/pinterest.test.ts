@@ -164,3 +164,19 @@ test("public privacy policy page explains Pinterest data use without app authent
     assert.equal((await handleRequest(new Request(`https://gxl.example${path}`), {})).status, 200, path);
   }
 });
+
+test("a board deleted on Pinterest is forgotten and the pin is retried", async () => {
+  const kv = memoryKv();
+  await kv.store.put("pinterest:tokens", JSON.stringify({ accessToken: "tok", refreshToken: "r", expiresAt: Date.now() + 3_600_000, scope: "pins:write" }));
+  await kv.store.put("pinterest:boards", JSON.stringify({ "printable planners & trackers": "gone-board" }));
+  await enqueueListingPins(kv.store, { listingId: 123456789, boardName: "Printable Planners & Trackers" }, NOW);
+  const fetcher = (async (input: string | URL | Request) => {
+    const target = new URL(String(input));
+    if (target.hostname === "api.etsy.com") return Response.json(listing("active"));
+    if (target.pathname === "/v5/pins") return Response.json({ message: "Board not found." }, { status: 404 });
+    return Response.json({}, { status: 404 });
+  }) as typeof fetch;
+  const result = await processPinQueue(env(kv.store), kv.store, fetcher, NOW);
+  assert.equal(result.status, "scheduled");
+  assert.deepEqual(JSON.parse(kv.values.get("pinterest:boards")!), {});
+});

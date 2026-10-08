@@ -1,5 +1,7 @@
 import type { EtsyRuntimeEnv } from "./etsy.js";
-import { inferPrintableKind, inferTrendGroup, normalizeKeyword, readCached, scanTrend, type PatternCraft, type PrintableKind, type TrendResult, type TrendStore } from "./etsy-trends.js";
+import { RELEVANT_FORMATS } from "./advice.js";
+import { listDiscoveries } from "./discovery.js";
+import { inferPrintableKind, inferTrendGroup, isTrendGroup, normalizeKeyword, readCached, scanTrend, TREND_NICHES, type PatternCraft, type PrintableKind, type TrendGroup, type TrendResult, type TrendStore } from "./etsy-trends.js";
 import { isIpRisky } from "./ip-guard.js";
 import { craftDefaultMaterial, type SkillLevel } from "./pattern-studio.js";
 import { defaultPrintableFormats, defaultPrintablePages, PRINTABLE_KINDS } from "./printable-studio.js";
@@ -8,8 +10,26 @@ type Fetcher = typeof fetch;
 
 // Stüdyo alanlarını trend verisinden doldurur. Ürün, özellik, renk, malzeme, ölçü ve zorluk
 // sabit bir listeden değil, o aramadaki üst ve yükselen ilanların etiket ve başlıklarından çıkarılır.
+// Rakipleri geçmek için veriden çıkarılan plan: fiyat, içerik miktarı, format boşlukları, paket.
+export interface CompetitionPlan {
+  medianPriceUsd?: number;
+  launchPriceUsd?: number;
+  bundlePriceUsd?: number;
+  competitorPages?: number;
+  ourPages?: number;
+  standardFormats: string[];
+  gapFormats: string[];
+  bundleShare?: number;
+  topCompetitors: Array<{ title: string; favorites: number; priceUsd?: number; ageDays: number }>;
+  planTr: string[];
+  planEn: string[];
+}
+
 export interface PatternSeed {
   studio: "pattern" | "printable";
+  audience?: string;
+  competition: CompetitionPlan;
+  pickedReason?: string;
   kind?: PrintableKind;
   formats: string[];
   pageCount?: number;
@@ -48,7 +68,7 @@ const CRAFT_PHRASES: Array<[PatternCraft, string]> = [
   ["crochet", "\\bcrochet(?:ed|ing)?\\b|\\bamigurumi\\b"]
 ];
 // Teknik filtre: anlam taşımayan ve her ilanda geçen kelimeler özellik sayılmaz.
-const STOP = new Set(["pattern", "patterns", "pdf", "pdfs", "digital", "download", "downloads", "instant", "printable", "print", "file", "files", "template", "templates", "tutorial", "tutorials", "diy", "chart", "charts", "svg", "design", "designs", "handmade", "gift", "gifts", "for", "and", "the", "with", "a", "an", "of", "in", "on", "to", "by", "or", "your", "you", "my", "etsy", "listing", "us", "terms", "english", "level", "friendly", "instructions", "written", "video", "step", "guide", "new", "best", "sale", "make", "made", "own", "how", "ebook", "e-book", "item", "items"]);
+const STOP = new Set(["pattern", "patterns", "pdf", "pdfs", "digital", "download", "downloads", "instant", "printable", "printables", "print", "file", "files", "template", "templates", "tutorial", "tutorials", "diy", "chart", "charts", "svg", "design", "designs", "handmade", "gift", "gifts", "for", "and", "the", "with", "a", "an", "of", "in", "on", "to", "by", "or", "your", "you", "my", "etsy", "listing", "us", "terms", "english", "level", "friendly", "instructions", "written", "video", "step", "guide", "new", "best", "sale", "make", "made", "own", "how", "ebook", "e-book", "item", "items"]);
 const SKILL_WORDS: Record<string, SkillLevel> = { beginner: "beginner", beginners: "beginner", easy: "easy", simple: "easy", quick: "easy", intermediate: "intermediate", advanced: "experienced", expert: "experienced" };
 const AUDIENCE_OR_SEASON = /^(baby|babies|newborn|kids?|children|toddler|women|womens|ladies|men|mens|girls?|boys?|christmas|xmas|halloween|easter|valentines?|fall|autumn|winter|summer|spring|thanksgiving|hanukkah|ramadan|eid|patriotic|holiday|wedding|bridal)$/;
 const SIZE_SIGNAL = /\b(plus size|size inclusive|inclusive sizing|xxs|xs ?(?:-|to) ?\d?x?l|\d?xl|\d{1,3} ?(?:in|inch|inches|cm|mm)|\d{1,3} ?x ?\d{1,3}(?: ?(?:in|inch|inches|cm))?|a0|a4|us letter|newborn|toddler|one size|all sizes|sizes? \d{1,2}(?: ?- ?\d{1,2})?)\b/g;
@@ -69,6 +89,46 @@ const COLOR_LEXICON: Array<{ name: string; hue?: number }> = [
   { name: "white" }, { name: "ivory" }, { name: "cream" }, { name: "oatmeal" }, { name: "beige" }, { name: "sand" }, { name: "camel" }, { name: "tan" },
   { name: "brown" }, { name: "chocolate" }, { name: "gray" }, { name: "grey" }, { name: "charcoal" }, { name: "black" }, { name: "silver" }
 ];
+// Trendde renk yoksa, trendin stil özelliğine uygun palet seçilir (ör. dark academia → bordo, orman yeşili, altın).
+const STYLE_PALETTES: Array<{ pattern: RegExp; label: string; palettes: string[][] }> = [
+  { pattern: /dark academia|gothic|grimoire|witch|occult/, label: "dark academia", palettes: [["burgundy", "forest green", "gold"], ["plum", "olive", "cream"], ["charcoal", "wine", "camel"]] },
+  { pattern: /botanical|floral|wildflower|garden|cottagecore|moss|mushroom|fern/, label: "botanical", palettes: [["sage green", "terracotta", "cream"], ["olive", "blush", "ivory"], ["forest green", "mustard", "oatmeal"]] },
+  { pattern: /boho|bohemian|desert|terracotta/, label: "boho", palettes: [["terracotta", "mustard", "cream"], ["rust", "sand", "sage"]] },
+  { pattern: /christmas|holiday|xmas|winter|noel/, label: "holiday", palettes: [["cherry red", "forest green", "ivory"], ["burgundy", "sage green", "gold"]] },
+  { pattern: /halloween|spooky|ghost|pumpkin|witchy/, label: "halloween", palettes: [["burnt orange", "black", "cream"], ["plum", "orange", "charcoal"]] },
+  { pattern: /valentine|romantic|heart|coquette|bow/, label: "romantic", palettes: [["blush", "cherry red", "ivory"], ["dusty rose", "wine", "cream"]] },
+  { pattern: /easter|spring|pastel|bunny/, label: "spring", palettes: [["lavender", "mint", "butter yellow"], ["baby pink", "sky blue", "cream"]] },
+  { pattern: /vintage|retro|antique|victorian|ephemera|nostalgic/, label: "vintage", palettes: [["dusty rose", "sand", "olive"], ["mustard", "teal", "cream"], ["rust", "dusty blue", "ivory"]] },
+  { pattern: /minimal|minimalist|modern|neutral|scandi|clean/, label: "minimalist", palettes: [["charcoal", "sand", "white"], ["black", "beige", "olive"]] },
+  { pattern: /coastal|beach|ocean|summer|nautical/, label: "coastal", palettes: [["navy", "sand", "white"], ["aqua", "coral", "ivory"]] },
+  { pattern: /fall|autumn|thanksgiving|harvest/, label: "autumn", palettes: [["rust", "mustard", "oatmeal"], ["burnt orange", "olive", "cream"]] },
+  { pattern: /western|cowgirl|rodeo/, label: "western", palettes: [["rust", "tan", "denim"], ["terracotta", "camel", "cream"]] },
+  { pattern: /kawaii|cute|rainbow|kids|whimsical/, label: "playful", palettes: [["baby pink", "mint", "butter yellow"], ["lavender", "peach", "sky blue"]] }
+];
+// Hedef kitle: etiket ve başlıklarda geçen alıcı grupları.
+const AUDIENCE_TERMS: Array<[string, string]> = [["busy moms", "busy moms"], ["moms", "moms"], ["mom", "moms"], ["teachers", "teachers"], ["teacher", "teachers"], ["homeschool", "homeschool families"], ["toddlers", "toddlers"], ["toddler", "toddlers"], ["preschool", "preschoolers"], ["kids", "kids"], ["teens", "teens"], ["students", "students"], ["adults", "adults"], ["adult", "adults"], ["seniors", "seniors"], ["women", "women"], ["brides", "brides-to-be"], ["bride", "brides-to-be"], ["couples", "couples"], ["nurses", "nurses"], ["book lovers", "book lovers"], ["bookish", "book lovers"], ["readers", "book lovers"], ["beginners", "beginners"], ["crafters", "crafters"], ["journalers", "journalers"]];
+const FORMAT_OFFERS: Record<string, { format?: string; en: string; tr: string }> = {
+  letter: { format: "US Letter", en: "US Letter size", tr: "US Letter" },
+  a4: { format: "A4", en: "A4 size", tr: "A4" },
+  a5: { format: "A5", en: "A5 size", tr: "A5" },
+  half_letter: { format: "Half Letter", en: "Half Letter size", tr: "Half Letter" },
+  tablet: { format: "Tablet PDF (hyperlinked)", en: "a hyperlinked tablet version", tr: "tablet (tıklanabilir) sürüm" },
+  editable: { en: "an editable template version", tr: "düzenlenebilir şablon sürümü" },
+  printer_friendly: { format: "Black-and-white printer-friendly version", en: "a black-and-white printer-friendly version", tr: "siyah-beyaz yazıcı dostu sürüm" },
+  ratio_sizes: { format: "5 ratio files (fits every frame)", en: "five ratio files that fit every frame size", tr: "tüm çerçevelere uyan 5 oran dosyası" },
+  card_sizes: { format: "4x6 and 5x7 in cards", en: "4x6 and 5x7 card sizes", tr: "4x6 ve 5x7 kart ölçüleri" },
+  scrapbook_size: { format: "12x12 in sheets", en: "12x12 in scrapbook sheets", tr: "12x12 scrapbook sayfaları" },
+  commercial: { en: "a commercial-use license option", tr: "ticari kullanım lisansı seçeneği" },
+  video: { en: "a short video tutorial", tr: "kısa video eğitim" }
+};
+
+// Fiyatın .49 / .99 ile bitmesi alıcıya tanıdık gelir; hedef değerin altında kalan en yakın sonu seçer.
+function charmPrice(value: number): number {
+  const base = Math.floor(value);
+  const options = [base - 0.01, base + 0.49, base + 0.99].filter((option) => option > 0 && option <= value + 0.001);
+  return Math.max(0.99, ...options);
+}
+
 const COLOR_DESCRIPTORS = ["rainbow", "pastel", "neutral", "earth tone", "earthy", "monochrome", "multicolor"];
 const YARN_WEIGHTS = ["super bulky", "lace weight", "sport weight", "fingering", "worsted", "chunky", "bulky", "jumbo", "aran", "dk"];
 const FIBERS = ["quilting cotton", "crochet thread", "t-shirt yarn", "knit fabric", "embroidery floss", "macrame cord", "cotton", "acrylic", "merino", "mohair", "alpaca", "cashmere", "bamboo", "chenille", "velvet", "wool", "linen", "silk", "jute", "hemp", "thread", "canvas", "denim", "fleece", "jersey", "felt", "aida", "floss", "cord", "rope"];
@@ -207,7 +267,8 @@ function mineFeatures(rows: Row[], productWords: Set<string>, head: string): { a
   for (const row of rows) {
     const index = row.tokens.findIndex((word) => singular(word) === head);
     if (index <= 0) continue;
-    const modifiers = row.tokens.slice(Math.max(0, index - 3), index).filter(usable);
+    // Ürün kelimeleri çıkarıldıktan sonra ürün adından önceki son 3 kelime (ör. "enchanted moss junk journal kit" → enchanted, moss).
+    const modifiers = row.tokens.slice(0, index).filter(usable).slice(-3);
     modifiers.forEach((word) => modifierWords.add(word));
     modifiers.forEach((word) => add(word, row.weight, row.rising));
     // İki kelimelik özellik yalnızca ürün adının hemen önündeyse sayılır ("granny square cardigan" → "granny square").
@@ -296,7 +357,19 @@ function hueDistance(a: number, b: number): number {
 
 // Palet: trend rengi varsa korunur; eksik kalan renkler ton uyumuna göre tamamlanır ve
 // bu arama için daha önce kullanılmış paletler tekrar seçilmez.
-function buildPalette(trendColors: string[], random: () => number, usedPalettes: Set<string>): { colors: string[]; source: string } {
+function buildPalette(trendColors: string[], random: () => number, usedPalettes: Set<string>, styleText = ""): { colors: string[]; source: string } {
+  const hasHue = trendColors.some((name) => COLOR_LEXICON.find((color) => color.name === name)?.hue !== undefined);
+  if (!hasHue) {
+    const styles = STYLE_PALETTES.filter((style) => style.pattern.test(styleText));
+    const options = styles.flatMap((style) => style.palettes.map((palette) => ({ palette, label: style.label })));
+    if (options.length) {
+      const start = Math.floor(random() * options.length);
+      for (let offset = 0; offset < options.length; offset += 1) {
+        const option = options[(start + offset) % options.length];
+        if (!usedPalettes.has([...option.palette].sort().join("|")) || offset === options.length - 1) return { colors: option.palette, source: `trendin ${option.label} stiline uygun palet` };
+      }
+    }
+  }
   const lexicon = (name: string) => COLOR_LEXICON.find((color) => color.name === name);
   const hues = trendColors.filter((name) => lexicon(name)?.hue !== undefined);
   const neutrals = trendColors.filter((name) => lexicon(name) && lexicon(name)!.hue === undefined);
@@ -362,13 +435,81 @@ async function readJson<T>(store: TrendStore | undefined, key: string, fallback:
   }
 }
 
+function buildCompetition(result: TrendResult | undefined, kind: PrintableKind | undefined, ourPages: number | undefined, risingFeatures: string[]): CompetitionPlan {
+  const median = result?.metrics.medianPriceUsd;
+  const signals = result?.signals;
+  const relevant = RELEVANT_FORMATS[kind || "pattern"];
+  const formats = (signals?.formats || []).filter((item) => relevant.includes(item.id) && FORMAT_OFFERS[item.id]);
+  const standard = formats.filter((item) => item.share >= 0.5);
+  const gaps = formats.filter((item) => item.share < 0.25);
+  const launch = median ? charmPrice(median * 0.88) : undefined;
+  const bundle = median ? charmPrice(median * 2.3) : undefined;
+  const competitorPages = signals?.pageCountMedian;
+  const percent = (value: number) => `%${Math.round(value * 100)}`;
+  const planTr: string[] = [];
+  const planEn: string[] = [];
+  if (median && launch && bundle) {
+    planTr.push(`Fiyat: rakip ortancası ${median.toFixed(2)} USD → ilk yorumlara kadar ${launch.toFixed(2)} USD, set ${bundle.toFixed(2)} USD.`);
+  }
+  if (competitorPages && ourPages) {
+    planTr.push(`İçerik: rakipler ortanca ${competitorPages} sayfa → bizde ${ourPages} sayfa.`);
+    planEn.push(`include about ${ourPages} pages (the top listings' median is ${competitorPages})`);
+  }
+  if (gaps.length) {
+    planTr.push(`Rakiplerin azının sunduğu, bizim ekleyeceğimiz: ${gaps.map((item) => `${FORMAT_OFFERS[item.id].tr} (rakiplerin ${percent(item.share)}'i)`).join(", ")}.`);
+    planEn.push(`offer ${gaps.map((item) => FORMAT_OFFERS[item.id].en).join(", ")}, which few competitors provide`);
+  }
+  if (standard.length) {
+    planTr.push(`Mutlaka olacak (rakiplerin çoğunda var): ${standard.map((item) => `${FORMAT_OFFERS[item.id].tr} (${percent(item.share)})`).join(", ")}.`);
+    planEn.push(`always include ${standard.map((item) => FORMAT_OFFERS[item.id].en).join(", ")}`);
+  }
+  if (signals && result!.metrics.sampleSize > 10) {
+    if (signals.bundleShare < 0.1) {
+      planTr.push(`Paket boşluğu: rakiplerin yalnızca ${percent(signals.bundleShare)}'i set sunuyor → aynı stilde set de hazırla.`);
+      planEn.push("design it so it can be sold as part of a matching set");
+    } else if (signals.bundleShare >= 0.3) {
+      planTr.push(`Setler satıyor (rakiplerin ${percent(signals.bundleShare)}'i) → tekli ürünle birlikte set ilanı da aç.`);
+      planEn.push("plan it as part of a coordinated bundle");
+    }
+  }
+  if (risingFeatures.length) {
+    planTr.push(`Yeni ilanlarda yükselen özellikleri ilk sen kullan: ${risingFeatures.join(", ")}.`);
+    planEn.push(`lean into rising features (${risingFeatures.join(", ")})`);
+  }
+  if (result && result.metrics.newcomerShare >= 0.4) planTr.push(`Üst ilanların ${percent(result.metrics.newcomerShare)}'i son 6 ayda açılmış → yeni mağaza için açık niş, hızlı listele.`);
+  if (signals?.ipRisks.length) planTr.push(`Telif riski olan kelimeler kullanılmayacak: ${signals.ipRisks.join(", ")}.`);
+  return {
+    medianPriceUsd: median,
+    launchPriceUsd: launch,
+    bundlePriceUsd: bundle,
+    competitorPages,
+    ourPages,
+    standardFormats: standard.map((item) => FORMAT_OFFERS[item.id].tr),
+    gapFormats: gaps.filter((item) => FORMAT_OFFERS[item.id].format).map((item) => FORMAT_OFFERS[item.id].format!),
+    bundleShare: signals?.bundleShare,
+    topCompetitors: (result?.examples || []).slice(0, 3).map((example) => ({ title: example.title.slice(0, 90), favorites: example.favorites, priceUsd: example.priceUsd, ageDays: example.ageDays })),
+    planTr,
+    planEn
+  };
+}
+
+function mineAudience(texts: Array<{ text: string; weight: number }>): string | undefined {
+  const counts = new Map<string, number>();
+  for (const { text, weight } of texts) {
+    const value = ` ${clean(text)} `;
+    for (const [term, label] of AUDIENCE_TERMS) if (value.includes(` ${term} `)) counts.set(label, (counts.get(label) || 0) + weight);
+  }
+  const top = ranked(counts).slice(0, 2).map(([label]) => label);
+  return top.length ? top.join(", ") : undefined;
+}
+
 const SKILL_TR: Record<SkillLevel, string> = { beginner: "Başlangıç", easy: "Kolay", intermediate: "Orta", experienced: "İleri" };
 
-export function buildPatternSeed(keywordInput: string, result: TrendResult | undefined, options: { craftHint?: string; nonce?: string; history?: SeedHistory } = {}): PatternSeed & { comboKey: string; paletteKey: string } {
+export function buildPatternSeed(keywordInput: string, result: TrendResult | undefined, options: { craftHint?: string; kindHint?: PrintableKind; groupHint?: TrendGroup; nonce?: string; history?: SeedHistory } = {}): PatternSeed & { comboKey: string; paletteKey: string } {
   const keyword = normalizeKeyword(keywordInput);
   const texts = corpus(result).filter((item) => !isIpRisky(item.text));
-  const studio: PatternSeed["studio"] = (result?.group || inferTrendGroup(keyword)) === "printables" ? "printable" : "pattern";
-  const kind: PrintableKind | undefined = studio === "printable" ? result?.kind || inferPrintableKind(keyword) || "planner" : undefined;
+  const studio: PatternSeed["studio"] = (result?.group || options.groupHint || inferTrendGroup(keyword)) === "printables" ? "printable" : "pattern";
+  const kind: PrintableKind | undefined = studio === "printable" ? result?.kind || options.kindHint || inferPrintableKind(keyword) || "planner" : undefined;
   const craft = detectCraft(keyword, [keyword, ...texts.map((item) => item.text)], options.craftHint || result?.craft);
   const rows: Row[] = texts.flatMap((item) => chunks(item.text).map((tokens) => ({ tokens, weight: item.weight, rising: item.rising })));
   const product = mineProduct(keyword, rows);
@@ -381,7 +522,7 @@ export function buildPatternSeed(keywordInput: string, result: TrendResult | und
   const colorRank = mineLexicon(texts, COLOR_LEXICON.map((color) => color.name));
   const descriptors = mineLexicon(texts, COLOR_DESCRIPTORS).map(([name]) => name);
   const trendColors = colorRank.map(([name]) => name).filter((name, index, list) => !list.some((other, otherIndex) => otherIndex !== index && other.includes(name) && other !== name)).slice(0, 4);
-  const palette = buildPalette(trendColors, random, new Set(history.palettes));
+  const palette = buildPalette(trendColors, random, new Set(history.palettes), [keyword, ...chosen.features, ...mined.rising.map(([phrase]) => phrase), ...descriptors].join(" "));
   const headPattern = new RegExp(`\\b${product.head.replace(/[^a-z0-9]/g, "")}s?\\b`);
   const titleTexts = (result?.examples || []).map((example) => ({ text: String(example.title || ""), weight: 1 }));
   const productTexts = [...texts, ...titleTexts].filter((item) => headPattern.test(clean(item.text)));
@@ -394,18 +535,26 @@ export function buildPatternSeed(keywordInput: string, result: TrendResult | und
   const printable = kind ? printableFormats(kind, [...texts, ...titleTexts]) : undefined;
   const competitorPages = result?.signals?.pageCountMedian;
   const pageCount = kind ? (competitorPages ? Math.ceil(competitorPages * 1.2) : defaultPrintablePages(kind)) : undefined;
+  const competition = buildCompetition(result, kind, pageCount, risingFeatures);
+  const audience = kind ? mineAudience([...texts, ...titleTexts]) : undefined;
+  if (printable) {
+    for (const gap of competition.gapFormats) if (!printable.formats.includes(gap) && printable.formats.length < 7) printable.formats.push(gap);
+  }
   const notes = [
     `Etsy market brief for "${keyword}"${metrics ? ` (${metrics.activeListings.toLocaleString("en-US")} live listings${metrics.medianPriceUsd ? `, median ${metrics.medianPriceUsd} USD` : ""})` : ""}`,
     chosen.features.length ? `: buyers favor ${chosen.features.join(", ")}` : "",
     risingFeatures.length ? `; the newest fast-selling listings add ${risingFeatures.join(", ")}` : "",
     trendColors.length || descriptors.length ? `; colors seen in top listings: ${[...trendColors, ...descriptors].slice(0, 5).join(", ")}` : "",
-    "."
-  ].join("").slice(0, 600);
+    audience ? `; main buyers: ${audience}` : "",
+    ". ",
+    competition.planEn.length ? `To outsell the top listings: ${competition.planEn.join("; ")}.` : ""
+  ].join("").trim().slice(0, 1000);
   const basis = kind ? [
     `PDF türü: ${PRINTABLE_KINDS[kind].labelTr} · Ürün: ${product.product} (${product.source})`,
     chosen.features.length ? `Bu seferki trend özellikleri: ${chosen.features.join(", ")}${risingFeatures.length ? ` · yeni ilanlarda yükselen: ${risingFeatures.join(", ")}` : ""}` : "Trendde belirgin özellik sinyali yok; özgün tasarım yapay zekâya bırakıldı.",
     `Renkler: ${palette.colors.join(", ")} (${palette.source})`,
-    `Formatlar: ${printable!.formats.join(", ")}${printable!.mined.length ? ` (rakiplerde geçen: ${printable!.mined.slice(0, 3).join(", ")})` : " (türün standart formatları)"}`,
+    `Formatlar: ${printable!.formats.join(", ")}${competition.gapFormats.length ? " (rakiplerde az olanlar eklendi)" : printable!.mined.length ? ` (rakiplerde geçen: ${printable!.mined.slice(0, 3).join(", ")})` : " (türün standart formatları)"}`,
+    ...(audience ? [`Hedef kitle: ${audience} (etiket ve başlıklardan)`] : []),
     competitorPages ? `Sayfa: ${pageCount} (rakiplerin ortancası ${competitorPages}; daha fazla değer için %20 fazlası)` : `Sayfa: ${pageCount} (trendde sayfa sayısı sinyali yok; türün tipik değeri)`,
     chosen.fresh ? "Bu özellik kombinasyonu bu arama için ilk kez kullanılıyor." : "Bu aramadaki tüm özellik kombinasyonları denendi; palet ve ad yine yeni seçildi."
   ] : [
@@ -420,6 +569,8 @@ export function buildPatternSeed(keywordInput: string, result: TrendResult | und
   return {
     studio,
     ...(kind ? { kind } : {}),
+    ...(audience ? { audience } : {}),
+    competition,
     formats: printable?.formats || [],
     ...(pageCount ? { pageCount } : {}),
     craft,
@@ -445,23 +596,72 @@ export function buildPatternSeed(keywordInput: string, result: TrendResult | und
 
 const historyKey = (keyword: string) => `pattern:seed:${normalizeKeyword(keyword).replace(/[^a-z0-9]+/g, "-")}`;
 
+const AUTOPICK_PREFIX = "pattern:autopick:";
+
+function isPrintableKind(value: unknown): value is PrintableKind {
+  return typeof value === "string" && Object.prototype.hasOwnProperty.call(PRINTABLE_KINDS, value);
+}
+
+// Arama verilmezse: seçilen türde (PDF türü veya el işi) önbellekteki en yüksek puanlı aramalardan,
+// son kullanılanları atlayarak birini seçer.
+export async function pickBestKeyword(store: TrendStore | undefined, input: { studio?: string; kind?: string; craft?: string }): Promise<{ keyword: string; reason: string; group: TrendGroup }> {
+  const group: TrendGroup = input.studio === "printable" ? "printables" : "patterns";
+  const kind = group === "printables" && isPrintableKind(input.kind) ? input.kind : undefined;
+  const craft = group === "patterns" && CRAFT_PHRASES.some(([id]) => id === input.craft) ? input.craft as PatternCraft : undefined;
+  const matches = (keyword: string, nicheKind?: PrintableKind, nicheCraft?: PatternCraft) => group === "printables"
+    ? !kind || (nicheKind || inferPrintableKind(keyword)) === kind
+    : !craft || (nicheCraft || detectCraft(keyword, [])) === craft;
+  const discovered = await listDiscoveries(store);
+  const candidates = [...new Set([
+    ...TREND_NICHES.filter((niche) => niche.group === group && matches(niche.keyword, niche.kind, niche.craft)).map((niche) => niche.keyword),
+    ...discovered.filter((item) => item.group === group && matches(item.keyword)).map((item) => item.keyword)
+  ])].slice(0, 30);
+  if (!candidates.length) throw new Error("PATTERN_KEYWORD_REQUIRED");
+  const scored = await Promise.all(candidates.map(async (keyword) => ({ keyword, result: await readCached(store, keyword) })));
+  const ranking = scored.sort((a, b) => (b.result?.score ?? -1) - (a.result?.score ?? -1));
+  const recentKey = `${AUTOPICK_PREFIX}${group}:${kind || craft || "all"}`;
+  const recent = await readJson<string[]>(store, recentKey, []);
+  const choice = ranking.slice(0, 5).find((item) => item.result && !recent.includes(item.keyword)) || ranking.find((item) => item.result) || ranking[0];
+  if (store) await store.put(recentKey, JSON.stringify([choice.keyword, ...recent.filter((item) => item !== choice.keyword)].slice(0, 3)));
+  const reason = choice.result
+    ? `Otomatik seçilen arama: "${choice.keyword}" (bu türde en güçlülerden; ${choice.result.score} puan, ${choice.result.verdict})`
+    : `Otomatik seçilen arama: "${choice.keyword}" (henüz puanlanmamıştı; şimdi Etsy'de tarandı)`;
+  return { keyword: choice.keyword, reason, group };
+}
+
 export async function createPatternSeed(
   env: EtsyRuntimeEnv,
   store: TrendStore | undefined,
-  input: { keyword: string; craft?: string },
+  input: { keyword?: string; craft?: string; group?: string; kind?: string; studio?: string },
   fetcher: Fetcher = fetch,
   now = Date.now()
 ): Promise<PatternSeed> {
-  const keyword = normalizeKeyword(input.keyword || "");
-  if (keyword.length < 3) throw new Error("PATTERN_KEYWORD_REQUIRED");
+  let keyword = normalizeKeyword(input.keyword || "");
+  let pickedReason: string | undefined;
+  let groupHint: TrendGroup | undefined = isTrendGroup(input.group) ? input.group : input.studio === "printable" ? "printables" : undefined;
+  if (keyword.length < 3) {
+    if (input.studio !== "printable" && input.studio !== "pattern") throw new Error("PATTERN_KEYWORD_REQUIRED");
+    const picked = await pickBestKeyword(store, input);
+    keyword = picked.keyword;
+    pickedReason = picked.reason;
+    groupHint = picked.group;
+  }
+  const niche = TREND_NICHES.find((item) => item.keyword === keyword);
+  const group = niche?.group || groupHint || inferTrendGroup(keyword);
   let result: TrendResult | undefined;
   try {
-    result = await scanTrend(env, { keyword, group: "patterns" }, store, fetcher, now);
+    result = await scanTrend(env, niche ? { nicheId: niche.id } : { keyword, group }, store, fetcher, now);
   } catch {
     result = await readCached(store, keyword);
   }
   const history = await readJson<SeedHistory>(store, historyKey(keyword), { combos: [], palettes: [] });
-  const { comboKey, paletteKey, ...seed } = buildPatternSeed(keyword, result, { craftHint: input.craft, nonce: String(now), history });
+  const { comboKey, paletteKey, ...seed } = buildPatternSeed(keyword, result, {
+    craftHint: input.craft,
+    kindHint: niche?.kind || (isPrintableKind(input.kind) ? input.kind : undefined),
+    groupHint: group,
+    nonce: String(now),
+    history
+  });
   if (store) {
     const next: SeedHistory = {
       combos: [comboKey, ...history.combos.filter((item) => item !== comboKey)].slice(0, HISTORY_LIMIT),
@@ -469,7 +669,7 @@ export async function createPatternSeed(
     };
     await store.put(historyKey(keyword), JSON.stringify(next));
   }
-  return seed;
+  return pickedReason ? { ...seed, pickedReason, basis: [pickedReason, ...seed.basis] } : seed;
 }
 
 export async function readUsedNames(store: TrendStore | undefined): Promise<string[]> {

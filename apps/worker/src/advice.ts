@@ -7,7 +7,7 @@ export interface TrendAdvice {
 }
 
 // Hangi format o PDF türünde alıcı için önemli: rakiplerde az görülen önemli format bir boşluktur.
-const RELEVANT_FORMATS: Record<PrintableKind | "pattern", string[]> = {
+export const RELEVANT_FORMATS: Record<PrintableKind | "pattern", string[]> = {
   planner: ["letter", "a4", "a5", "half_letter", "printer_friendly", "tablet"],
   digital_planner: ["tablet", "letter"],
   coloring: ["letter", "a4", "printer_friendly"],
@@ -17,7 +17,8 @@ const RELEVANT_FORMATS: Record<PrintableKind | "pattern", string[]> = {
   journal: ["letter", "a5", "tablet", "printer_friendly"],
   kids: ["letter", "a4", "printer_friendly"],
   paper_craft: ["commercial", "scrapbook_size", "letter"],
-  pattern: ["video", "letter", "a4"]
+  // Desen PDF'leri zaten Letter ve A4'e uygun hazırlanır; desende anlamlı boşluk video eğitimdir.
+  pattern: ["video"]
 };
 
 const percent = (value: number) => `%${Math.round(value * 100)}`;

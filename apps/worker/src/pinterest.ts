@@ -403,7 +403,14 @@ export async function processPinQueue(env: PinterestRuntimeEnv, store: Pinterest
     delete job.error;
   } catch (error) {
     const message = error instanceof Error ? error.message.slice(0, 200) : "Pin oluşturulamadı.";
-    const retryable = error instanceof PinterestError && (error.code === "RATE_LIMITED" || error.code === "UPSTREAM_FAILED");
+    // Pano Pinterest'te silinmişse önbellekteki pano numarası temizlenir; sonraki denemede pano yeniden bulunur veya açılır.
+    const boardMissing = error instanceof PinterestError && error.code === "NOT_FOUND";
+    if (boardMissing) {
+      const boards = await readJson<Record<string, string>>(store, BOARDS_KEY, {});
+      delete boards[job.boardName.toLowerCase()];
+      await store.put(BOARDS_KEY, JSON.stringify(boards));
+    }
+    const retryable = error instanceof PinterestError && (error.code === "RATE_LIMITED" || error.code === "UPSTREAM_FAILED" || boardMissing);
     job.error = message;
     if (retryable && job.attempts < 5) {
       job.status = "scheduled";

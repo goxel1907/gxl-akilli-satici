@@ -134,7 +134,7 @@ export function normalizePatternPlanInput(raw: Record<string, unknown>): Pattern
   return {
     craft,
     productType,
-    referenceNotes: cleanText(raw.referenceNotes, 600) || undefined,
+    referenceNotes: cleanText(raw.referenceNotes, 1000) || undefined,
     referenceRepeatCount: Number.isInteger(repeat) && repeat > 1 && repeat <= 48 ? repeat : undefined,
     referenceColors: cleanList(raw.referenceColors, 6, 30),
     skillLevel: SKILL_LABELS[skillLevel] ? skillLevel : "easy",
