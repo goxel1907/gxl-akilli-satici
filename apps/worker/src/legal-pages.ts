@@ -4,10 +4,10 @@ export const PRIVACY_PATHS = new Set(["/privacy", "/gxlmarketstudio/privacy", "/
 
 export function privacyPolicyPage(): Response {
   const updated = "2026-10-08";
-  const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Privacy Policy - GXL Market Studio</title></head>
+  const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>GXLMarketStudio Privacy Policy</title></head>
 <body style="margin:0;background:#f7f2e8;font-family:system-ui,sans-serif;color:#17201d;line-height:1.6"><main style="max-width:760px;margin:40px auto;padding:24px"><section style="background:white;border-radius:20px;padding:28px">
-<h1>Privacy Policy</h1>
-<p><strong>GXL Market Studio</strong> · GXL Akıllı Satıcı app · Last updated ${updated}</p>
+<h1>GXLMarketStudio Privacy Policy</h1>
+<p><strong>GXLMarketStudio</strong> (GXL Market Studio, Etsy shop: etsy.com/shop/GXLMarketStudio) · GXL Akıllı Satıcı app · Last updated ${updated}</p>
 <h2>What the app does</h2>
 <p>GXL Akıllı Satıcı is a private tool used by the owner of the GXL Market Studio shop to prepare Etsy listings and to publish Pins that link to the shop's own Etsy listings. It is not offered to the public.</p>
 <h2>Data we access</h2>
