@@ -1,12 +1,18 @@
 import type { EtsyRuntimeEnv } from "./etsy.js";
-import { normalizeKeyword, readCached, scanTrend, type PatternCraft, type TrendResult, type TrendStore } from "./etsy-trends.js";
+import { inferPrintableKind, inferTrendGroup, normalizeKeyword, readCached, scanTrend, type PatternCraft, type PrintableKind, type TrendResult, type TrendStore } from "./etsy-trends.js";
+import { isIpRisky } from "./ip-guard.js";
 import { craftDefaultMaterial, type SkillLevel } from "./pattern-studio.js";
+import { defaultPrintableFormats, defaultPrintablePages, PRINTABLE_KINDS } from "./printable-studio.js";
 
 type Fetcher = typeof fetch;
 
 // Stüdyo alanlarını trend verisinden doldurur. Ürün, özellik, renk, malzeme, ölçü ve zorluk
 // sabit bir listeden değil, o aramadaki üst ve yükselen ilanların etiket ve başlıklarından çıkarılır.
 export interface PatternSeed {
+  studio: "pattern" | "printable";
+  kind?: PrintableKind;
+  formats: string[];
+  pageCount?: number;
   craft: PatternCraft;
   productType: string;
   referenceSource: "trend";
@@ -173,6 +179,10 @@ function mineProduct(keyword: string, rows: Row[]): { product: string; source: s
     const specific = ranked(specifics).find(([phrase]) => singular(phrase.split(" ")[1]) === head);
     return specific && specific[1] >= total! * 0.4 ? { product: specific[0], count: specific[1] } : { product: head, count: total! };
   };
+  if (remainder.length > 1 && AUDIENCE_OR_SEASON.test(remainder[remainder.length - 1]) && !AUDIENCE_OR_SEASON.test(remainder[remainder.length - 2])) {
+    const reordered = [remainder[remainder.length - 1], ...remainder.slice(0, -1)];
+    return { product: reordered.join(" "), source: "aramadan", head: singular(reordered[reordered.length - 1]) };
+  }
   if (remainder.length && !AUDIENCE_OR_SEASON.test(remainder[remainder.length - 1])) {
     const product = remainder.join(" ");
     return { product, source: "aramadan", head: singular(remainder[remainder.length - 1]) };
@@ -248,6 +258,31 @@ function mineSizes(texts: Array<{ text: string; weight: number }>): Array<[strin
     }
   }
   return ranked(counts);
+}
+
+const PRINT_FORMAT_SIGNALS: Array<[string, RegExp]> = [
+  ["US Letter", /\b(us letter|letter size|8\.5 ?x ?11)\b/],
+  ["A4", /\ba4\b/],
+  ["A5", /\ba5\b/],
+  ["Half Letter", /\b(half letter|5\.5 ?x ?8\.5)\b/],
+  ["4x6 in cards", /\b4 ?x ?6\b/],
+  ["5x7 in cards", /\b5 ?x ?7\b/],
+  ["8x10 in", /\b8 ?x ?10\b/],
+  ["11x14 in", /\b11 ?x ?14\b/],
+  ["12x12 in sheets", /\b12 ?x ?12\b/]
+];
+
+// PDF ürünlerinde format: türün standart formatları + rakiplerde geçen ek formatlar.
+function printableFormats(kind: PrintableKind, texts: Array<{ text: string; weight: number }>): { formats: string[]; mined: string[] } {
+  const counts = new Map<string, number>();
+  for (const { text, weight } of texts) {
+    const value = text.toLowerCase();
+    for (const [label, pattern] of PRINT_FORMAT_SIGNALS) if (pattern.test(value)) counts.set(label, (counts.get(label) || 0) + weight);
+  }
+  const mined = ranked(counts).map(([label]) => label);
+  const defaults = defaultPrintableFormats(kind);
+  const extra = mined.filter((label) => !defaults.some((item) => item.toLowerCase().startsWith(label.toLowerCase().split(" ")[0])));
+  return { formats: [...defaults, ...extra].slice(0, 6), mined };
 }
 
 function formatSize(value: string): string {
@@ -331,7 +366,9 @@ const SKILL_TR: Record<SkillLevel, string> = { beginner: "Başlangıç", easy: "
 
 export function buildPatternSeed(keywordInput: string, result: TrendResult | undefined, options: { craftHint?: string; nonce?: string; history?: SeedHistory } = {}): PatternSeed & { comboKey: string; paletteKey: string } {
   const keyword = normalizeKeyword(keywordInput);
-  const texts = corpus(result);
+  const texts = corpus(result).filter((item) => !isIpRisky(item.text));
+  const studio: PatternSeed["studio"] = (result?.group || inferTrendGroup(keyword)) === "printables" ? "printable" : "pattern";
+  const kind: PrintableKind | undefined = studio === "printable" ? result?.kind || inferPrintableKind(keyword) || "planner" : undefined;
   const craft = detectCraft(keyword, [keyword, ...texts.map((item) => item.text)], options.craftHint || result?.craft);
   const rows: Row[] = texts.flatMap((item) => chunks(item.text).map((tokens) => ({ tokens, weight: item.weight, rising: item.rising })));
   const product = mineProduct(keyword, rows);
@@ -339,7 +376,7 @@ export function buildPatternSeed(keywordInput: string, result: TrendResult | und
   const random = seededRandom(hash(`${keyword}|${options.nonce || ""}|${(options.history?.combos || []).length}`));
   const history = options.history || { combos: [], palettes: [] };
   const mined = mineFeatures(rows, productWords, product.head);
-  const chosen = pickFeatures(mined.all, mined.rising, random, new Set(history.combos));
+  const chosen = pickFeatures(mined.all.filter(([phrase]) => !isIpRisky(phrase)), mined.rising.filter(([phrase]) => !isIpRisky(phrase)), random, new Set(history.combos));
   const risingFeatures = mined.rising.map(([phrase]) => phrase).filter((phrase) => !chosen.features.includes(phrase)).slice(0, 2);
   const colorRank = mineLexicon(texts, COLOR_LEXICON.map((color) => color.name));
   const descriptors = mineLexicon(texts, COLOR_DESCRIPTORS).map(([name]) => name);
@@ -353,7 +390,10 @@ export function buildPatternSeed(keywordInput: string, result: TrendResult | und
   const size = mineSizes(productTexts).filter(([value]) => !PRINT_FORMATS.test(value)).slice(0, 2).map(([value]) => formatSize(value));
   const sizeNote = size.join(", ").slice(0, 60);
   const metrics = result?.metrics;
-  const trendTags = [...new Set([...(result?.risingTags || []).map((item) => item.tag), ...(result?.topTags || []).map((item) => item.tag)].map((tag) => clean(tag)).filter(Boolean))].slice(0, 20);
+  const trendTags = [...new Set([...(result?.risingTags || []).map((item) => item.tag), ...(result?.topTags || []).map((item) => item.tag)].map((tag) => clean(tag)).filter((tag) => tag && !isIpRisky(tag)))].slice(0, 20);
+  const printable = kind ? printableFormats(kind, [...texts, ...titleTexts]) : undefined;
+  const competitorPages = result?.signals?.pageCountMedian;
+  const pageCount = kind ? (competitorPages ? Math.ceil(competitorPages * 1.2) : defaultPrintablePages(kind)) : undefined;
   const notes = [
     `Etsy market brief for "${keyword}"${metrics ? ` (${metrics.activeListings.toLocaleString("en-US")} live listings${metrics.medianPriceUsd ? `, median ${metrics.medianPriceUsd} USD` : ""})` : ""}`,
     chosen.features.length ? `: buyers favor ${chosen.features.join(", ")}` : "",
@@ -361,7 +401,14 @@ export function buildPatternSeed(keywordInput: string, result: TrendResult | und
     trendColors.length || descriptors.length ? `; colors seen in top listings: ${[...trendColors, ...descriptors].slice(0, 5).join(", ")}` : "",
     "."
   ].join("").slice(0, 600);
-  const basis = [
+  const basis = kind ? [
+    `PDF türü: ${PRINTABLE_KINDS[kind].labelTr} · Ürün: ${product.product} (${product.source})`,
+    chosen.features.length ? `Bu seferki trend özellikleri: ${chosen.features.join(", ")}${risingFeatures.length ? ` · yeni ilanlarda yükselen: ${risingFeatures.join(", ")}` : ""}` : "Trendde belirgin özellik sinyali yok; özgün tasarım yapay zekâya bırakıldı.",
+    `Renkler: ${palette.colors.join(", ")} (${palette.source})`,
+    `Formatlar: ${printable!.formats.join(", ")}${printable!.mined.length ? ` (rakiplerde geçen: ${printable!.mined.slice(0, 3).join(", ")})` : " (türün standart formatları)"}`,
+    competitorPages ? `Sayfa: ${pageCount} (rakiplerin ortancası ${competitorPages}; daha fazla değer için %20 fazlası)` : `Sayfa: ${pageCount} (trendde sayfa sayısı sinyali yok; türün tipik değeri)`,
+    chosen.fresh ? "Bu özellik kombinasyonu bu arama için ilk kez kullanılıyor." : "Bu aramadaki tüm özellik kombinasyonları denendi; palet ve ad yine yeni seçildi."
+  ] : [
     `Ürün: ${product.product} (${product.source})`,
     chosen.features.length ? `Bu seferki trend özellikleri: ${chosen.features.join(", ")}${risingFeatures.length ? ` · yeni ilanlarda yükselen: ${risingFeatures.join(", ")}` : ""}` : "Trendde belirgin özellik sinyali yok; özgün tasarım yapay zekâya bırakıldı.",
     `Renkler: ${palette.colors.join(", ")} (${palette.source})`,
@@ -371,6 +418,10 @@ export function buildPatternSeed(keywordInput: string, result: TrendResult | und
     chosen.fresh ? "Bu özellik kombinasyonu bu arama için ilk kez kullanılıyor." : "Bu aramadaki tüm özellik kombinasyonları denendi; palet ve desen adı yine yeni seçildi."
   ];
   return {
+    studio,
+    ...(kind ? { kind } : {}),
+    formats: printable?.formats || [],
+    ...(pageCount ? { pageCount } : {}),
     craft,
     productType: product.product.slice(0, 60),
     referenceSource: "trend",

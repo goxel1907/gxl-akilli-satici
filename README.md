@@ -4,7 +4,7 @@ GXL Market Studio için ürün kategorisinden bağımsız, Android merkezli çok
 
 Sistem; serbest kategorili ürün kataloğu, pazar fırsatları, müşteri adayları, ilk temas onayı, onay sonrası otomatik konuşma, ürün önerisi, çok kanallı satış yönlendirmesi ve insan devralma kurallarını tek yerde toplar.
 
-Güncel kanal önceliği Etsy'dir; Shopier ve Letgo ikinci plandadır. Uygulama Etsy sekmesiyle açılır. Etsy kanalı hobi PDF desenlerini, tesbih ve gümüş ürünleri ve vintage ürünleri satar. Shopier uygulamada ayrı bir satış merkezi olarak canlı ürün/sipariş okuma, açık onaylı ürün oluşturma ve güncelleme, stok yönetimi ve imzalı webhook doğrulaması sağlar. Etsy ayrı bir kanal olarak tutulur; mağaza sahibi kurulum ücretini onaylayıp mağazayı açana kadar ödeme öncesi hazırlık aşamasında kalır. Letgo beklemededir.
+Güncel kanal önceliği Etsy'dir; Shopier ve Letgo ikinci plandadır. Uygulama Etsy sekmesiyle açılır. Etsy kanalı kadınlara yönelik PDF ürünlerini (planlayıcı, boyama, duvar sanatı, tarif kartı, parti oyunları, günlük, çocuk etkinlikleri, kâğıt işi), hobi desenlerini, tesbih ve gümüş ürünleri ve vintage ürünleri satar. Shopier uygulamada ayrı bir satış merkezi olarak canlı ürün/sipariş okuma, açık onaylı ürün oluşturma ve güncelleme, stok yönetimi ve imzalı webhook doğrulaması sağlar. Etsy ayrı bir kanal olarak tutulur; mağaza sahibi kurulum ücretini onaylayıp mağazayı açana kadar ödeme öncesi hazırlık aşamasında kalır. Letgo beklemededir.
 
 Yeni akıllı ürün modülü; telefondan seçilen gerçek ürün fotoğrafını analiz eder, yalnızca gözlemlenebilir özellikleri çıkarır, doğrulanamayan marka/yıl/malzeme iddialarını soruya dönüştürür, Etsy için İngilizce; Shopier ve Letgo için Türkçe ilan taslakları hazırlar. Deterministik politika kilidi `YASAK`, `İNCELEME GEREKLİ` ve `UYGUNLUK KONTROLÜ GEÇTİ` sonuçlarından birini verir; yasak veya eksik kanıtlı ürün otomatik yayınlanmaz.
 
@@ -66,6 +66,7 @@ Depodaki `GXL Android APK` iş akışı `main` dalına yapılan her mobil uygula
 - Etsy trend radarı: hobi deseni, tesbih/gümüş ve vintage nişlerini Etsy resmî aramasıyla 0–100 arası puanlama
 - Otomatik keşif (otopilot): her 30 dakikada bir Etsy taraması; yeni ilanlarda yükselen etiketlerden yeni arama ifadeleri çıkarıp takibe alma
 - Uygulama içi Etsy kullanım kılavuzu (Etsy → Kılavuz)
+- PDF ürün stüdyosu: 9 PDF türü için ilgi sıralaması, veriye dayalı "öne geçme" önerileri (format boşluğu, paket, fiyat, yükselen özellikler), marka/telif koruması, türe özel PDF promptu, sayfa görseli promptları, kullanım yerini gösteren reklam tadında 10 görsel, Pinterest pinleri ve paket fikri (`docs/PDF_URUN_STUDYOSU_TR.md`)
 - Desen stüdyosu: sistemin seçtiği desen adı, referanstan farklılaştırma planı, Claude/ChatGPT PDF promptu, 3D render promptu ve Etsy kurallarına uygun başlık ile 13 etiket
 - ABD sezon fırsatları: yaklaşan alışveriş dönemleri, son listeleme tarihleri ve dönemlik arama puanları
 - Fiziksel ürün Etsy stüdyosu: alıcı arama ifadesi, etiket, başlık, açıklama, TL→USD fiyat analizi, Etsy kural kapısı, taslak ve tek onayla yayınlama (`docs/ETSY_URUN_STUDYOSU_TR.md`)

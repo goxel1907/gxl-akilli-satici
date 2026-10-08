@@ -1,5 +1,5 @@
 import { etsyRequest, EtsyIntegrationError, getConnectedShop, type EtsyRuntimeEnv } from "./etsy.js";
-import type { PatternCraft } from "./etsy-trends.js";
+import type { PatternCraft, PrintableKind } from "./etsy-trends.js";
 import { normalizeEtsyTags, normalizeEtsyTitle, validateEtsyListingText } from "./pattern-studio.js";
 
 type Fetcher = typeof fetch;
@@ -24,7 +24,8 @@ export interface DigitalImage {
 export interface DigitalProduct {
   id: string;
   name: string;
-  craft: PatternCraft;
+  craft?: PatternCraft;
+  kind?: PrintableKind;
   productType: string;
   fileName: string;
   fileSize: number;
@@ -75,6 +76,18 @@ const TAXONOMY_WORDS: Record<PatternCraft, string[]> = {
   macrame: ["macrame", "macramé"],
   punch_needle: ["punch needle", "rug"]
 };
+// PDF ürünleri için Etsy kategori arama kelimeleri (öncelik sırasıyla).
+const KIND_TAXONOMY_WORDS: Record<PrintableKind, string[]> = {
+  planner: ["calendars & planners", "planners", "planner"],
+  digital_planner: ["calendars & planners", "planners", "planner"],
+  coloring: ["coloring"],
+  wall_art: ["digital prints", "prints"],
+  party: ["party games", "games", "party supplies"],
+  recipe: ["recipe", "stationery"],
+  journal: ["journals", "notebooks", "journal"],
+  kids: ["educational", "learning", "flash cards"],
+  paper_craft: ["scrapbooking", "digital paper", "paper"]
+};
 
 function randomId(bytes = 24): string {
   const values = new Uint8Array(bytes);
@@ -122,10 +135,11 @@ export async function createDigitalProduct(store: DigitalStore, form: FormData, 
     throw new DigitalDeliveryError("VALIDATION_FAILED", "Ürün bilgileri okunamadı.");
   }
   const name = String(metadata.name || "").replace(/\s+/g, " ").trim().slice(0, 80);
-  const craft = String(metadata.craft || "") as PatternCraft;
+  const kind = KIND_TAXONOMY_WORDS[String(metadata.kind || "") as PrintableKind] ? String(metadata.kind) as PrintableKind : undefined;
+  const craft = kind ? undefined : String(metadata.craft || "") as PatternCraft;
   const productType = String(metadata.productType || "").replace(/\s+/g, " ").trim().toLowerCase().slice(0, 60);
-  if (!name) throw new DigitalDeliveryError("VALIDATION_FAILED", "Desen adı gerekli.");
-  if (!CRAFTS.has(craft)) throw new DigitalDeliveryError("VALIDATION_FAILED", "El işi türü geçersiz.");
+  if (!name) throw new DigitalDeliveryError("VALIDATION_FAILED", "Ürün adı gerekli.");
+  if (!kind && !CRAFTS.has(craft!)) throw new DigitalDeliveryError("VALIDATION_FAILED", "El işi veya PDF türü geçersiz.");
   if (productType.length < 3) throw new DigitalDeliveryError("VALIDATION_FAILED", "Ürün türü gerekli.");
 
   const listingInput = metadata.listing && typeof metadata.listing === "object" ? metadata.listing as Record<string, unknown> : {};
@@ -164,9 +178,9 @@ export async function createDigitalProduct(store: DigitalStore, form: FormData, 
   const product: DigitalProduct = {
     id: crypto.randomUUID(),
     name,
-    craft,
+    ...(kind ? { kind } : { craft }),
     productType,
-    fileName: safeFileName(pdf.name || name, "pattern"),
+    fileName: safeFileName(pdf.name || name, kind ? "printable" : "pattern"),
     fileSize: pdfBytes.byteLength,
     images,
     listing,
@@ -307,6 +321,27 @@ export async function findPatternTaxonomyId(env: EtsyRuntimeEnv, craft: PatternC
   return chosen.id;
 }
 
+export async function findKindTaxonomyId(env: EtsyRuntimeEnv, kind: PrintableKind, store: DigitalStore, fetcher: Fetcher = fetch): Promise<number> {
+  const cacheKey = `etsy:taxonomy:printable:${kind}`;
+  const cached = Number(await store.get(cacheKey));
+  if (cached > 0) return cached;
+  const payload = await etsyRequest<{ results?: TaxonomyNode[] }>(env, "/application/seller-taxonomy/nodes", { authenticated: false }, fetcher);
+  const nodes: Array<{ id: number; name: string; depth: number }> = [];
+  const visit = (node: TaxonomyNode, depth: number) => {
+    if (node.id) nodes.push({ id: node.id, name: String(node.name || "").toLowerCase(), depth });
+    for (const child of node.children || []) visit(child, depth + 1);
+  };
+  for (const node of payload.results || []) visit(node, 0);
+  let chosen: { id: number; depth: number } | undefined;
+  for (const word of KIND_TAXONOMY_WORDS[kind]) {
+    chosen = nodes.filter((node) => node.name.includes(word)).sort((a, b) => b.depth - a.depth)[0];
+    if (chosen) break;
+  }
+  if (!chosen) throw new EtsyIntegrationError("VALIDATION_FAILED", "Etsy kategorisi bulunamadı; ilanı Etsy uygulamasında kategori seçerek tamamlayın.", 400);
+  await store.put(cacheKey, String(chosen.id), { expirationTtl: 7 * 24 * 60 * 60 });
+  return chosen.id;
+}
+
 export async function createEtsyDigitalDraft(
   env: EtsyRuntimeEnv,
   store: DigitalStore,
@@ -326,7 +361,9 @@ export async function createEtsyDigitalDraft(
   const currency = (shop.currencyCode || "USD").toUpperCase();
   const price = currency === "TRY" ? product.prices.try : currency === "USD" ? product.prices.usd : undefined;
   if (!price) throw new DigitalDeliveryError("VALIDATION_FAILED", `Etsy mağazanızın para birimi ${currency}. Bu ürüne ${currency === "TRY" ? "TL" : currency} fiyatı girin.`);
-  const taxonomyId = await findPatternTaxonomyId(env, product.craft, store, fetcher);
+  const taxonomyId = product.kind
+    ? await findKindTaxonomyId(env, product.kind, store, fetcher)
+    : await findPatternTaxonomyId(env, product.craft || "crochet", store, fetcher);
 
   let listingId = product.etsy?.listingId;
   if (!listingId) {

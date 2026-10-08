@@ -1,4 +1,5 @@
 import { generateStructuredObject, hasAiProvider, type AiRuntimeEnv } from "../../api/src/structured-ai.js";
+import { buildAdVisuals, type AdVisual } from "./ad-visuals.js";
 import type { PatternCraft } from "./etsy-trends.js";
 
 export type SkillLevel = "beginner" | "easy" | "intermediate" | "experienced";
@@ -28,6 +29,7 @@ export interface PatternBrief {
   renderPrompt: string;
   photoPlan: Array<{ slot: number; title: string; detail: string }>;
   qualityGate: string[];
+  adVisuals: AdVisual[];
 }
 
 export interface DigitalListingInput {
@@ -109,7 +111,7 @@ function hash(value: string): number {
   return result >>> 0;
 }
 
-function titleCase(value: string): string {
+export function titleCase(value: string): string {
   return value.trim().replace(/\s+/g, " ").split(" ").map((word) => word ? word[0].toUpperCase() + word.slice(1).toLowerCase() : word).join(" ");
 }
 
@@ -164,21 +166,30 @@ function coinWord(value: number): string {
 }
 
 // Ad: trendden gelen bir özellik veya renk + türetilmiş özgün sözcük + ürün. Daha önce kullanılan adlar atlanır.
-export function choosePatternName(input: Pick<PatternPlanInput, "productType" | "referenceNotes" | "craft" | "seed" | "trendFeatures" | "colors" | "avoidNames">): string {
+export function coinProductName(input: { productType: string; salt: string; accents?: string[]; avoidNames?: string[] }): string {
   const avoid = new Set((input.avoidNames || []).map((name) => name.toLowerCase()));
   const productWords = new Set(input.productType.toLowerCase().split(/\s+/));
-  const accents = [...(input.trendFeatures || []), ...(input.colors || [])]
+  const accents = (input.accents || [])
     .map((value) => value.toLowerCase().trim())
     .filter((value) => /^[a-z][a-z -]{1,15}$/.test(value) && !value.split(" ").some((word) => productWords.has(word)));
   const product = titleCase(input.productType);
   let name = "";
   for (let attempt = 0; attempt < 50; attempt += 1) {
-    const value = hash(`${input.seed || ""}|${input.craft}|${input.productType}|${input.referenceNotes || ""}|${attempt}`);
+    const value = hash(`${input.salt}|${attempt}`);
     const accent = accents.length && value % 3 !== 0 ? `${titleCase(accents[value % accents.length])} ` : "";
     name = `${accent}${coinWord(value)} ${product}`;
     if (!avoid.has(name.toLowerCase())) break;
   }
   return name;
+}
+
+export function choosePatternName(input: Pick<PatternPlanInput, "productType" | "referenceNotes" | "craft" | "seed" | "trendFeatures" | "colors" | "avoidNames">): string {
+  return coinProductName({
+    productType: input.productType,
+    salt: `${input.seed || ""}|${input.craft}|${input.productType}|${input.referenceNotes || ""}`,
+    accents: [...(input.trendFeatures || []), ...(input.colors || [])],
+    avoidNames: input.avoidNames
+  });
 }
 
 function alternativeRepeat(reference: number): number {
@@ -356,6 +367,7 @@ export function buildPatternBrief(input: PatternPlanInput): PatternBrief {
     patternPrompt: buildPatternPrompt(input, name, rules.en),
     renderPrompt: buildRenderPrompt(input, name),
     photoPlan: PHOTO_PLAN.map((item, index) => ({ slot: index + 1, ...item })),
+    adVisuals: buildAdVisuals({ craft: input.craft, productType: input.productType, name, colors: input.colors, features: input.trendFeatures, formats: input.sizeNote ? [input.sizeNote] : undefined, seed: input.seed }),
     qualityGate: [
       "Deseni satışa açmadan önce en az bir kez bizzat ör/yap ya da test ördür; sayıları, metrajı ve ölçüyü buna göre düzelt.",
       "Ana fotoğraf mümkünse gerçek üründen olsun. Render kullanılıyorsa görselde 'Digital render' yazsın; ilan açıklaması bunu otomatik belirtir.",

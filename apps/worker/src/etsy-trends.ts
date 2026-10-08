@@ -1,10 +1,15 @@
+import { buildAdvice, type TrendAdvice } from "./advice.js";
 import { etsyRequest, EtsyIntegrationError, type EtsyRuntimeEnv } from "./etsy.js";
+import { findIpRisks } from "./ip-guard.js";
 
 type Fetcher = typeof fetch;
 
 export type PatternCraft = "crochet" | "knitting" | "embroidery" | "cross_stitch" | "sewing" | "macrame" | "punch_needle";
 
-export type TrendGroup = "patterns" | "tesbih" | "vintage" | "other";
+// Kadınlara yönelik yazdırılabilir / dijital PDF ürün türleri.
+export type PrintableKind = "planner" | "digital_planner" | "coloring" | "wall_art" | "party" | "recipe" | "journal" | "kids" | "paper_craft";
+
+export type TrendGroup = "printables" | "patterns" | "tesbih" | "vintage" | "other";
 
 export interface TrendNiche {
   id: string;
@@ -12,6 +17,7 @@ export interface TrendNiche {
   labelTr: string;
   group: TrendGroup;
   craft?: PatternCraft;
+  kind?: PrintableKind;
 }
 
 interface GroupProfile {
@@ -21,6 +27,7 @@ interface GroupProfile {
 }
 
 export const TREND_GROUPS: Record<TrendGroup, GroupProfile> = {
+  printables: { labelTr: "PDF ürünleri", expectsDigital: true, priceUsd: [2, 15] },
   patterns: { labelTr: "Hobi desenleri", expectsDigital: true, priceUsd: [2, 12] },
   tesbih: { labelTr: "Tesbih ve gümüş", expectsDigital: false, priceUsd: [15, 250] },
   vintage: { labelTr: "Vintage", expectsDigital: false, priceUsd: [15, 250] },
@@ -28,6 +35,26 @@ export const TREND_GROUPS: Record<TrendGroup, GroupProfile> = {
 };
 
 export const TREND_NICHES: TrendNiche[] = [
+  { id: "printable-planner", keyword: "printable planner", labelTr: "Yazdırılabilir planlayıcı", group: "printables", kind: "planner" },
+  { id: "digital-planner", keyword: "digital planner", labelTr: "Dijital planlayıcı (tablet)", group: "printables", kind: "digital_planner" },
+  { id: "budget-planner", keyword: "budget planner printable", labelTr: "Bütçe planlayıcı", group: "printables", kind: "planner" },
+  { id: "meal-planner", keyword: "meal planner printable", labelTr: "Yemek planlayıcı", group: "printables", kind: "planner" },
+  { id: "habit-tracker", keyword: "habit tracker printable", labelTr: "Alışkanlık takipçisi", group: "printables", kind: "planner" },
+  { id: "cleaning-schedule", keyword: "cleaning schedule printable", labelTr: "Temizlik planı", group: "printables", kind: "planner" },
+  { id: "wedding-planner", keyword: "wedding planner printable", labelTr: "Düğün planlayıcı", group: "printables", kind: "planner" },
+  { id: "adult-coloring", keyword: "adult coloring pages", labelTr: "Yetişkin boyama sayfaları", group: "printables", kind: "coloring" },
+  { id: "kids-coloring", keyword: "coloring pages for kids", labelTr: "Çocuk boyama sayfaları", group: "printables", kind: "coloring" },
+  { id: "wall-art", keyword: "printable wall art", labelTr: "Yazdırılabilir duvar sanatı", group: "printables", kind: "wall_art" },
+  { id: "recipe-cards", keyword: "recipe card printable", labelTr: "Tarif kartı / tarif defteri", group: "printables", kind: "recipe" },
+  { id: "bridal-shower-games", keyword: "bridal shower games", labelTr: "Bridal shower oyunları", group: "printables", kind: "party" },
+  { id: "baby-shower-games", keyword: "baby shower games printable", labelTr: "Baby shower oyunları", group: "printables", kind: "party" },
+  { id: "self-care-journal", keyword: "self care journal printable", labelTr: "Öz bakım günlüğü", group: "printables", kind: "journal" },
+  { id: "reading-journal", keyword: "reading journal printable", labelTr: "Okuma günlüğü", group: "printables", kind: "journal" },
+  { id: "junk-journal", keyword: "junk journal kit", labelTr: "Junk journal kiti", group: "printables", kind: "paper_craft" },
+  { id: "digital-paper", keyword: "digital paper pack", labelTr: "Dijital kâğıt paketi", group: "printables", kind: "paper_craft" },
+  { id: "kids-activity", keyword: "kids activity pages", labelTr: "Çocuk etkinlik sayfaları", group: "printables", kind: "kids" },
+  { id: "homeschool", keyword: "homeschool printables", labelTr: "Evde eğitim çalışma kâğıtları", group: "printables", kind: "kids" },
+  { id: "quilt-pattern", keyword: "quilt pattern pdf", labelTr: "Kapitone / yorgan deseni", group: "patterns", craft: "sewing" },
   { id: "crochet-doily", keyword: "crochet doily pattern", labelTr: "Tığ işi dantel / sehpa örtüsü", group: "patterns", craft: "crochet" },
   { id: "crochet-bag", keyword: "crochet bag pattern", labelTr: "Tığ işi çanta", group: "patterns", craft: "crochet" },
   { id: "amigurumi", keyword: "amigurumi pattern", labelTr: "Amigurumi oyuncak", group: "patterns", craft: "crochet" },
@@ -62,7 +89,26 @@ export function isTrendGroup(value: unknown): value is TrendGroup {
   return typeof value === "string" && Object.prototype.hasOwnProperty.call(TREND_GROUPS, value);
 }
 
+const CRAFT_IN_KEYWORD = /\b(crochet|knit|knitting|sewing|sew|embroidery|cross stitch|macrame|punch needle|amigurumi|quilt|quilting|needlepoint)\b/i;
+const PRINTABLE_IN_KEYWORD = /\b(printables?|planners?|journal|journaling|coloring|colouring|wall art|worksheets?|tracker|checklist|recipe cards?|invitations?|games|digital paper|clipart|stickers|templates?|calendar|workbook|flash ?cards)\b/i;
+
+export function inferPrintableKind(keyword: string): PrintableKind | undefined {
+  const value = keyword.toLowerCase();
+  if (/\bdigital planner|goodnotes|notability|hyperlinked\b/.test(value)) return "digital_planner";
+  if (/\bcolou?ring\b/.test(value)) return "coloring";
+  if (/\bwall art|poster|art print|digital print\b/.test(value)) return "wall_art";
+  if (/\brecipe\b/.test(value)) return "recipe";
+  if (/\bgames?|invitation|shower|party|bingo|scavenger hunt\b/.test(value)) return "party";
+  if (/\bkids?|toddler|preschool|homeschool|worksheets?|activity|flash ?cards?|classroom\b/.test(value)) return "kids";
+  if (/\bjunk journal|digital paper|scrapbook|ephemera|paper flower|clipart|stickers\b/.test(value)) return "paper_craft";
+  if (/\bjournal|workbook|gratitude|prompts\b/.test(value)) return "journal";
+  if (/\bplanner|tracker|checklist|schedule|calendar|organizer|budget\b/.test(value)) return "planner";
+  return undefined;
+}
+
 export function inferTrendGroup(keyword: string): TrendGroup {
+  if (CRAFT_IN_KEYWORD.test(keyword) && /\b(pattern|pdf|chart|template)\b/i.test(keyword)) return "patterns";
+  if (PRINTABLE_IN_KEYWORD.test(keyword) && !CRAFT_IN_KEYWORD.test(keyword)) return "printables";
   if (/\b(pattern|pdf|printable|template|svg|chart)\b/i.test(keyword)) return "patterns";
   if (/\b(vintage|antique|retro)\b/i.test(keyword)) return "vintage";
   if (/\b(tasbih|tesbih|tespih|misbaha|prayer beads|worry beads|komboloi|islamic)\b/i.test(keyword)) return "tesbih";
@@ -105,6 +151,49 @@ export interface TrendResult {
   examples: TrendExample[];
   scannedAt: string;
   cached?: boolean;
+  kind?: PrintableKind;
+  signals?: TrendSignals;
+  advice?: TrendAdvice[];
+}
+
+// Üst ilanların başlık ve etiketlerinde hangi formatların ne sıklıkla geçtiği: rakiplerin sunmadığı formatı sunmak öne geçirir.
+export interface TrendSignals {
+  formats: Array<{ id: string; labelTr: string; share: number }>;
+  bundleShare: number;
+  pageCountMedian?: number;
+  ipRisks: string[];
+}
+
+const FORMAT_SIGNALS: Array<{ id: string; labelTr: string; pattern: RegExp }> = [
+  { id: "letter", labelTr: "US Letter", pattern: /\b(us letter|letter size|8\.5 ?x ?11)\b/ },
+  { id: "a4", labelTr: "A4", pattern: /\ba4\b/ },
+  { id: "a5", labelTr: "A5", pattern: /\ba5\b/ },
+  { id: "half_letter", labelTr: "Half Letter", pattern: /\b(half letter|5\.5 ?x ?8\.5)\b/ },
+  { id: "editable", labelTr: "Düzenlenebilir (Canva/Corjl)", pattern: /\b(editable|canva|corjl|templett)\b/ },
+  { id: "tablet", labelTr: "Tablet / hyperlinked", pattern: /\b(goodnotes|notability|hyperlinked|ipad|tablet)\b/ },
+  { id: "printer_friendly", labelTr: "Yazıcı dostu / siyah-beyaz", pattern: /\b(printer friendly|black and white|ink saving|minimal ink)\b/ },
+  { id: "instant", labelTr: "Instant download", pattern: /\binstant download\b/ },
+  { id: "commercial", labelTr: "Ticari kullanım lisansı", pattern: /\b(commercial use|plr|resell rights)\b/ },
+  { id: "video", labelTr: "Video eğitim", pattern: /\b(video tutorial|video)\b/ },
+  { id: "ratio_sizes", labelTr: "Çoklu çerçeve ölçüleri", pattern: /\b(5 ?x ?7|8 ?x ?10|11 ?x ?14|16 ?x ?20|18 ?x ?24|24 ?x ?36|multiple sizes)\b/ },
+  { id: "card_sizes", labelTr: "Kart ölçüleri (4x6 / 5x7)", pattern: /\b(4 ?x ?6|5 ?x ?7|3 ?x ?5)\b/ },
+  { id: "scrapbook_size", labelTr: "12x12 scrapbook", pattern: /\b12 ?x ?12\b/ }
+];
+
+function computeSignals(pageOne: EtsyListingRow[], topTags: Array<{ tag: string }>): TrendSignals {
+  const texts = pageOne.map((listing) => `${String(listing.title || "")} ${(Array.isArray(listing.tags) ? listing.tags : []).join(" ")}`.toLowerCase());
+  const share = (pattern: RegExp) => texts.length ? Math.round(100 * texts.filter((text) => pattern.test(text)).length / texts.length) / 100 : 0;
+  const pageCounts = pageOne
+    .map((listing) => String(listing.title || "").toLowerCase().match(/\b(\d{2,3})\+? ?(?:pages|page|designs|sheets|cards|prints|worksheets)\b/))
+    .filter((match): match is RegExpMatchArray => Boolean(match))
+    .map((match) => Number(match[1]))
+    .filter((value) => value >= 2 && value <= 600);
+  return {
+    formats: FORMAT_SIGNALS.map((item) => ({ id: item.id, labelTr: item.labelTr, share: share(item.pattern) })),
+    bundleShare: share(/\b(bundle|set of|mega|pack)\b/),
+    pageCountMedian: pageCounts.length >= 3 ? Math.round(median(pageCounts)) : undefined,
+    ipRisks: [...new Set([...topTags.map((item) => item.tag), ...pageOne.map((listing) => String(listing.title || ""))].flatMap((text) => findIpRisks(text)))].slice(0, 8)
+  };
 }
 
 interface EtsyMoney { amount?: number; divisor?: number; currency_code?: string }
@@ -217,6 +306,7 @@ export function scoreTrend(keyword: string, payload: { count?: number; results?:
       priceUsd: priceUsd(listing)
     }));
 
+  const signals = computeSignals(pageOne, topTags);
   const reasons = [
     `Üst sıradaki ilanlar ayda ortanca ${favoritesPerMonth.toFixed(1)} favori alıyor (talep göstergesi).`,
     `${activeListings.toLocaleString("tr-TR")} aktif ilanla rekabet ediliyor.`,
@@ -232,9 +322,10 @@ export function scoreTrend(keyword: string, payload: { count?: number; results?:
     : parts.openness < 30 ? "Rekabet yoğun"
     : "Zor";
 
-  return {
+  const result: TrendResult = {
     keyword,
     group,
+    ...(group === "printables" ? { kind: inferPrintableKind(keyword) } : {}),
     score,
     verdict,
     parts,
@@ -250,12 +341,14 @@ export function scoreTrend(keyword: string, payload: { count?: number; results?:
     topTags,
     risingTags,
     examples,
+    signals,
     scannedAt: new Date(now).toISOString()
   };
+  return { ...result, advice: buildAdvice(result) };
 }
 
 function priceScore(price: number, [low, high]: [number, number]): number {
-  if (high <= 12) return 100 * (price - low) / (high - low);
+  if (high <= 20) return 100 * (price - low) / (high - low);
   return 100 * (Math.log(Math.max(price, 1)) - Math.log(low)) / (Math.log(high) - Math.log(low));
 }
 
@@ -298,7 +391,7 @@ export async function scanTrend(
   }, fetcher);
   const result: TrendResult = {
     ...scoreTrend(keyword, payload, now, niche?.group || input.group || inferTrendGroup(keyword)),
-    ...(niche ? { nicheId: niche.id, labelTr: niche.labelTr, craft: niche.craft } : {})
+    ...(niche ? { nicheId: niche.id, labelTr: niche.labelTr, craft: niche.craft, ...(niche.kind ? { kind: niche.kind } : {}) } : {})
   };
   if (store) await store.put(cacheKey(keyword), JSON.stringify(result), { expirationTtl: CACHE_TTL_SECONDS });
   return result;
@@ -309,7 +402,7 @@ export async function getTrendBoard(env: EtsyRuntimeEnv, store: TrendStore | und
   return {
     configured: Boolean(env.ETSY_API_KEY && env.ETSY_SHARED_SECRET),
     cacheHours: CACHE_TTL_SECONDS / 3600,
-    groups: (["patterns", "tesbih", "vintage"] as const).map((id) => ({ id, labelTr: TREND_GROUPS[id].labelTr })),
+    groups: (["printables", "patterns", "tesbih", "vintage"] as const).map((id) => ({ id, labelTr: TREND_GROUPS[id].labelTr })),
     niches: results.sort((a, b) => (b.result?.score ?? -1) - (a.result?.score ?? -1)),
     method: "Etsy resmî aramasında üst sıradaki ilanların favori hızı, rekabet hacmi, yeni ilan payı ve fiyat bandı puanlanır. Etsy satış adedini API ile paylaşmadığı için puan tahmindir."
   };

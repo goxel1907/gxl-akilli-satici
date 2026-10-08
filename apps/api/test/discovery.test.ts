@@ -112,6 +112,7 @@ test("autopilot scans one stale keyword per run, records discoveries and reports
     const url = new URL(String(input));
     scanned.push(url.searchParams.get("keywords") || "");
     if (fail) return Response.json({ error: "Too many requests" }, { status: 429 });
+    if (/planner/.test(url.searchParams.get("keywords") || "")) return Response.json({ count: 900, results: [listing(200, 20, ["sinking funds tracker", "cash envelope budget", "disney planner"])] });
     return Response.json(doilyPayload(NOW));
   }) as typeof fetch;
   const env = { ETSY_API_KEY: "key", ETSY_SHARED_SECRET: "secret" };
@@ -119,7 +120,8 @@ test("autopilot scans one stale keyword per run, records discoveries and reports
   assert.deepEqual(await runAutopilot({}, kv.store, fetcher, new Date(NOW)), { skipped: true });
   const first = await runAutopilot(env, kv.store, fetcher, new Date(NOW));
   assert.equal(first.keyword, TREND_NICHES[0].keyword);
-  assert.ok(first.added.includes("pineapple doily pattern"));
+  assert.ok(first.added.includes("sinking funds tracker"));
+  assert.ok(!first.added.some((phrase) => phrase.includes("disney")));
   const second = await runAutopilot(env, kv.store, fetcher, new Date(NOW + 30 * 60_000));
   assert.equal(second.keyword, TREND_NICHES[1].keyword);
   assert.deepEqual(scanned, [TREND_NICHES[0].keyword, TREND_NICHES[1].keyword]);

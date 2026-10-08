@@ -1,6 +1,6 @@
 # Dijital desen satışı: Trend → Stüdyo → Korumalı PDF
 
-GXL'nin önceliği Etsy'dir; Shopier ve Letgo ikinci plandadır. Bu belge hobi PDF desenlerinin (tığ işi, şiş örgü, nakış, kanaviçe, dikiş, makrome, punch) akışını anlatır. Tesbih, gümüş ve vintage gibi fiziksel ürünler için bkz. [ETSY_URUN_STUDYOSU_TR.md](ETSY_URUN_STUDYOSU_TR.md).
+GXL'nin önceliği Etsy'dir; Shopier ve Letgo ikinci plandadır. Bu belge hobi PDF desenlerinin (tığ işi, şiş örgü, nakış, kanaviçe, dikiş, makrome, punch) akışını anlatır. Planlayıcı, boyama, duvar sanatı gibi diğer PDF ürünleri için bkz. [PDF_URUN_STUDYOSU_TR.md](PDF_URUN_STUDYOSU_TR.md). Tesbih, gümüş ve vintage gibi fiziksel ürünler için bkz. [ETSY_URUN_STUDYOSU_TR.md](ETSY_URUN_STUDYOSU_TR.md).
 
 Uygulama **Etsy** sekmesiyle açılır. Sekme dört bölümden oluşur: **Trend**, **Stüdyo**, **Dijital** ve **Kılavuz**. Kılavuz, günlük akışı, satış adımlarını, teslimatı, Etsy kurallarını, mağaza ayarlarını ve sorun gidermeyi uygulamanın içinde anlatır.
 

@@ -82,6 +82,9 @@ test("physical tesbih and vintage niches use their own price scale and digital r
   assert.equal(inferTrendGroup("antique silver ring"), "vintage");
   assert.equal(inferTrendGroup("misbaha gift"), "tesbih");
   assert.equal(inferTrendGroup("wooden bowl"), "other");
+  assert.equal(inferTrendGroup("budget planner printable"), "printables");
+  assert.equal(inferTrendGroup("adult coloring pages"), "printables");
+  assert.equal(inferTrendGroup("crochet pattern printable"), "patterns");
   assert.ok(TREND_NICHES.some((niche) => niche.group === "tesbih") && TREND_NICHES.some((niche) => niche.group === "vintage"));
 });
 
@@ -114,7 +117,7 @@ test("trend scan uses the public Etsy search with the API key only and caches th
 
   const board = await getTrendBoard(env, kv.store);
   assert.equal(board.niches.length, TREND_NICHES.length);
-  assert.deepEqual(board.groups.map((group) => group.id), ["patterns", "tesbih", "vintage"]);
+  assert.deepEqual(board.groups.map((group) => group.id), ["printables", "patterns", "tesbih", "vintage"]);
   assert.equal(board.niches[0].id, "crochet-doily");
 });
 
