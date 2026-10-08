@@ -10,6 +10,7 @@ export interface DiscoverySummary {
   verdict: string;
   activeListings: number;
   favoritesPerMonth: number;
+  leaderFavoritesPerMonth?: number;
   medianPriceUsd?: number;
   scannedAt: string;
 }
@@ -47,6 +48,7 @@ function summarize(result: TrendResult): DiscoverySummary {
     verdict: result.verdict,
     activeListings: result.metrics.activeListings,
     favoritesPerMonth: result.metrics.favoritesPerMonth,
+    leaderFavoritesPerMonth: result.metrics.leaderFavoritesPerMonth,
     medianPriceUsd: result.metrics.medianPriceUsd,
     scannedAt: result.scannedAt
   };

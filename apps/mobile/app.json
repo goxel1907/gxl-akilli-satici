@@ -3,12 +3,12 @@
     "name": "GXL Akıllı Satıcı",
     "slug": "gxl-akilli-satici",
     "owner": "goxel34",
-    "version": "0.8.1",
+    "version": "0.8.2",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
     "android": {
       "package": "com.gxl.akillisatici",
-      "versionCode": 11,
+      "versionCode": 12,
       "adaptiveIcon": { "backgroundColor": "#12261F" }
     },
     "plugins": ["expo-secure-store"],

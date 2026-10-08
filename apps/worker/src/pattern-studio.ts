@@ -1,4 +1,5 @@
 import { generateStructuredObject, hasAiProvider, type AiRuntimeEnv } from "../../api/src/structured-ai.js";
+import { buildMasterPrompt } from "./master-prompt.js";
 import { buildAdVisuals, type AdVisual } from "./ad-visuals.js";
 import type { PatternCraft } from "./etsy-trends.js";
 
@@ -30,6 +31,8 @@ export interface PatternBrief {
   photoPlan: Array<{ slot: number; title: string; detail: string }>;
   qualityGate: string[];
   adVisuals: AdVisual[];
+  // Desen, render ve reklam görselleri tek sohbette sırayla yapılsın diye birleştirilmiş paket.
+  masterPrompt: string;
 }
 
 export interface DigitalListingInput {
@@ -361,13 +364,32 @@ const PHOTO_PLAN = [
 export function buildPatternBrief(input: PatternPlanInput): PatternBrief {
   const name = choosePatternName(input);
   const rules = originalityRules(input);
+  const patternPrompt = buildPatternPrompt(input, name, rules.en);
+  const renderPrompt = buildRenderPrompt(input, name);
+  const adVisuals = buildAdVisuals({ craft: input.craft, productType: input.productType, name, colors: input.colors, features: input.trendFeatures, formats: input.sizeNote ? [input.sizeNote] : undefined, seed: input.seed });
   return {
     name,
     originalityPlan: rules.tr,
-    patternPrompt: buildPatternPrompt(input, name, rules.en),
-    renderPrompt: buildRenderPrompt(input, name),
+    patternPrompt,
+    renderPrompt,
     photoPlan: PHOTO_PLAN.map((item, index) => ({ slot: index + 1, ...item })),
-    adVisuals: buildAdVisuals({ craft: input.craft, productType: input.productType, name, colors: input.colors, features: input.trendFeatures, formats: input.sizeNote ? [input.sizeNote] : undefined, seed: input.seed }),
+    adVisuals,
+    masterPrompt: buildMasterPrompt({
+      name,
+      productLabel: `${CRAFTS[input.craft].label.toLowerCase()} ${input.productType} pattern`,
+      specName: "Design spec",
+      filesBrief: patternPrompt,
+      renderPrompt,
+      adVisuals,
+      checklist: [
+        "Every stitch or knot count adds up row by row; every [TEST-MAKE CHECK] item is listed for the maker to confirm.",
+        "Renders show exactly the motif counts, repeats and colors of the Design spec.",
+        "No text, photo, chart or name from any reference product appears in the pattern or listing.",
+        "Every PDF page has the copyright footer and the last page has the license text.",
+        "US terms are used and a stitch abbreviation table is included.",
+        "No brand, character or celebrity names."
+      ]
+    }),
     qualityGate: [
       "Deseni satışa açmadan önce en az bir kez bizzat ör/yap ya da test ördür; sayıları, metrajı ve ölçüyü buna göre düzelt.",
       "Ana fotoğraf mümkünse gerçek üründen olsun. Render kullanılıyorsa görselde 'Digital render' yazsın; ilan açıklaması bunu otomatik belirtir.",
@@ -407,8 +429,10 @@ export function normalizeEtsyTags(values: string[], limit = 13): string[] {
   const tags: string[] = [];
   for (const raw of values) {
     const tag = raw.replace(TAG_DISALLOWED, " ").replace(/\s+/g, " ").trim().toLowerCase();
-    if (!tag || tag.length > 20 || seen.has(tag)) continue;
-    seen.add(tag);
+    // Etsy kelime sırasına bakmaz: "planner printable" ile "printable planner" aynı aramayı karşılar, ikincisi etiket hakkını boşa harcar.
+    const key = tag.split(" ").sort().join(" ");
+    if (!tag || tag.length > 20 || seen.has(key)) continue;
+    seen.add(key);
     tags.push(tag);
     if (tags.length === limit) break;
   }

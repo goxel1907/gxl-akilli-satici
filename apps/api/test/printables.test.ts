@@ -198,3 +198,46 @@ test("an unscanned printable search is scanned as a printable, with a style-matc
   assert.ok([["burgundy", "forest green", "gold"], ["plum", "olive", "cream"], ["charcoal", "wine", "camel"]].some((palette) => palette.join() === seed.colors.join()));
   assert.equal(JSON.parse(values.get("etsy:trend:wedding-shower-games")!).group, "printables");
 });
+
+test("every part goes into one ordered master prompt for a single chat", () => {
+  const coloring = buildPrintableBrief({ kind: "coloring", productType: "coloring book", keyword: "adult coloring pages", trendFeatures: ["mandala"], colors: ["sage green", "blush"], pageCount: 40, audience: "adults, moms", seed: "m" });
+  const master = coloring.masterPrompt;
+  assert.match(master, /Do every step in THIS chat/);
+  assert.match(master, /Product spec JSON/);
+  // Sanatlı türde görseller dosyalardan önce üretilir.
+  assert.ok(master.indexOf("- STEP 2 - Artwork") > 0 && master.indexOf("- STEP 3 - Product files") > master.indexOf("- STEP 2 - Artwork"));
+  for (const visual of coloring.adVisuals) assert.ok(master.includes(`### C${visual.slot}. `), `C${visual.slot}`);
+  coloring.pins.forEach((pin, index) => assert.ok(master.includes(`D${index + 1}. Title: ${pin.title}`)));
+  coloring.artPrompts.forEach((prompt) => assert.ok(master.includes(prompt)));
+  assert.ok(!/^## Working name/m.test(master), "brief headings are nested under Brief A");
+  assert.equal(master.split("## Artwork prompts").length, 1, "artwork prompts appear once, in Brief B");
+  assert.match(coloring.pins[0].description, /^.+ is an original .+\. Includes 40 pages/);
+  assert.match(coloring.pins[0].description, /Made for adults and moms\./);
+
+  const doily = buildPatternBrief({ craft: "crochet", productType: "doily", colors: ["cream"], seed: "d" } as never);
+  assert.match(doily.masterPrompt, /## Brief R - product renders/);
+  assert.ok(!doily.masterPrompt.includes("<DESIGN SPEC JSON>"));
+  assert.match(doily.masterPrompt, /Design spec JSON from step 1 of this chat/);
+});
+
+test("demand reads the leading quarter too, so big printable niches are not called weak", () => {
+  const rows = [
+    listing("Printable Planner Bundle", ["printable planner"], 8000, 3800),
+    listing("12 Month Journal Bundle", ["12 month journal", "printable planner"], 800, 320),
+    listing("Weekly Planner", ["weekly planner", "planner printable"], 2000, 1050),
+    ...Array.from({ length: 21 }, (_, index) => listing(`Planner page ${index}`, ["printable planner", "erin condren"], index % 4 === 0 ? 3 : 0, 30 + index))
+  ];
+  const result = scoreTrend("printable planner", { count: 857_460, results: rows }, NOW, "printables");
+  assert.equal(result.metrics.favoritesPerMonth, 0);
+  assert.ok((result.metrics.leaderFavoritesPerMonth || 0) > 1);
+  assert.notEqual(result.verdict, "Talep zayıf");
+  assert.ok(result.signals?.ipRisks.includes("erin condren"));
+  const seed = buildPatternSeed("printable planner", result, { kindHint: "planner", groupHint: "printables", nonce: "1" });
+  assert.ok(!seed.trendTags.some((tag) => tag.includes("condren")));
+  assert.ok(!seed.trendFeatures.concat(seed.risingFeatures).includes("month journal"));
+});
+
+test("tags that only differ in word order are not repeated", async () => {
+  const { normalizeEtsyTags } = await import("../../worker/src/pattern-studio.js");
+  assert.deepEqual(normalizeEtsyTags(["printable planner", "planner printable", "weekly planner"]), ["printable planner", "weekly planner"]);
+});

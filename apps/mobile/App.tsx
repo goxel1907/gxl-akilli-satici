@@ -795,7 +795,7 @@ function TrendCard({ title, result, expanded, onToggle, onUse, scanning, group, 
     {!!result && <>
       <Text style={styles.trendVerdict}>{result.verdict}</Text>
       {!!result.signals?.ipRisks?.length && <Text style={styles.shopierBlocker}>Marka/telif riski: {result.signals.ipRisks.join(", ")}. Bu kelimeleri başlıkta, etikette ve tasarımda kullanma.</Text>}
-      <Text style={styles.small}>Rakip: {Number(result.metrics.activeListings).toLocaleString("tr-TR")} ilan · Talep: {result.metrics.favoritesPerMonth} favori/ay · Yeni ilan payı: %{Math.round(result.metrics.newcomerShare * 100)}{result.metrics.medianPriceUsd ? ` · Ortanca ${result.metrics.medianPriceUsd} USD` : ""}</Text>
+      <Text style={styles.small}>Rakip: {Number(result.metrics.activeListings).toLocaleString("tr-TR")} ilan · Talep: {demandText(result.metrics)} · Yeni ilan payı: %{Math.round(result.metrics.newcomerShare * 100)}{result.metrics.medianPriceUsd ? ` · Ortanca ${result.metrics.medianPriceUsd} USD` : ""}</Text>
       {expanded && <>
         {result.reasons.map((reason: string) => <Text style={styles.evidence} key={reason}>• {reason}</Text>)}
         {!!result.advice?.length && <View style={styles.adviceBox}>
@@ -805,7 +805,7 @@ function TrendCard({ title, result, expanded, onToggle, onUse, scanning, group, 
             <View style={{ flex: 1 }}><Text style={styles.rowTitle}>{item.titleTr}</Text><Text style={styles.evidence}>{item.detailTr}</Text></View>
           </View>)}
         </View>}
-        {(isPattern || isPrintable) && !!result.signals?.formats && <Text style={styles.small}>Rakiplerde format: {result.signals.formats.filter((item: any) => item.share > 0).map((item: any) => `${item.labelTr} %${Math.round(item.share * 100)}`).join(" · ") || "belirgin format bilgisi yok"} · Paket/set: %{Math.round((result.signals.bundleShare || 0) * 100)}{result.signals.pageCountMedian ? ` · Ortanca ${result.signals.pageCountMedian} sayfa` : ""}</Text>}
+        {(isPattern || isPrintable) && !!result.signals?.formats && <Text style={styles.small}>Rakiplerin başlık/etiketinde geçen format: {result.signals.formats.filter((item: any) => item.share > 0).map((item: any) => `${item.labelTr} %${Math.round(item.share * 100)}`).join(" · ") || "belirgin format bilgisi yok"} · Paket/set: %{Math.round((result.signals.bundleShare || 0) * 100)}{result.signals.pageCountMedian ? ` · Ortanca ${result.signals.pageCountMedian} sayfa` : ""}</Text>}
         <Text style={styles.warningTitle}>Üst ilanlarda en çok geçen etiketler</Text>
         <View style={styles.chips}>{result.topTags.slice(0, 14).map((tag: any) => <View style={styles.chip} key={tag.tag}><Text style={styles.chipText}>{tag.tag} · {tag.count}</Text></View>)}</View>
         {!!result.risingTags?.length && <>
@@ -1003,24 +1003,30 @@ function DiscoveryPanel({ online, onUse }: any) {
           {scanning === item.keyword ? <ActivityIndicator color="#A86B2E" /> : <View style={[styles.scoreBadge, scoreStyle(item.summary?.score)]}><Text style={styles.scoreBadgeText}>{item.summary ? item.summary.score : "—"}</Text></View>}
         </View>
         {item.summary
-          ? <><Text style={styles.trendVerdict}>{item.summary.verdict}</Text><Text style={styles.small}>Rakip: {Number(item.summary.activeListings).toLocaleString("tr-TR")} ilan · Talep: {item.summary.favoritesPerMonth} favori/ay{item.summary.medianPriceUsd ? ` · Ortanca ${item.summary.medianPriceUsd} USD` : ""} · {timeAgo(item.summary.scannedAt)}</Text></>
+          ? <><Text style={styles.trendVerdict}>{item.summary.verdict}</Text><Text style={styles.small}>Rakip: {Number(item.summary.activeListings).toLocaleString("tr-TR")} ilan · Talep: {demandText(item.summary)}{item.summary.medianPriceUsd ? ` · Ortanca ${item.summary.medianPriceUsd} USD` : ""} · {timeAgo(item.summary.scannedAt)}</Text></>
           : <Text style={styles.small}>Henüz puanlanmadı. Dokunun, Etsy'de taransın.</Text>}
       </Pressable>)}
   </>;
 }
 
-// Alıcı ilgisi (üst ilanların aylık favori hızı) çubukla, fırsat puanı yanında gösterilir.
+// Talep: ortanca ilan ve öne çıkan çeyrek birlikte; eski önbellek kayıtlarında yalnızca ortanca vardır.
+function demandText(metrics: any) {
+  const leaders = metrics?.leaderFavoritesPerMonth;
+  return typeof leaders === "number" ? `ortanca ${metrics.favoritesPerMonth}, öne çıkanlar ${leaders} favori/ay` : `${metrics?.favoritesPerMonth ?? 0} favori/ay`;
+}
+
+// Alıcı ilgisi (talep puanı: ortanca ilan + öne çıkan çeyreğin aylık favori hızı) çubukla, fırsat puanı yanında gösterilir.
 function InterestRanking({ rows }: any) {
-  const scanned = rows.filter((row: any) => row.result).sort((a: any, b: any) => b.result.metrics.favoritesPerMonth - a.result.metrics.favoritesPerMonth);
+  const scanned = rows.filter((row: any) => row.result).sort((a: any, b: any) => b.result.parts.demand - a.result.parts.demand);
   if (scanned.length < 2) return null;
-  const max = Math.max(...scanned.map((row: any) => row.result.metrics.favoritesPerMonth), 1);
+  const max = Math.max(...scanned.map((row: any) => row.result.parts.demand), 1);
   return <View style={styles.analysisCard}>
     <Text style={styles.cardTitle}>İlgi sıralaması</Text>
-    <Text style={styles.small}>Çubuk: alıcı ilgisi (üst ilanların aylık favori hızı). Sağdaki rozet: fırsat puanı. Önce ilgisi yüksek ve puanı 45+ olanlara gir.</Text>
+    <Text style={styles.small}>Çubuk: alıcı ilgisi (talep puanı). Sayı: öne çıkan ilanların aylık favorisi. Sağdaki rozet: fırsat puanı. Önce ilgisi yüksek ve puanı 45+ olanlara gir; ilgisi yüksek ama puanı düşükse rekabet yoğundur, dar bir alt ifadeyle gir.</Text>
     {scanned.map((row: any) => <View key={row.id} style={styles.barRow}>
       <Text style={styles.barLabel} numberOfLines={1}>{row.labelTr}</Text>
-      <View style={styles.barTrack}><View style={[styles.barFill, { width: `${Math.max(4, Math.round(100 * row.result.metrics.favoritesPerMonth / max))}%` }]} /></View>
-      <Text style={styles.barValue}>{row.result.metrics.favoritesPerMonth}</Text>
+      <View style={styles.barTrack}><View style={[styles.barFill, { width: `${Math.max(4, Math.round(100 * row.result.parts.demand / max))}%` }]} /></View>
+      <Text style={styles.barValue}>{row.result.metrics.leaderFavoritesPerMonth ?? row.result.metrics.favoritesPerMonth}</Text>
       <View style={[styles.miniScore, scoreStyle(row.result.score)]}><Text style={styles.miniScoreText}>{row.result.score}</Text></View>
     </View>)}
   </View>;
@@ -1148,6 +1154,7 @@ function PrintableStudio({ online, seed, seeding, onReseed, onPickKind, onUpload
         <Text style={styles.warningTitle}>Özgünlük planı</Text>
         {brief.originalityPlan.map((line: string) => <Text style={styles.analysisLine} key={line}>• {line}</Text>)}
       </View>
+      <MasterPromptCard brief={brief} />
       <PromptBox title="1) PDF promptu (Claude / ChatGPT)" text={brief.pdfPrompt} shareTitle={`${brief.name} PDF prompt`} />
       {!!brief.artPrompts?.length && <PromptBox title="2) Sayfa görselleri promptları" text={brief.artPrompts.join("\n\n")} shareTitle={`${brief.name} artwork prompts`} />}
       <AdVisualsPanel visuals={brief.adVisuals} />
@@ -1188,6 +1195,23 @@ function PrintableStudio({ online, seed, seeding, onReseed, onPickKind, onUpload
 
 function ChipGroup({ options, value, onChange }: any) {
   return <View style={styles.chips}>{options.map((option: any) => <Pressable key={option.id} style={[styles.chip, value === option.id && styles.chipActive]} onPress={() => onChange(option.id)}><Text style={[styles.chipText, value === option.id && styles.chipTextActive]}>{option.label}</Text></Pressable>)}</View>;
+}
+
+// Paylaşım ChatGPT/Claude'da her seferinde yeni sohbet açar; parçalar ayrı sohbetlere düşerse ad, palet ve spec kaybolur.
+// Tek paket tüm adımları sırayla içerir: bir kez gönderilir, tüm iş aynı sohbette yürür.
+function MasterPromptCard({ brief }: any) {
+  if (!brief?.masterPrompt) return null;
+  const steps = (brief.masterPrompt.match(/^- STEP \d+/gm) || []).length;
+  return <View style={[styles.analysisCard, styles.masterCard]}>
+    <Text style={styles.cardTitle}>Tek paket: tek sohbette hepsi</Text>
+    <Text style={styles.analysisLine}>Parça parça gönderme: her paylaşım yeni sohbet açar ve yeni sohbet önceki ürün adını, paleti ve sayfa planını bilmez. Bu paket ürün dosyası, görseller ve varsa pinler dahil tüm parçaları {steps} sıralı adımda birleştirir.</Text>
+    <Text style={styles.analysisLine}>1. Aşağıdaki düğmeyle bir kez ChatGPT'ye (veya Claude'a) gönder.</Text>
+    <Text style={styles.analysisLine}>2. Her adım bitince aynı sohbete "next" yaz; yeni sohbet açma.</Text>
+    <Text style={styles.analysisLine}>3. Görseller için ChatGPT kullan; Claude fotoğraf üretmez, dosyaları ve vektör çizimleri yapar.</Text>
+    <Text style={styles.small}>{Math.round(brief.masterPrompt.length / 100) / 10} bin karakter. Uygulama uzun metni almazsa paylaş ekranının üstündeki kopyala simgesine dokunup aynı sohbete yapıştır.</Text>
+    <Pressable style={[styles.primary, { marginTop: 12, marginBottom: 0 }]} onPress={() => Share.share({ message: brief.masterPrompt, title: `${brief.name} - tek paket` })}><Text style={styles.primaryText}>Tek paketi gönder</Text><Ionicons name="paper-plane-outline" size={18} color="white" /></Pressable>
+    <Text style={[styles.small, { marginTop: 10 }]}>Aşağıdaki parçalar bu paketin içindekilerdir. Ayrı kullanacaksan hepsini aynı sohbete yapıştır.</Text>
+  </View>;
 }
 
 function PromptBox({ title, text, shareTitle }: any) {
@@ -1343,6 +1367,7 @@ function StudioPanel({ online, active, seed, onUpload }: any) {
         <Text style={styles.warningTitle}>Modelden farklılaştırma planı</Text>
         {brief.originalityPlan.map((line: string) => <Text style={styles.analysisLine} key={line}>• {line}</Text>)}
       </View>
+      <MasterPromptCard brief={brief} />
       <PromptBox title="1) PDF desen promptu (Claude / ChatGPT)" text={brief.patternPrompt} shareTitle={`${brief.name} pattern prompt`} />
       <PromptBox title="2) 3D render promptu" text={brief.renderPrompt} shareTitle={`${brief.name} render prompt`} />
       <AdVisualsPanel visuals={brief.adVisuals} />
@@ -1693,11 +1718,12 @@ const ETSY_GUIDE: Array<{ id: string; title: string; icon: any; steps: string[] 
     "Pahalı fiziksel ürünlerde (gümüş tesbih vb.) favori sayısı doğal olarak düşüktür. Az satış da yüksek kazanç demektir."
   ] },
   { id: "printables", title: "PDF ürün satışı adım adım (planlayıcı, boyama, duvar sanatı…)", icon: "document-attach-outline", steps: [
-    "Trend → PDF ürünleri: planlayıcı, dijital planlayıcı, boyama, duvar sanatı, tarif kartı, parti oyunları, günlük, çocuk etkinlikleri ve kâğıt işi nişleri puanlanır. 'İlgi sıralaması' alıcı ilgisini çubukla gösterir.",
+    "Trend → PDF ürünleri: planlayıcı, dijital planlayıcı, boyama, duvar sanatı, tarif kartı, parti oyunları, günlük, çocuk etkinlikleri ve kâğıt işi nişleri puanlanır. 'İlgi sıralaması' alıcı ilgisini çubukla gösterir: talep, ortanca ilan ile öne çıkan çeyreğin aylık favorisinden birlikte hesaplanır. İlgisi yüksek ama puanı düşük nişte rekabet yoğundur; dar bir alt ifadeyle girin.",
     "Bir kartı açıp 'Öne geçmek için ne yapmalı?' önerilerini okuyun, sonra 'Bu nişte PDF hazırla'ya basın.",
     "Stüdyo'yu açtığınızda veya bir PDF türüne bastığınızda sistem o türde en güçlü Etsy aramasını kendisi seçer ve tüm alanları doldurur: ürün, trend özellikleri, renkler (trend rengi yoksa trend stiline uygun palet), formatlar (rakiplerin az sunduğu formatlar eklenir), sayfa sayısı (rakip ortancasının %20 fazlası) ve hedef kitle. 'Başka arama seç' sıradaki güçlü aramayı getirir.",
     "'Rakipleri geçmek için' kartı rakip ortanca fiyatını, önerilen başlangıç ve set fiyatını, format boşluklarını ve geçilecek rakipleri gösterir; önerilen fiyat yükleme formuna otomatik gelir. Siz 'Prompt, görsel ve ilanı hazırla'ya basarsınız.",
-    "1) PDF promptunu Claude veya ChatGPT'ye verin; prompt yazdırmaya hazır dosyaları her format için ayrı üretir. Boyama, duvar sanatı ve kâğıt işinde 2) sayfa görseli promptlarıyla görselleri üretin.",
+    "'Tek paketi gönder' ile her şeyi bir kez ChatGPT'ye gönderin: PDF, sayfa görselleri, 10 reklam görseli ve pin görselleri sıralı adımlarla aynı sohbette yapılır. Her adım bitince aynı sohbete 'next' yazın. Parçaları ayrı ayrı paylaşmayın; her paylaşım yeni sohbet açar ve yeni sohbet ürün adını, paleti ve sayfa planını bilmez.",
+    "Claude dosyaları (PDF/HTML/SVG) çok iyi kurar ama fotoğraf üretmez. Claude kullanırsanız paketin fotoğraf adımlarını ChatGPT'de, yine tek sohbette yapın; Product spec JSON'unu oraya da yapıştırın.",
     "Reklam tadında 10 görselin her birinde nerede kullanılacağı (Etsy kapak, galeri, Pinterest, Instagram), ölçüsü ve üstüne yazılacak kısa metin yazar. Görseli üretirken PDF sayfalarınızı referans olarak yükleyin, yazıyı Canva ile ekleyin.",
     "Pinterest pinlerini farklı günlerde paylaşın. Paket fikriyle aynı stilde bir set hazırlayın.",
     "Dijital → PDF'i ve görselleri yükleyin → 'Etsy taslağı oluştur'. Etsy'de yapay zekâ beyanını ve kategoriyi kontrol edip yayınlayın."
@@ -1726,7 +1752,7 @@ const ETSY_GUIDE: Array<{ id: string; title: string; icon: any; steps: string[] 
     "Trend'de bir desen araması açın → 'Bu nişte desen hazırla'.",
     "Stüdyo tüm alanları o aramanın güncel Etsy verisinden kendisi doldurur: ürün, trend özellikleri, renkler, zorluk, malzeme ve varsa ölçü. Siz yalnızca 'Prompt ve ilanı hazırla'ya basarsınız.",
     "Her seferinde o arama için daha önce kullanılmamış bir özellik kombinasyonu, yeni bir palet ve daha önce verilmemiş bir desen adı seçilir. Trendin en güçlü özelliği ve ana rengi korunur. 'Başka trend kombinasyonu' yeni seçenek getirir; kendi modeliniz varsa 'Kendi modelimden hazırla'ya basın.",
-    "Promptu 'Kopyala / gönder' ile Claude veya ChatGPT'ye verin. PDF'i ve render görsellerini telefona kaydedin.",
+    "'Tek paketi gönder' ile deseni, render görsellerini ve reklam görsellerini bir kez ChatGPT'ye gönderin; hepsi aynı sohbette sırayla yapılır ve render Design spec ile birebir aynı olur. Her adım sonunda 'next' yazın. PDF'i ve görselleri telefona kaydedin.",
     "Kalite kapısındaki maddeleri kontrol edin: ölçüler, ilmek sayıları, kısaltmalar, en az bir deneme örneği.",
     "Dijital → PDF'i ve görselleri yükleyin → 'Etsy taslağı oluştur'. Başlık, 13 etiket ve açıklama otomatik gelir.",
     "Etsy'de taslağı açın, yapay zekâ beyanını ve kategoriyi kontrol edip yayınlayın. Dijital desenlerde bu beyan Etsy'de elle işaretlendiği için son adım Etsy'dedir."
@@ -2109,6 +2135,7 @@ const styles = StyleSheet.create({
   barLabel: { width: 112, fontSize: 11, color: "#303B36", fontWeight: "700" },
   barTrack: { flex: 1, height: 10, backgroundColor: "#E7E3D9", borderRadius: 5, overflow: "hidden" },
   barFill: { height: 10, backgroundColor: "#315B4C", borderRadius: 5 },
+  masterCard: { borderWidth: 2, borderColor: "#315B4C" },
   barValue: { width: 34, fontSize: 11, color: "#56615C", textAlign: "right" },
   miniScore: { minWidth: 30, height: 22, borderRadius: 11, alignItems: "center", justifyContent: "center", paddingHorizontal: 4 },
   miniScoreText: { fontSize: 11, fontWeight: "900", color: "#17221E" },
