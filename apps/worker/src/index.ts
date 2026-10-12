@@ -29,6 +29,7 @@ import { autopilotStatus, listDiscoveries, recordScan, runAutopilot } from "./di
 import { buildProductPlan, createEtsyPhysicalDraft, detectProductSignals, getUsdTryRate, keywordCandidates, normalizeProductInput, publishEtsyListing, type KeyValueStore } from "./product-studio.js";
 import { buildPatternBrief, createDigitalListing, normalizeDigitalListingInput, normalizePatternPlanInput } from "./pattern-studio.js";
 import { PRIVACY_PATHS, privacyPolicyPage } from "./legal-pages.js";
+import { applyShopSettings, shopSettingsStatus, ShopSettingsError } from "./shop-settings.js";
 import { createPatternSeed, readUsedNames, rememberName } from "./pattern-seed.js";
 import { buildPrintableBrief, createPrintableListing, normalizePrintablePlanInput } from "./printable-studio.js";
 import {
@@ -415,10 +416,12 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
       if (shopierWebhookEvents.length > 100) shopierWebhookEvents.splice(0, shopierWebhookEvents.length - 100);
       return json(200, { accepted: true, duplicate: false, event: verification.event });
     }
-    const downloadMatch = url.pathname.match(/^\/d\/([A-Za-z0-9_-]{32})(\/file)?$/);
+    const downloadMatch = url.pathname.match(/^\/d\/([A-Za-z0-9_-]{32})(\/file(?:\/([1-4]))?)?$/);
     if (request.method === "GET" && downloadMatch) {
       if (!env.ETSY_OAUTH) return json(404, { error: "İndirme bağlantısı bulunamadı." });
-      return downloadMatch[2] ? await grantDownload(digitalStore(env), downloadMatch[1]) : await grantLandingPage(digitalStore(env), downloadMatch[1]);
+      return downloadMatch[2]
+        ? await grantDownload(digitalStore(env), downloadMatch[1], Date.now(), Number(downloadMatch[3] || 0))
+        : await grantLandingPage(digitalStore(env), downloadMatch[1]);
     }
     if (url.pathname.startsWith("/api/") && !authorized(request, env)) return json(401, { error: "Uygulama erişim anahtarı geçersiz." });
 
@@ -449,6 +452,16 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
 
     if (request.method === "POST" && url.pathname === "/api/etsy/connect-session") {
       return json(200, await createEtsyConnectSession(request, env));
+    }
+
+    if (request.method === "GET" && url.pathname === "/api/etsy/shop-settings") {
+      return json(200, await shopSettingsStatus(env));
+    }
+    if (request.method === "POST" && url.pathname === "/api/etsy/shop-settings") {
+      const input = await readBody(request);
+      const blocked = requireConfirmedWrite(env, input, "Etsy mağaza vitrinini değiştirme");
+      if (blocked) return blocked;
+      return json(200, await applyShopSettings(env, input));
     }
 
     if (request.method === "GET" && url.pathname === "/api/etsy/trends") {
@@ -861,6 +874,7 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
     if (code === "PATTERN_KEYWORD_REQUIRED") return json(400, { error: "Desen için bir Etsy araması seçin." });
     if (code === "PATTERN_PRODUCT_REQUIRED") return json(400, { error: "Ürün türünü yazın (ör. doily, slippers)." });
     if (error instanceof DigitalDeliveryError) return json(error.status, { error: error.message });
+    if (error instanceof ShopSettingsError) return json(error.status, { error: error.message, code: error.code });
     if (error instanceof PinterestError) return json(error.status, { error: error.message, code: error.code });
     if (error instanceof EtsyIntegrationError) {
       if (error.code === "NOT_CONFIGURED") return json(503, { error: "Etsy keystring ve shared secret henüz sunucuya eklenmedi." });

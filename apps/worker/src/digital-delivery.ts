@@ -21,20 +21,29 @@ export interface DigitalImage {
   size: number;
 }
 
+export interface DigitalFile {
+  name: string;
+  size: number;
+  mimeType: "application/pdf" | "application/zip";
+}
+
 export interface DigitalProduct {
   id: string;
   name: string;
   craft?: PatternCraft;
   kind?: PrintableKind;
   productType: string;
+  // İlk dosya (geriye uyum için ayrıca fileName/fileSize olarak da tutulur).
   fileName: string;
   fileSize: number;
+  // Etsy dijital ilana en fazla 5 dosya eklenebilir: her format ayrı PDF, fazlası ZIP.
+  files?: DigitalFile[];
   images: DigitalImage[];
   listing: { title: string; description: string; tags: string[]; materials: string[] };
   pins?: Array<{ title: string; description: string; overlay?: string }>;
   prices: { usd?: number; try?: number };
   flags: { aiAssisted: boolean; photosAreRenders: boolean; testMade: boolean };
-  etsy?: { listingId: number; editUrl: string; createdAt: string; imagesUploaded: number; fileUploaded: boolean; error?: string };
+  etsy?: { listingId: number; editUrl: string; createdAt: string; imagesUploaded: number; fileUploaded: boolean; filesUploaded?: number; error?: string };
   createdAt: string;
 }
 
@@ -47,6 +56,8 @@ export interface DownloadGrant {
   expiresAt: string;
   maxDownloads: number;
   downloads: number;
+  // Çok dosyalı üründe indirme hakkı dosya başınadır; downloads en çok indirilen dosyanın sayısıdır.
+  fileDownloads?: number[];
   revoked: boolean;
   lastDownloadAt?: string;
 }
@@ -64,6 +75,7 @@ const GRANT_PREFIX = "digital:grant:";
 const GRANT_INDEX_PREFIX = "digital:grants:";
 const PRODUCT_INDEX = "digital:index";
 const MAX_PDF_BYTES = 20 * 1024 * 1024;
+const MAX_FILES = 5;
 const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
 const MAX_IMAGES = 10;
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -108,9 +120,17 @@ function imageType(bytes: Uint8Array): { mimeType: string; extension: string } |
   return undefined;
 }
 
-function safeFileName(value: string, fallback: string): string {
-  const base = value.replace(/\.pdf$/i, "").normalize("NFKD").replace(/[^\w\s-]/g, "").replace(/\s+/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "").slice(0, 60);
-  return `${base || fallback}.pdf`;
+function safeFileName(value: string, fallback: string, extension = "pdf"): string {
+  const base = value.replace(/\.(pdf|zip)$/i, "").normalize("NFKD").replace(/[^\w\s-]/g, "").replace(/\s+/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "").slice(0, 60);
+  return `${base || fallback}.${extension}`;
+}
+
+function fileKey(productId: string, index: number): string {
+  return index === 0 ? `${FILE_PREFIX}${productId}` : `${FILE_PREFIX}${productId}:${index}`;
+}
+
+export function productFiles(product: DigitalProduct): DigitalFile[] {
+  return product.files?.length ? product.files : [{ name: product.fileName, size: product.fileSize, mimeType: "application/pdf" }];
 }
 
 function positivePrice(value: unknown): number | undefined {
@@ -155,11 +175,26 @@ export async function createDigitalProduct(store: DigitalStore, form: FormData, 
   };
   if (!listing.title || !listing.description) throw new DigitalDeliveryError("VALIDATION_FAILED", "Önce stüdyoda ilan başlığı ve açıklaması hazırlanmalı.");
 
-  const pdf = form.get("pdf");
-  if (!pdf || typeof pdf === "string") throw new DigitalDeliveryError("VALIDATION_FAILED", "PDF dosyası seçilmedi.");
-  if (pdf.size < 1_024 || pdf.size > MAX_PDF_BYTES) throw new DigitalDeliveryError("VALIDATION_FAILED", "PDF 1 KB ile 20 MB arasında olmalıdır.");
-  const pdfBytes = await pdf.arrayBuffer();
-  if (!startsWith(new Uint8Array(pdfBytes, 0, 5), [0x25, 0x50, 0x44, 0x46, 0x2d])) throw new DigitalDeliveryError("VALIDATION_FAILED", "Seçilen dosya geçerli bir PDF değil.");
+  // "files" alanı birden çok PDF/ZIP taşır; eski uygulama sürümleri tek "pdf" alanı gönderir.
+  const uploads = [...form.getAll("files"), ...form.getAll("pdf")].filter((item): item is File => typeof item !== "string");
+  if (!uploads.length) throw new DigitalDeliveryError("VALIDATION_FAILED", "PDF dosyası seçilmedi.");
+  if (uploads.length > MAX_FILES) throw new DigitalDeliveryError("VALIDATION_FAILED", "Etsy bir dijital ilana en fazla 5 dosya kabul eder. Fazla formatları bir ZIP dosyasında birleştirin.");
+  const files: DigitalFile[] = [];
+  const fileBytes: ArrayBuffer[] = [];
+  const usedNames = new Set<string>();
+  for (const upload of uploads) {
+    if (upload.size < 1_024 || upload.size > MAX_PDF_BYTES) throw new DigitalDeliveryError("VALIDATION_FAILED", `${upload.name || "Dosya"}: her dosya 1 KB ile 20 MB arasında olmalıdır.`);
+    const bytes = await upload.arrayBuffer();
+    const head = new Uint8Array(bytes, 0, 5);
+    const isPdf = startsWith(head, [0x25, 0x50, 0x44, 0x46, 0x2d]);
+    const isZip = startsWith(head, [0x50, 0x4b, 0x03, 0x04]);
+    if (!isPdf && !isZip) throw new DigitalDeliveryError("VALIDATION_FAILED", `${upload.name || "Dosya"} geçerli bir PDF veya ZIP değil.`);
+    let fileName = safeFileName(upload.name || name, kind ? "printable" : "pattern", isPdf ? "pdf" : "zip");
+    for (let copy = 2; usedNames.has(fileName.toLowerCase()); copy += 1) fileName = fileName.replace(/(-\d+)?\.(pdf|zip)$/, `-${copy}.$2`);
+    usedNames.add(fileName.toLowerCase());
+    files.push({ name: fileName, size: bytes.byteLength, mimeType: isPdf ? "application/pdf" : "application/zip" });
+    fileBytes.push(bytes);
+  }
 
   const imageFiles = form.getAll("images").filter((item): item is File => typeof item !== "string");
   if (imageFiles.length > MAX_IMAGES) throw new DigitalDeliveryError("VALIDATION_FAILED", "En fazla 10 görsel yüklenebilir.");
@@ -187,8 +222,9 @@ export async function createDigitalProduct(store: DigitalStore, form: FormData, 
     name,
     ...(kind ? { kind } : { craft }),
     productType,
-    fileName: safeFileName(pdf.name || name, kind ? "printable" : "pattern"),
-    fileSize: pdfBytes.byteLength,
+    fileName: files[0].name,
+    fileSize: files[0].size,
+    files,
     images,
     listing,
     ...(pins.length ? { pins } : {}),
@@ -196,7 +232,7 @@ export async function createDigitalProduct(store: DigitalStore, form: FormData, 
     flags: { aiAssisted: flags.aiAssisted !== false, photosAreRenders: flags.photosAreRenders !== false, testMade: flags.testMade === true },
     createdAt: new Date().toISOString()
   };
-  await store.put(`${FILE_PREFIX}${product.id}`, pdfBytes);
+  for (const [index, bytes] of fileBytes.entries()) await store.put(fileKey(product.id, index), bytes);
   await store.put(`${PRODUCT_PREFIX}${product.id}`, JSON.stringify(product));
   const index = (await readJson<string[]>(store, PRODUCT_INDEX)) || [];
   await store.put(PRODUCT_INDEX, JSON.stringify([product.id, ...index.filter((id) => id !== product.id)].slice(0, 200)));
@@ -253,11 +289,18 @@ export async function revokeGrant(store: DigitalStore, grantId: string): Promise
   return grant;
 }
 
-function grantProblem(grant: DownloadGrant | undefined, now: number): string | undefined {
+function fileDownloads(grant: DownloadGrant, index: number): number {
+  return grant.fileDownloads ? grant.fileDownloads[index] || 0 : index === 0 ? grant.downloads : 0;
+}
+
+function grantProblem(grant: DownloadGrant | undefined, now: number, fileCount = 1, fileIndex?: number): string | undefined {
   if (!grant) return "Bu indirme bağlantısı geçersiz. / This download link is not valid.";
   if (grant.revoked) return "Bu bağlantı satıcı tarafından kapatıldı. / This link was closed by the seller.";
   if (Date.parse(grant.expiresAt) <= now) return "Bu bağlantının süresi doldu. / This link has expired.";
-  if (grant.downloads >= grant.maxDownloads) return "İndirme hakkı doldu. / The download limit has been reached.";
+  const used = fileIndex === undefined
+    ? Math.min(...Array.from({ length: fileCount }, (_, index) => fileDownloads(grant, index)))
+    : fileDownloads(grant, fileIndex);
+  if (used >= grant.maxDownloads) return "İndirme hakkı doldu. / The download limit has been reached.";
   return undefined;
 }
 
@@ -272,31 +315,41 @@ function page(title: string, body: string, status = 200): Response {
 
 export async function grantLandingPage(store: DigitalStore, grantId: string, now = Date.now()): Promise<Response> {
   const grant = await readJson<DownloadGrant>(store, `${GRANT_PREFIX}${grantId}`);
-  const problem = grantProblem(grant, now);
+  const product = grant ? await readJson<DigitalProduct>(store, `${PRODUCT_PREFIX}${grant.productId}`) : undefined;
+  const files = product ? productFiles(product) : [];
+  const problem = grantProblem(grant, now, Math.max(1, files.length));
   if (problem || !grant) return page("İndirme bağlantısı", `<h1>İndirme bağlantısı</h1><p>${escapeHtml(problem || "")}</p><small>Sorun yaşıyorsanız satıcıyla sipariş numaranızla iletişime geçin.</small>`, problem?.includes("geçersiz") ? 404 : 410);
-  const product = await readJson<DigitalProduct>(store, `${PRODUCT_PREFIX}${grant.productId}`);
-  const remaining = grant.maxDownloads - grant.downloads;
   const expires = new Date(grant.expiresAt).toLocaleDateString("tr-TR", { timeZone: "Europe/Istanbul" });
-  return page(product?.name || "Desen indirme", `<h1>${escapeHtml(product?.name || "Desen")}</h1><p>Bu bağlantı yalnızca <strong>${escapeHtml(grant.orderRef)}</strong> numaralı sipariş içindir. Lütfen paylaşmayın.</p><p>Kalan indirme: <strong>${remaining}</strong> · Son gün: <strong>${escapeHtml(expires)}</strong></p><a class="button" href="/d/${encodeURIComponent(grant.id)}/file">PDF'i indir / Download PDF</a><p><small>This link belongs to one paid order. Remaining downloads: ${remaining}. The PDF is licensed for personal use only.</small></p>`);
+  const buttons = (files.length ? files : [{ name: "PDF", size: 0, mimeType: "application/pdf" as const }]).map((file, index) => {
+    const remaining = Math.max(0, grant.maxDownloads - fileDownloads(grant, index));
+    const href = `/d/${encodeURIComponent(grant.id)}/file${index ? `/${index}` : ""}`;
+    return remaining > 0
+      ? `<a class="button" href="${href}">${escapeHtml(file.name)} · indir / download (${remaining})</a>`
+      : `<p><small>${escapeHtml(file.name)}: indirme hakkı doldu / download limit reached</small></p>`;
+  }).join("");
+  return page(product?.name || "Dijital ürün", `<h1>${escapeHtml(product?.name || "Dijital ürün")}</h1><p>Bu bağlantı yalnızca <strong>${escapeHtml(grant.orderRef)}</strong> numaralı sipariş içindir. Lütfen paylaşmayın.</p><p>Her dosya <strong>${grant.maxDownloads}</strong> kez indirilebilir · Son gün: <strong>${escapeHtml(expires)}</strong></p>${buttons}<p><small>This link belongs to one paid order. Each file can be downloaded ${grant.maxDownloads} times. The files are licensed for personal use only.</small></p>`);
 }
 
-export async function grantDownload(store: DigitalStore, grantId: string, now = Date.now()): Promise<Response> {
+export async function grantDownload(store: DigitalStore, grantId: string, now = Date.now(), fileIndex = 0): Promise<Response> {
   const grant = await readJson<DownloadGrant>(store, `${GRANT_PREFIX}${grantId}`);
-  const problem = grantProblem(grant, now);
+  const product = grant ? await readJson<DigitalProduct>(store, `${PRODUCT_PREFIX}${grant.productId}`) : undefined;
+  const files = product ? productFiles(product) : [];
+  const problem = grantProblem(grant, now, Math.max(1, files.length), fileIndex);
   if (problem || !grant) return page("İndirme bağlantısı", `<h1>İndirme yapılamadı</h1><p>${escapeHtml(problem || "")}</p>`, problem?.includes("geçersiz") ? 404 : 410);
-  const [product, file] = await Promise.all([
-    readJson<DigitalProduct>(store, `${PRODUCT_PREFIX}${grant.productId}`),
-    store.get(`${FILE_PREFIX}${grant.productId}`, "arrayBuffer")
-  ]);
-  if (!product || !file) return page("İndirme bağlantısı", "<h1>Dosya bulunamadı</h1><p>Satıcıyla iletişime geçin.</p>", 404);
-  grant.downloads += 1;
+  const meta = files[fileIndex];
+  const file = product && meta ? await store.get(fileKey(product.id, fileIndex), "arrayBuffer") : null;
+  if (!product || !meta || !file) return page("İndirme bağlantısı", "<h1>Dosya bulunamadı</h1><p>Satıcıyla iletişime geçin.</p>", 404);
+  const counts = Array.from({ length: files.length }, (_, index) => fileDownloads(grant, index));
+  counts[fileIndex] += 1;
+  grant.fileDownloads = counts;
+  grant.downloads = Math.max(...counts);
   grant.lastDownloadAt = new Date(now).toISOString();
   const ttl = Math.max(60, Math.round((Date.parse(grant.expiresAt) - now + 30 * DAY_MS) / 1000));
   await store.put(`${GRANT_PREFIX}${grant.id}`, JSON.stringify(grant), { expirationTtl: ttl });
   return new Response(file, {
     headers: {
-      "content-type": "application/pdf",
-      "content-disposition": `attachment; filename="${product.fileName}"`,
+      "content-type": meta.mimeType,
+      "content-disposition": `attachment; filename="${meta.name}"`,
       "cache-control": "no-store, private",
       "x-robots-tag": "noindex, nofollow",
       "referrer-policy": "no-referrer"
@@ -393,7 +446,7 @@ export async function createEtsyDigitalDraft(
     if (!listingId) throw new EtsyIntegrationError("UPSTREAM_FAILED", "Etsy taslak ilan numarası döndürmedi.", 502);
   }
   const editUrl = `https://www.etsy.com/your/shops/me/listing-editor/edit/${listingId}`;
-  product.etsy = { listingId, editUrl, createdAt: product.etsy?.createdAt || new Date().toISOString(), imagesUploaded: product.etsy?.imagesUploaded || 0, fileUploaded: false };
+  product.etsy = { listingId, editUrl, createdAt: product.etsy?.createdAt || new Date().toISOString(), imagesUploaded: product.etsy?.imagesUploaded || 0, fileUploaded: false, filesUploaded: product.etsy?.filesUploaded || 0 };
   await store.put(`${PRODUCT_PREFIX}${product.id}`, JSON.stringify(product));
 
   try {
@@ -407,13 +460,18 @@ export async function createEtsyDigitalDraft(
       await etsyRequest(env, `/application/shops/${shop.shopId}/listings/${listingId}/images`, { method: "POST", multipart: form }, fetcher);
       product.etsy.imagesUploaded = index + 1;
     }
-    const file = await store.get(`${FILE_PREFIX}${product.id}`, "arrayBuffer");
-    if (!file) throw new DigitalDeliveryError("NOT_FOUND", "PDF dosyası depoda bulunamadı.", 404);
-    const form = new FormData();
-    form.set("file", new Blob([file], { type: "application/pdf" }), product.fileName);
-    form.set("name", product.fileName);
-    form.set("rank", "1");
-    await etsyRequest(env, `/application/shops/${shop.shopId}/listings/${listingId}/files`, { method: "POST", multipart: form }, fetcher);
+    // Tüm dosyalar sırayla ilana eklenir; yarıda kalırsa bir sonraki denemede kaldığı dosyadan devam eder.
+    for (const [index, meta] of productFiles(product).entries()) {
+      if (index < (product.etsy.filesUploaded || 0)) continue;
+      const file = await store.get(fileKey(product.id, index), "arrayBuffer");
+      if (!file) throw new DigitalDeliveryError("NOT_FOUND", `${meta.name} depoda bulunamadı.`, 404);
+      const form = new FormData();
+      form.set("file", new Blob([file], { type: meta.mimeType }), meta.name);
+      form.set("name", meta.name);
+      form.set("rank", String(index + 1));
+      await etsyRequest(env, `/application/shops/${shop.shopId}/listings/${listingId}/files`, { method: "POST", multipart: form }, fetcher);
+      product.etsy.filesUploaded = index + 1;
+    }
     product.etsy.fileUploaded = true;
     delete product.etsy.error;
   } catch (error) {

@@ -77,6 +77,28 @@ Ekranda gösterilen kurulum ücretini kontrol edin ve **Open your shop** düğme
 4. Shopier ürünlerinde **Etsy ilanı hazırla → Etsy taslağı oluştur → Etsy'de yayınla** akışı açılır.
 5. Günlük kullanım, kurallar ve sorun giderme uygulamada **Etsy → Kılavuz** bölümündedir.
 
+## 9. Mağaza vitrini: uygulama mı, siz mi?
+
+Etsy Open API v3 mağaza düzeyinde yalnızca şu alanları değiştirmeye izin verir. Uygulama bunları **Etsy → Kılavuz → Mağaza vitrini → Etsy'ye uygula** ile tek onayla yazar:
+
+- mağaza başlığı (en fazla 55 karakter)
+- duyuru
+- satış sonrası mesaj ve dijital ürün satış mesajı
+- mağaza bölümleri (her biri en fazla 24 karakter; var olan bölüm yeniden açılmaz)
+
+Bu yazma işlemi için Etsy'nin `shops_w` (mağaza düzenleme) izni gerekir. Bu izin daha önce istenmiyordu. Eski bağlantıyla kartta **Etsy iznini yenile** düğmesi çıkar; bir kez basıp Etsy'de izin verin.
+
+**API'nin desteklemediği, Shop Manager'dan elle yapılacaklar:**
+
+- mağaza logosu (500×500)
+- afiş (3360×840)
+- "About" (hikâye) bölümü
+- sık sorulan sorular
+
+Hazır görseller ve metinler GXL mağaza kitinde verilir.
+
+**Yalnız mağaza sahibinin yapacakları:** ödeme, banka/IBAN, kimlik ve vergi bilgileri, şifre ve iki adımlı doğrulama. Bunlar hiçbir zaman sohbete veya uygulamaya yazılmaz.
+
 ## Ek: Tesbih Etsy'de satılacaksa
 
 Tesbih ve gümüş ürünler Etsy'de **Shopier → Etsy ilanı hazırla** akışıyla listelenir (bkz. [ETSY_URUN_STUDYOSU_TR.md](ETSY_URUN_STUDYOSU_TR.md)). Yukarıdaki "Ürünü kim yaptı?" tablosu geçerlidir. Aşağıdaki taslak `GXL-GMS-024` (24 g, ay-yıldızlı, oksitli) içindir. Köşeli parantezli alanları ürünü ölçerek doldurun. Doğrulanmamış bilgiyi silin, tahminle doldurmayın.
