@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { applyShopSettings, DEFAULT_SHOP_SETTINGS, normalizeShopSettings, SHOP_LIMITS } from "../../worker/src/shop-settings.js";
+import { applyShopSettings, DEFAULT_SHOP_SETTINGS, normalizeShopSettings, recommendAudience, SHOP_LIMITS, SHOP_PRESETS } from "../../worker/src/shop-settings.js";
 import { handleRequest } from "../../worker/src/index.js";
 
 function memoryKv() {
@@ -18,10 +18,13 @@ async function envWithScope(scope: string) {
   return { APP_ACCESS_TOKEN: "app-token", ETSY_API_KEY: "key", ETSY_SHARED_SECRET: "secret", ETSY_OAUTH: store };
 }
 
-test("default storefront texts respect Etsy limits and contain no protected names", () => {
-  assert.ok(DEFAULT_SHOP_SETTINGS.title.length <= SHOP_LIMITS.title);
-  assert.ok(DEFAULT_SHOP_SETTINGS.sections.every((section) => section.length <= SHOP_LIMITS.sectionTitle));
-  assert.deepEqual(normalizeShopSettings(DEFAULT_SHOP_SETTINGS as unknown as Record<string, unknown>).sections, DEFAULT_SHOP_SETTINGS.sections);
+test("every audience preset respects Etsy limits and contains no protected names", () => {
+  for (const [key, preset] of Object.entries(SHOP_PRESETS)) {
+    assert.ok(preset.title.length <= SHOP_LIMITS.title, key);
+    assert.ok(preset.sections.every((section) => section.length <= SHOP_LIMITS.sectionTitle), key);
+    assert.deepEqual(normalizeShopSettings(preset as unknown as Record<string, unknown>).sections, preset.sections);
+  }
+  assert.equal(DEFAULT_SHOP_SETTINGS.title, SHOP_PRESETS.planners.title);
   assert.throws(() => normalizeShopSettings({ title: "x".repeat(56) }), /en fazla 55/);
   assert.throws(() => normalizeShopSettings({ sections: ["Disney Printables"] }), /disney/);
 });
@@ -49,8 +52,11 @@ test("storefront update writes the shop texts and only creates missing sections"
   }) as typeof fetch;
   const result = await applyShopSettings(env, DEFAULT_SHOP_SETTINGS as unknown as Record<string, unknown>, fetcher);
   assert.deepEqual(result.updated, ["title", "announcement", "sale_message", "digital_sale_message"]);
-  assert.deepEqual(result.sectionsExisting, ["Vintage Finds"]);
-  assert.equal(result.sectionsCreated.length, 4);
+  assert.deepEqual(result.sectionsExisting, []);
+  assert.equal(result.sectionsCreated.length, DEFAULT_SHOP_SETTINGS.sections.length);
+  const again = await applyShopSettings(env, { sections: ["Vintage Finds", "Printable Planners"] }, fetcher);
+  assert.deepEqual(again.sectionsExisting, ["Vintage Finds"]);
+  assert.deepEqual(again.sectionsCreated, ["Printable Planners"]);
   const put = calls.find((call) => call.method === "PUT")!;
   const form = new URLSearchParams(put.body);
   assert.equal(form.get("title"), DEFAULT_SHOP_SETTINGS.title);
@@ -63,4 +69,11 @@ test("Etsy connection asks for the shop editing permission", async () => {
   const response = await handleRequest(new Request("https://gxl.example/api/etsy/connect-session", { method: "POST", headers: { authorization: "Bearer app-token", "content-type": "application/json" }, body: "{}" }), env);
   const { authorizationUrl } = await response.json() as { authorizationUrl: string };
   assert.match(new URL(authorizationUrl).searchParams.get("scope") || "", /\bshops_w\b/);
+});
+
+test("the storefront preset follows what the shop actually sells", () => {
+  assert.equal(recommendAudience([]).audience, "planners");
+  assert.equal(recommendAudience([{ craft: "crochet" }, { craft: "knitting" }, { kind: "planner" }]).audience, "crafts");
+  assert.equal(recommendAudience([{ kind: "planner" }, { kind: "coloring" }, { craft: "crochet" }]).audience, "planners");
+  assert.ok(!/handmade/i.test(SHOP_PRESETS.faith.title + SHOP_PRESETS.vintage.title), "no handmade claim for bought-in or vintage items");
 });

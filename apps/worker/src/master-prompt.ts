@@ -12,6 +12,8 @@ export interface MasterPromptInput {
   adVisuals: AdVisual[];
   pins?: Array<{ title: string; description: string; overlay: string }>;
   checklist: string[];
+  // Kodla çalıştırılacak kalite protokolü (qa-protocol.ts); çıktısı yapıştırılmadan adım bitmez.
+  qa?: string[];
 }
 
 export function buildMasterPrompt(input: MasterPromptInput): string {
@@ -22,11 +24,11 @@ export function buildMasterPrompt(input: MasterPromptInput): string {
     { title: `${spec} first`, body: `Read the whole package. Before any file, output the ${spec} JSON described in Brief A. It is the single source of truth: every later file and image must match it exactly (name, palette hex codes, fonts, page or motif list, counts). If I ask for a change, update the JSON first and show it again. Show the final JSON again when the product files are finished.` }
   ];
   if (input.artPrompts?.length) steps.push({ title: "Artwork", body: "Create the artworks in Brief B one image per reply, in the spec palette and one consistent style. Name them page-01.png, page-02.png and so on; the product files will place them." });
-  steps.push({ title: "Product files", body: "Build the product files exactly as Brief A says, pass by pass. Deliver every format: none may be missing. Then give me ONE zip with the Etsy upload set (at most 5 files; put extra formats into a single Extras.zip inside it) so I can download everything at once. If you cannot create files, give complete print-ready HTML I can save as PDF." });
+  steps.push({ title: "Product files", body: "Build the product files exactly as Brief A says, pass by pass. Deliver every format: none may be missing. Before you write STEP DONE, run the Automated QA script on the finished files, paste its output and fix every FAIL. Then give me ONE zip with the Etsy upload set (at most 5 files; put extra formats into a single Extras.zip inside it) so I can download everything at once. If you cannot create files, give complete print-ready HTML I can save as PDF." });
   if (input.renderPrompt) steps.push({ title: "Product renders", body: `Create the renders in Brief R, one image per reply. Use the ${spec} JSON from step 1 of this chat; show exactly its motif counts and colors.` });
   steps.push({ title: "Listing images", body: "Create the listing images in Brief C one per reply, in order. The product shown must be the real pages or item from this chat. If you cannot see them as images, ask me to upload 2-3 screenshots first. Never draw text, letters or logos in the image; I add headlines later in Canva." });
   if (input.pins?.length && pinVisual) steps.push({ title: "Pinterest images", body: `For each pin in Brief D create one 2:3 vertical image based on image C${pinVisual.slot}, changing the scene so the pins look different and match each pin's angle. Keep the top 30% clean for the headline.` });
-  steps.push({ title: "Final check", body: "Check everything against the Final checklist and list what passes and what still needs fixing." });
+  steps.push({ title: "Final check", body: input.qa?.length ? "Run the Automated QA script again on the final upload set and paste its output, then check the Final checklist. Everything must pass before you call the product ready." : "Check everything against the Final checklist and list what passes and what still needs fixing." });
 
   const lines = [
     `# ${input.name} - complete product package (GXL Market Studio)`,
@@ -61,6 +63,7 @@ export function buildMasterPrompt(input: MasterPromptInput): string {
     lines.push("## Brief D - Pinterest pins");
     input.pins.forEach((pin, index) => lines.push(`D${index + 1}. Title: ${pin.title}`, `Description: ${pin.description}`, `Headline added later: ${pin.overlay}`, ""));
   }
+  if (input.qa?.length) lines.push("## Automated QA (mandatory, run with code)", ...input.qa, "");
   lines.push("## Final checklist", ...input.checklist.map((item) => `- ${item}`));
   return lines.join("\n");
 }

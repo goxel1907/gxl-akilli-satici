@@ -86,6 +86,17 @@ Etsy Open API v3 mağaza düzeyinde yalnızca şu alanları değiştirmeye izin 
 - satış sonrası mesaj ve dijital ürün satış mesajı
 - mağaza bölümleri (her biri en fazla 24 karakter; var olan bölüm yeniden açılmaz)
 
+Kartta önce **hedef alıcı kitlesi** seçilir; metinler o kitleye göre dolar. Dört kitle var:
+
+| Kitle | Kim |
+| --- | --- |
+| Planlayıcı ve PDF alıcıları (varsayılan) | ABD'de düzen ve sakin bir gün arayan kadınlar |
+| Örgü ve el işi | Tığ ve şiş ile örgü yapanlar |
+| Tesbih ve İslami hediye | Kendine veya özel gün için hediye arayanlar |
+| Vintage | 20 yıl ve daha eski parça arayan koleksiyoncular |
+
+Uygulama, mağazadaki dijital ürünlere bakıp birini önerir. Tesbih ve vintage, planlayıcı/desen alıcılarından farklı bir kitledir; bunları tek vitrinde karıştırmak yerine ayrı bir mağaza veya Shopier önerilir.
+
 Bu yazma işlemi için Etsy'nin `shops_w` (mağaza düzenleme) izni gerekir. Bu izin daha önce istenmiyordu. Eski bağlantıyla kartta **Etsy iznini yenile** düğmesi çıkar; bir kez basıp Etsy'de izin verin.
 
 **API'nin desteklemediği, Shop Manager'dan elle yapılacaklar:**

@@ -1,5 +1,6 @@
 import { etsyGrantedScopes, etsyRequest, EtsyIntegrationError, getConnectedShop, type EtsyRuntimeEnv } from "./etsy.js";
 import { findIpRisks } from "./ip-guard.js";
+import { listDigitalProducts, type DigitalStore } from "./digital-delivery.js";
 
 type Fetcher = typeof fetch;
 
@@ -14,13 +15,74 @@ export interface ShopSettings {
 
 export const SHOP_LIMITS = { title: 55, announcement: 1500, saleMessage: 1000, digitalSaleMessage: 1000, sectionTitle: 24, sections: 10 };
 
-export const DEFAULT_SHOP_SETTINGS: ShopSettings = {
-  title: "Printable Planners, PDF Patterns & Handmade Finds",
-  announcement: "Welcome to GXL Market Studio! We design original printable planners, habit trackers and craft patterns for real, busy lives, and we also offer handpicked prayer beads and vintage finds. Every digital file is an instant download: print at home at Actual size (100%). Questions about printing, sizes or an order? Send us a message, we are happy to help.",
-  saleMessage: "Thank you for your order from GXL Market Studio! If you have any question about your item, just reply to this message and we will help.",
-  digitalSaleMessage: "Thank you for your purchase! Your files are ready on your Etsy Purchases page (You > Purchases and reviews > Download files). Print at Actual size / 100% scale, and open the Tablet PDF in an annotation app that supports links. Need help? Message us anytime. Enjoy!",
-  sections: ["Printable Planners", "Habit & Life Trackers", "Crochet & Knit Patterns", "Prayer Beads & Tesbih", "Vintage Finds"]
+// Mağaza kimliği tek bir alıcı kitlesine konuşmalı: başlık, duyuru, bölümler ve görsel dil o kitleye göre seçilir.
+export type ShopAudience = "planners" | "crafts" | "faith" | "vintage";
+
+export interface ShopPreset extends ShopSettings {
+  labelTr: string;
+  audienceTr: string;
+  tagline: string;
+}
+
+const DIGITAL_THANKS = "Thank you for your purchase! Your files are ready on your Etsy Purchases page (You > Purchases and reviews > Download files). Print at Actual size / 100% scale, and open the Tablet PDF in an annotation app that supports links. Need help? Message us anytime. Enjoy!";
+
+export const SHOP_PRESETS: Record<ShopAudience, ShopPreset> = {
+  planners: {
+    labelTr: "Planlayıcı ve PDF alıcıları (önerilen)",
+    audienceTr: "ABD'de düzen, alışkanlık ve sakin bir gün arayan kadınlar: anneler, öğrenciler, çalışan kadınlar.",
+    tagline: "Printable planners & craft patterns for calm, organized days",
+    title: "Printable Planners & Craft Patterns for Calm Days",
+    announcement: "Welcome to GXL Market Studio! We design calm, practical printables for real, busy lives: undated planners, gentle habit and life trackers, and easy-to-follow craft patterns. Every file is an instant download that prints cleanly at home on US Letter or A4. Questions about printing or sizes? Send us a message, we are happy to help.",
+    saleMessage: "Thank you for your order from GXL Market Studio! If you have any question about your item, just reply to this message and we will help.",
+    digitalSaleMessage: DIGITAL_THANKS,
+    sections: ["Printable Planners", "Habit & Life Trackers", "Crochet & Knit Patterns"]
+  },
+  crafts: {
+    labelTr: "Örgü ve el işi yapanlar",
+    audienceTr: "Tığ ve şiş ile örgü yapan, adım adım ve sayısı doğru desen arayan ABD'li hobi severler.",
+    tagline: "Original crochet & knitting patterns, easy to follow",
+    title: "Easy Crochet & Knitting Patterns, PDF Downloads",
+    announcement: "Welcome to GXL Market Studio! We design original crochet and knitting patterns with clear, step-by-step instructions, a stitch count for every row and print-friendly PDFs in US terms. Every pattern is an instant download. Stuck on a row? Send us a message, we are happy to help.",
+    saleMessage: "Thank you for your order from GXL Market Studio! If you have any question about your pattern, just reply to this message and we will help.",
+    digitalSaleMessage: "Thank you for your purchase! Your pattern is ready on your Etsy Purchases page (You > Purchases and reviews > Download files). Print at Actual size / 100% scale. Stuck on a row? Message us anytime. Happy making!",
+    sections: ["Crochet Patterns", "Knitting Patterns", "Beginner Friendly", "Printable Planners"]
+  },
+  faith: {
+    labelTr: "Tesbih ve İslami hediye alıcıları",
+    audienceTr: "Kendine veya Ramazan, Bayram ve özel günler için anlamlı hediye arayan alıcılar.",
+    tagline: "Sterling silver prayer beads & thoughtful gifts",
+    title: "Sterling Silver Prayer Beads & Islamic Gifts",
+    announcement: "Welcome to GXL Market Studio! We offer sterling silver tesbih (prayer beads) and thoughtful gifts for Ramadan, Eid and special days. Every listing shows the real weight and materials of the piece. Questions about a piece or a gift note? Send us a message, we are happy to help.",
+    saleMessage: "Thank you for your order from GXL Market Studio! Your prayer beads will be packed with care. If you would like a gift note, just reply to this message.",
+    digitalSaleMessage: DIGITAL_THANKS,
+    sections: ["Silver Prayer Beads", "Tesbih & Misbaha", "Ramadan & Eid Gifts"]
+  },
+  vintage: {
+    labelTr: "Vintage koleksiyoncular",
+    audienceTr: "En az 20 yıllık, hikâyesi olan gümüş, bakır ve tekstil arayan koleksiyoncular ve dekor severler.",
+    tagline: "Curated vintage silver, copper & textiles from Türkiye",
+    title: "Curated Vintage Silver, Copper & Turkish Finds",
+    announcement: "Welcome to GXL Market Studio! We hand-select vintage pieces from Türkiye: silver jewelry, copper and textiles that are at least 20 years old. Every listing shows the real item with honest notes on age and condition. Questions? Send us a message, we are happy to help.",
+    saleMessage: "Thank you for your order from GXL Market Studio! Your vintage piece will be packed with care. Reply to this message with any question.",
+    digitalSaleMessage: DIGITAL_THANKS,
+    sections: ["Vintage Silver", "Vintage Copper", "Rugs & Textiles"]
+  }
 };
+
+function settingsOf(preset: ShopPreset): ShopSettings {
+  return { title: preset.title, announcement: preset.announcement, saleMessage: preset.saleMessage, digitalSaleMessage: preset.digitalSaleMessage, sections: preset.sections };
+}
+
+export const DEFAULT_SHOP_SETTINGS: ShopSettings = settingsOf(SHOP_PRESETS.planners);
+
+// Öneri mağazadaki dijital ürünlerden çıkar; ürün yoksa uygulamanın Etsy stratejisi (önce PDF ürünleri) esas alınır.
+export function recommendAudience(products: Array<{ kind?: string; craft?: string }>): { audience: ShopAudience; reasonTr: string } {
+  const printables = products.filter((product) => product.kind).length;
+  const patterns = products.filter((product) => !product.kind && product.craft).length;
+  if (patterns > printables) return { audience: "crafts", reasonTr: `Mağazadaki dijital ürünlerin çoğu desen (${patterns} desen, ${printables} PDF ürünü).` };
+  if (printables) return { audience: "planners", reasonTr: `Mağazadaki dijital ürünlerin çoğu PDF ürünü (${printables} PDF ürünü, ${patterns} desen).` };
+  return { audience: "planners", reasonTr: "Henüz ürün yok; uygulamanın Etsy stratejisi PDF ürünleriyle başlıyor. Trend taramalarında bu ürünlerin alıcıları ağırlıkla kadınlar, anneler ve öğrenciler." };
+}
 
 export class ShopSettingsError extends Error {
   constructor(public code: "VALIDATION_FAILED" | "SCOPE_MISSING", message: string, public status = 400) {
@@ -55,7 +117,9 @@ export function normalizeShopSettings(raw: Record<string, unknown>): Partial<Sho
 
 export async function shopSettingsStatus(env: EtsyRuntimeEnv) {
   const scopes = await etsyGrantedScopes(env).catch(() => [] as string[]);
-  return { defaults: DEFAULT_SHOP_SETTINGS, limits: SHOP_LIMITS, canWrite: scopes.includes("shops_w"), connected: scopes.length > 0 };
+  const products = env.ETSY_OAUTH ? await listDigitalProducts(env.ETSY_OAUTH as unknown as DigitalStore).catch(() => []) : [];
+  const recommendation = recommendAudience(products);
+  return { defaults: settingsOf(SHOP_PRESETS[recommendation.audience]), presets: SHOP_PRESETS, recommended: recommendation.audience, reasonTr: recommendation.reasonTr, limits: SHOP_LIMITS, canWrite: scopes.includes("shops_w"), connected: scopes.length > 0 };
 }
 
 export async function applyShopSettings(env: EtsyRuntimeEnv, raw: Record<string, unknown>, fetcher: Fetcher = fetch) {

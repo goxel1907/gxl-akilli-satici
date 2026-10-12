@@ -125,6 +125,56 @@ function safeFileName(value: string, fallback: string, extension = "pdf"): strin
   return `${base || fallback}.${extension}`;
 }
 
+// İlanda vaat edilen formatların dosyalarda gerçekten olduğunu doğrulamak için dosya adından format çıkarılır.
+type FormatId = "letter" | "a4" | "a5" | "half_letter" | "tablet" | "bw";
+const FORMAT_LABELS: Record<FormatId, string> = { letter: "US Letter", a4: "A4", a5: "A5", half_letter: "Half Letter", tablet: "Tablet", bw: "Black & white" };
+
+function formatOfText(value: string): FormatId | undefined {
+  const text = value.toLowerCase().replace(/[_\-.]+/g, " ");
+  if (/\b(bw|b w|black|grayscale|greyscale|printer friendly|ink saving)\b/.test(text)) return "bw";
+  if (/half ?letter|\bhl\b/.test(text)) return "half_letter";
+  if (/tablet|hyperlink|ipad|goodnotes/.test(text)) return "tablet";
+  if (/\ba4\b/.test(text)) return "a4";
+  if (/\ba5\b/.test(text)) return "a5";
+  if (/\bletter\b/.test(text)) return "letter";
+  return undefined;
+}
+
+// "• Formats: US Letter, A4, ..." satırındaki vaatler; satır yoksa (ör. desenler) kontrol atlanır.
+export function claimedFormats(description: string): FormatId[] {
+  const line = description.split("\n").find((item) => /^\W*formats?\s*:/i.test(item.trim()));
+  if (!line) return [];
+  const items = line.replace(/^\W*formats?\s*:/i, "").split(/,(?![^()]*\))/);
+  return [...new Set(items.map((item) => formatOfText(item)).filter((item): item is FormatId => Boolean(item)))];
+}
+
+// ZIP'in merkez dizininden dosya adları okunur (açmadan, yalnız dosya sonundaki dizin).
+export function zipEntryNames(bytes: ArrayBuffer): string[] {
+  const view = new DataView(bytes);
+  const data = new Uint8Array(bytes);
+  for (let end = data.length - 22; end >= Math.max(0, data.length - 65_557); end -= 1) {
+    if (view.getUint32(end, true) !== 0x06054b50) continue;
+    const count = view.getUint16(end + 10, true);
+    let offset = view.getUint32(end + 16, true);
+    const names: string[] = [];
+    for (let index = 0; index < count && offset + 46 <= data.length; index += 1) {
+      if (view.getUint32(offset, true) !== 0x02014b50) break;
+      const nameLength = view.getUint16(offset + 28, true);
+      const extraLength = view.getUint16(offset + 30, true);
+      const commentLength = view.getUint16(offset + 32, true);
+      names.push(new TextDecoder().decode(data.subarray(offset + 46, offset + 46 + nameLength)));
+      offset += 46 + nameLength + extraLength + commentLength;
+    }
+    return names.filter((name) => !name.endsWith("/"));
+  }
+  return [];
+}
+
+async function sha256(bytes: ArrayBuffer): Promise<string> {
+  const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", bytes));
+  return [...digest].map((value) => value.toString(16).padStart(2, "0")).join("");
+}
+
 function fileKey(productId: string, index: number): string {
   return index === 0 ? `${FILE_PREFIX}${productId}` : `${FILE_PREFIX}${productId}:${index}`;
 }
@@ -194,6 +244,25 @@ export async function createDigitalProduct(store: DigitalStore, form: FormData, 
     usedNames.add(fileName.toLowerCase());
     files.push({ name: fileName, size: bytes.byteLength, mimeType: isPdf ? "application/pdf" : "application/zip" });
     fileBytes.push(bytes);
+  }
+  // Kalite kapısı: aynı dosya iki kez yüklenmez; ilanda yazan her format dosyalarda (veya ZIP içinde) bulunur.
+  const hashes = await Promise.all(fileBytes.map((bytes) => sha256(bytes)));
+  const duplicate = hashes.findIndex((hash, index) => hashes.indexOf(hash) !== index);
+  if (duplicate >= 0) throw new DigitalDeliveryError("VALIDATION_FAILED", `${files[duplicate].name} ile ${files[hashes.indexOf(hashes[duplicate])].name} aynı dosya. Her format ayrı dosya olmalı.`);
+  const claimed = claimedFormats(listing.description);
+  if (claimed.length) {
+    const covered = new Set<FormatId>();
+    files.forEach((file, index) => {
+      const names = file.mimeType === "application/zip" ? zipEntryNames(fileBytes[index]) : [file.name];
+      for (const entry of names) {
+        const format = formatOfText(entry);
+        if (format) covered.add(format);
+      }
+    });
+    const missing = claimed.filter((format) => !covered.has(format));
+    if (missing.length) {
+      throw new DigitalDeliveryError("VALIDATION_FAILED", `İlan açıklaması şu formatları vaat ediyor ama dosyalarda yok: ${missing.map((format) => FORMAT_LABELS[format]).join(", ")}. Eksik dosyayı ekleyin (dosya adında format geçsin, ör. Planner-US-Letter.pdf) ya da açıklamadaki "Formats" satırını düzeltin.`);
+    }
   }
 
   const imageFiles = form.getAll("images").filter((item): item is File => typeof item !== "string");
