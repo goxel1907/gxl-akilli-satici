@@ -64,7 +64,7 @@ export function buildAdvice(result: TrendResult): TrendAdvice[] {
       advice.push({ priority: "high", titleTr: "Bu formatlar artık standart", detailTr: `${standard.map((item) => `${item.labelTr} (${percent(item.share)})`).join(", ")}: üst ilanların çoğu sunuyor. Ürününde mutlaka bulunsun ve başlıkta/görselde yazsın.` });
     }
     for (const gap of gaps) {
-      advice.push({ priority: "medium", titleTr: `Boşluk: ${gap.labelTr}`, detailTr: `Rakiplerin yalnızca ${percent(gap.share)} kadarı ${gap.labelTr} sunuyor. Sen sunarsan bu formatı arayan alıcıda öne çıkarsın; kapak görselinde belirt.` });
+      advice.push({ priority: "medium", titleTr: `Boşluk: ${gap.labelTr}`, detailTr: `Rakiplerin yalnızca ${percent(gap.share)} kadarı başlık veya etiketinde ${gap.labelTr} belirtiyor. Sen bu formatı sunup başlıkta, etikette ve kapak görselinde açıkça yazarsan bu formatla arayan alıcıda öne çıkarsın.` });
     }
     if (signals.bundleShare >= 0.3) {
       advice.push({ priority: "medium", titleTr: "Paketler satıyor", detailTr: `Üst ilanların ${percent(signals.bundleShare)} kadarı paket/set. Tekli ürün yerine uyumlu 3-5'li set hazırla; set fiyatı tekli fiyatın yaklaşık 2-2,5 katı olsun.` });

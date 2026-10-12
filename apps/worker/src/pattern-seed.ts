@@ -73,6 +73,9 @@ const SKILL_WORDS: Record<string, SkillLevel> = { beginner: "beginner", beginner
 const AUDIENCE_OR_SEASON = /^(baby|babies|newborn|kids?|children|toddler|women|womens|ladies|men|mens|girls?|boys?|christmas|xmas|halloween|easter|valentines?|fall|autumn|winter|summer|spring|thanksgiving|hanukkah|ramadan|eid|patriotic|holiday|wedding|bridal)$/;
 const SIZE_SIGNAL = /\b(plus size|size inclusive|inclusive sizing|xxs|xs ?(?:-|to) ?\d?x?l|\d?xl|\d{1,3} ?(?:in|inch|inches|cm|mm)|\d{1,3} ?x ?\d{1,3}(?: ?(?:in|inch|inches|cm))?|a0|a4|us letter|newborn|toddler|one size|all sizes|sizes? \d{1,2}(?: ?- ?\d{1,2})?)\b/g;
 const NOT_A_WORD = /^(\d.*|a\d|xx?s|x*l|\d?xl)$/;
+// "12 month journal", "52 week planner" gibi süreler anlamını korumak için tek kelime sayılır ("12-month").
+const DURATION = /\b(\d{1,3}) (month|week|day|year)s?\b/g;
+const DURATION_WORD = /^\d{1,3}-(month|week|day|year)$/;
 
 // Renk tanıma sözlüğü. Ton açısı, trendde eksik kalan renkleri uyumlu biçimde tamamlamak için kullanılır.
 const COLOR_LEXICON: Array<{ name: string; hue?: number }> = [
@@ -176,11 +179,11 @@ function stripCraft(text: string): string {
 
 // Başlık ve etiketleri anlamlı parçalara böler: zanaat adları çıkarılır, dolgu kelimeleri ayraç olur.
 function chunks(text: string): string[][] {
-  const words = stripCraft(clean(text).replace(SIZE_SIGNAL, " | ").replace(MULTI_COLORS, " | ")).split(/\s+/);
+  const words = stripCraft(clean(text).replace(DURATION, "$1-$2").replace(SIZE_SIGNAL, " | ").replace(MULTI_COLORS, " | ")).split(/\s+/);
   const result: string[][] = [];
   let current: string[] = [];
   for (const word of words) {
-    if (!word || word === "|" || STOP.has(word) || SKILL_WORDS[word] || NOT_A_WORD.test(word)) {
+    if (!word || word === "|" || STOP.has(word) || SKILL_WORDS[word] || (NOT_A_WORD.test(word) && !DURATION_WORD.test(word))) {
       if (current.length) result.push(current);
       current = [];
     } else current.push(word);
@@ -456,8 +459,8 @@ function buildCompetition(result: TrendResult | undefined, kind: PrintableKind |
     planEn.push(`include about ${ourPages} pages (the top listings' median is ${competitorPages})`);
   }
   if (gaps.length) {
-    planTr.push(`Rakiplerin azının sunduğu, bizim ekleyeceğimiz: ${gaps.map((item) => `${FORMAT_OFFERS[item.id].tr} (rakiplerin ${percent(item.share)}'i)`).join(", ")}.`);
-    planEn.push(`offer ${gaps.map((item) => FORMAT_OFFERS[item.id].en).join(", ")}, which few competitors provide`);
+    planTr.push(`Rakiplerin azının başlık/etiketinde belirttiği, bizim sunup ilanda açıkça yazacağımız: ${gaps.map((item) => `${FORMAT_OFFERS[item.id].tr} (rakiplerin ${percent(item.share)}'i)`).join(", ")}.`);
+    planEn.push(`offer ${gaps.map((item) => FORMAT_OFFERS[item.id].en).join(", ")} and state them clearly on the cover and in the listing, because few competitors mention them`);
   }
   if (standard.length) {
     planTr.push(`Mutlaka olacak (rakiplerin çoğunda var): ${standard.map((item) => `${FORMAT_OFFERS[item.id].tr} (${percent(item.share)})`).join(", ")}.`);

@@ -26,7 +26,10 @@ Etsy kanalı yalnızca tığ işi desen satmaz. Kadınların en çok satın ald�
 
 Hobi desenleri grubuna da kapitone (quilt) deseni eklendi.
 
-- **İlgi sıralaması:** Taranan nişleri, üst ilanların aylık favori hızına (alıcı ilgisi) göre çubuklarla sıralar. Yanında fırsat puanı görünür. Önce ilgisi yüksek ve puanı 45 üstü olan nişlere girin.
+- **İlgi sıralaması:** Taranan nişleri talep puanına göre çubuklarla sıralar. Yanında fırsat puanı görünür. Önce ilgisi yüksek ve puanı 45 üstü olan nişlere girin.
+  - Talep puanı iki ölçünün ortalamasıdır: ilk sayfadaki ortanca ilanın ve öne çıkan çeyreğin (en hızlı favori toplayan %25) aylık favorisi.
+  - Etsy yeni ilanlara ilk sayfada yer açtığı için büyük nişlerde (örn. printable planner) ortanca 0'a yakın çıkar. Yalnız ortancaya bakmak bu nişleri yanlışlıkla "Talep zayıf" gösteriyordu.
+  - İlgisi yüksek ama puanı düşük niş "Rekabet yoğun" demektir: dar ve yükselen bir alt ifadeyle girin.
 - **Otomatik tarama:** Otopilot bu nişleri de her 30 dakikada bir sırayla tarar, böylece tablo kendiliğinden dolar. PDF aramalarından yeni ifadeler de keşfedilir.
 - **Sezon takvimi:** PDF aramaları eklendi (Christmas printables, Easter coloring pages vb.). Üç yeni dönem var:
   - Yeni yıl planlama sezonu (Ocak)
@@ -83,6 +86,22 @@ PDF kartında **Bu nişte PDF hazırla**'ya basınca Stüdyo **PDF ürünü** mo
 Size kalan tek şey **Prompt, görsel ve ilanı hazırla** düğmesine basmaktır.
 
 ## 4. Stüdyonun ürettikleri
+
+> **Tek paket, tek sohbet.** Android paylaşımı ChatGPT/Claude'da her seferinde yeni sohbet açar ve yeni sohbet önceki parçanın ürün adını, paletini ve sayfa planını bilmez. Parçalar ayrı sohbetlere giderse ürün tutarsızlaşır. Bu yüzden sonucun en üstünde **"Tek paketi gönder"** kartı vardır. Kart tüm parçaları sıralı adımlarla tek metinde birleştirir:
+>
+> 1. Product/Design spec JSON
+> 2. (Sanatlı türlerde) sayfa görselleri
+> 3. Ürün dosyaları
+> 4. (Desende) render
+> 5. 10 reklam görseli
+> 6. Pin görselleri
+> 7. Son kontrol
+>
+> Paketi bir kez gönderin. Her adım bitince aynı sohbete `next` yazın.
+>
+> Claude dosyaları kurar ama fotoğraf üretmez. Fotoğraf adımları için ChatGPT kullanın ve Product spec JSON'unu o sohbete de yapıştırın.
+>
+> Aşağıdaki parçalar paketin içindekilerdir; tek tek kullanılacaksa hepsi aynı sohbete yapıştırılmalıdır.
 
 1. **Ürün adı:** Trendden bir kelime ile her seferinde yeni türetilen bir sözcükten oluşur. Daha önce verilen adlar tekrar kullanılmaz.
 2. **PDF promptu (Claude / ChatGPT):** Türe özel içerik ve baskı kurallarını içerir:

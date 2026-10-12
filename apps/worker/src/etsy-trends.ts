@@ -140,6 +140,8 @@ export interface TrendResult {
   metrics: {
     activeListings: number;
     favoritesPerMonth: number;
+    // Öne çıkan çeyreğin (en hızlı favori toplayan %25) ortanca aylık favorisi: kazanan ilanın gördüğü talep.
+    leaderFavoritesPerMonth?: number;
     newcomerShare: number;
     digitalShare: number;
     medianPriceUsd?: number;
@@ -224,6 +226,11 @@ function median(values: number[]): number {
   return sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
 }
 
+// Aylık favori hızını 0-100'e çevirir: 100 favori/ay ve üstü tam puan.
+function demandScale(velocity: number): number {
+  return clamp(100 * Math.log10(1 + velocity) / Math.log10(101));
+}
+
 function priceUsd(listing: EtsyListingRow): number | undefined {
   for (const money of [listing.converted_price, listing.price]) {
     if (money?.currency_code === "USD" && Number(money.divisor) > 0) return Number(money.amount) / Number(money.divisor);
@@ -249,13 +256,17 @@ export function scoreTrend(keyword: string, payload: { count?: number; results?:
 
   const velocities = pageOne.map((listing) => Number(listing.num_favorers || 0) / Math.max(1, ageDays(listing, now) / 30));
   const favoritesPerMonth = median(velocities);
+  // Etsy yeni ilanlara ilk sayfada yer açar; bu yüzden ortanca, büyük nişlerde (örn. printable planner) 0'a yakın çıkar.
+  // Talebi ortanca ile öne çıkan çeyreğin birlikte ölçer: biri tipik ilanı, diğeri kazanan ilanın gördüğü ilgiyi gösterir.
+  const leaders = [...velocities].sort((a, b) => b - a).slice(0, Math.max(3, Math.ceil(velocities.length / 4)));
+  const leaderFavoritesPerMonth = median(leaders);
   const newcomerShare = pageOne.length ? pageOne.filter((listing) => ageDays(listing, now) <= 180).length / pageOne.length : 0;
   const digitalShare = listings.length ? listings.filter((listing) => listing.listing_type === "download" || listing.listing_type === "both").length / listings.length : 0;
   const prices = pageOne.map(priceUsd).filter((value): value is number => typeof value === "number" && value > 0);
   const medianPriceUsd = prices.length ? Math.round(median(prices) * 100) / 100 : undefined;
 
   const parts = {
-    demand: Math.round(clamp(100 * Math.log10(1 + favoritesPerMonth) / Math.log10(101))),
+    demand: Math.round(clamp(0.5 * demandScale(favoritesPerMonth) + 0.5 * demandScale(leaderFavoritesPerMonth))),
     openness: Math.round(100 - clamp(100 * (Math.log10(Math.max(activeListings, 1)) - 2) / (Math.log10(500_000) - 2))),
     newcomer: Math.round(100 * newcomerShare),
     price: medianPriceUsd === undefined ? 50 : Math.round(clamp(priceScore(medianPriceUsd, profile.priceUsd)))
@@ -308,7 +319,7 @@ export function scoreTrend(keyword: string, payload: { count?: number; results?:
 
   const signals = computeSignals(pageOne, topTags);
   const reasons = [
-    `Üst sıradaki ilanlar ayda ortanca ${favoritesPerMonth.toFixed(1)} favori alıyor (talep göstergesi).`,
+    `Üst sıradaki ilanlar ayda ortanca ${favoritesPerMonth.toFixed(1)} favori, öne çıkan çeyrek ise ${leaderFavoritesPerMonth.toFixed(1)} favori alıyor (talep göstergesi).`,
     `${activeListings.toLocaleString("tr-TR")} aktif ilanla rekabet ediliyor.`,
     `İlk ${pageOne.length} ilanın %${Math.round(newcomerShare * 100)} kadarı son 6 ayda açılmış; yeni mağazanın öne çıkma şansı buna bağlı.`,
     medianPriceUsd === undefined ? "Fiyat verisi alınamadı." : `Üst sıradaki ilanların ortanca fiyatı ${medianPriceUsd.toFixed(2)} USD.`,
@@ -332,6 +343,7 @@ export function scoreTrend(keyword: string, payload: { count?: number; results?:
     metrics: {
       activeListings,
       favoritesPerMonth: Math.round(favoritesPerMonth * 10) / 10,
+      leaderFavoritesPerMonth: Math.round(leaderFavoritesPerMonth * 10) / 10,
       newcomerShare: Math.round(newcomerShare * 100) / 100,
       digitalShare: Math.round(digitalShare * 100) / 100,
       medianPriceUsd,

@@ -2,6 +2,7 @@ import { generateStructuredObject, hasAiProvider, type AiRuntimeEnv } from "../.
 import { buildAdVisuals, type AdVisual } from "./ad-visuals.js";
 import type { PrintableKind } from "./etsy-trends.js";
 import { isIpRisky } from "./ip-guard.js";
+import { buildMasterPrompt } from "./master-prompt.js";
 import { coinProductName, normalizeEtsyTags, normalizeEtsyTitle, titleCase, validateEtsyListingText } from "./pattern-studio.js";
 
 // Kadınlara yönelik yazdırılabilir / dijital PDF ürünleri için stüdyo:
@@ -34,6 +35,8 @@ export interface PrintableBrief {
   pins: Array<{ title: string; description: string; overlay: string }>;
   bundleIdea: { titleTr: string; items: string[]; priceNoteTr: string };
   qualityGate: string[];
+  // Tüm parçalar tek sohbette sırayla yapılsın diye birleştirilmiş paket (tek paylaşım).
+  masterPrompt: string;
 }
 
 export interface PrintableListingDraft {
@@ -354,11 +357,31 @@ function buildPins(input: PrintablePlanInput, name: string): PrintableBrief["pin
     { phrase: phrases[1] || input.productType, feature: features[1] || features[0] },
     { phrase: phrases[2] || phrases[0], feature: features[2] || features[1] }
   ];
-  return angles.map(({ phrase, feature }, index) => ({
-    title: `${titleCase(phrase)}${feature && !phrase.includes(feature) ? ` | ${titleCase(feature)}` : ""}`.slice(0, 100),
-    overlay: (feature || phrase).toUpperCase(),
-    description: `${name}: ${phrase}${feature && !phrase.includes(feature) ? `, ${feature}` : ""}. ${phrases.filter((item) => item !== phrase && item !== feature).slice(index, index + 5).join(", ")}. Digital download by GXL Market Studio.`.slice(0, 480)
-  }));
+  const formats = formatPhrase(input.formats?.length ? input.formats : PRINTABLE_KINDS[input.kind].defaultFormats);
+  const palette = input.colors?.length ? ` in a ${joinWords(input.colors.slice(0, 3))} palette` : "";
+  const pages = input.pageCount ? `${input.pageCount} pages` : "";
+  const tablet = (input.formats || []).some((format) => /tablet|hyperlink/i.test(format)) || input.kind === "digital_planner";
+  // Pinterest açıklaması doğal cümlelerle yazılır; anahtar kelime yığını hem okuyucuyu hem Pinterest aramasını olumsuz etkiler.
+  return angles.map(({ phrase, feature }, index) => {
+    const related = phrases.filter((item) => item !== phrase && item !== feature).slice(index, index + 3);
+    const sentences = [
+      `${name} is an original ${phrase}${feature && !phrase.includes(feature) ? ` with ${feature} pages` : ""}${palette}.`,
+      [pages, formats].filter(Boolean).length ? `Includes ${[pages, formats].filter(Boolean).join(" in ")}.` : "",
+      `Instant digital download: print at home${tablet ? " or use it on your tablet" : ""}.`,
+      input.audience ? `Made for ${joinWords(input.audience.split(/\s*,\s*/).filter(Boolean))}.` : "",
+      related.length ? `Great if you love ${joinWords(related)}.` : "",
+      "Designed by GXL Market Studio."
+    ];
+    return {
+      title: `${titleCase(phrase)}${feature && !phrase.includes(feature) ? ` | ${titleCase(feature)}` : ""}`.slice(0, 100),
+      overlay: (feature || phrase).toUpperCase(),
+      description: sentences.filter(Boolean).join(" ").slice(0, 480)
+    };
+  });
+}
+
+function joinWords(items: string[]): string {
+  return items.length <= 1 ? items.join("") : `${items.slice(0, -1).join(", ")} and ${items[items.length - 1]}`;
 }
 
 export function buildPrintableBrief(input: PrintablePlanInput): PrintableBrief {
@@ -367,14 +390,36 @@ export function buildPrintableBrief(input: PrintablePlanInput): PrintableBrief {
   const rules = originalityPlan(input, profile);
   const artPrompts = buildArtPrompts(input, profile);
   const formats = input.formats?.length ? input.formats : profile.defaultFormats;
+  const pdfPrompt = buildPdfPrompt(input, profile, name, rules.en, artPrompts);
+  const adVisuals = buildAdVisuals({ kind: input.kind, productType: input.productType, name, colors: input.colors, features: input.trendFeatures, formats, pageCount: input.pageCount || profile.defaultPages, seed: input.seed });
+  const pins = buildPins(input, name);
   return {
     name,
     kind: input.kind,
     originalityPlan: rules.tr,
-    pdfPrompt: buildPdfPrompt(input, profile, name, rules.en, artPrompts),
+    pdfPrompt,
     artPrompts,
-    adVisuals: buildAdVisuals({ kind: input.kind, productType: input.productType, name, colors: input.colors, features: input.trendFeatures, formats, pageCount: input.pageCount || profile.defaultPages, seed: input.seed }),
-    pins: buildPins(input, name),
+    adVisuals,
+    pins,
+    masterPrompt: buildMasterPrompt({
+      name,
+      productLabel: input.productType,
+      specName: "Product spec",
+      // Sanat promptları PDF briefinin içinde de geçer; pakette Brief B olarak bir kez verilir.
+      filesBrief: pdfPrompt.replace(/## Artwork prompts[\s\S]*?\n\n(?=## )/, "## Artwork\nUse the artworks from Brief B.\n\n"),
+      artPrompts,
+      adVisuals,
+      pins,
+      checklist: [
+        "Every page sits inside the safe margins and prints at 100% (Actual size) on both US Letter and A4 without clipping.",
+        "US English spelling, no typos, no placeholder text, page numbers and footer consistent.",
+        "All fonts are licensed for commercial use; list them.",
+        "No brand, character or celebrity names; all artwork is original.",
+        "Etsy allows at most 5 files of 20 MB each per digital listing; zip extras and give the files clear names (for example Planner-US-Letter.pdf).",
+        "Listing images show the real pages from the files.",
+        "How to print, thank-you and license pages are included."
+      ]
+    }),
     bundleIdea: bundleIdea(input, profile, name),
     qualityGate: [
       "Her formattan bir test sayfasını %100 (gerçek boyut) ölçekte hem Letter hem A4 kâğıda yazdır; kenar boşluğu kesilmiyor mu kontrol et.",
