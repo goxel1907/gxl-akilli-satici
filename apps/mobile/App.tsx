@@ -4,6 +4,7 @@ import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as DocumentPicker from "expo-document-picker";
 import * as ImagePicker from "expo-image-picker";
+import { ImageManipulator, SaveFormat } from "expo-image-manipulator";
 import * as SecureStore from "expo-secure-store";
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL?.trim() || "https://gxl-akilli-satici-api.gxl-marketstudio.workers.dev";
@@ -715,6 +716,7 @@ function ProductForm({ visible, onClose, onSave }: any) {
       <Field label="Stok" value={stock} onChangeText={setStock} placeholder="1" keyboardType="number-pad" />
       <Pressable style={styles.primary} onPress={save}><Text style={styles.primaryText}>Onaylı bilgileri kataloğa kaydet</Text></Pressable>
       <Text style={styles.formHint}>YASAK sonucu alan ürün yayımlanamaz. İNCELEME GEREKLİ sonucu alan ürün belge veya insan onayı olmadan otomatik yayımlanmaz.</Text>
+      <Text style={styles.formHint}>Bu ürünü Etsy'de satmak için: Etsy → Stüdyo → "Elimdeki ürün (fotoğraf)". Başlık, etiket, açıklama ve fiyat orada hazırlanır; Shopier gerekmez.</Text>
     </ScrollView></SafeAreaView>
   </Modal>;
 }
@@ -770,7 +772,7 @@ function EtsyScreen({ online, channels }: any) {
     </View>
     {!online && section !== "Kılavuz" && <Text style={styles.shopierBlocker}>Sunucu bağlantısı yok. Trend tarama, prompt üretimi ve PDF yükleme için uygulamanın sunucuya bağlı olması gerekir.</Text>}
     {section === "Trend" && <TrendPanel online={online} onUse={(seed: any) => { setStudioSeed(seed); setSection("Stüdyo"); }} />}
-    <View style={section === "Stüdyo" ? undefined : styles.hidden}><StudioPanel online={online} active={section === "Stüdyo"} seed={studioSeed} onUpload={(prefill: any) => { setUploadPrefill(prefill); setSection("Dijital"); }} /></View>
+    <View style={section === "Stüdyo" ? undefined : styles.hidden}><StudioPanel online={online} active={section === "Stüdyo"} etsyReady={shopReady} seed={studioSeed} onUpload={(prefill: any) => { setUploadPrefill(prefill); setSection("Dijital"); }} /></View>
     {section === "Dijital" && <DigitalPanel online={online} shopReady={shopReady} prefill={uploadPrefill} onPrefillUsed={() => setUploadPrefill(undefined)} />}
     {section === "Pinterest" && <PinterestPanel online={online} />}
     {section === "Kılavuz" && <><ShopSettingsCard online={online} shopReady={shopReady} /><EtsyGuide shopReady={shopReady} authorized={authorized} /></>}
@@ -1070,7 +1072,8 @@ const PRINTABLE_KIND_OPTIONS = [
 ];
 const STUDIO_MODES = [
   { id: "printable", label: "PDF ürünü" },
-  { id: "pattern", label: "El işi deseni" }
+  { id: "pattern", label: "El işi deseni" },
+  { id: "physical", label: "Elimdeki ürün (fotoğraf)" }
 ];
 
 // Rakipleri geçmek için plan: fiyat, içerik miktarı, format boşlukları, paket ve öne çıkan rakipler.
@@ -1221,7 +1224,7 @@ function PromptBox({ title, text, shareTitle }: any) {
   </View>;
 }
 
-function StudioPanel({ online, active, seed, onUpload }: any) {
+function StudioPanel({ online, active, seed, onUpload, etsyReady }: any) {
   const [craft, setCraft] = useState("crochet");
   const [productType, setProductType] = useState("");
   const [referenceNotes, setReferenceNotes] = useState("");
@@ -1237,7 +1240,7 @@ function StudioPanel({ online, active, seed, onUpload }: any) {
   const [trendBasis, setTrendBasis] = useState<string[]>([]);
   const [fromTrend, setFromTrend] = useState(false);
   const [seeding, setSeeding] = useState(false);
-  const [mode, setMode] = useState<"pattern" | "printable">("printable");
+  const [mode, setMode] = useState<"pattern" | "printable" | "physical">("printable");
   const [printableSeed, setPrintableSeed] = useState<any>();
   const [competition, setCompetition] = useState<any>();
   const [plan, setPlan] = useState<any>();
@@ -1299,7 +1302,7 @@ function StudioPanel({ online, active, seed, onUpload }: any) {
     setInitialized(true);
     fillFromTrend({ studio: mode });
   }, [active, online]);
-  const changeMode = (next: "pattern" | "printable") => {
+  const changeMode = (next: "pattern" | "printable" | "physical") => {
     setMode(next);
     if (next === "printable" && !printableSeed) fillFromTrend({ studio: "printable" });
     if (next === "pattern" && !fromTrend && !productType) fillFromTrend({ studio: "pattern" });
@@ -1331,10 +1334,10 @@ function StudioPanel({ online, active, seed, onUpload }: any) {
   const brief = plan?.brief;
   const listing = plan?.listing;
   return <>
-    <Text style={styles.sectionTitle}>Yeni ürün fikri</Text>
+    <Text style={styles.sectionTitle}>{mode === "physical" ? "Elimdeki ürünü sat" : "Yeni ürün fikri"}</Text>
     <ChipGroup options={STUDIO_MODES} value={mode} onChange={changeMode} />
     {seeding && <View style={styles.guardrail}><ActivityIndicator color="#315B4C" /><Text style={[styles.guardrailText, { flex: 1 }]}>Etsy trend verisi okunuyor; tüm alanlar otomatik dolduruluyor…</Text></View>}
-    {mode === "printable" ? <PrintableStudio online={online} seed={printableSeed} seeding={seeding} onReseed={() => printableSeed?.keyword && fillFromTrend({ keyword: printableSeed.keyword, studio: "printable" })} onPickKind={(kind: string) => fillFromTrend({ studio: "printable", kind })} onUpload={onUpload} /> : <>
+    {mode === "physical" ? <PhotoListingStudio online={online} etsyReady={etsyReady} /> : mode === "printable" ? <PrintableStudio online={online} seed={printableSeed} seeding={seeding} onReseed={() => printableSeed?.keyword && fillFromTrend({ keyword: printableSeed.keyword, studio: "printable" })} onPickKind={(kind: string) => fillFromTrend({ studio: "printable", kind })} onUpload={onUpload} /> : <>
     {fromTrend && !seeding && <View style={styles.analysisCard}>
       <Text style={styles.cardTitle}>Trendden otomatik dolduruldu: {keyword}</Text>
       {trendBasis.map((line) => <Text style={styles.analysisLine} key={line}>• {line}</Text>)}
@@ -1710,7 +1713,7 @@ const ETSY_GUIDE: Array<{ id: string; title: string; icon: any; steps: string[] 
     "Uygulama Etsy sekmesiyle açılır. Trend → PDF ürünleri'ndeki 'İlgi sıralaması'na ve Keşfedilenler'e bakın. Sunucu siz uygulamayı açmasanız da her 30 dakikada bir Etsy'yi tarar.",
     "65 ve üstü puan (Yüksek fırsat) olan aramaları açın. 'Talep zayıf' ve 'Rekabet yoğun' yazanları şimdilik atlayın.",
     "Sezon fırsatları'nda 'Hemen listele' yazan bir dönem varsa önce ona hazırlanın.",
-    "PDF aramasında 'Bu nişte PDF hazırla', desen aramasında 'Bu nişte desen hazırla' düğmesine basın. Fiziksel ürün için Shopier sekmesinde ürünün 'Etsy ilanı hazırla' düğmesini kullanın.",
+    "PDF aramasında 'Bu nişte PDF hazırla', desen aramasında 'Bu nişte desen hazırla' düğmesine basın. Elinizdeki fiziksel ürün için Stüdyo → 'Elimdeki ürün (fotoğraf)' bölümünü kullanın; Shopier gerekmez.",
     "Siparişleri ve mesajları Etsy'nin 'Sell on Etsy' uygulamasından takip edin. Mesajlara 24 saat içinde dönmek Star Seller rozetini korur."
   ] },
   { id: "discovery", title: "Otomatik keşif nasıl çalışır?", icon: "sync-circle-outline", steps: [
@@ -1766,12 +1769,15 @@ const ETSY_GUIDE: Array<{ id: string; title: string; icon: any; steps: string[] 
     "Dijital → PDF dosyalarını (en fazla 5) ve görselleri tek seferde seçin → 'Etsy taslağı oluştur'. Başlık, 13 etiket, açıklama ve tüm dosyalar otomatik gelir.",
     "Etsy'de taslağı açın, yapay zekâ beyanını ve kategoriyi kontrol edip yayınlayın. Dijital desenlerde bu beyan Etsy'de elle işaretlendiği için son adım Etsy'dedir."
   ] },
-  { id: "physical", title: "Tesbih, gümüş, vintage (fiziksel ürün)", icon: "diamond-outline", steps: [
-    "Ürünü fotoğraf, TL fiyat ve açıklamayla Shopier'e ekleyin. Shopier sekmesinde ürünün 'Etsy ilanı hazırla' düğmesine basın.",
-    "'Bu ürünü kim yaptı?' sorusunu doğru cevaplayın. Hazır alınıp yeniden satılan ürün Etsy'de yasaktır; sistem yayınlamaz. Ustaya yaptırılan tasarım üretim ortağıyla listelenir. Vintage ürün en az 20 yıllık olmalıdır.",
-    "925 damgası veya ayar belgesi yoksa ilanda 'gümüş' yazılmaz; sistem uyarır.",
-    "Ağırlık, tane sayısı ve ABD kargo ücretini girin → 'Etsy'de araştır ve hazırla'. Sistem arama ifadelerini bulur, rakipleri ve etiketleri okur, TL fiyatı güncel kurla USD'ye çevirir, Etsy kesintileri ve kargoyla birlikte ortanca fiyatla karşılaştırır.",
-    "Başlığı, etiketleri ve fiyatı isterseniz düzeltin → 'Etsy taslağı oluştur' → 'Taslağı kontrol et' → 'Etsy'de yayınla'. Yayınlamada Etsy 0,20 USD ilan ücreti keser."
+  { id: "physical", title: "Elimdeki ürünü fotoğrafla satmak (tesbih, vintage, örgü)", icon: "camera-outline", steps: [
+    "Etsy → Stüdyo → 'Elimdeki ürün (fotoğraf)'. 'Fotoğraf çek' veya 'Galeriden seç' ile 5–10 fotoğraf ekleyin; kapak yapmak istediğinize dokunun. Shopier'e eklemeniz gerekmez.",
+    "'Fotoğraflara bak, alanları doldur': sistem ürün türünü, İngilizce adını, rengini, öne çıkan özelliklerini ve görünen kusurları bulur; sizin doğrulamanız gerekenleri listeler.",
+    "Örgü/tığ işi: kimin ördüğünü, tekniği, bedeni, göğüs genişliği ile boyu, iplik içeriğini (ör. %100 pamuk) ve yıkama şeklini seçin. Ailenizden biri örüyorsa 'mağaza üyesi' seçin ve Etsy'de o kişiyi Shop members bölümüne ekleyin.",
+    "Tesbih: kim yaptı, gram, tane sayısı, uzunluk. 925 damgası veya belge yoksa ilanda 'gümüş' yazılmaz. Hazır alınıp yeniden satılan tesbih Etsy'de yasaktır; sistem yayınlamaz.",
+    "Vintage: yaklaşık üretim yılı (en az 20 yıl önce), ölçüler ve durum notu. Yıl girilmeden vintage ilan açılmaz.",
+    "'Elinize geçecek (TL)' ve 'ABD'ye kargo (TL)' yazın → 'Etsy'de araştır ve ilanı hazırla'. Sistem alıcıların aramalarını tarar; başlık, 13 etiket, İngilizce açıklama ve kesintiler ile kargo dahil dolar fiyatını hazırlar.",
+    "Başlığı, etiketleri ve fiyatı isterseniz düzeltin → 'Etsy taslağı oluştur' (fotoğraflar bu adımda yüklenir) → 'Taslağı kontrol et' → 'Etsy'de yayınla'. Yayınlamada Etsy 0,20 USD ilan ücreti keser.",
+    "Shopier'de zaten olan ürünler için Shopier sekmesindeki 'Etsy ilanı hazırla' da aynı motoru kullanır."
   ] },
   { id: "delivery", title: "PDF teslimi ve koruma", icon: "lock-closed-outline", steps: [
     "Etsy satışında PDF'i Etsy teslim eder. Alıcı ödeme yaptıktan sonra dosyayı Etsy'deki 'Purchases' sayfasından indirir. Ödeme yapmayan erişemez.",
@@ -1900,6 +1906,22 @@ const ORIGIN_OPTIONS = [
   { id: "commercial_resale", label: "Hazır aldım, yeniden satıyorum" }
 ];
 
+// Shopier ürünü ve fotoğraftan ürün aynı Etsy motorunu kullanır: arama ifadeleri, tarama, başlık, etiket, açıklama ve fiyat.
+async function researchEtsyPlan(base: any, setProgress: (text: string) => void) {
+  setProgress("Alıcıların kullandığı arama ifadeleri bulunuyor…");
+  const suggestion = await apiJson("/api/products/etsy-keywords", { method: "POST", headers: apiHeaders(true), body: JSON.stringify(base) });
+  const payload = { ...base };
+  if (!payload.productNounEn && suggestion.signals?.noun && suggestion.signals.noun !== "item") payload.productNounEn = suggestion.signals.noun;
+  for (const keyword of suggestion.candidates) {
+    setProgress(`Etsy'de araştırılıyor: ${keyword}`);
+    try { await apiJson("/api/etsy/trends/scan", { method: "POST", headers: apiHeaders(true), body: JSON.stringify({ keyword }) }); }
+    catch { /* bir arama başarısız olursa diğerleriyle devam edilir */ }
+  }
+  setProgress("Başlık, etiket, açıklama ve fiyat hazırlanıyor…");
+  const result = await apiJson("/api/products/etsy-plan", { method: "POST", headers: apiHeaders(true), body: JSON.stringify({ product: payload, keywords: suggestion.candidates }) });
+  return { plan: result.plan, payload };
+}
+
 function EtsyProductPlanner({ product, etsyReady, onClose }: any) {
   const [origin, setOrigin] = useState("designed_by_seller");
   const [yearMade, setYearMade] = useState("");
@@ -1914,17 +1936,8 @@ function EtsyProductPlanner({ product, etsyReady, onClose }: any) {
   const [progress, setProgress] = useState("");
   const [plan, setPlan] = useState<any>();
   const [payload, setPayload] = useState<any>();
-  const [title, setTitle] = useState("");
-  const [tags, setTags] = useState("");
-  const [priceUsd, setPriceUsd] = useState("");
-  const [saving, setSaving] = useState(false);
-  const [draft, setDraft] = useState<any>();
-  const [published, setPublished] = useState<any>();
-  const [publishing, setPublishing] = useState(false);
   useEffect(() => {
     setPlan(undefined);
-    setDraft(undefined);
-    setPublished(undefined);
     setProgress("");
     const weight = String(product?.title || "").match(/(\d+(?:[.,]\d+)?)\s*(?:g|gr|gram)\b/i);
     setWeightGrams(weight ? weight[1].replace(",", ".") : "");
@@ -1950,58 +1963,12 @@ function EtsyProductPlanner({ product, etsyReady, onClose }: any) {
     };
     setPlan(undefined);
     try {
-      setProgress("Alıcıların kullandığı arama ifadeleri bulunuyor…");
-      const suggestion = await apiJson("/api/products/etsy-keywords", { method: "POST", headers: apiHeaders(true), body: JSON.stringify(base) });
-      if (!base.productNounEn && suggestion.signals?.noun && suggestion.signals.noun !== "item") base.productNounEn = suggestion.signals.noun;
-      for (const keyword of suggestion.candidates) {
-        setProgress(`Etsy'de araştırılıyor: ${keyword}`);
-        try { await apiJson("/api/etsy/trends/scan", { method: "POST", headers: apiHeaders(true), body: JSON.stringify({ keyword }) }); }
-        catch { /* bir arama başarısız olursa diğerleriyle devam edilir */ }
-      }
-      setProgress("Başlık, etiket, açıklama ve fiyat hazırlanıyor…");
-      const result = await apiJson("/api/products/etsy-plan", { method: "POST", headers: apiHeaders(true), body: JSON.stringify({ product: base, keywords: suggestion.candidates }) });
-      setPayload(base);
+      const result = await researchEtsyPlan(base, setProgress);
+      setPayload(result.payload);
       setPlan(result.plan);
-      setTitle(result.plan.title);
-      setTags(result.plan.tags.join(", "));
-      setPriceUsd(result.plan.pricing ? String(result.plan.pricing.recommendedUsd) : "");
     } catch (error) { Alert.alert("Hazırlanamadı", errorText(error)); }
     finally { setProgress(""); }
   };
-  const createDraft = () => {
-    if (!etsyReady) return Alert.alert("Etsy mağazası hazır değil", "Mağaza açılıp Etsy bağlantısı 'Bağlı' görünene kadar taslak oluşturulamaz.");
-    Alert.alert("Etsy'de taslak ilan oluşturulsun mu?", "İlan önce taslak olarak oluşturulur, yayına girmez. Kontrol ettikten sonra buradan veya Etsy'den yayınlayabilirsiniz.", [
-      { text: "Vazgeç", style: "cancel" },
-      { text: "Taslak oluştur", onPress: async () => {
-        setSaving(true);
-        try {
-          const result = await apiJson("/api/products/etsy-draft", { method: "POST", headers: apiHeaders(true), body: JSON.stringify({ confirm: true, product: payload, listing: { title, tags: tags.split(",").map((tag) => tag.trim()).filter(Boolean), description: plan.description, materials: plan.materials, priceUsd: Number(priceUsd.replace(",", ".")) } }) });
-          setDraft(result);
-          Alert.alert(result.alreadyCreated ? "Taslak zaten var" : "Etsy taslağı hazır", [...(result.warnings || []), "Taslağı kontrol ettikten sonra 'Etsy'de yayınla' düğmesine basın.", ...(result.pinsQueued ? [`Pinterest: ${result.pinsQueued} pin planlandı; ilan yayına girince satış linkiyle otomatik atılacak.`] : [])].join("\n"), [{ text: "Taslağı aç", onPress: () => openUrl(result.editUrl, "Etsy taslak ilanı") }, { text: "Tamam" }]);
-        } catch (error) { Alert.alert("Taslak oluşturulamadı", errorText(error)); }
-        finally { setSaving(false); }
-      } }
-    ]);
-  };
-  const publish = () => {
-    if (!draft) return;
-    Alert.alert("Etsy'de yayınlansın mı?", "İlan alıcılara açılır ve Etsy 0,20 USD ilan ücreti keser. Fotoğrafları, fiyatı ve kargo profilini taslakta kontrol ettiyseniz devam edin.", [
-      { text: "Vazgeç", style: "cancel" },
-      { text: "Taslağı aç", onPress: () => openUrl(draft.editUrl, "Etsy taslak ilanı") },
-      { text: "Yayınla", onPress: async () => {
-        setPublishing(true);
-        try {
-          const result = await apiJson("/api/products/etsy-publish", { method: "POST", headers: apiHeaders(true), body: JSON.stringify({ confirm: true, listingId: draft.listingId }) });
-          setPublished(result);
-          Alert.alert("İlan yayında", "Etsy ilanı alıcılara açıldı.", [{ text: "İlanı aç", onPress: () => openUrl(result.url, "Etsy ilanı") }, { text: "Tamam" }]);
-        } catch (error) { Alert.alert("Yayınlanamadı", `${errorText(error)}\nTaslağı Etsy'de açıp eksik alanı tamamlayın, sonra tekrar deneyin.`); }
-        finally { setPublishing(false); }
-      } }
-    ]);
-  };
-  const eligibility = plan?.eligibility;
-  const pricing = plan?.pricing;
-  const bannerStyle = eligibility?.status === "allowed" ? styles.policyAllowed : eligibility?.status === "blocked" ? styles.policyBlocked : styles.policyReview;
   return <Modal visible={Boolean(product)} animationType="slide" onRequestClose={onClose}>
     <SafeAreaView style={styles.formSafe}><ScrollView contentContainerStyle={styles.formContent}>
       <View style={styles.formHeader}><Text style={[styles.sectionTitle, { flex: 1 }]}>Etsy ilanı hazırla</Text><Pressable onPress={onClose}><Ionicons name="close" size={26} color="#315B4C" /></Pressable></View>
@@ -2024,50 +1991,384 @@ function EtsyProductPlanner({ product, etsyReady, onClose }: any) {
       <Field label="Dolar kuru (boşsa güncel kur alınır)" value={usdTryRate} onChangeText={setUsdTryRate} keyboardType="decimal-pad" />
       <Pressable style={[styles.analyzeButton, Boolean(progress) && styles.primaryDisabled]} disabled={Boolean(progress)} onPress={analyze}>{progress ? <ActivityIndicator color="white" /> : <Ionicons name="search" size={18} color="white" />}<Text style={styles.primaryText}>{plan ? "Yeniden araştır" : "Etsy'de araştır ve hazırla"}</Text></Pressable>
       {!!progress && <Text style={styles.formHint}>{progress}</Text>}
-      {plan && <>
-        <View style={[styles.policyBox, bannerStyle, { marginBottom: 14 }]}>
-          <Text style={styles.policyName}>ETSY KURAL KONTROLÜ</Text>
-          <Text style={styles.policyLabel}>{eligibility.status === "allowed" ? "Etsy'de satılabilir" : eligibility.status === "blocked" ? "Etsy'de yayınlanmaz" : "Eksik bilgi var"}</Text>
-          {eligibility.reasons.map((reason: string) => <Text style={styles.analysisLine} key={reason}>• {reason}</Text>)}
-          {eligibility.requiredEvidence.map((item: string) => <Text style={styles.warningText} key={item}>• Gerekli: {item}</Text>)}
-        </View>
-        <View style={styles.analysisCard}>
-          <Text style={styles.cardTitle}>Alıcıların aradığı ifadeler</Text>
-          {plan.keywordScores.map((row: any) => <Text style={styles.analysisLine} key={row.keyword}>{row.keyword === plan.primaryKeyword ? "★ " : "• "}{row.keyword} — {row.score ?? "veri yok"} puan{row.activeListings ? ` · ${Number(row.activeListings).toLocaleString("tr-TR")} ilan` : ""}{row.medianPriceUsd ? ` · ortanca ${row.medianPriceUsd} USD` : ""}</Text>)}
-          <Text style={styles.formHint}>★ işaretli ifade başlığın başına yerleştirildi.</Text>
-        </View>
-        {pricing && <View style={styles.analysisCard}>
-          <Text style={styles.cardTitle}>Fiyat analizi</Text>
-          <Text style={styles.analysisLine}>Shopier fiyatı: {pricing.priceTry} TL ≈ {pricing.targetNetUsd} USD (kur {pricing.usdTryRate})</Text>
-          <Text style={styles.analysisLine}>Etsy kesintileri: %{pricing.feePercent} + {pricing.fixedFeesUsd} USD sabit</Text>
-          <Text style={styles.analysisLine}>ABD kargosu (fiyata dahil): {pricing.shippingUsd} USD</Text>
-          <Text style={styles.analysisLine}>Başabaş Etsy fiyatı: {pricing.breakEvenUsd} USD</Text>
-          <Text style={styles.analysisLine}>Etsy ortancası: {pricing.medianUsd ?? "—"} USD</Text>
-          <Text style={styles.listingTitle}>Önerilen: {pricing.recommendedUsd} USD ≈ {pricing.recommendedTry} TL · elinize ≈ {pricing.netAtRecommendedTry} TL</Text>
-          <Text style={styles.warningText}>{pricing.note}</Text>
-        </View>}
-        <Field label={`Başlık (${title.length}/140)`} value={title} onChangeText={setTitle} multiline />
-        <Field label="Etiketler (13 adet)" value={tags} onChangeText={setTags} multiline autoCapitalize="none" />
-        <Field label="Etsy fiyatı (USD)" value={priceUsd} onChangeText={setPriceUsd} keyboardType="decimal-pad" />
-        <View style={styles.analysisCard}>
-          <View style={styles.shopierProductTop}><Text style={[styles.cardTitle, { flex: 1 }]}>Açıklama (İngilizce)</Text><Pressable style={styles.secondaryButton} onPress={() => Share.share({ message: `${title}\n\n${plan.description}\n\nTags: ${tags}` })}><Text style={styles.secondaryButtonText}>Kopyala</Text></Pressable></View>
-          <Text style={styles.promptText} numberOfLines={12}>{plan.description}</Text>
-        </View>
-        {!!plan.competitors.length && <View style={styles.analysisCard}>
-          <Text style={styles.cardTitle}>Öne çıkan rakip ilanlar</Text>
-          {plan.competitors.map((item: any, index: number) => <Pressable key={`${item.url}-${index}`} onPress={() => item.url && openUrl(item.url, "Etsy ilanı")}><Text style={styles.linkNote} numberOfLines={2}>{item.priceUsd ? `${item.priceUsd.toFixed(2)} USD · ` : ""}{item.favorites} favori · {item.title}</Text></Pressable>)}
-        </View>}
-        {plan.warnings.map((warning: string) => <Text style={styles.warningText} key={warning}>• {warning}</Text>)}
-        <Pressable style={[styles.analyzeButton, { marginTop: 14 }, (eligibility.status !== "allowed" || saving || Boolean(draft)) && styles.primaryDisabled]} disabled={eligibility.status !== "allowed" || saving || Boolean(draft)} onPress={createDraft}>{saving ? <ActivityIndicator color="white" /> : <Ionicons name="storefront-outline" size={18} color="white" />}<Text style={styles.primaryText}>{eligibility.status === "blocked" ? "Etsy'de yayınlanamaz" : draft ? "Taslak oluşturuldu" : "Etsy taslağı oluştur"}</Text></Pressable>
-        {draft && <View style={[styles.policyBox, published ? styles.policyAllowed : styles.policyReview, { marginTop: 14 }]}>
-          <Text style={styles.policyName}>ETSY İLANI #{draft.listingId}</Text>
-          <Text style={styles.policyLabel}>{published ? "Yayında" : "Taslak hazır · henüz yayında değil"}</Text>
-          <Pressable style={[styles.secondaryButton, { alignSelf: "flex-start", marginTop: 6 }]} onPress={() => published ? openUrl(published.url, "Etsy ilanı") : openUrl(draft.editUrl, "Etsy taslak ilanı")}><Text style={styles.secondaryButtonText}>{published ? "İlanı aç" : "Taslağı kontrol et"}</Text></Pressable>
-          {!published && <Pressable style={[styles.analyzeButton, { marginTop: 12 }, publishing && styles.primaryDisabled]} disabled={publishing} onPress={publish}>{publishing ? <ActivityIndicator color="white" /> : <Ionicons name="rocket-outline" size={18} color="white" />}<Text style={styles.primaryText}>Etsy'de yayınla</Text></Pressable>}
-        </View>}
-      </>}
+      {plan && <EtsyPlanResult plan={plan} payload={payload} etsyReady={etsyReady} priceSourceLabel="Shopier fiyatı" />}
     </ScrollView></SafeAreaView>
   </Modal>;
+}
+
+// Planın sonucu, taslak ve yayın: iki akışta da aynı. prepareProduct taslaktan hemen önce çalışır (ör. fotoğrafları yükler).
+function EtsyPlanResult({ plan, payload, etsyReady, priceSourceLabel, prepareProduct }: any) {
+  const [title, setTitle] = useState(plan.title);
+  const [tags, setTags] = useState(plan.tags.join(", "));
+  const [priceUsd, setPriceUsd] = useState(plan.pricing ? String(plan.pricing.recommendedUsd) : "");
+  const [saving, setSaving] = useState(false);
+  const [savingText, setSavingText] = useState("");
+  const [draft, setDraft] = useState<any>();
+  const [published, setPublished] = useState<any>();
+  const [publishing, setPublishing] = useState(false);
+  useEffect(() => {
+    setTitle(plan.title);
+    setTags(plan.tags.join(", "));
+    setPriceUsd(plan.pricing ? String(plan.pricing.recommendedUsd) : "");
+    setDraft(undefined);
+    setPublished(undefined);
+  }, [plan]);
+  const createDraft = () => {
+    if (!etsyReady) return Alert.alert("Etsy mağazası hazır değil", "Mağaza açılıp Etsy bağlantısı 'Bağlı' görünene kadar taslak oluşturulamaz.");
+    if (!(Number(priceUsd.replace(",", ".")) > 0)) return Alert.alert("Fiyat", "Etsy fiyatını (USD) yazın.");
+    Alert.alert("Etsy'de taslak ilan oluşturulsun mu?", "İlan önce taslak olarak oluşturulur, yayına girmez. Kontrol ettikten sonra buradan veya Etsy'den yayınlayabilirsiniz.", [
+      { text: "Vazgeç", style: "cancel" },
+      { text: "Taslak oluştur", onPress: async () => {
+        setSaving(true);
+        try {
+          const product = prepareProduct ? await prepareProduct(payload, setSavingText) : payload;
+          setSavingText("Etsy taslağı oluşturuluyor…");
+          const result = await apiJson("/api/products/etsy-draft", { method: "POST", headers: apiHeaders(true), body: JSON.stringify({ confirm: true, product, listing: { title, tags: tags.split(",").map((tag: string) => tag.trim()).filter(Boolean), description: plan.description, materials: plan.materials, priceUsd: Number(priceUsd.replace(",", ".")) } }) });
+          setDraft(result);
+          Alert.alert(result.alreadyCreated ? "Taslak zaten var" : "Etsy taslağı hazır", [...(result.warnings || []), "Taslağı kontrol ettikten sonra 'Etsy'de yayınla' düğmesine basın.", ...(result.pinsQueued ? [`Pinterest: ${result.pinsQueued} pin planlandı; ilan yayına girince satış linkiyle otomatik atılacak.`] : [])].join("\n"), [{ text: "Taslağı aç", onPress: () => openUrl(result.editUrl, "Etsy taslak ilanı") }, { text: "Tamam" }]);
+        } catch (error) { Alert.alert("Taslak oluşturulamadı", errorText(error)); }
+        finally { setSaving(false); setSavingText(""); }
+      } }
+    ]);
+  };
+  const publish = () => {
+    if (!draft) return;
+    Alert.alert("Etsy'de yayınlansın mı?", "İlan alıcılara açılır ve Etsy 0,20 USD ilan ücreti keser. Fotoğrafları, fiyatı ve kargo profilini taslakta kontrol ettiyseniz devam edin.", [
+      { text: "Vazgeç", style: "cancel" },
+      { text: "Taslağı aç", onPress: () => openUrl(draft.editUrl, "Etsy taslak ilanı") },
+      { text: "Yayınla", onPress: async () => {
+        setPublishing(true);
+        try {
+          const result = await apiJson("/api/products/etsy-publish", { method: "POST", headers: apiHeaders(true), body: JSON.stringify({ confirm: true, listingId: draft.listingId }) });
+          setPublished(result);
+          Alert.alert("İlan yayında", "Etsy ilanı alıcılara açıldı.", [{ text: "İlanı aç", onPress: () => openUrl(result.url, "Etsy ilanı") }, { text: "Tamam" }]);
+        } catch (error) { Alert.alert("Yayınlanamadı", `${errorText(error)}\nTaslağı Etsy'de açıp eksik alanı tamamlayın, sonra tekrar deneyin.`); }
+        finally { setPublishing(false); }
+      } }
+    ]);
+  };
+  const eligibility = plan.eligibility;
+  const pricing = plan.pricing;
+  const bannerStyle = eligibility.status === "allowed" ? styles.policyAllowed : eligibility.status === "blocked" ? styles.policyBlocked : styles.policyReview;
+  return <>
+      <View style={[styles.policyBox, bannerStyle, { marginBottom: 14 }]}>
+        <Text style={styles.policyName}>ETSY KURAL KONTROLÜ</Text>
+        <Text style={styles.policyLabel}>{eligibility.status === "allowed" ? "Etsy'de satılabilir" : eligibility.status === "blocked" ? "Etsy'de yayınlanmaz" : "Eksik bilgi var"}</Text>
+        {eligibility.reasons.map((reason: string) => <Text style={styles.analysisLine} key={reason}>• {reason}</Text>)}
+        {eligibility.requiredEvidence.map((item: string) => <Text style={styles.warningText} key={item}>• Gerekli: {item}</Text>)}
+      </View>
+      <View style={styles.analysisCard}>
+        <Text style={styles.cardTitle}>Alıcıların aradığı ifadeler</Text>
+        {plan.keywordScores.map((row: any) => <Text style={styles.analysisLine} key={row.keyword}>{row.keyword === plan.primaryKeyword ? "★ " : "• "}{row.keyword} — {row.score ?? "veri yok"} puan{row.activeListings ? ` · ${Number(row.activeListings).toLocaleString("tr-TR")} ilan` : ""}{row.medianPriceUsd ? ` · ortanca ${row.medianPriceUsd} USD` : ""}</Text>)}
+        <Text style={styles.formHint}>★ işaretli ifade başlığın başına yerleştirildi.</Text>
+      </View>
+      {pricing && <View style={styles.analysisCard}>
+        <Text style={styles.cardTitle}>Fiyat analizi</Text>
+        <Text style={styles.analysisLine}>{priceSourceLabel}: {pricing.priceTry} TL ≈ {pricing.targetNetUsd} USD (kur {pricing.usdTryRate})</Text>
+        <Text style={styles.analysisLine}>Etsy kesintileri: %{pricing.feePercent} + {pricing.fixedFeesUsd} USD sabit</Text>
+        <Text style={styles.analysisLine}>ABD kargosu (fiyata dahil): {pricing.shippingUsd} USD</Text>
+        <Text style={styles.analysisLine}>Başabaş Etsy fiyatı: {pricing.breakEvenUsd} USD</Text>
+        <Text style={styles.analysisLine}>Etsy ortancası: {pricing.medianUsd ?? "—"} USD</Text>
+        <Text style={styles.listingTitle}>Önerilen: {pricing.recommendedUsd} USD ≈ {pricing.recommendedTry} TL · elinize ≈ {pricing.netAtRecommendedTry} TL</Text>
+        <Text style={styles.warningText}>{pricing.note}</Text>
+      </View>}
+      <Field label={`Başlık (${title.length}/140)`} value={title} onChangeText={setTitle} multiline />
+      <Field label="Etiketler (13 adet)" value={tags} onChangeText={setTags} multiline autoCapitalize="none" />
+      <Field label="Etsy fiyatı (USD)" value={priceUsd} onChangeText={setPriceUsd} keyboardType="decimal-pad" />
+      <View style={styles.analysisCard}>
+        <View style={styles.shopierProductTop}><Text style={[styles.cardTitle, { flex: 1 }]}>Açıklama (İngilizce)</Text><Pressable style={styles.secondaryButton} onPress={() => Share.share({ message: `${title}\n\n${plan.description}\n\nTags: ${tags}` })}><Text style={styles.secondaryButtonText}>Kopyala</Text></Pressable></View>
+        <Text style={styles.promptText} numberOfLines={12}>{plan.description}</Text>
+      </View>
+      {!!plan.competitors.length && <View style={styles.analysisCard}>
+        <Text style={styles.cardTitle}>Öne çıkan rakip ilanlar</Text>
+        {plan.competitors.map((item: any, index: number) => <Pressable key={`${item.url}-${index}`} onPress={() => item.url && openUrl(item.url, "Etsy ilanı")}><Text style={styles.linkNote} numberOfLines={2}>{item.priceUsd ? `${item.priceUsd.toFixed(2)} USD · ` : ""}{item.favorites} favori · {item.title}</Text></Pressable>)}
+      </View>}
+      {plan.warnings.map((warning: string) => <Text style={styles.warningText} key={warning}>• {warning}</Text>)}
+      <Pressable style={[styles.analyzeButton, { marginTop: 14 }, (eligibility.status !== "allowed" || saving || Boolean(draft)) && styles.primaryDisabled]} disabled={eligibility.status !== "allowed" || saving || Boolean(draft)} onPress={createDraft}>{saving ? <ActivityIndicator color="white" /> : <Ionicons name="storefront-outline" size={18} color="white" />}<Text style={styles.primaryText}>{eligibility.status === "blocked" ? "Etsy'de yayınlanamaz" : draft ? "Taslak oluşturuldu" : "Etsy taslağı oluştur"}</Text></Pressable>
+      {!!savingText && <Text style={styles.formHint}>{savingText}</Text>}
+      {draft && <View style={[styles.policyBox, published ? styles.policyAllowed : styles.policyReview, { marginTop: 14 }]}>
+        <Text style={styles.policyName}>ETSY İLANI #{draft.listingId}</Text>
+        <Text style={styles.policyLabel}>{published ? "Yayında" : "Taslak hazır · henüz yayında değil"}</Text>
+        <Pressable style={[styles.secondaryButton, { alignSelf: "flex-start", marginTop: 6 }]} onPress={() => published ? openUrl(published.url, "Etsy ilanı") : openUrl(draft.editUrl, "Etsy taslak ilanı")}><Text style={styles.secondaryButtonText}>{published ? "İlanı aç" : "Taslağı kontrol et"}</Text></Pressable>
+        {!published && <Pressable style={[styles.analyzeButton, { marginTop: 12 }, publishing && styles.primaryDisabled]} disabled={publishing} onPress={publish}>{publishing ? <ActivityIndicator color="white" /> : <Ionicons name="rocket-outline" size={18} color="white" />}<Text style={styles.primaryText}>Etsy'de yayınla</Text></Pressable>}
+      </View>}
+  </>;
+}
+
+const PHOTO_KINDS = [
+  { id: "knitwear", label: "Örgü / tığ işi" },
+  { id: "tesbih", label: "Tesbih" },
+  { id: "vintage", label: "Vintage" },
+  { id: "other", label: "Diğer el yapımı" }
+];
+const KNIT_MAKER_OPTIONS = [
+  { id: "me", label: "Ben ördüm" },
+  { id: "member", label: "Ailemden biri ördü (mağaza üyesi)" }
+];
+const KNIT_CRAFT_OPTIONS = [{ id: "crochet", label: "Tığ işi" }, { id: "knit", label: "Şiş örgü" }];
+const AUDIENCE_OPTIONS = [{ id: "women", label: "Kadın" }, { id: "men", label: "Erkek" }, { id: "unisex", label: "Unisex" }];
+const SIZE_OPTIONS = ["XS", "S", "M", "L", "XL", "XXL", "One size"].map((id) => ({ id, label: id === "One size" ? "Tek beden" : id }));
+const CARE_OPTIONS = [{ id: "hand_wash", label: "Elde, soğuk su" }, { id: "machine_gentle", label: "Makinede hassas" }, { id: "dry_clean", label: "Kuru temizleme" }];
+const RISK_LABELS: Record<string, string> = {
+  childrens_product: "Bebek/çocuk ürünü gibi görünüyor: ABD çocuk ürünü güvenlik bilgisi olmadan Etsy'ye otomatik konmaz.",
+  branded_product: "Marka logosu görünüyor: orijinallik kanıtı olmadan Etsy'ye otomatik konmaz."
+};
+const MAX_LISTING_PHOTOS = 10;
+
+// "2.500" Türkçede iki bin beş yüz demektir; sunucuya 2500 gitmeli.
+function parseAmount(text: string): number | undefined {
+  const clean = text.trim().replace(/\s/g, "");
+  const normalized = /^\d{1,3}(\.\d{3})+(,\d+)?$/.test(clean) ? clean.replace(/\./g, "").replace(",", ".") : clean.replace(",", ".");
+  const value = Number(normalized);
+  return value > 0 ? value : undefined;
+}
+
+// Analiz için küçük (1024 px), Etsy için büyük (3000 px) kopya; büyük telefon fotoğrafı sunucuyu ve kotayı yormaz.
+async function shrinkPhoto(photo: { uri: string; width?: number; height?: number }, longest: number, compress: number, base64 = false) {
+  const context = ImageManipulator.manipulate(photo.uri);
+  const width = photo.width || 0;
+  const height = photo.height || 0;
+  if (Math.max(width, height) > longest) context.resize(width >= height ? { width: longest } : { height: longest });
+  const image = await context.renderAsync();
+  return await image.saveAsync({ compress, format: SaveFormat.JPEG, base64 });
+}
+
+// Shopier'e eklemeden: fotoğraf → ürün türü ve ölçüler → Etsy araştırması → başlık, etiket, açıklama, fiyat → taslak → yayın.
+function PhotoListingStudio({ online, etsyReady }: any) {
+  const [sourceId, setSourceId] = useState(() => `photo-${Date.now()}`);
+  const [photos, setPhotos] = useState<Array<{ uri: string; width?: number; height?: number }>>([]);
+  const uploaded = useRef<Record<string, string>>({});
+  const [kind, setKind] = useState("");
+  const [origin, setOrigin] = useState("made_by_seller");
+  const [maker, setMaker] = useState("me");
+  const [craft, setCraft] = useState("");
+  const [audience, setAudience] = useState("women");
+  const [nameTr, setNameTr] = useState("");
+  const [productNounEn, setProductNounEn] = useState("");
+  const [material, setMaterial] = useState("");
+  const [materialVerified, setMaterialVerified] = useState(false);
+  const [size, setSize] = useState("");
+  const [chestCm, setChestCm] = useState("");
+  const [lengthCm, setLengthCm] = useState("");
+  const [widthCm, setWidthCm] = useState("");
+  const [fiber, setFiber] = useState("");
+  const [care, setCare] = useState("hand_wash");
+  const [colors, setColors] = useState("");
+  const [attributes, setAttributes] = useState("");
+  const [weightGrams, setWeightGrams] = useState("");
+  const [beadCount, setBeadCount] = useState("");
+  const [yearMade, setYearMade] = useState("");
+  const [conditionNote, setConditionNote] = useState("");
+  const [priceTry, setPriceTry] = useState("");
+  const [shippingTry, setShippingTry] = useState("");
+  const [quantity, setQuantity] = useState("1");
+  const [readyToShip, setReadyToShip] = useState(true);
+  const [analysis, setAnalysis] = useState<any>();
+  const [riskFlags, setRiskFlags] = useState<string[]>([]);
+  const [analyzing, setAnalyzing] = useState(false);
+  const [progress, setProgress] = useState("");
+  const [plan, setPlan] = useState<any>();
+  const [payload, setPayload] = useState<any>();
+  const knit = kind === "knitwear";
+
+  const chooseKind = (next: string) => {
+    setKind(next);
+    setOrigin(next === "vintage" ? "vintage" : next === "tesbih" ? "designed_by_seller" : "made_by_seller");
+    setPlan(undefined);
+  };
+  const addPhotos = async (camera: boolean) => {
+    if (photos.length >= MAX_LISTING_PHOTOS) return Alert.alert("En fazla 10 fotoğraf", "Etsy bir ilana en fazla 10 fotoğraf kabul eder.");
+    const permission = camera ? await ImagePicker.requestCameraPermissionsAsync() : await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) return Alert.alert(camera ? "Kamera izni gerekli" : "Galeri izni gerekli", "Ürün fotoğrafı için ayarlardan izin verin.");
+    const result = camera
+      ? await ImagePicker.launchCameraAsync({ mediaTypes: ["images"], quality: 1 })
+      : await ImagePicker.launchImageLibraryAsync({ mediaTypes: ["images"], allowsMultipleSelection: true, selectionLimit: MAX_LISTING_PHOTOS - photos.length, quality: 1 });
+    if (result.canceled) return;
+    setPhotos((current) => [...current, ...result.assets.map((asset) => ({ uri: asset.uri, width: asset.width, height: asset.height }))]
+      .filter((photo, index, all) => all.findIndex((other) => other.uri === photo.uri) === index)
+      .slice(0, MAX_LISTING_PHOTOS));
+  };
+  const removePhoto = (uri: string) => setPhotos((current) => current.filter((photo) => photo.uri !== uri));
+  const makeCover = (uri: string) => setPhotos((current) => [...current.filter((photo) => photo.uri === uri), ...current.filter((photo) => photo.uri !== uri)]);
+
+  const analyze = async () => {
+    if (!photos.length) return Alert.alert("Fotoğraf gerekli", "Önce ürünün fotoğrafını çekin veya seçin.");
+    setAnalyzing(true);
+    try {
+      const images: string[] = [];
+      for (const photo of photos.slice(0, 3)) {
+        const small = await shrinkPhoto(photo, 1024, 0.6, true);
+        if (small.base64) images.push(`data:image/jpeg;base64,${small.base64}`);
+      }
+      const { analysis: result } = await apiJson("/api/products/photo-analyze", { method: "POST", headers: apiHeaders(true), body: JSON.stringify({ imageDataUrls: images, kind: kind || undefined, name: nameTr.trim() || undefined }) });
+      setAnalysis(result);
+      if (!kind) chooseKind(result.productKind);
+      setNameTr((current) => current.trim() || result.nameTr);
+      setProductNounEn((current) => current.trim() || result.productNounEn);
+      setMaterial((current) => current.trim() || result.materialGuessTr);
+      setColors((current) => current.trim() || result.colors.join(", "));
+      setAttributes((current) => current.trim() || result.attributesEn.join(", "));
+      setConditionNote((current) => current.trim() || result.conditionNotesEn.join(" "));
+      if (result.craft !== "none") setCraft(result.craft);
+      if (result.audience !== "unknown") setAudience(result.audience);
+      setRiskFlags(result.riskFlags);
+      setPlan(undefined);
+    } catch (error) { Alert.alert("Fotoğraf analizi yapılamadı", `${errorText(error)}\nAlanları elle doldurup devam edebilirsiniz.`); }
+    finally { setAnalyzing(false); }
+  };
+
+  const prepare = async () => {
+    if (!photos.length) return Alert.alert("Fotoğraf gerekli", "Etsy ilanı için en az bir fotoğraf ekleyin; 5 ve üzeri önerilir.");
+    if (!kind) return Alert.alert("Ürün türü", "Örgü, tesbih, vintage veya diğer seçeneklerinden birini seçin.");
+    if (nameTr.trim().length < 3) return Alert.alert("Ürün adı", "Ürünün Türkçe adını yazın; fotoğraf analizi de önerebilir.");
+    const net = parseAmount(priceTry);
+    if (!net) return Alert.alert("Elinize geçecek tutar", "Bu üründen elinize geçmesini istediğiniz tutarı TL olarak yazın. Etsy fiyatı, kesintiler ve kargo eklenerek buna göre hesaplanır.");
+    const list = (text: string) => text.split(",").map((item) => item.trim()).filter(Boolean);
+    const vintage = kind === "vintage" || origin === "vintage";
+    const base: any = {
+      sourceId,
+      titleTr: nameTr.trim(),
+      productKind: kind,
+      origin: knit ? "made_by_seller" : origin,
+      madeByShopMember: knit && maker === "member",
+      productNounEn: productNounEn.trim() || undefined,
+      material: knit ? undefined : material.trim() || undefined,
+      materialVerified: knit ? false : materialVerified,
+      craft: knit && craft ? craft : undefined,
+      audience: knit ? audience : undefined,
+      size: knit && size ? size : undefined,
+      chestCm: knit ? parseAmount(chestCm) : undefined,
+      lengthCm: parseAmount(lengthCm),
+      widthCm: knit ? undefined : parseAmount(widthCm),
+      fiber: knit ? fiber.trim() || undefined : undefined,
+      care: knit ? care : undefined,
+      colors: list(colors),
+      attributesEn: list(attributes),
+      weightGrams: parseAmount(weightGrams),
+      beadCount: kind === "tesbih" ? parseAmount(beadCount) : undefined,
+      yearMade: vintage ? Number(yearMade) || undefined : undefined,
+      conditionNote: vintage ? conditionNote.trim() || undefined : undefined,
+      priceTry: net,
+      shippingTry: parseAmount(shippingTry),
+      quantity: Number(quantity) || 1,
+      readyToShip,
+      riskFlags,
+      imageUrls: []
+    };
+    setPlan(undefined);
+    try {
+      const result = await researchEtsyPlan(base, setProgress);
+      setPayload(result.payload);
+      setPlan(result.plan);
+    } catch (error) { Alert.alert("Hazırlanamadı", errorText(error)); }
+    finally { setProgress(""); }
+  };
+
+  // Fotoğraflar yalnız taslak oluşturulurken yüklenir; yeniden denemede yüklenenler tekrar gönderilmez.
+  const uploadPhotos = async (current: any, report: (text: string) => void) => {
+    const imageUrls: string[] = [];
+    for (const [index, photo] of photos.entries()) {
+      let url = uploaded.current[photo.uri];
+      if (!url) {
+        report(`Fotoğraf ${index + 1}/${photos.length} yükleniyor…`);
+        const large = await shrinkPhoto(photo, 3000, 0.85);
+        const form = new FormData();
+        form.append("image", { uri: large.uri, name: `photo-${index + 1}.jpg`, type: "image/jpeg" } as any);
+        const response = await fetch(`${API_URL}/api/products/photos`, { method: "POST", headers: apiHeaders(), body: form });
+        const body = await response.json().catch(() => ({})) as any;
+        if (!response.ok) throw new Error(body.error || `${index + 1}. fotoğraf yüklenemedi.`);
+        url = String(body.url);
+        uploaded.current[photo.uri] = url;
+      }
+      imageUrls.push(url);
+    }
+    return { ...current, imageUrls };
+  };
+
+  const reset = () => {
+    setSourceId(`photo-${Date.now()}`);
+    uploaded.current = {};
+    setPhotos([]); setKind(""); setOrigin("made_by_seller"); setMaker("me"); setCraft(""); setAudience("women");
+    setNameTr(""); setProductNounEn(""); setMaterial(""); setMaterialVerified(false); setSize(""); setChestCm(""); setLengthCm(""); setWidthCm("");
+    setFiber(""); setCare("hand_wash"); setColors(""); setAttributes(""); setWeightGrams(""); setBeadCount(""); setYearMade(""); setConditionNote("");
+    setPriceTry(""); setShippingTry(""); setQuantity("1"); setReadyToShip(true); setAnalysis(undefined); setRiskFlags([]); setPlan(undefined); setPayload(undefined);
+  };
+
+  return <>
+    <View style={styles.analysisCard}>
+      <Text style={styles.cardTitle}>Elinizdeki ürünü Etsy'de satın</Text>
+      <Text style={styles.analysisLine}>Fotoğrafları çekin ve ürün türünü seçin. Uygulama fotoğrafa bakar, Etsy'de alıcıların aramalarını tarar; başlık, 13 etiket, İngilizce açıklama ve fiyatı hazırlar. Shopier gerekmez.</Text>
+    </View>
+    <Text style={styles.fieldLabel}>Fotoğraflar ({photos.length}/{MAX_LISTING_PHOTOS}) · kapak yapmak için fotoğrafa dokunun</Text>
+    {!!photos.length && <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 10 }}>
+      {photos.map((photo, index) => <View key={photo.uri} style={styles.photoThumbWrap}>
+        <Pressable onPress={() => makeCover(photo.uri)}><Image source={{ uri: photo.uri }} style={styles.photoThumb} /></Pressable>
+        {index === 0 && <Text style={styles.photoCover}>Kapak</Text>}
+        <Pressable style={styles.photoRemove} onPress={() => removePhoto(photo.uri)}><Ionicons name="close" size={14} color="white" /></Pressable>
+      </View>)}
+    </ScrollView>}
+    <View style={styles.inlineActions}>
+      <Pressable style={styles.secondaryButton} onPress={() => addPhotos(true)}><Text style={styles.secondaryButtonText}>Fotoğraf çek</Text></Pressable>
+      <Pressable style={styles.secondaryButton} onPress={() => addPhotos(false)}><Text style={styles.secondaryButtonText}>Galeriden seç</Text></Pressable>
+    </View>
+    <Text style={styles.formHint}>Gün ışığında, sade zeminde çekin: önden, arkadan, doku veya damga yakın planı ve ölçü gösteren bir kare. Etsy'de 5 ve üzeri fotoğraf satışı artırır.</Text>
+    <Pressable style={[styles.analyzeButton, (analyzing || !online) && styles.primaryDisabled]} disabled={analyzing || !online} onPress={analyze}>{analyzing ? <ActivityIndicator color="white" /> : <Ionicons name="sparkles" size={18} color="white" />}<Text style={styles.primaryText}>{analyzing ? "Fotoğraflar inceleniyor…" : "Fotoğraflara bak, alanları doldur"}</Text></Pressable>
+    {analysis && <View style={styles.analysisCard}>
+      <Text style={styles.cardTitle}>Fotoğraftan anlaşılan</Text>
+      <Text style={styles.analysisLine}>{analysis.nameTr}{analysis.productNounEn ? ` · ${analysis.productNounEn}` : ""} · %{Math.round(analysis.confidence * 100)} güven</Text>
+      {!!analysis.questionsTr.length && <><Text style={styles.warningTitle}>Sizin doğrulamanız gerekenler</Text>{analysis.questionsTr.map((question: string) => <Text style={styles.warningText} key={question}>• {question}</Text>)}</>}
+      {!!riskFlags.length && <><Text style={styles.warningTitle}>Etsy kuralı uyarıları</Text>{riskFlags.map((flag) => <Pressable key={flag} style={styles.readinessRow} onPress={() => setRiskFlags((current) => current.filter((item) => item !== flag))}><Ionicons name="warning-outline" size={18} color="#A86B2E" /><Text style={[styles.warningText, { flex: 1 }]}>{RISK_LABELS[flag] || `Etsy'de yasaklı olabilir (${flag}).`} Yanlışsa dokunup kaldırın.</Text></Pressable>)}</>}
+      <Text style={styles.formHint}>Malzeme, yaş ve damga fotoğraftan kesin anlaşılamaz; aşağıda siz onaylarsınız.</Text>
+    </View>}
+    <Text style={[styles.fieldLabel, { marginTop: 12 }]}>Ürün türü</Text>
+    <ChipGroup options={PHOTO_KINDS} value={kind} onChange={chooseKind} />
+    <Field label="Ürün adı (Türkçe)" value={nameTr} onChangeText={setNameTr} placeholder="ör. Krem tığ işi oversize kazak" />
+    <Field label="İngilizce ürün adı (boşsa sistem bulur)" value={productNounEn} onChangeText={setProductNounEn} autoCapitalize="none" placeholder="crochet sweater, prayer beads, copper tray" />
+    {knit && <>
+      <Text style={styles.fieldLabel}>Kim ördü?</Text>
+      <ChipGroup options={KNIT_MAKER_OPTIONS} value={maker} onChange={setMaker} />
+      {maker === "member" && <Text style={styles.formHint}>Etsy'de o kişiyi mağaza üyesi olarak ekleyin: Shop Manager → Settings → About your shop → Shop members. İlan "A member of my shop" olarak açılır.</Text>}
+      <Text style={styles.fieldLabel}>Teknik</Text>
+      <ChipGroup options={KNIT_CRAFT_OPTIONS} value={craft} onChange={setCraft} />
+      <Text style={styles.fieldLabel}>Kimin için?</Text>
+      <ChipGroup options={AUDIENCE_OPTIONS} value={audience} onChange={setAudience} />
+      <Text style={styles.fieldLabel}>Beden</Text>
+      <ChipGroup options={SIZE_OPTIONS} value={size} onChange={setSize} />
+      <View style={{ flexDirection: "row", gap: 10 }}>
+        <View style={{ flex: 1 }}><Field label="Göğüs genişliği (cm, düz)" value={chestCm} onChangeText={setChestCm} keyboardType="decimal-pad" placeholder="52" /></View>
+        <View style={{ flex: 1 }}><Field label="Boy (cm)" value={lengthCm} onChangeText={setLengthCm} keyboardType="decimal-pad" placeholder="60" /></View>
+      </View>
+      <Field label="İplik içeriği" value={fiber} onChangeText={setFiber} placeholder="%100 pamuk veya %50 yün %50 akrilik" />
+      <Text style={styles.fieldLabel}>Yıkama</Text>
+      <ChipGroup options={CARE_OPTIONS} value={care} onChange={setCare} />
+    </>}
+    {!!kind && !knit && <>
+      {kind !== "vintage" && <><Text style={styles.fieldLabel}>Bu ürünü kim yaptı?</Text><ChipGroup options={ORIGIN_OPTIONS} value={origin} onChange={setOrigin} /></>}
+      {(kind === "vintage" || origin === "vintage") && <Field label="Üretim yılı (yaklaşık; en az 20 yıl önce)" value={yearMade} onChangeText={setYearMade} keyboardType="number-pad" placeholder="1985" />}
+      <Field label="Malzeme" value={material} onChangeText={setMaterial} placeholder="925 gümüş, bakır, kehribar, kuka…" />
+      <Toggle label="Ayar damgası veya malzeme belgesi var (925 vb.)" value={materialVerified} onChange={setMaterialVerified} />
+      <View style={{ flexDirection: "row", gap: 10 }}>
+        <View style={{ flex: 1 }}><Field label="Ağırlık (g)" value={weightGrams} onChangeText={setWeightGrams} keyboardType="decimal-pad" /></View>
+        {kind === "tesbih"
+          ? <View style={{ flex: 1 }}><Field label="Tane sayısı" value={beadCount} onChangeText={setBeadCount} keyboardType="number-pad" /></View>
+          : <View style={{ flex: 1 }}><Field label="En (cm)" value={widthCm} onChangeText={setWidthCm} keyboardType="decimal-pad" /></View>}
+        <View style={{ flex: 1 }}><Field label="Uzunluk (cm)" value={lengthCm} onChangeText={setLengthCm} keyboardType="decimal-pad" /></View>
+      </View>
+      {(kind === "vintage" || origin === "vintage") && <Field label="Durum notu (İngilizce; fotoğraf analizi doldurur)" value={conditionNote} onChangeText={setConditionNote} multiline placeholder="Light surface scratches consistent with age." />}
+    </>}
+    <Field label="Renkler (İngilizce, virgülle)" value={colors} onChangeText={setColors} autoCapitalize="none" placeholder="cream, sage green" />
+    <Field label="Öne çıkan özellikler (İngilizce, virgülle)" value={attributes} onChangeText={setAttributes} autoCapitalize="none" placeholder="oversized, granny square, filigree" />
+    <View style={{ flexDirection: "row", gap: 10 }}>
+      <View style={{ flex: 1 }}><Field label="Elinize geçecek (TL)" value={priceTry} onChangeText={setPriceTry} keyboardType="decimal-pad" placeholder="2500" /></View>
+      <View style={{ flex: 1 }}><Field label="ABD'ye kargo (TL)" value={shippingTry} onChangeText={setShippingTry} keyboardType="decimal-pad" placeholder="900" /></View>
+      <View style={{ width: 70 }}><Field label="Adet" value={quantity} onChangeText={setQuantity} keyboardType="number-pad" /></View>
+    </View>
+    <Toggle label="Hazır, hemen gönderilebilir" value={readyToShip} onChange={setReadyToShip} />
+    <Pressable style={[styles.analyzeButton, { marginTop: 12 }, (Boolean(progress) || !online) && styles.primaryDisabled]} disabled={Boolean(progress) || !online} onPress={prepare}>{progress ? <ActivityIndicator color="white" /> : <Ionicons name="search" size={18} color="white" />}<Text style={styles.primaryText}>{plan ? "Yeniden araştır" : "Etsy'de araştır ve ilanı hazırla"}</Text></Pressable>
+    {!!progress && <Text style={styles.formHint}>{progress}</Text>}
+    {plan && <EtsyPlanResult plan={plan} payload={payload} etsyReady={etsyReady} priceSourceLabel="Elinize geçecek tutar" prepareProduct={uploadPhotos} />}
+    {(plan || photos.length > 0) && <Pressable style={[styles.secondaryButton, { alignSelf: "flex-start", marginTop: 14 }]} onPress={reset}><Text style={styles.secondaryButtonText}>Yeni ürüne başla</Text></Pressable>}
+  </>;
 }
 
 const styles = StyleSheet.create({
@@ -2232,6 +2533,10 @@ const styles = StyleSheet.create({
   nav: { position: "absolute", bottom: 0, left: 0, right: 0, height: 78, backgroundColor: "white", borderTopWidth: 1, borderTopColor: "#E3E0D8", flexDirection: "row", paddingBottom: 10 },
   navItem: { flex: 1, alignItems: "center", justifyContent: "center", gap: 4 },
   segment: { flexDirection: "row", backgroundColor: "#E7E3D9", borderRadius: 13, padding: 4, marginBottom: 14 },
+  photoThumbWrap: { marginRight: 10, position: "relative" },
+  photoThumb: { width: 84, height: 84, borderRadius: 12, backgroundColor: "#E7E3D9" },
+  photoCover: { position: "absolute", left: 6, bottom: 6, backgroundColor: "#315B4C", color: "white", fontSize: 10, fontWeight: "800", paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, overflow: "hidden" },
+  photoRemove: { position: "absolute", top: 4, right: 4, width: 22, height: 22, borderRadius: 11, backgroundColor: "#17221ECC", alignItems: "center", justifyContent: "center" },
   segmentItem: { flex: 1, alignItems: "center", paddingVertical: 9, borderRadius: 10 },
   segmentActive: { backgroundColor: "white" },
   segmentText: { color: "#68736E", fontWeight: "800", fontSize: 11 },

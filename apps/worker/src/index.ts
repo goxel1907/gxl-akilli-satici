@@ -27,6 +27,7 @@ import { getTrendBoard, isTrendGroup, normalizeKeyword, readCached, scanTrend, t
 import { seasonalBoard } from "./seasonal.js";
 import { autopilotStatus, listDiscoveries, recordScan, runAutopilot } from "./discovery.js";
 import { buildProductPlan, createEtsyPhysicalDraft, detectProductSignals, getUsdTryRate, keywordCandidates, normalizeProductInput, publishEtsyListing, type KeyValueStore } from "./product-studio.js";
+import { analyzeListingPhotos, PhotoListingError } from "./photo-listing.js";
 import { buildPatternBrief, createDigitalListing, normalizeDigitalListingInput, normalizePatternPlanInput } from "./pattern-studio.js";
 import { PRIVACY_PATHS, privacyPolicyPage } from "./legal-pages.js";
 import { applyShopSettings, shopSettingsStatus, ShopSettingsError } from "./shop-settings.js";
@@ -363,6 +364,23 @@ async function opportunityContext(env: Env): Promise<OpportunityContext> {
   };
 }
 
+const MEDIA_KEY = /^(shopier|digital|photo)\/[a-f0-9-]+\.(jpg|png|bmp)$/;
+
+// Fotoğraftan ilan: telefon her fotoğrafı ayrı istekle multipart olarak yükler; base64 çözme olmadığı için Worker CPU'su harcanmaz.
+async function storeListingPhoto(env: Env, form: FormData, origin: string): Promise<{ key: string; url: string }> {
+  if (!productMediaStorage(env)) throw new PhotoListingError("Fotoğraf deposu bağlı değil (KV veya R2).", 503);
+  const file = form.get("image");
+  if (!file || typeof file === "string") throw new PhotoListingError("Fotoğraf dosyası gönderilmedi.");
+  if (file.size < 1_024 || file.size > 8_000_000) throw new PhotoListingError("Her fotoğraf 1 KB ile 8 MB arasında olmalıdır.");
+  const bytes = await file.arrayBuffer();
+  const head = new Uint8Array(bytes, 0, 4);
+  const type = head[0] === 0xff && head[1] === 0xd8 ? { mimeType: "image/jpeg", extension: "jpg" } : head[0] === 0x89 && head[1] === 0x50 ? { mimeType: "image/png", extension: "png" } : undefined;
+  if (!type) throw new PhotoListingError("Fotoğraf JPG veya PNG olmalıdır.");
+  const key = `photo/${crypto.randomUUID()}.${type.extension}`;
+  await putProductMedia(env, key, bytes, type.mimeType);
+  return { key, url: `${origin}/media/${key}` };
+}
+
 function authorized(request: Request, env: Env): boolean {
   if (!env.APP_ACCESS_TOKEN) return true;
   return request.headers.get("authorization") === `Bearer ${env.APP_ACCESS_TOKEN}`;
@@ -388,10 +406,10 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
     if (request.method === "GET" && PRIVACY_PATHS.has(url.pathname.toLowerCase().replace(/\/+$/, ""))) return privacyPolicyPage();
     if (request.method === "GET" && url.pathname === "/etsy/oauth/callback") return await handleEtsyCallback(request, env);
     if (request.method === "GET" && url.pathname === "/pinterest/oauth/callback") return await handlePinterestCallback(request, env);
-    if (request.method === "GET" && (url.pathname.startsWith("/media/shopier/") || url.pathname.startsWith("/media/digital/"))) {
+    if (request.method === "GET" && /^\/media\/(shopier|digital|photo)\//.test(url.pathname)) {
       if (!productMediaStorage(env)) return json(404, { error: "Ürün görseli bulunamadı." });
       const key = url.pathname.slice("/media/".length);
-      if (!/^(shopier|digital)\/[a-f0-9-]+\.(jpg|png|bmp)$/.test(key)) return json(404, { error: "Ürün görseli bulunamadı." });
+      if (!MEDIA_KEY.test(key)) return json(404, { error: "Ürün görseli bulunamadı." });
       const object = await getProductMedia(env, key);
       if (!object) return json(404, { error: "Ürün görseli bulunamadı." });
       const extension = key.split(".").at(-1);
@@ -551,6 +569,13 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
       return json(200, await processPinQueue(env, env.ETSY_OAUTH as unknown as PinterestStore | undefined, fetch, Date.now(), { jobId: pinRunMatch[1] }));
     }
 
+    if (request.method === "POST" && url.pathname === "/api/products/photos") {
+      return json(201, await storeListingPhoto(env, await readMultipart(request), url.origin));
+    }
+    if (request.method === "POST" && url.pathname === "/api/products/photo-analyze") {
+      const input = await readBody(request);
+      return json(200, { analysis: await analyzeListingPhotos({ imageDataUrls: input.imageDataUrls, kindHint: input.kind, nameHint: input.name }, env) });
+    }
     if (request.method === "POST" && url.pathname === "/api/products/etsy-keywords") {
       const product = normalizeProductInput(await readBody(request));
       return json(200, await keywordCandidates(product, env));
@@ -594,6 +619,12 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
         description: String(listing.description || ""),
         materials: Array.isArray(listing.materials) ? listing.materials.map(String) : [],
         priceUsd: Number(listing.priceUsd || 0)
+      }, fetch, async (imageUrl) => {
+        if (!imageUrl.startsWith(`${url.origin}/media/`)) return undefined;
+        const key = imageUrl.slice(`${url.origin}/media/`.length);
+        if (!MEDIA_KEY.test(key)) return undefined;
+        const media = await getProductMedia(env, key);
+        return media ? await new Response(media.body).arrayBuffer() : undefined;
       });
       const pinsQueued = result.alreadyCreated ? 0 : await autoEnqueuePins(env.ETSY_OAUTH as unknown as PinterestStore, { listingId: result.listingId, boardName: boardNameFor({ noun: detectProductSignals(product).noun }), listingTitle: String(listing.title || "") });
       return json(result.alreadyCreated ? 200 : 201, { ...result, pinsQueued });
@@ -875,6 +906,7 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
     if (code === "PATTERN_PRODUCT_REQUIRED") return json(400, { error: "Ürün türünü yazın (ör. doily, slippers)." });
     if (error instanceof DigitalDeliveryError) return json(error.status, { error: error.message });
     if (error instanceof ShopSettingsError) return json(error.status, { error: error.message, code: error.code });
+    if (error instanceof PhotoListingError) return json(error.status, { error: error.message });
     if (error instanceof PinterestError) return json(error.status, { error: error.message, code: error.code });
     if (error instanceof EtsyIntegrationError) {
       if (error.code === "NOT_CONFIGURED") return json(503, { error: "Etsy keystring ve shared secret henüz sunucuya eklenmedi." });
