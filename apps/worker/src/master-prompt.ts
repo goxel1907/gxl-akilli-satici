@@ -55,7 +55,7 @@ export function buildMasterPrompt(input: MasterPromptInput): string {
   }
   lines.push("", "## Brief C - listing images (one per reply, in this order)");
   for (const visual of input.adVisuals) {
-    lines.push(`### C${visual.slot}. ${visual.titleTr} - ${visual.aspect}`, `Used for: ${visual.useTr}${visual.overlay ? `. Headline added later in Canva: "${visual.overlay}"` : ""}`, visual.prompt, "");
+    lines.push(`### C${visual.slot}. ${visual.titleEn} - ${aspectEn(visual.aspect)}`, `Used for: ${visual.useEn}${visual.overlay ? `. Headline added later in Canva: "${visual.overlay}"` : ""}`, visual.prompt, "");
   }
   if (input.pins?.length) {
     lines.push("## Brief D - Pinterest pins");
@@ -63,4 +63,9 @@ export function buildMasterPrompt(input: MasterPromptInput): string {
   }
   lines.push("## Final checklist", ...input.checklist.map((item) => `- ${item}`));
   return lines.join("\n");
+}
+
+// "4:3 yatay · 3000x2250 px" → "4:3 landscape, 3000x2250 px"
+function aspectEn(aspect: string): string {
+  return aspect.replace(/yatay/g, "landscape").replace(/dikey/g, "portrait").replace(/kare/g, "square").replace(/hikâye için/g, "story").replace(/ · /g, ", ");
 }

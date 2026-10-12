@@ -169,12 +169,15 @@ function coinWord(value: number): string {
 }
 
 // Ad: trendden gelen bir özellik veya renk + türetilmiş özgün sözcük + ürün. Daha önce kullanılan adlar atlanır.
+const NAME_FUNCTION_WORDS = new Set(["daily", "weekly", "monthly", "yearly", "annual", "undated", "dated", "habit", "tracker", "trackers", "budget", "printable", "digital", "editable", "instant", "download", "bundle", "set", "kit", "page", "pages", "template", "worksheet", "worksheets", "checklist", "schedule", "log", "book", "card", "cards", "game", "games", "pattern", "pdf", "planner", "journal", "insert", "inserts", "tablet", "hyperlinked", "month", "week", "day", "year", "life", "goal", "goals", "mood", "sleep", "meal", "fitness", "beginner", "easy", "free", "chart", "video", "tutorial"]);
+
 export function coinProductName(input: { productType: string; salt: string; accents?: string[]; avoidNames?: string[] }): string {
   const avoid = new Set((input.avoidNames || []).map((name) => name.toLowerCase()));
   const productWords = new Set(input.productType.toLowerCase().split(/\s+/));
+  // Ada yalnız renk/stil gibi tanımlayıcılar girer; "habit tracker", "weekly" gibi arama ifadeleri adı anahtar kelime yığınına çevirir.
   const accents = (input.accents || [])
     .map((value) => value.toLowerCase().trim())
-    .filter((value) => /^[a-z][a-z -]{1,15}$/.test(value) && !value.split(" ").some((word) => productWords.has(word)));
+    .filter((value) => /^[a-z][a-z -]{1,15}$/.test(value) && value.split(" ").length <= 2 && !value.split(/[\s-]+/).some((word) => productWords.has(word) || NAME_FUNCTION_WORDS.has(word)));
   const product = titleCase(input.productType);
   let name = "";
   for (let attempt = 0; attempt < 50; attempt += 1) {

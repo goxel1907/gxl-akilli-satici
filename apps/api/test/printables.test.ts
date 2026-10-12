@@ -241,3 +241,18 @@ test("tags that only differ in word order are not repeated", async () => {
   const { normalizeEtsyTags } = await import("../../worker/src/pattern-studio.js");
   assert.deepEqual(normalizeEtsyTags(["printable planner", "planner printable", "weekly planner"]), ["printable planner", "weekly planner"]);
 });
+
+test("product names avoid search phrases, the package is fully English and the ad image has its own scene", () => {
+  const input = { kind: "planner" as const, productType: "planner", keyword: "printable planner", trendFeatures: ["daily", "habit tracker", "weekly"], colors: ["sage green", "lavender", "beige"], pageCount: 30 };
+  for (const seed of ["a", "b", "c", "d", "e", "f", "g", "h"]) {
+    const name = buildPrintableBrief({ ...input, seed }).name;
+    assert.ok(!/\b(habit|tracker|daily|weekly)\b/i.test(name), name);
+    assert.match(name, /Planner$/);
+  }
+  const brief = buildPrintableBrief({ ...input, seed: "z" });
+  assert.ok(!/yatay|dikey|kare|Etsy galerisi|Kapak/.test(brief.masterPrompt));
+  assert.match(brief.masterPrompt, /### C1\. Cover \(main image\) - 4:3 landscape, 3000x2250 px/);
+  const lifestyle = brief.adVisuals[1].prompt.match(/Lifestyle scene: the ".+?" planner, (.+?)\. Candid/)?.[1];
+  assert.ok(lifestyle);
+  assert.ok(!brief.adVisuals[9].prompt.includes(lifestyle), "ad image must not reuse the lifestyle scene");
+});
