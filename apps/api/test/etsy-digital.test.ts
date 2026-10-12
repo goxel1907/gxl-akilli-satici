@@ -343,3 +343,74 @@ test("Etsy status treats a missing shop as setup pending instead of an outage", 
     globalThis.fetch = originalFetch;
   }
 });
+
+test("a digital product carries up to 5 files (PDFs and a ZIP) to Etsy and to protected links", async () => {
+  const kv = memoryKv();
+  await kv.store.put("etsy:tokens", JSON.stringify({ accessToken: "123.token", refreshToken: "refresh", expiresAt: Date.now() + 3_600_000, scope: "listings_w", userId: "123" }));
+  const env = { APP_ACCESS_TOKEN: "app-token", ETSY_API_KEY: "key", ETSY_SHARED_SECRET: "secret", ETSY_OAUTH: kv.store };
+  const pdf = (name: string) => new File([Buffer.concat([Buffer.from("%PDF-1.7\n"), Buffer.alloc(2_000, 32)])], name, { type: "application/pdf" });
+  const zip = new File([Buffer.concat([Buffer.from([0x50, 0x4b, 0x03, 0x04]), Buffer.alloc(2_000, 7)])], "Planner Extras.zip", { type: "application/zip" });
+  const form = (files: File[]) => {
+    const value = new FormData();
+    value.set("metadata", JSON.stringify({
+      confirm: true, name: "Lavender Lirara Planner", kind: "planner", productType: "planner", prices: { usd: "4.49" },
+      listing: { title: "Printable Planner, Lavender Lirara Planner, Undated", description: "A printable planner.", tags: ["printable planner"], materials: ["pdf"] }
+    }));
+    for (const file of files) value.append("files", file);
+    return value;
+  };
+  const post = (body: FormData) => handleRequest(new Request("https://gxl.example/api/digital/products", { method: "POST", headers: { authorization: "Bearer app-token" }, body }), env);
+  const files = [pdf("Planner-US-Letter.pdf"), pdf("Planner-A4.pdf"), pdf("Planner-A5.pdf"), pdf("Planner-Tablet.pdf"), zip];
+  assert.equal((await post(form([...files, pdf("Planner-BW.pdf")]))).status, 400);
+  const created = await post(form(files));
+  assert.equal(created.status, 201);
+  const { product } = await created.json() as { product: { id: string; fileName: string; files: Array<{ name: string; mimeType: string }> } };
+  assert.deepEqual(product.files.map((file) => file.name), ["Planner-US-Letter.pdf", "Planner-A4.pdf", "Planner-A5.pdf", "Planner-Tablet.pdf", "Planner-Extras.zip"]);
+  assert.equal(product.files[4].mimeType, "application/zip");
+  assert.equal(product.fileName, "Planner-US-Letter.pdf");
+
+  const uploads: Array<{ name: string; rank: string; type: string }> = [];
+  const fetcher = (async (input: string | URL | Request, init?: RequestInit) => {
+    const url = new URL(String(input));
+    if (url.pathname === "/v3/application/users/123/shops") return Response.json({ shop_id: 777, shop_name: "GXLMarketStudio", currency_code: "USD" });
+    if (url.pathname === "/v3/application/seller-taxonomy/nodes") return Response.json({ results: [{ id: 10, name: "Paper & Party Supplies", children: [{ id: 11, name: "Calendars & Planners", children: [] }] }] });
+    if (url.pathname === "/v3/application/shops/777/listings") return Response.json({ listing_id: 901 }, { status: 201 });
+    if (url.pathname.endsWith("/files")) {
+      const body = init?.body as FormData;
+      uploads.push({ name: String(body.get("name")), rank: String(body.get("rank")), type: (body.get("file") as File).type });
+      return Response.json({ listing_file_id: uploads.length }, { status: 201 });
+    }
+    return Response.json({ error: "unexpected" }, { status: 500 });
+  }) as typeof fetch;
+  const draft = await createEtsyDigitalDraft(env, kv.store, product.id, async () => null, fetcher);
+  assert.equal(draft.product.etsy?.fileUploaded, true);
+  assert.equal(draft.product.etsy?.filesUploaded, 5);
+  assert.deepEqual(uploads.map((item) => `${item.rank}:${item.name}`), ["1:Planner-US-Letter.pdf", "2:Planner-A4.pdf", "3:Planner-A5.pdf", "4:Planner-Tablet.pdf", "5:Planner-Extras.zip"]);
+  assert.equal(uploads[4].type, "application/zip");
+
+  const grantResponse = await handleRequest(new Request(`https://gxl.example/api/digital/products/${product.id}/grants`, { method: "POST", headers: { authorization: "Bearer app-token", "content-type": "application/json" }, body: JSON.stringify({ confirm: true, orderRef: "SHP-2001", maxDownloads: 1 }) }), env);
+  const { grant } = await grantResponse.json() as { grant: { url: string } };
+  const landing = await (await handleRequest(new Request(grant.url), env)).text();
+  assert.equal((landing.match(/class="button"/g) || []).length, 5);
+  const zipDownload = await handleRequest(new Request(`${grant.url}/file/4`), env);
+  assert.equal(zipDownload.status, 200);
+  assert.equal(zipDownload.headers.get("content-type"), "application/zip");
+  assert.match(zipDownload.headers.get("content-disposition") || "", /Planner-Extras\.zip/);
+  // Hak dosya başınadır: ZIP'i indirmek PDF'lerin hakkını tüketmez.
+  assert.equal((await handleRequest(new Request(`${grant.url}/file/4`), env)).status, 410);
+  assert.equal((await handleRequest(new Request(`${grant.url}/file`), env)).status, 200);
+  assert.equal((await handleRequest(new Request(`${grant.url}/file/1`), env)).status, 200);
+  assert.equal((await handleRequest(new Request(`${grant.url}/file/5`), env)).status, 404);
+});
+
+test("products saved before multi-file support still download their single PDF", async () => {
+  const kv = memoryKv();
+  const env = { APP_ACCESS_TOKEN: "app-token", ETSY_OAUTH: kv.store };
+  await kv.store.put("digital:product:legacy-1", JSON.stringify({ id: "legacy-1", name: "Old Doily", craft: "crochet", productType: "doily", fileName: "Old-Doily.pdf", fileSize: 2_000, images: [], listing: { title: "Old Doily Pattern", description: "PDF", tags: [], materials: [] }, prices: { usd: 5 }, flags: { aiAssisted: true, photosAreRenders: true, testMade: false }, createdAt: "2026-09-01T00:00:00Z" }));
+  await kv.store.put("digital:file:legacy-1", Buffer.concat([Buffer.from("%PDF-1.4\n"), Buffer.alloc(2_000, 32)]).buffer as ArrayBuffer);
+  await kv.store.put("digital:grant:BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB", JSON.stringify({ id: "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB", productId: "legacy-1", orderRef: "OLD-1", channel: "shopier", createdAt: "2026-10-01T00:00:00Z", expiresAt: new Date(Date.now() + 86_400_000).toISOString(), maxDownloads: 2, downloads: 1, revoked: false }));
+  const download = await handleRequest(new Request("https://gxl.example/d/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/file"), env);
+  assert.equal(download.status, 200);
+  assert.match(download.headers.get("content-disposition") || "", /Old-Doily\.pdf/);
+  assert.equal((await handleRequest(new Request("https://gxl.example/d/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/file"), env)).status, 410);
+});

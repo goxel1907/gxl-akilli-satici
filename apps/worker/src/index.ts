@@ -415,10 +415,12 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
       if (shopierWebhookEvents.length > 100) shopierWebhookEvents.splice(0, shopierWebhookEvents.length - 100);
       return json(200, { accepted: true, duplicate: false, event: verification.event });
     }
-    const downloadMatch = url.pathname.match(/^\/d\/([A-Za-z0-9_-]{32})(\/file)?$/);
+    const downloadMatch = url.pathname.match(/^\/d\/([A-Za-z0-9_-]{32})(\/file(?:\/([1-4]))?)?$/);
     if (request.method === "GET" && downloadMatch) {
       if (!env.ETSY_OAUTH) return json(404, { error: "İndirme bağlantısı bulunamadı." });
-      return downloadMatch[2] ? await grantDownload(digitalStore(env), downloadMatch[1]) : await grantLandingPage(digitalStore(env), downloadMatch[1]);
+      return downloadMatch[2]
+        ? await grantDownload(digitalStore(env), downloadMatch[1], Date.now(), Number(downloadMatch[3] || 0))
+        : await grantLandingPage(digitalStore(env), downloadMatch[1]);
     }
     if (url.pathname.startsWith("/api/") && !authorized(request, env)) return json(401, { error: "Uygulama erişim anahtarı geçersiz." });
 

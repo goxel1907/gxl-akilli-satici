@@ -1414,7 +1414,7 @@ function DigitalUploadForm({ visible, prefill, onClose, onSaved }: any) {
   const [testMade, setTestMade] = useState(false);
   const [photosAreRenders, setPhotosAreRenders] = useState(true);
   const [aiAssisted, setAiAssisted] = useState(true);
-  const [pdf, setPdf] = useState<any>();
+  const [files, setFiles] = useState<any[]>([]);
   const [images, setImages] = useState<any[]>([]);
   const [saving, setSaving] = useState(false);
   useEffect(() => {
@@ -1428,15 +1428,18 @@ function DigitalUploadForm({ visible, prefill, onClose, onSaved }: any) {
     setDescription(prefill?.listing?.description || "");
     setMaterials(prefill?.listing?.materials || []);
     setPriceUsd(prefill?.priceUsd ? String(prefill.priceUsd) : "");
-    setPdf(undefined);
+    setFiles([]);
     setImages([]);
   }, [visible, prefill]);
-  const pickPdf = async () => {
-    const result = await DocumentPicker.getDocumentAsync({ type: "application/pdf", copyToCacheDirectory: true });
+  // Etsy dijital ilana en fazla 5 dosya alır: her format ayrı PDF, fazlası tek ZIP.
+  const pickFiles = async () => {
+    const result = await DocumentPicker.getDocumentAsync({ type: ["application/pdf", "application/zip", "application/x-zip-compressed"], multiple: true, copyToCacheDirectory: true });
     if (result.canceled) return;
-    const asset = result.assets[0];
-    if (asset.size && asset.size > 20 * 1024 * 1024) return Alert.alert("PDF çok büyük", "Etsy en fazla 20 MB dosya kabul eder.");
-    setPdf(asset);
+    const tooBig = result.assets.filter((asset) => asset.size && asset.size > 20 * 1024 * 1024);
+    if (tooBig.length) Alert.alert("Dosya çok büyük", `${tooBig.map((asset) => asset.name).join(", ")}: Etsy dosya başına en fazla 20 MB kabul eder.`);
+    const merged = [...files, ...result.assets.filter((asset) => !tooBig.includes(asset))].filter((asset, index, all) => all.findIndex((other) => other.name === asset.name) === index);
+    if (merged.length > 5) Alert.alert("En fazla 5 dosya", "Etsy bir dijital ilana en fazla 5 dosya kabul eder. Fazla formatları (ör. Half Letter ve siyah-beyaz) tek bir ZIP dosyasında birleştirin.");
+    setFiles(merged.slice(0, 5));
   };
   const pickImages = async () => {
     const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ["images"], allowsMultipleSelection: true, selectionLimit: 10, quality: 0.7 });
@@ -1444,7 +1447,7 @@ function DigitalUploadForm({ visible, prefill, onClose, onSaved }: any) {
   };
   const save = () => {
     if (!name.trim() || !productType.trim() || !title.trim() || !description.trim()) return Alert.alert("Eksik bilgi", "Ürün adı, ürün türü, başlık ve açıklama gerekli. Önce Stüdyo'da ilanı hazırlayın.");
-    if (!pdf) return Alert.alert("PDF seçin", "Satılacak PDF'i seçin.");
+    if (!files.length) return Alert.alert("Dosya seçin", "Satılacak PDF dosyalarını seçin (en fazla 5; fazlası ZIP).");
     if (!priceUsd && !priceTry) return Alert.alert("Fiyat", "Etsy mağaza para birimine göre USD veya TL fiyatı girin.");
     Alert.alert("PDF güvenli depoya yüklensin mi?", "Dosya herkese açık değildir. Müşteri yalnızca Etsy'de ödeme yaptıktan sonra Etsy üzerinden veya sizin oluşturduğunuz kişiye özel bağlantıyla indirebilir.", [
       { text: "Vazgeç", style: "cancel" },
@@ -1462,7 +1465,10 @@ function DigitalUploadForm({ visible, prefill, onClose, onSaved }: any) {
             listing: { title: title.trim(), description: description.trim(), tags: tags.split(",").map((tag) => tag.trim()).filter(Boolean), materials },
             pins: prefill?.pins || []
           }));
-          form.append("pdf", { uri: pdf.uri, name: pdf.name || "pattern.pdf", type: "application/pdf" } as any);
+          files.forEach((file, index) => {
+            const isZip = /\.zip$/i.test(file.name || "") || /zip/.test(file.mimeType || "");
+            form.append("files", { uri: file.uri, name: file.name || `file-${index + 1}.${isZip ? "zip" : "pdf"}`, type: isZip ? "application/zip" : "application/pdf" } as any);
+          });
           images.forEach((image, index) => form.append("images", { uri: image.uri, name: image.fileName || `render-${index + 1}.jpg`, type: image.mimeType || "image/jpeg" } as any));
           const response = await fetch(`${API_URL}/api/digital/products`, { method: "POST", headers: apiHeaders(), body: form });
           const body = await response.json().catch(() => ({})) as any;
@@ -1476,7 +1482,9 @@ function DigitalUploadForm({ visible, prefill, onClose, onSaved }: any) {
   return <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
     <SafeAreaView style={styles.formSafe}><ScrollView contentContainerStyle={styles.formContent}>
       <View style={styles.formHeader}><Text style={styles.sectionTitle}>Dijital PDF yükle</Text><Pressable onPress={onClose}><Ionicons name="close" size={26} color="#315B4C" /></Pressable></View>
-      <Pressable style={styles.uploadRow} onPress={pickPdf}><Ionicons name="document-text-outline" size={22} color="#315B4C" /><Text style={[styles.rowTitle, { flex: 1 }]}>{pdf ? `${pdf.name} · ${Math.round((pdf.size || 0) / 1024)} KB` : "PDF seç (en fazla 20 MB)"}</Text></Pressable>
+      <Pressable style={styles.uploadRow} onPress={pickFiles}><Ionicons name="document-text-outline" size={22} color="#315B4C" /><Text style={[styles.rowTitle, { flex: 1 }]}>{files.length ? `${files.length}/5 dosya seçildi · eklemek için dokunun` : "PDF dosyalarını seç (birden çok seçilebilir, en fazla 5)"}</Text></Pressable>
+      {files.map((file) => <View key={file.name} style={styles.fileRow}><Ionicons name={/\.zip$/i.test(file.name || "") ? "archive-outline" : "document-outline"} size={18} color="#56615C" /><Text style={[styles.small, { flex: 1 }]} numberOfLines={1}>{file.name} · {Math.round((file.size || 0) / 1024)} KB</Text><Pressable onPress={() => setFiles(files.filter((item) => item.name !== file.name))}><Ionicons name="close-circle-outline" size={20} color="#B4483A" /></Pressable></View>)}
+      {!!files.length && <Text style={styles.formHint}>Hepsi tek seferde Etsy ilanına eklenir. Etsy en fazla 5 dosya alır; fazla formatları tek bir ZIP'te birleştirin.</Text>}
       <Pressable style={styles.uploadRow} onPress={pickImages}><Ionicons name="images-outline" size={22} color="#315B4C" /><Text style={[styles.rowTitle, { flex: 1 }]}>{images.length ? `${images.length} görsel seçildi` : "3D render / ürün fotoğrafları (en fazla 10)"}</Text></Pressable>
       {!!images.length && <ScrollView horizontal style={{ marginBottom: 12 }}>{images.map((image) => <Image key={image.uri} source={{ uri: image.uri }} style={styles.thumb} />)}</ScrollView>}
       <Field label="Ürün adı" value={name} onChangeText={setName} />
@@ -1512,7 +1520,7 @@ function GrantForm({ product, onClose }: any) {
     try {
       const { grant } = await apiJson(`/api/digital/products/${product.id}/grants`, { method: "POST", headers: apiHeaders(true), body: JSON.stringify({ confirm: true, orderRef, channel, maxDownloads: Number(maxDownloads), expiresInDays: Number(expiresInDays) }) });
       onClose(true);
-      await Share.share({ message: `Merhaba, ${product.name} desen PDF'iniz hazır: ${grant.url}\nBu bağlantı size özeldir; ${grant.maxDownloads} kez indirilebilir ve ${new Date(grant.expiresAt).toLocaleDateString("tr-TR")} tarihine kadar geçerlidir. İyi örgüler!` });
+      await Share.share({ message: `Merhaba, ${product.name} dosyalarınız hazır: ${grant.url}\nBu bağlantı size özeldir; ${grant.maxDownloads} kez indirilebilir ve ${new Date(grant.expiresAt).toLocaleDateString("tr-TR")} tarihine kadar geçerlidir. İyi örgüler!` });
     } catch (error) { Alert.alert("Bağlantı oluşturulamadı", errorText(error)); }
     finally { setSaving(false); }
   };
@@ -1584,7 +1592,7 @@ function DigitalPanel({ online, shopReady, prefill, onPrefillUsed }: any) {
     {products.map((product) => <View style={styles.card} key={product.id}>
       <View style={styles.shopierProductTop}>
         {product.images?.[0] ? <Image source={{ uri: product.images[0].url }} style={styles.productImagePhoto} /> : <View style={styles.productImage}><Ionicons name="document-text" size={26} color="#C88B47" /></View>}
-        <View style={{ flex: 1 }}><Text style={styles.cardTitle}>{product.name}</Text><Text style={styles.small}>{product.fileName} · {Math.round(product.fileSize / 1024)} KB · {product.images?.length || 0} görsel</Text><Text style={styles.price}>{[product.prices?.usd ? `${product.prices.usd} USD` : "", product.prices?.try ? `${product.prices.try} TL` : ""].filter(Boolean).join(" · ")}</Text></View>
+        <View style={{ flex: 1 }}><Text style={styles.cardTitle}>{product.name}</Text><Text style={styles.small}>{product.files?.length > 1 ? `${product.files.length} dosya · ${Math.round(product.files.reduce((sum: number, file: any) => sum + file.size, 0) / 1024)} KB` : `${product.fileName} · ${Math.round(product.fileSize / 1024)} KB`} · {product.images?.length || 0} görsel</Text><Text style={styles.price}>{[product.prices?.usd ? `${product.prices.usd} USD` : "", product.prices?.try ? `${product.prices.try} TL` : ""].filter(Boolean).join(" · ")}</Text></View>
       </View>
       <Text style={styles.small} numberOfLines={2}>{product.listing?.title}</Text>
       {!product.flags?.testMade && <Text style={styles.warningText}>• Test edilmedi</Text>}
@@ -1726,7 +1734,7 @@ const ETSY_GUIDE: Array<{ id: string; title: string; icon: any; steps: string[] 
     "Claude dosyaları (PDF/HTML/SVG) çok iyi kurar ama fotoğraf üretmez. Claude kullanırsanız paketin fotoğraf adımlarını ChatGPT'de, yine tek sohbette yapın; Product spec JSON'unu oraya da yapıştırın.",
     "Reklam tadında 10 görselin her birinde nerede kullanılacağı (Etsy kapak, galeri, Pinterest, Instagram), ölçüsü ve üstüne yazılacak kısa metin yazar. Görseli üretirken PDF sayfalarınızı referans olarak yükleyin, yazıyı Canva ile ekleyin.",
     "Pinterest pinlerini farklı günlerde paylaşın. Paket fikriyle aynı stilde bir set hazırlayın.",
-    "Dijital → PDF'i ve görselleri yükleyin → 'Etsy taslağı oluştur'. Etsy'de yapay zekâ beyanını ve kategoriyi kontrol edip yayınlayın."
+    "Dijital → tüm PDF dosyalarını tek seferde seçin (en fazla 5; fazla formatlar tek bir ZIP'te) ve görselleri ekleyin → 'Etsy taslağı oluştur'. Dosyaların hepsi ilana otomatik eklenir. Etsy'de yapay zekâ beyanını ve kategoriyi kontrol edip yayınlayın."
   ] },
   { id: "pdf-win", title: "PDF satışında öne geçmek", icon: "trophy-outline", steps: [
     "Kapak görseli satışın yarısıdır: küçük görünümde okunan 3-5 kelimelik başlık ve sayfa sayısı ya da format rozeti ekleyin.",
@@ -1754,7 +1762,7 @@ const ETSY_GUIDE: Array<{ id: string; title: string; icon: any; steps: string[] 
     "Her seferinde o arama için daha önce kullanılmamış bir özellik kombinasyonu, yeni bir palet ve daha önce verilmemiş bir desen adı seçilir. Trendin en güçlü özelliği ve ana rengi korunur. 'Başka trend kombinasyonu' yeni seçenek getirir; kendi modeliniz varsa 'Kendi modelimden hazırla'ya basın.",
     "'Tek paketi gönder' ile deseni, render görsellerini ve reklam görsellerini bir kez ChatGPT'ye gönderin; hepsi aynı sohbette sırayla yapılır ve render Design spec ile birebir aynı olur. Her adım sonunda 'next' yazın. PDF'i ve görselleri telefona kaydedin.",
     "Kalite kapısındaki maddeleri kontrol edin: ölçüler, ilmek sayıları, kısaltmalar, en az bir deneme örneği.",
-    "Dijital → PDF'i ve görselleri yükleyin → 'Etsy taslağı oluştur'. Başlık, 13 etiket ve açıklama otomatik gelir.",
+    "Dijital → PDF dosyalarını (en fazla 5) ve görselleri tek seferde seçin → 'Etsy taslağı oluştur'. Başlık, 13 etiket, açıklama ve tüm dosyalar otomatik gelir.",
     "Etsy'de taslağı açın, yapay zekâ beyanını ve kategoriyi kontrol edip yayınlayın. Dijital desenlerde bu beyan Etsy'de elle işaretlendiği için son adım Etsy'dedir."
   ] },
   { id: "physical", title: "Tesbih, gümüş, vintage (fiziksel ürün)", icon: "diamond-outline", steps: [
@@ -2135,6 +2143,7 @@ const styles = StyleSheet.create({
   barLabel: { width: 112, fontSize: 11, color: "#303B36", fontWeight: "700" },
   barTrack: { flex: 1, height: 10, backgroundColor: "#E7E3D9", borderRadius: 5, overflow: "hidden" },
   barFill: { height: 10, backgroundColor: "#315B4C", borderRadius: 5 },
+  fileRow: { flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 6, paddingHorizontal: 4 },
   masterCard: { borderWidth: 2, borderColor: "#315B4C" },
   barValue: { width: 34, fontSize: 11, color: "#56615C", textAlign: "right" },
   miniScore: { minWidth: 30, height: 22, borderRadius: 11, alignItems: "center", justifyContent: "center", paddingHorizontal: 4 },
