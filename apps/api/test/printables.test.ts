@@ -256,3 +256,8 @@ test("product names avoid search phrases, the package is fully English and the a
   assert.ok(lifestyle);
   assert.ok(!brief.adVisuals[9].prompt.includes(lifestyle), "ad image must not reuse the lifestyle scene");
 });
+
+test("listing description reads as a sentence, not a keyword list", () => {
+  const draft = buildPrintableListing({ kind: "planner", productType: "planner", keyword: "printable planner", trendFeatures: ["daily", "habit tracker", "weekly"], pageCount: 33 }, "Zomery Planner");
+  assert.match(draft.description, /^Zomery Planner - an original planner with daily, habit tracker and weekly pages, designed/);
+});

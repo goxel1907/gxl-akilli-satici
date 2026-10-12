@@ -773,7 +773,7 @@ function EtsyScreen({ online, channels }: any) {
     <View style={section === "Stüdyo" ? undefined : styles.hidden}><StudioPanel online={online} active={section === "Stüdyo"} seed={studioSeed} onUpload={(prefill: any) => { setUploadPrefill(prefill); setSection("Dijital"); }} /></View>
     {section === "Dijital" && <DigitalPanel online={online} shopReady={shopReady} prefill={uploadPrefill} onPrefillUsed={() => setUploadPrefill(undefined)} />}
     {section === "Pinterest" && <PinterestPanel online={online} />}
-    {section === "Kılavuz" && <EtsyGuide shopReady={shopReady} authorized={authorized} />}
+    {section === "Kılavuz" && <><ShopSettingsCard online={online} shopReady={shopReady} /><EtsyGuide shopReady={shopReady} authorized={authorized} /></>}
   </>;
 }
 
@@ -1801,6 +1801,60 @@ const ETSY_GUIDE: Array<{ id: string; title: string; icon: any; steps: string[] 
     "Üstte 'Yerel mod' görünüyorsa sunucuya bağlanılamıyordur. 'Bağlantı anahtarını yeniden gir' ile anahtarı tekrar girin."
   ] }
 ];
+
+// Mağaza vitrini: başlık, duyuru, satış mesajları ve bölümler API ile Etsy'ye yazılır.
+// Logo, afiş ve "Hakkında" bölümü için Etsy API'si yoktur; bunlar Shop Manager'dan yüklenir.
+function ShopSettingsCard({ online, shopReady }: any) {
+  const [status, setStatus] = useState<any>();
+  const [open, setOpen] = useState(false);
+  const [title, setTitle] = useState("");
+  const [announcement, setAnnouncement] = useState("");
+  const [saleMessage, setSaleMessage] = useState("");
+  const [digitalSaleMessage, setDigitalSaleMessage] = useState("");
+  const [sections, setSections] = useState("");
+  const [saving, setSaving] = useState(false);
+  const load = async () => {
+    try {
+      const body = await apiJson("/api/etsy/shop-settings", { headers: apiHeaders() });
+      setStatus(body);
+      setTitle((current) => current || body.defaults.title);
+      setAnnouncement((current) => current || body.defaults.announcement);
+      setSaleMessage((current) => current || body.defaults.saleMessage);
+      setDigitalSaleMessage((current) => current || body.defaults.digitalSaleMessage);
+      setSections((current) => current || body.defaults.sections.join(", "));
+    } catch { setStatus({ error: true }); }
+  };
+  useEffect(() => { if (online && open && !status) load(); }, [online, open]);
+  const apply = () => Alert.alert("Etsy mağaza vitrini güncellensin mi?", "Mağaza başlığı, duyuru, satış sonrası mesajlar ve bölümler Etsy'de bu metinlerle değişir.", [
+    { text: "Vazgeç", style: "cancel" },
+    { text: "Uygula", onPress: async () => {
+      setSaving(true);
+      try {
+        const result = await apiJson("/api/etsy/shop-settings", { method: "POST", headers: apiHeaders(true), body: JSON.stringify({ confirm: true, title, announcement, saleMessage, digitalSaleMessage, sections: sections.split(",").map((item) => item.trim()).filter(Boolean) }) });
+        Alert.alert("Mağaza güncellendi", `Değişen alanlar: ${result.updated.length}. Yeni bölüm: ${result.sectionsCreated.length}${result.sectionsExisting.length ? `, zaten var: ${result.sectionsExisting.length}` : ""}.`);
+      } catch (error) { Alert.alert("Uygulanamadı", errorText(error)); }
+      finally { setSaving(false); }
+    } }
+  ]);
+  return <View style={styles.card}>
+    <Pressable style={styles.shopierProductTop} onPress={() => setOpen(!open)}>
+      <Ionicons name="storefront-outline" size={20} color="#315B4C" />
+      <Text style={[styles.cardTitle, { flex: 1 }]}>Mağaza vitrini (başlık, duyuru, mesajlar, bölümler)</Text>
+      <Ionicons name={open ? "chevron-up" : "chevron-down"} size={18} color="#68736E" />
+    </Pressable>
+    {open && <>
+      {!shopReady && <Text style={styles.warningText}>Mağaza açılışı tamamlanınca uygulanabilir.</Text>}
+      {status?.connected && !status?.canWrite && <View style={{ marginVertical: 8 }}><Text style={styles.warningText}>Mevcut Etsy izni mağaza düzenlemeyi kapsamıyor. Bir kez bağlantıyı yenileyin; Etsy yeni izni (mağaza düzenleme) soracak.</Text><Pressable style={[styles.secondaryButton, { alignSelf: "flex-start", marginTop: 8 }]} onPress={connectEtsy}><Text style={styles.secondaryButtonText}>Etsy iznini yenile</Text></Pressable></View>}
+      <Field label={`Mağaza başlığı (${title.length}/55)`} value={title} onChangeText={setTitle} />
+      <Field label="Duyuru (mağaza sayfasında görünür)" value={announcement} onChangeText={setAnnouncement} multiline style={[styles.input, { minHeight: 110, textAlignVertical: "top" }]} />
+      <Field label="Satış sonrası mesaj" value={saleMessage} onChangeText={setSaleMessage} multiline style={[styles.input, { minHeight: 80, textAlignVertical: "top" }]} />
+      <Field label="Dijital ürün satış mesajı" value={digitalSaleMessage} onChangeText={setDigitalSaleMessage} multiline style={[styles.input, { minHeight: 90, textAlignVertical: "top" }]} />
+      <Field label="Bölümler (virgülle, her biri en fazla 24 karakter)" value={sections} onChangeText={setSections} />
+      <Text style={styles.formHint}>Logo (500×500), afiş (3360×840) ve "Hakkında" metni için Etsy API'si yok; bunları Etsy Shop Manager'dan yükleyin.</Text>
+      <Pressable style={[styles.analyzeButton, { marginTop: 12 }, (saving || !online || !status?.canWrite || !shopReady) && styles.primaryDisabled]} disabled={saving || !online || !status?.canWrite || !shopReady} onPress={apply}>{saving ? <ActivityIndicator color="white" /> : <Ionicons name="cloud-upload-outline" size={18} color="white" />}<Text style={styles.primaryText}>Etsy'ye uygula</Text></Pressable>
+    </>}
+  </View>;
+}
 
 function EtsyGuide({ shopReady, authorized }: any) {
   const [open, setOpen] = useState<string>(shopReady ? "daily" : "setup");

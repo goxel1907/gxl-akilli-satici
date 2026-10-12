@@ -29,6 +29,7 @@ import { autopilotStatus, listDiscoveries, recordScan, runAutopilot } from "./di
 import { buildProductPlan, createEtsyPhysicalDraft, detectProductSignals, getUsdTryRate, keywordCandidates, normalizeProductInput, publishEtsyListing, type KeyValueStore } from "./product-studio.js";
 import { buildPatternBrief, createDigitalListing, normalizeDigitalListingInput, normalizePatternPlanInput } from "./pattern-studio.js";
 import { PRIVACY_PATHS, privacyPolicyPage } from "./legal-pages.js";
+import { applyShopSettings, shopSettingsStatus, ShopSettingsError } from "./shop-settings.js";
 import { createPatternSeed, readUsedNames, rememberName } from "./pattern-seed.js";
 import { buildPrintableBrief, createPrintableListing, normalizePrintablePlanInput } from "./printable-studio.js";
 import {
@@ -453,6 +454,16 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
       return json(200, await createEtsyConnectSession(request, env));
     }
 
+    if (request.method === "GET" && url.pathname === "/api/etsy/shop-settings") {
+      return json(200, await shopSettingsStatus(env));
+    }
+    if (request.method === "POST" && url.pathname === "/api/etsy/shop-settings") {
+      const input = await readBody(request);
+      const blocked = requireConfirmedWrite(env, input, "Etsy mağaza vitrinini değiştirme");
+      if (blocked) return blocked;
+      return json(200, await applyShopSettings(env, input));
+    }
+
     if (request.method === "GET" && url.pathname === "/api/etsy/trends") {
       return json(200, await getTrendBoard(env, env.ETSY_OAUTH as unknown as TrendStore | undefined));
     }
@@ -863,6 +874,7 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
     if (code === "PATTERN_KEYWORD_REQUIRED") return json(400, { error: "Desen için bir Etsy araması seçin." });
     if (code === "PATTERN_PRODUCT_REQUIRED") return json(400, { error: "Ürün türünü yazın (ör. doily, slippers)." });
     if (error instanceof DigitalDeliveryError) return json(error.status, { error: error.message });
+    if (error instanceof ShopSettingsError) return json(error.status, { error: error.message, code: error.code });
     if (error instanceof PinterestError) return json(error.status, { error: error.message, code: error.code });
     if (error instanceof EtsyIntegrationError) {
       if (error.code === "NOT_CONFIGURED") return json(503, { error: "Etsy keystring ve shared secret henüz sunucuya eklenmedi." });

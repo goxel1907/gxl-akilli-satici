@@ -3,7 +3,8 @@ const ETSY_TOKEN_ENDPOINT = `${ETSY_API_ROOT}/public/oauth/token`;
 const ETSY_AUTHORIZE_ENDPOINT = "https://www.etsy.com/oauth/connect";
 const OAUTH_STATE_PREFIX = "etsy:oauth:";
 const TOKEN_KEY = "etsy:tokens";
-const OAUTH_SCOPES = ["shops_r", "listings_r", "listings_w", "transactions_r"];
+// shops_w: mağaza başlığı, duyuru, satış mesajları ve bölümler uygulamadan ayarlanabilsin diye.
+const OAUTH_SCOPES = ["shops_r", "shops_w", "listings_r", "listings_w", "transactions_r"];
 
 type Fetcher = typeof fetch;
 
@@ -128,6 +129,13 @@ async function exchangeToken(body: URLSearchParams): Promise<EtsyTokenResponse> 
     throw new EtsyIntegrationError("AUTH_FAILED", payload.error_description || payload.error || "Etsy yetkilendirme isteği reddedildi.", response.status);
   }
   return payload;
+}
+
+// Bağlantı yapılırken verilen izinler; eski bağlantılarda yeni izin (ör. shops_w) yoksa kullanıcı bağlantıyı yeniler.
+export async function etsyGrantedScopes(env: EtsyRuntimeEnv): Promise<string[]> {
+  const { store } = requireConfiguration(env);
+  const tokens = await loadTokens(store);
+  return tokens ? tokens.scope.split(/[\s,]+/).filter(Boolean) : [];
 }
 
 async function validAccessToken(env: EtsyRuntimeEnv): Promise<{ token: string; userId: string }> {

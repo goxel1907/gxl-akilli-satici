@@ -505,7 +505,8 @@ function buildDescription(input: PrintablePlanInput, name: string, hook?: string
   const formats = input.formats?.length ? input.formats : profile.defaultFormats;
   const pages = input.pageCount || profile.defaultPages;
   return [
-    `${name} - ${hook || `an original ${input.productType}${input.trendFeatures?.length ? ` with ${input.trendFeatures.slice(0, 3).join(", ")}` : ""}, designed to be printed at home and used right away.`}`,
+    // "with daily, habit tracker, weekly" yerine okunur cümle: "with daily, habit tracker and weekly pages".
+    `${name} - ${hook || `an original ${input.productType}${input.trendFeatures?.length ? ` with ${joinWords(input.trendFeatures.slice(0, 3))} ${input.kind === "wall_art" ? "designs" : "pages"}` : ""}, designed to be printed at home and used right away.`}`,
     "",
     "THIS IS A DIGITAL PRODUCT. NO PHYSICAL ITEM WILL BE SHIPPED.",
     "",
