@@ -1,5 +1,6 @@
 import { generateStructuredObject, hasAiProvider, type AiRuntimeEnv } from "../../api/src/structured-ai.js";
 import { buildMasterPrompt } from "./master-prompt.js";
+import { qaProtocol } from "./qa-protocol.js";
 import { buildAdVisuals, type AdVisual } from "./ad-visuals.js";
 import type { PatternCraft } from "./etsy-trends.js";
 
@@ -384,6 +385,7 @@ export function buildPatternBrief(input: PatternPlanInput): PatternBrief {
       filesBrief: patternPrompt,
       renderPrompt,
       adVisuals,
+      qa: qaProtocol({ type: "pattern", name, terms: CRAFTS[input.craft].terms, unit: CRAFTS[input.craft].unit, sizes: input.sizeNote }),
       checklist: [
         "Every stitch or knot count adds up row by row; every [TEST-MAKE CHECK] item is listed for the maker to confirm.",
         "Renders show exactly the motif counts, repeats and colors of the Design spec.",
@@ -395,6 +397,7 @@ export function buildPatternBrief(input: PatternPlanInput): PatternBrief {
     }),
     qualityGate: [
       "Deseni satışa açmadan önce en az bir kez bizzat ör/yap ya da test ördür; sayıları, metrajı ve ölçüyü buna göre düzelt.",
+      "Paketin 'Automated QA' çıktısını iste ve oku: ilmek hesabı tablosunda hesaplanan ve yazılan sayılar her sırada eşit olmalı, sıra numaralarında boşluk/tekrar olmamalı, kısaltma tablosu eksiksiz olmalı.",
       "Ana fotoğraf mümkünse gerçek üründen olsun. Render kullanılıyorsa görselde 'Digital render' yazsın; ilan açıklaması bunu otomatik belirtir.",
       "Yapay zekâ desteği kullandıysan Etsy formunda yapay zekâ kutusunu işaretle ve 'Designed by' seçeneğini kullan.",
       "Render, PDF'teki Design spec ile birebir aynı sayıda motif ve aynı renkleri göstermeli; farklıysa yeniden üret.",

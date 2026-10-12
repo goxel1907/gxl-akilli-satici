@@ -1732,6 +1732,7 @@ const ETSY_GUIDE: Array<{ id: string; title: string; icon: any; steps: string[] 
     "'Rakipleri geçmek için' kartı rakip ortanca fiyatını, önerilen başlangıç ve set fiyatını, format boşluklarını ve geçilecek rakipleri gösterir; önerilen fiyat yükleme formuna otomatik gelir. Siz 'Prompt, görsel ve ilanı hazırla'ya basarsınız.",
     "'Tek paketi gönder' ile her şeyi bir kez ChatGPT'ye gönderin: PDF, sayfa görselleri, 10 reklam görseli ve pin görselleri sıralı adımlarla aynı sohbette yapılır. Her adım bitince aynı sohbete 'next' yazın. Parçaları ayrı ayrı paylaşmayın; her paylaşım yeni sohbet açar ve yeni sohbet ürün adını, paleti ve sayfa planını bilmez.",
     "Claude dosyaları (PDF/HTML/SVG) çok iyi kurar ama fotoğraf üretmez. Claude kullanırsanız paketin fotoğraf adımlarını ChatGPT'de, yine tek sohbette yapın; Product spec JSON'unu oraya da yapıştırın.",
+    "Dosyalar gelince modelden 'Automated QA' betik çıktısını isteyin: tek satırda FAIL olmamalı (saat AM/PM, kopya sayfa, eksik format, ad, kapak, kenar boşluğu). Uygulama da yüklemede ilanda yazan formatın dosyalarda olmamasını ve aynı dosyanın iki kez yüklenmesini engeller.",
     "Reklam tadında 10 görselin her birinde nerede kullanılacağı (Etsy kapak, galeri, Pinterest, Instagram), ölçüsü ve üstüne yazılacak kısa metin yazar. Görseli üretirken PDF sayfalarınızı referans olarak yükleyin, yazıyı Canva ile ekleyin.",
     "Pinterest pinlerini farklı günlerde paylaşın. Paket fikriyle aynı stilde bir set hazırlayın.",
     "Dijital → tüm PDF dosyalarını tek seferde seçin (en fazla 5; fazla formatlar tek bir ZIP'te) ve görselleri ekleyin → 'Etsy taslağı oluştur'. Dosyaların hepsi ilana otomatik eklenir. Etsy'de yapay zekâ beyanını ve kategoriyi kontrol edip yayınlayın."
@@ -1812,16 +1813,22 @@ function ShopSettingsCard({ online, shopReady }: any) {
   const [saleMessage, setSaleMessage] = useState("");
   const [digitalSaleMessage, setDigitalSaleMessage] = useState("");
   const [sections, setSections] = useState("");
+  const [audience, setAudience] = useState("");
   const [saving, setSaving] = useState(false);
+  // Kitle seçimi tüm metinleri o kitleye göre doldurur; öneri mağazadaki ürünlerden gelir.
+  const fill = (preset: any) => {
+    setTitle(preset.title);
+    setAnnouncement(preset.announcement);
+    setSaleMessage(preset.saleMessage);
+    setDigitalSaleMessage(preset.digitalSaleMessage);
+    setSections(preset.sections.join(", "));
+  };
   const load = async () => {
     try {
       const body = await apiJson("/api/etsy/shop-settings", { headers: apiHeaders() });
       setStatus(body);
-      setTitle((current) => current || body.defaults.title);
-      setAnnouncement((current) => current || body.defaults.announcement);
-      setSaleMessage((current) => current || body.defaults.saleMessage);
-      setDigitalSaleMessage((current) => current || body.defaults.digitalSaleMessage);
-      setSections((current) => current || body.defaults.sections.join(", "));
+      setAudience(body.recommended);
+      if (!title) fill(body.presets?.[body.recommended] || body.defaults);
     } catch { setStatus({ error: true }); }
   };
   useEffect(() => { if (online && open && !status) load(); }, [online, open]);
@@ -1844,6 +1851,13 @@ function ShopSettingsCard({ online, shopReady }: any) {
     </Pressable>
     {open && <>
       {!shopReady && <Text style={styles.warningText}>Mağaza açılışı tamamlanınca uygulanabilir.</Text>}
+      {!!status?.presets && <>
+        <Text style={styles.fieldLabel}>Hedef alıcı kitlesi</Text>
+        <ChipGroup options={Object.entries(status.presets).map(([id, preset]: any) => ({ id, label: preset.labelTr }))} value={audience} onChange={(id: string) => { setAudience(id); fill(status.presets[id]); }} />
+        <Text style={styles.small}>{status.presets[audience]?.audienceTr}</Text>
+        {audience === status.recommended && <Text style={styles.formHint}>Öneri: {status.reasonTr}</Text>}
+        {(audience === "faith" || audience === "vintage") && <Text style={styles.warningText}>Bu kitle planlayıcı ve desen alıcılarından farklı. Aynı mağazada karışık vitrin güveni ve satışı düşürür; bu ürünler için ayrı bir Etsy mağazası veya Shopier önerilir.</Text>}
+      </>}
       {status?.connected && !status?.canWrite && <View style={{ marginVertical: 8 }}><Text style={styles.warningText}>Mevcut Etsy izni mağaza düzenlemeyi kapsamıyor. Bir kez bağlantıyı yenileyin; Etsy yeni izni (mağaza düzenleme) soracak.</Text><Pressable style={[styles.secondaryButton, { alignSelf: "flex-start", marginTop: 8 }]} onPress={connectEtsy}><Text style={styles.secondaryButtonText}>Etsy iznini yenile</Text></Pressable></View>}
       <Field label={`Mağaza başlığı (${title.length}/55)`} value={title} onChangeText={setTitle} />
       <Field label="Duyuru (mağaza sayfasında görünür)" value={announcement} onChangeText={setAnnouncement} multiline style={[styles.input, { minHeight: 110, textAlignVertical: "top" }]} />

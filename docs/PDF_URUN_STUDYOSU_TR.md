@@ -103,6 +103,18 @@ Size kalan tek şey **Prompt, görsel ve ilanı hazırla** düğmesine basmaktı
 >
 > Aşağıdaki parçalar paketin içindekilerdir; tek tek kullanılacaksa hepsi aynı sohbete yapıştırılmalıdır.
 
+### Kalite kapısı (her ürün türü)
+
+Yapay zekânın "kontrol ettim" demesi yetmez. Gerçek bir planlayıcıda 1 PM yerine 1 AM yazan saatler, kopya sayfalar ve eksik formatlar bu yüzden gözden kaçtı. Artık iki katman var:
+
+1. **Pakette "Automated QA" protokolü.** Model dosyaları açan bir Python betiği yazar ve çıktısını yapıştırır. Tek satırda FAIL varken adım bitmez.
+   - **Ortak kontroller:** formatların her biri ayrı dosya; sayfa sayısı ve sayfa ölçüsü; sayı dizileri (saat AM/PM, gün 1–31, haftanın günleri, sayfa numaraları); kopya sayfa; ürün adı tutarlılığı; gerçek kapak; tablet bağlantıları; yer tutucu metin; gömülü yazı tipleri; kenar boşlukları; okunabilirlik; yazım; görsel kontrol.
+   - **Türe özel ek kontroller:** takvim ızgarası, tablet sekmeleri, duvar sanatı piksel ölçüsü, boyama çizgileri, cevap anahtarları, kesim çizgileri, tekrar etmeyen sorular, kesintisiz desen.
+   - **El işi desenleri:** sıra numarası sürekliliği, her sıra için ilmek hesabı tablosu (yazılan ile hesaplanan eşit olmalı), beden büyütmesi ve gauge hesabı, kısaltma tablosu, malzeme tutarlılığı, açık test-örgü maddeleri.
+2. **Uygulamada yükleme kapısı (kesin kontrol).**
+   - İlan açıklamasındaki "Formats" satırında yazan her format, dosya adlarında veya ZIP içindeki dosya adlarında yoksa yükleme reddedilir ve eksik format adıyla söylenir.
+   - Aynı dosya iki kez yüklenirse reddedilir.
+
 1. **Ürün adı:** Trendden bir kelime ile her seferinde yeni türetilen bir sözcükten oluşur. Daha önce verilen adlar tekrar kullanılmaz.
 2. **PDF promptu (Claude / ChatGPT):** Türe özel içerik ve baskı kurallarını içerir:
    - **Planlayıcı:** Tarihsiz, Pazartesi ve Pazar başlangıçlı, yazıcı dostu siyah-beyaz sürüm, ciltleme payı.

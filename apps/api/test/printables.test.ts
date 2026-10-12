@@ -261,3 +261,21 @@ test("listing description reads as a sentence, not a keyword list", () => {
   const draft = buildPrintableListing({ kind: "planner", productType: "planner", keyword: "printable planner", trendFeatures: ["daily", "habit tracker", "weekly"], pageCount: 33 }, "Zomery Planner");
   assert.match(draft.description, /^Zomery Planner - an original planner with daily, habit tracker and weekly pages, designed/);
 });
+
+test("every package carries a scripted QA protocol tuned to its product type", () => {
+  const planner = buildPrintableBrief({ kind: "planner", productType: "planner", keyword: "printable planner", formats: ["US Letter", "A4", "Tablet PDF (hyperlinked)"], pageCount: 33, seed: "qa" });
+  assert.match(planner.masterPrompt, /## Automated QA \(mandatory, run with code\)/);
+  assert.match(planner.masterPrompt, /11 AM, 12 PM, 1 PM/);
+  assert.match(planner.masterPrompt, /DUPLICATES/);
+  assert.match(planner.masterPrompt, /every promised format exists as its own file: US Letter, A4, Tablet PDF \(hyperlinked\)/);
+  assert.match(planner.masterPrompt, /CALENDAR/);
+  assert.match(planner.masterPrompt, /run the Automated QA script on the finished files/);
+  const wallArt = buildPrintableBrief({ kind: "wall_art", productType: "botanical print", seed: "qa" });
+  assert.match(wallArt.masterPrompt, /7200×10800 px/);
+
+  const doily = buildPatternBrief({ craft: "crochet", productType: "doily", colors: ["cream"], seed: "qa" } as never);
+  assert.match(doily.masterPrompt, /STITCH MATH/);
+  assert.match(doily.masterPrompt, /computed count must equal the stated count/);
+  assert.match(doily.masterPrompt, /ABBREVIATIONS — .*Craft Yarn Council/);
+  assert.ok(!/11 AM, 12 PM/.test(doily.masterPrompt), "pattern packages do not get planner-only checks");
+});

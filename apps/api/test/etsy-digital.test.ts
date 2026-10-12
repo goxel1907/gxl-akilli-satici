@@ -3,7 +3,7 @@ import test from "node:test";
 import { getEtsyStatus } from "../../worker/src/etsy.js";
 import { getTrendBoard, inferTrendGroup, scanTrend, scoreTrend, TREND_NICHES } from "../../worker/src/etsy-trends.js";
 import { buildDigitalListing, buildPatternBrief, normalizeEtsyTitle, validateEtsyListingText } from "../../worker/src/pattern-studio.js";
-import { createEtsyDigitalDraft, type DigitalStore } from "../../worker/src/digital-delivery.js";
+import { claimedFormats, createEtsyDigitalDraft, zipEntryNames, type DigitalStore } from "../../worker/src/digital-delivery.js";
 import { handleRequest } from "../../worker/src/index.js";
 
 const NOW = Date.parse("2026-10-07T12:00:00Z");
@@ -211,6 +211,27 @@ function pdfFile(name = "Juniper Crown.pdf") {
   return new File([Buffer.concat([Buffer.from("%PDF-1.4\n"), Buffer.alloc(4_000, 32)])], name, { type: "application/pdf" });
 }
 
+// Sıkıştırmasız, geçerli merkez dizinli küçük bir ZIP (yalnız dosya adları kontrol edilir).
+function makeZip(names: string[]): Uint8Array<ArrayBuffer> {
+  const locals: Buffer[] = [];
+  const centrals: Buffer[] = [];
+  let offset = 0;
+  for (const name of names) {
+    const nameBytes = Buffer.from(name);
+    const content = Buffer.alloc(1_200, name.length);
+    const local = Buffer.alloc(30); local.writeUInt32LE(0x04034b50, 0); local.writeUInt16LE(nameBytes.length, 26);
+    local.writeUInt32LE(content.length, 18); local.writeUInt32LE(content.length, 22);
+    const central = Buffer.alloc(46); central.writeUInt32LE(0x02014b50, 0); central.writeUInt16LE(nameBytes.length, 28); central.writeUInt32LE(offset, 42);
+    locals.push(local, nameBytes, content);
+    centrals.push(central, nameBytes);
+    offset += 30 + nameBytes.length + content.length;
+  }
+  const directory = Buffer.concat(centrals);
+  const end = Buffer.alloc(22); end.writeUInt32LE(0x06054b50, 0); end.writeUInt16LE(names.length, 8); end.writeUInt16LE(names.length, 10);
+  end.writeUInt32LE(directory.length, 12); end.writeUInt32LE(offset, 16);
+  return Uint8Array.from(Buffer.concat([...locals, directory, end]));
+}
+
 function uploadForm(confirm = true, pdf: File = pdfFile()) {
   const form = new FormData();
   form.set("metadata", JSON.stringify({
@@ -348,8 +369,8 @@ test("a digital product carries up to 5 files (PDFs and a ZIP) to Etsy and to pr
   const kv = memoryKv();
   await kv.store.put("etsy:tokens", JSON.stringify({ accessToken: "123.token", refreshToken: "refresh", expiresAt: Date.now() + 3_600_000, scope: "listings_w", userId: "123" }));
   const env = { APP_ACCESS_TOKEN: "app-token", ETSY_API_KEY: "key", ETSY_SHARED_SECRET: "secret", ETSY_OAUTH: kv.store };
-  const pdf = (name: string) => new File([Buffer.concat([Buffer.from("%PDF-1.7\n"), Buffer.alloc(2_000, 32)])], name, { type: "application/pdf" });
-  const zip = new File([Buffer.concat([Buffer.from([0x50, 0x4b, 0x03, 0x04]), Buffer.alloc(2_000, 7)])], "Planner Extras.zip", { type: "application/zip" });
+  const pdf = (name: string) => new File([Buffer.concat([Buffer.from(`%PDF-1.7\n% ${name}\n`), Buffer.alloc(2_000, 32)])], name, { type: "application/pdf" });
+  const zip = new File([makeZip(["Planner-Half-Letter.pdf", "Planner-BW-US-Letter.pdf"])], "Planner Extras.zip", { type: "application/zip" });
   const form = (files: File[]) => {
     const value = new FormData();
     value.set("metadata", JSON.stringify({
@@ -413,4 +434,34 @@ test("products saved before multi-file support still download their single PDF",
   assert.equal(download.status, 200);
   assert.match(download.headers.get("content-disposition") || "", /Old-Doily\.pdf/);
   assert.equal((await handleRequest(new Request("https://gxl.example/d/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/file"), env)).status, 410);
+});
+
+test("uploads are blocked when the listing promises a format that no file contains", async () => {
+  assert.deepEqual(claimedFormats("Intro\n• Formats: US Letter, A4, A5, Half Letter, Tablet PDF (hyperlinked), Black-and-white printer-friendly versions (US Letter + A4)\nmore"), ["letter", "a4", "a5", "half_letter", "tablet", "bw"]);
+  assert.deepEqual(claimedFormats("A crochet pattern without a formats line."), []);
+  assert.deepEqual(zipEntryNames(makeZip(["Extras/Planner-Half-Letter.pdf", "Planner-BW-A4.pdf"]).buffer), ["Extras/Planner-Half-Letter.pdf", "Planner-BW-A4.pdf"]);
+
+  const kv = memoryKv();
+  const env = { APP_ACCESS_TOKEN: "app-token", ETSY_OAUTH: kv.store };
+  const pdf = (name: string) => new File([Buffer.concat([Buffer.from(`%PDF-1.7\n% ${name}\n`), Buffer.alloc(2_000, 32)])], name, { type: "application/pdf" });
+  const form = (files: File[]) => {
+    const value = new FormData();
+    value.set("metadata", JSON.stringify({
+      confirm: true, name: "Lavender Lirara Planner", kind: "planner", productType: "planner", prices: { usd: "3.49" },
+      listing: { title: "Printable Planner, Lavender Lirara Planner", description: "A planner.\n• Formats: US Letter, A4, A5, Tablet PDF (hyperlinked)\nMore.", tags: ["printable planner"], materials: ["pdf"] }
+    }));
+    for (const file of files) value.append("files", file);
+    return value;
+  };
+  const post = (body: FormData) => handleRequest(new Request("https://gxl.example/api/digital/products", { method: "POST", headers: { authorization: "Bearer app-token" }, body }), env);
+  // ChatGPT'nin teslim ettiği gibi: US Letter ve Tablet eksik.
+  const missing = await post(form([pdf("Planner-A4.pdf"), pdf("Planner-A5.pdf")]));
+  assert.equal(missing.status, 400);
+  assert.match(((await missing.json()) as { error: string }).error, /US Letter, Tablet/);
+  const same = pdf("Planner-US-Letter.pdf");
+  const duplicate = await post(form([same, new File([await same.arrayBuffer()], "Planner-Tablet.pdf", { type: "application/pdf" }), pdf("Planner-A4.pdf"), pdf("Planner-A5.pdf")]));
+  assert.equal(duplicate.status, 400);
+  assert.match(((await duplicate.json()) as { error: string }).error, /aynı dosya/);
+  const ok = await post(form([pdf("Planner-US-Letter.pdf"), pdf("Planner-A4.pdf"), new File([makeZip(["Planner-A5.pdf", "Planner-Tablet.pdf"])], "Extras.zip", { type: "application/zip" })]));
+  assert.equal(ok.status, 201);
 });

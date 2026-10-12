@@ -3,6 +3,7 @@ import { buildAdVisuals, type AdVisual } from "./ad-visuals.js";
 import type { PrintableKind } from "./etsy-trends.js";
 import { isIpRisky } from "./ip-guard.js";
 import { buildMasterPrompt } from "./master-prompt.js";
+import { qaProtocol } from "./qa-protocol.js";
 import { coinProductName, normalizeEtsyTags, normalizeEtsyTitle, titleCase, validateEtsyListingText } from "./pattern-studio.js";
 
 // Kadınlara yönelik yazdırılabilir / dijital PDF ürünleri için stüdyo:
@@ -410,6 +411,7 @@ export function buildPrintableBrief(input: PrintablePlanInput): PrintableBrief {
       artPrompts,
       adVisuals,
       pins,
+      qa: qaProtocol({ type: "printable", name, kind: input.kind, formats, pages: input.pageCount || profile.defaultPages }),
       checklist: [
         "Every page sits inside the safe margins and prints at 100% (Actual size) on both US Letter and A4 without clipping.",
         "US English spelling, no typos, no placeholder text, page numbers and footer consistent.",
@@ -423,6 +425,8 @@ export function buildPrintableBrief(input: PrintablePlanInput): PrintableBrief {
     bundleIdea: bundleIdea(input, profile, name),
     qualityGate: [
       "Her formattan bir test sayfasını %100 (gerçek boyut) ölçekte hem Letter hem A4 kâğıda yazdır; kenar boşluğu kesilmiyor mu kontrol et.",
+      "Paketin 'Automated QA' çıktısını iste ve oku: tek satırda FAIL kalmamalı (saat AM/PM sırası, kopya sayfa, eksik format, ad tutarlılığı, kapak, bağlantılar).",
+      "İlanda yazan her format dosyalarda gerçekten var mı bak; uygulama yüklemede eksik formatı ve aynı dosyanın iki kez yüklenmesini engeller.",
       "Yazım denetimi yap (US English); 'Lorem ipsum' veya boş alan kalmasın.",
       "Fontların ticari kullanım lisansı olsun; listeyi sakla.",
       "Marka, karakter veya ünlü adı yok; görseller tamamen özgün.",
