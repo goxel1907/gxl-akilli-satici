@@ -116,13 +116,62 @@ const WORDS: Record<string, string> = {
   christmas: "Noel", halloween: "Cadılar Bayramı", ramadan: "Ramazan", eid: "Bayram", islamic: "İslami", muslim: "Müslüman"
 };
 
+// Etsy arama ifadeleri (trend, keşif ve sezon kartları) için ek sözlük. Bu sözlükte olmayan kelime
+// sunucuda yapay zekâyla çevrilip saklanır; yapay zekâ yoksa İngilizce bırakılır ve kartta öyle görünür.
+Object.assign(PHRASES, {
+  "coloring pages": "boyama sayfaları", "coloring book": "boyama kitabı", "baby shower": "baby shower (doğum öncesi kutlaması)",
+  "bridal shower": "bridal shower (gelin partisi)", "cross stitch": "kanaviçe (etamin)", "punch needle": "punch nakış",
+  "junk journal": "junk journal (kolaj defteri)", "digital paper": "dijital kâğıt", "wall decor": "duvar dekoru",
+  "home decor": "ev dekorasyonu", "mothers day": "Anneler Günü", "fathers day": "Babalar Günü", "valentines day": "Sevgililer Günü",
+  "st patricks day": "Aziz Patrick Günü", "new year": "Yılbaşı", "back to school": "okula dönüş", "fall decor": "sonbahar dekoru",
+  "gift idea": "hediye fikri", "prayer rug": "seccade", "prayer mat": "seccade", "evil eye": "nazar boncuğu", "nazar boncugu": "nazar boncuğu",
+  "beginner friendly": "yeni başlayanlara uygun", "easy crochet": "kolay tığ işi", "no sew": "dikişsiz", "step by step": "adım adım",
+  "video tutorial": "video anlatım", "instant download": "anında indirme", "digital download": "dijital indirme",
+  "sterling silver": "925 ayar gümüş", "silver jewelry": "gümüş takı", "turkish rug": "Türk halısı", "kilim pillow": "kilim yastık",
+  "tote bag": "bez çanta", "bucket hat": "kova şapka", "christmas gift": "Noel hediyesi", "birthday gift": "doğum günü hediyesi",
+  "anniversary gift": "yıldönümü hediyesi", "wedding gift": "düğün hediyesi", "graduation gift": "mezuniyet hediyesi",
+  "housewarming gift": "yeni ev hediyesi", "mothers day gift": "Anneler Günü hediyesi", "valentines gift": "Sevgililer Günü hediyesi", "granny square": "kare motif", "amigurumi pattern": "amigurumi (örgü oyuncak) deseni"
+});
+Object.assign(WORDS, {
+  quilt: "yorgan (kapitone)", quilting: "kapitone", embroidery: "nakış", sewing: "dikiş", macrame: "makrome",
+  needlepoint: "goblen", tapestry: "goblen", amigurumi: "amigurumi (örgü oyuncak)", knitting: "şiş örgü", doily: "dantel örtü",
+  stitch: "ilmek", toy: "oyuncak", toys: "oyuncaklar", doll: "oyuncak bebek", animal: "hayvan", animals: "hayvanlar",
+  flower: "çiçek", flowers: "çiçekler", heart: "kalp", hearts: "kalpler", ornament: "süs", ornaments: "süsleri", pumpkin: "balkabağı",
+  shamrock: "yonca", bow: "fiyonk", bows: "fiyonklar", menorah: "menora (Yahudi şamdanı)", games: "oyunları", game: "oyun", bingo: "tombala", party: "parti",
+  invitation: "davetiye", invitations: "davetiyeler", stickers: "çıkartmalar", sticker: "çıkartma", clipart: "küçük çizimler (clipart)",
+  poster: "poster", posters: "posterler", print: "baskı", prints: "baskılar", calendar: "takvim", checklist: "kontrol listesi",
+  schedule: "plan", cleaning: "temizlik", meal: "yemek", budget: "bütçe", habit: "alışkanlık", reading: "okuma", gratitude: "şükür",
+  worksheet: "çalışma kâğıdı", worksheets: "çalışma kâğıtları", homeschool: "evde eğitim", activity: "etkinlik", activities: "etkinlikler",
+  preschool: "okul öncesi", toddler: "küçük çocuk", teacher: "öğretmen", classroom: "sınıf", wedding: "düğün", birthday: "doğum günü",
+  thanksgiving: "Şükran Günü", valentine: "Sevgililer Günü", valentines: "Sevgililer Günü", easter: "Paskalya", hanukkah: "Hanuka",
+  jewelry: "takı", pendant: "kolye ucu", charm: "küçük süs (charm)", rosary: "tespih (Hristiyan)", pillow: "yastık", cushion: "minder",
+  slippers: "patik", socks: "çorap", shirt: "gömlek", purse: "el çantası", basket: "sepet", coaster: "bardak altlığı", coasters: "bardak altlıkları",
+  keychain: "anahtarlık", bookmark: "kitap ayracı", cottagecore: "kır evi tarzı (cottagecore)", coquette: "fiyonklu romantik tarz (coquette)",
+  kawaii: "sevimli Japon tarzı (kawaii)", y2k: "2000'ler tarzı (Y2K)", aesthetic: "estetik", cute: "sevimli", easy: "kolay",
+  beginner: "yeni başlayan", beginners: "yeni başlayanlar", simple: "basit", modern: "modern", rustic: "rustik", farmhouse: "çiftlik evi tarzı",
+  neutral: "nötr renkli", pastel: "pastel", rainbow: "gökkuşağı", mushroom: "mantar", frog: "kurbağa", bear: "ayı", bunny: "tavşan",
+  cat: "kedi", dog: "köpek", ghost: "hayalet", witch: "cadı", skull: "kafatası", star: "yıldız", moon: "ay", sun: "güneş", tree: "ağaç",
+  leaf: "yaprak", bee: "arı", butterfly: "kelebek", strawberry: "çilek", cherry: "kiraz", lemon: "limon", coffee: "kahve", tea: "çay",
+  book: "kitap", fall: "sonbahar", autumn: "sonbahar", spring: "ilkbahar", summer: "yaz", decoration: "dekorasyon", decorations: "süslemeler",
+  prayer: "dua", worry: "oyalama", islam: "İslam", quran: "Kuran", allah: "Allah", arabic: "Arapça", calligraphy: "hat sanatı",
+  jewish: "Yahudi", catholic: "Katolik", personalized: "kişiye özel", custom: "kişiye özel", name: "isim", family: "aile", couple: "çift",
+  nursery: "bebek odası", bedroom: "yatak odası", bathroom: "banyo", office: "ofis", desk: "masa", storage: "saklama", organizer: "düzenleyici",
+  notes: "notlar", notebook: "defter", sketchbook: "çizim defteri", diary: "günlük", workbook: "çalışma kitabı",
+  goodnotes: "GoodNotes (tablet uygulaması)", ipad: "iPad", hyperlinked: "tıklanabilir bağlantılı", editable: "düzenlenebilir", canva: "Canva",
+  svg: "SVG (kesim dosyası)", png: "PNG", sublimation: "süblimasyon baskı", cricut: "Cricut (kesim makinesi)", apron: "önlük", afghan: "örgü battaniye", cowl: "boyunluk", headband: "saç bandı",
+  bandana: "bandana", balaclava: "kar maskesi (balaklava)", shrug: "bolero", bralette: "örgü büstiyer", bikini: "bikini", granny: "nine",
+  square: "kare", squares: "kareler", hexagon: "altıgen", motif: "motif", border: "kenar", edging: "kenar örgüsü",
+  pdfs: "PDF'ler", instant: "anında", sheet: "sayfa", sheets: "sayfalar", list: "liste", log: "kayıt", glass: "cam",
+  ceramic: "seramik", porcelain: "porselen", pottery: "çömlek", enamel: "mine", pearl: "inci", pearls: "inciler", gemstone: "değerli taş"
+});
 const MAX_PHRASE_WORDS = Math.max(...Object.keys(PHRASES).map((key) => key.split(" ").length));
 
-export function glossTr(english: string): string {
+function glossParts(english: string): { text: string; unknown: string[] } {
   // Sözlükte olmayan parça (beden harfi, ölçü, marka dışı özel ad) yazıldığı gibi kalır.
   const original = english.replace(/[^A-Za-z0-9üÜ'\s%.-]/g, " ").split(/\s+/).filter(Boolean);
   const words = original.map((word) => word.toLowerCase());
   const out: string[] = [];
+  const unknown: string[] = [];
   for (let index = 0; index < words.length;) {
     let matched = false;
     for (let size = Math.min(MAX_PHRASE_WORDS, words.length - index); size >= 2; size -= 1) {
@@ -131,10 +180,51 @@ export function glossTr(english: string): string {
     }
     if (matched) continue;
     const word = words[index];
-    out.push(/^\d{4}s$/.test(word) ? `${word.slice(0, 4)}'ler` : word === "for" ? "için" : WORDS[word] || original[index]);
+    const known = /^\d{4}s$/.test(word) ? `${word.slice(0, 4)}'ler` : word === "for" ? "için" : WORDS[word];
+    if (!known && /^[a-z][a-z'-]{2,}$/.test(word)) unknown.push(word);
+    out.push(known || original[index]);
     index += 1;
   }
-  return out.join(" ");
+  return { text: out.join(" "), unknown };
+}
+
+export function glossTr(english: string): string {
+  return glossParts(english).text;
+}
+
+// Etsy arama ifadesi → Türkçe ad. İngilizce sıra Türkçeye çevrilir: "crochet bag pattern" → "tığ işi çanta deseni",
+// "budget planner printable" → "yazdırılabilir bütçe planlayıcı", "coloring pages for kids" → "çocuklar için boyama sayfaları".
+// unknown: sözlükte bulunamayan İngilizce kelimeler (sunucu bunları yapay zekâyla çevirir).
+const PHRASE_TAIL: Record<string, string> = { pattern: "deseni", patterns: "desenleri", pdf: "(PDF)", template: "şablonu", templates: "şablonları", chart: "şeması", svg: "(SVG)" };
+const FOR_TARGETS: Record<string, string> = {
+  men: "erkekler için", women: "kadınlar için", her: "kadına", him: "erkeğe", mom: "anneye", dad: "babaya", kids: "çocuklar için",
+  baby: "bebek için", babies: "bebekler için", beginners: "yeni başlayanlar için", teachers: "öğretmenler için", girls: "kız çocukları için",
+  boys: "erkek çocukları için", toddlers: "küçük çocuklar için", adults: "yetişkinler için", grandma: "büyükanneye", wife: "eşe (kadın)", husband: "eşe (erkek)"
+};
+
+export function phraseTr(keyword: string): { tr: string; unknown: string[] } {
+  let words = keyword.toLowerCase().replace(/[^a-z0-9'\s-]/g, " ").split(/\s+/).filter(Boolean);
+  if (!words.length) return { tr: "", unknown: [] };
+  if (PHRASES[words.join(" ")]) return { tr: PHRASES[words.join(" ")], unknown: [] };
+  const tail: string[] = [];
+  let printable = false;
+  while (words.length > 1) {
+    const last = words[words.length - 1];
+    if (last === "printable" || last === "printables") { printable = true; words = words.slice(0, -1); continue; }
+    if (!PHRASE_TAIL[last] || PHRASES[words.slice(-2).join(" ")]) break;
+    tail.unshift(PHRASE_TAIL[last]);
+    words = words.slice(0, -1);
+  }
+  if (words.length > 1 && words[0] === "printable") { printable = true; words = words.slice(1); }
+  let target = "";
+  const forAt = words.lastIndexOf("for");
+  if (forAt > 0 && forAt < words.length - 1) {
+    const who = FOR_TARGETS[words.slice(forAt + 1).join(" ")];
+    if (who) { target = who; words = words.slice(0, forAt); }
+  }
+  const body = glossParts(words.join(" "));
+  const tr = [target, printable ? "yazdırılabilir" : "", body.text, ...tail].filter(Boolean).join(" ").replace(/\s+/g, " ").trim();
+  return { tr, unknown: body.unknown };
 }
 
 export function explainListingTr(input: { title?: unknown; tags?: unknown }): { titleTr: string; tags: Array<{ tag: string; tr: string }> } {
