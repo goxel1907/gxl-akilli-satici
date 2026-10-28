@@ -402,7 +402,7 @@ function App() {
           {mode === "simple" && <View style={tab === "Sat" ? undefined : styles.hidden}><SellScreen online={online} channels={channels} route={sellRoute} setRoute={setSellRoute} onStepChange={scrollTop} setTab={setTab} /></View>}
           {tab === "Siparişler" && <EtsyOrdersPanel online={online} />}
           {tab === "Müşteri" && <><SalesPlanCard online={online} shopierProducts={shopierCenter?.products} etsyActiveListings={channels?.etsy?.activeListings} /><MessageHelperCard online={online} /></>}
-          {tab === "Yardım" && <HelpScreen channels={channels} onExpert={() => changeMode("expert")} />}
+          {tab === "Yardım" && <HelpScreen online={online} channels={channels} onExpert={() => changeMode("expert")} onSell={() => openSell("choose")} />}
           {tab === "Özet" && <Overview data={data} setTab={setTab} online={online} channels={channels} onSimple={() => changeMode("simple")} />}
           {tab === "Shopier" && <ShopierScreen center={shopierCenter} online={online} onRefresh={refresh} etsyReady={Boolean(channels?.etsy?.shopReady || channels?.etsy?.shopId)} />}
           {tab === "Etsy" && <EtsyScreen online={online} channels={channels} />}
@@ -1087,7 +1087,7 @@ function EtsyScreen({ online, channels, initialSection = "Trend" }: any) {
     <View style={section === "Stüdyo" ? undefined : styles.hidden}><StudioPanel online={online} active={section === "Stüdyo"} etsyReady={shopReady} seed={studioSeed} onUpload={(prefill: any) => { setUploadPrefill(prefill); setSection("Dijital"); }} /></View>
     {section === "Dijital" && <DigitalPanel online={online} shopReady={shopReady} prefill={uploadPrefill} onPrefillUsed={() => setUploadPrefill(undefined)} />}
     {section === "Pinterest" && <PinterestPanel online={online} />}
-    {section === "Kılavuz" && <><ShopSettingsCard online={online} shopReady={shopReady} /><EtsyGuide shopReady={shopReady} authorized={authorized} /></>}
+    {section === "Kılavuz" && <><ShopReadinessCard online={online} onSell={() => setSection("Stüdyo")} /><ShopSettingsCard online={online} shopReady={shopReady} /><EtsyGuide shopReady={shopReady} authorized={authorized} /></>}
   </>;
 }
 
@@ -2550,6 +2550,90 @@ async function shrinkPhoto(photo: { uri: string; width?: number; height?: number
 }
 
 // Shopier'e eklemeden: fotoğraf → ürün türü ve ölçüler → Etsy araştırması → başlık, etiket, açıklama, fiyat → taslak → yayın.
+// ——— Mağaza hazırlığı ———
+// Açılıştan önce hangi adımın bittiğini Etsy'den okur. Kargo profili ve iade politikası uygulamadan oluşturulur;
+// ödeme, kimlik ve banka adımlarını yalnız satıcı Etsy'de yapar.
+const RETURN_CHOICES = [{ id: "30", label: "30 gün iade ve değişim (önerilen)" }, { id: "14", label: "14 gün" }, { id: "none", label: "İade kabul etmiyorum" }];
+
+function ShopReadinessCard({ online, onSell }: any) {
+  const [data, setData] = useState<any>();
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [form, setForm] = useState<string>();
+  const [postal, setPostal] = useState("");
+  const [minDays, setMinDays] = useState("7");
+  const [maxDays, setMaxDays] = useState("21");
+  const [processing, setProcessing] = useState("3");
+  const [returns, setReturns] = useState("30");
+  const [busy, setBusy] = useState(false);
+  const load = async () => {
+    setLoading(true);
+    try { setData(await apiJson("/api/etsy/readiness", { headers: apiHeaders() })); setError(""); }
+    catch (err) { setError(errorText(err)); }
+    finally { setLoading(false); }
+  };
+  useEffect(() => { if (online) load(); }, [online]);
+  const act = (item: any) => {
+    if (item.action === "connect" || item.action === "reauth") return connectEtsy();
+    if (item.action === "open_url" && item.url) return openUrl(item.url, item.titleTr);
+    if (item.action === "create_shipping_profile") return setForm(form === "shipping" ? undefined : "shipping");
+    if (item.action === "create_return_policy") return setForm(form === "returns" ? undefined : "returns");
+    if (item.action === "sell") return onSell?.();
+    if (item.action === "shop_settings") return Alert.alert("Mağaza vitrini", "Bu kartın hemen altındaki 'Mağaza vitrini' kartından başlık, duyuru ve satış mesajlarını tek dokunuşla Etsy'ye yazın.");
+  };
+  const post = async (path: string, body: any, done: string) => {
+    setBusy(true);
+    try {
+      const result = await apiJson(path, { method: "POST", headers: apiHeaders(true), body: JSON.stringify(body) });
+      Alert.alert("Tamam", result.alreadyExisted ? "Etsy'de zaten vardı; yenisi açılmadı." : done);
+      setForm(undefined);
+      await load();
+    } catch (err) { Alert.alert("Oluşturulamadı", errorText(err)); }
+    finally { setBusy(false); }
+  };
+  const icon = (state: string) => state === "done" ? "checkmark-circle" : state === "manual" ? "hand-left-outline" : "ellipse-outline";
+  const color = (state: string) => state === "done" ? "#2E8B57" : state === "manual" ? "#8A521F" : "#748079";
+  return <View style={styles.analysisCard}>
+    <View style={styles.shopierProductTop}>
+      <Ionicons name="storefront-outline" size={22} color="#315B4C" />
+      <Text style={[styles.cardTitle, { flex: 1 }]}>Mağaza hazırlığı{data ? ` · ${data.done}/${data.total}` : ""}</Text>
+      <Pressable style={[styles.secondaryButton, (!online || loading) && styles.primaryDisabled]} disabled={!online || loading} onPress={load}><Text style={styles.secondaryButtonText}>{loading ? "…" : "Yenile"}</Text></Pressable>
+    </View>
+    {!!data && <View style={styles.stepBar}>{data.items.filter((item: any) => item.state !== "manual").map((item: any) => <View key={item.id} style={[styles.stepDot, item.state === "done" && styles.stepDotActive]} />)}</View>}
+    <Text style={styles.evidence}>Etsy mağazasını açmadan önce bu listenin hepsi tamamlanmalı. El simgeli adımları yalnız siz Etsy'de yaparsınız (kimlik, banka, logo); diğerlerini uygulama gösterir ya da sizin yerinize yapar.</Text>
+    {!!error && <Text style={styles.shopierBlocker}>{error}</Text>}
+    {(data?.items || []).map((item: any) => <View key={item.id}>
+      <Pressable style={styles.readinessRow} disabled={!item.action || item.state === "done"} onPress={() => act(item)}>
+        <Ionicons name={icon(item.state) as any} size={20} color={color(item.state)} />
+        <View style={{ flex: 1 }}>
+          <Text style={styles.rowTitle}>{item.titleTr}</Text>
+          <Text style={styles.small}>{item.detailTr}</Text>
+        </View>
+        {item.state !== "done" && !!item.action && <Ionicons name="chevron-forward" size={18} color="#748079" />}
+      </Pressable>
+      {item.id === "shipping" && form === "shipping" && <View style={styles.adviceBox}>
+        <Text style={styles.rowTitle}>Kargo profili: Türkiye → ABD, ücretsiz kargo</Text>
+        <Text style={styles.small}>Kargo bedeli ürün fiyatına eklendiği için alıcıya "ücretsiz kargo" görünür. Teslim süresini kargo firmanıza sorun; PTT ile genelde 1–3 hafta, hızlı kargoyla birkaç gün.</Text>
+        <View style={{ flexDirection: "row", gap: 10 }}>
+          <View style={{ flex: 1 }}><Field label="Teslim en az (iş günü)" value={minDays} onChangeText={setMinDays} keyboardType="number-pad" /></View>
+          <View style={{ flex: 1 }}><Field label="Teslim en çok (iş günü)" value={maxDays} onChangeText={setMaxDays} keyboardType="number-pad" /></View>
+        </View>
+        <View style={{ flexDirection: "row", gap: 10 }}>
+          <View style={{ flex: 1 }}><Field label="Kargoya veriş (en çok gün)" value={processing} onChangeText={setProcessing} keyboardType="number-pad" /></View>
+          <View style={{ flex: 1 }}><Field label="Posta kodunuz (isteğe bağlı)" value={postal} onChangeText={setPostal} keyboardType="number-pad" placeholder="34000" /></View>
+        </View>
+        <Pressable style={[styles.primary, { marginTop: 10, marginBottom: 0 }, (busy || !online) && styles.primaryDisabled]} disabled={busy || !online} onPress={() => post("/api/etsy/shipping-profile", { postalCode: postal.trim() || undefined, minDeliveryDays: Number(minDays), maxDeliveryDays: Number(maxDays), maxProcessingDays: Number(processing) }, "Kargo profili Etsy'de oluşturuldu.")}>{busy ? <ActivityIndicator color="white" /> : <Ionicons name="cube" size={18} color="white" />}<Text style={styles.primaryText}>Kargo profilini oluştur</Text></Pressable>
+      </View>}
+      {item.id === "returns" && form === "returns" && <View style={styles.adviceBox}>
+        <Text style={styles.rowTitle}>İade politikası</Text>
+        <Text style={styles.small}>Alıcı iade kargosunu kendisi öder. İade kabul etmek alıcıya güven verir; kabul etmezseniz Etsy ilanda "iade kabul edilmez" yazar.</Text>
+        <ChipGroup options={RETURN_CHOICES} value={returns} onChange={setReturns} />
+        <Pressable style={[styles.primary, { marginTop: 10, marginBottom: 0 }, (busy || !online) && styles.primaryDisabled]} disabled={busy || !online} onPress={() => post("/api/etsy/return-policy", returns === "none" ? { acceptsReturns: false } : { acceptsReturns: true, deadlineDays: Number(returns) }, "İade politikası Etsy'de oluşturuldu.")}>{busy ? <ActivityIndicator color="white" /> : <Ionicons name="return-up-back" size={18} color="white" />}<Text style={styles.primaryText}>İade politikasını oluştur</Text></Pressable>
+      </View>}
+    </View>)}
+  </View>;
+}
+
 // ——— Etsy siparişleri ———
 // En önemli bilgi son kargo tarihi: geç kargo yeni mağazanın puanını düşürür. Takip numarası buradan Etsy'ye
 // yazılınca alıcıya Etsy'den bildirim gider.
@@ -2729,7 +2813,7 @@ function HomeScreen({ online, channels, setTab, openSell }: any) {
   const nextStep = !online
     ? "Önce internete bağlanın; üstteki 'Yeniden bağlan' düğmesine basın."
     : !etsyShop || etsy.paymentsReady === false
-      ? "Etsy mağazası henüz satışa açık değil. Ürünlerinizi şimdiden hazırlayabilirsiniz; mağaza açılınca Etsy'ye gönderilir. Mağaza açılış adımları Yardım bölümünde."
+      ? "Etsy mağazası henüz satışa açık değil. Ürünlerinizi şimdiden hazırlayabilirsiniz; mağaza açılınca Etsy'ye gönderilir. Eksik adımlar: Yardım → Mağaza hazırlığı."
       : etsy.activeListings === 0
         ? "Mağazada yayında ilan yok. 'Ürün sat' ile ilk ilanınızı hazırlayın."
         : "İlanlarınızı alıcılara göstermek için 'Müşteri bul' planını hazırlayın.";
@@ -2794,9 +2878,12 @@ function SellScreen({ online, channels, route, setRoute, onStepChange, setTab }:
   </>;
 }
 
-function HelpScreen({ channels, onExpert }: any) {
+function HelpScreen({ online, channels, onExpert, onSell }: any) {
   const etsy = channels?.etsy || {};
+  const shopReady = Boolean(etsy.shopReady || etsy.shopId);
   return <>
+    <ShopReadinessCard online={online} onSell={onSell} />
+    <ShopSettingsCard online={online} shopReady={shopReady} />
     <EtsyGuide shopReady={Boolean(etsy.shopReady || etsy.shopId)} authorized={Boolean(etsy.authorized || etsy.connected)} />
     <View style={styles.card}>
       <Text style={styles.cardTitle}>Uzman mod</Text>

@@ -220,7 +220,7 @@ function safeShopSummary(payload: unknown): { shopId?: number; shopName?: string
   };
 }
 
-export async function getConnectedShop(env: EtsyRuntimeEnv, fetcher: Fetcher = fetch): Promise<{ shopId: number; shopName?: string; currencyCode?: string }> {
+export async function getConnectedShop(env: EtsyRuntimeEnv, fetcher: Fetcher = fetch): Promise<{ shopId: number; shopName?: string; currencyCode?: string; title?: string; paymentsReady?: boolean; activeListings?: number }> {
   const { userId } = await validAccessToken(env);
   let shop: ReturnType<typeof safeShopSummary>;
   try {
@@ -230,7 +230,7 @@ export async function getConnectedShop(env: EtsyRuntimeEnv, fetcher: Fetcher = f
     else throw error;
   }
   if (!shop.shopId) throw new EtsyIntegrationError("NOT_CONNECTED", "Etsy mağazası henüz açılmadı.", 409);
-  return { shopId: shop.shopId, shopName: shop.shopName, currencyCode: shop.currencyCode };
+  return { shopId: shop.shopId, shopName: shop.shopName, currencyCode: shop.currencyCode, title: shop.title, paymentsReady: shop.paymentsReady, activeListings: shop.activeListings };
 }
 
 export async function getEtsyStatus(env: EtsyRuntimeEnv) {

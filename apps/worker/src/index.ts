@@ -30,6 +30,7 @@ import { buildProductPlan, createEtsyPhysicalDraft, detectProductSignals, getUsd
 import { analyzeListingPhotos, PhotoListingError } from "./photo-listing.js";
 import { buildMarketingPlan, MarketingPlanError, normalizeMarketingInput } from "./marketing-plan.js";
 import { addEtsyTracking, listEtsyOrders, listShippingCarriers, normalizeTrackingInput } from "./etsy-orders.js";
+import { createReturnPolicy, createShippingProfile, normalizeReturnPolicyInput, normalizeShippingProfileInput, shopReadiness } from "./etsy-setup.js";
 import { assistBuyerMessage, MessageAssistError, normalizeMessageInput } from "./message-assist.js";
 import { explainListingTr } from "./tr-glossary.js";
 import { turkishFor, turkishForPhrases } from "./phrase-tr.js";
@@ -589,6 +590,15 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
     }
     if (request.method === "POST" && url.pathname === "/api/explain-tr") {
       return json(200, explainListingTr(await readBody(request)));
+    }
+    if (request.method === "GET" && url.pathname === "/api/etsy/readiness") {
+      return json(200, await shopReadiness(env));
+    }
+    if (request.method === "POST" && url.pathname === "/api/etsy/shipping-profile") {
+      return json(200, await createShippingProfile(env, normalizeShippingProfileInput(await readBody(request))));
+    }
+    if (request.method === "POST" && url.pathname === "/api/etsy/return-policy") {
+      return json(200, await createReturnPolicy(env, normalizeReturnPolicyInput(await readBody(request))));
     }
     if (request.method === "GET" && url.pathname === "/api/etsy/orders") {
       return json(200, await listEtsyOrders(env));

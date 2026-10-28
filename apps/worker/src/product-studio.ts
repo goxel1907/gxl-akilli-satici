@@ -1,6 +1,7 @@
 import { evaluateMarketplacePolicies, type ProductOrigin, type RiskFlag } from "../../api/src/marketplace-policy.js";
 import { generateStructuredObject, hasAiProvider, type AiRuntimeEnv } from "../../api/src/structured-ai.js";
 import { etsyRequest, EtsyIntegrationError, getConnectedShop, type EtsyRuntimeEnv } from "./etsy.js";
+import { returnPolicies } from "./etsy-setup.js";
 import type { TrendResult } from "./etsy-trends.js";
 import { normalizeEtsyTags, normalizeEtsyTitle, validateEtsyListingText } from "./pattern-studio.js";
 import { termsToEnglish } from "./tr-glossary.js";
@@ -758,7 +759,17 @@ export async function createEtsyPhysicalDraft(
 
   const profiles = await etsyRequest<{ results?: Array<{ shipping_profile_id?: number; is_deleted?: boolean }> }>(env, `/application/shops/${shop.shopId}/shipping-profiles`, {}, fetcher);
   const shippingProfile = (profiles.results || []).find((profile) => profile.shipping_profile_id && !profile.is_deleted);
-  if (!shippingProfile) throw new EtsyIntegrationError("VALIDATION_FAILED", "Etsy'de önce bir kargo profili oluşturun: Shop Manager → Settings → Shipping settings. ABD için ücretsiz kargo seçin; kargo bedeli fiyata dahil edildi.", 400);
+  if (!shippingProfile) throw new EtsyIntegrationError("VALIDATION_FAILED", "Etsy'de kargo profili yok. Yardım → Mağaza hazırlığı → 'Kargo profili oluştur' ile tek dokunuşla oluşturun (ABD'ye ücretsiz kargo; kargo bedeli fiyata dahil).", 400);
+
+  // Fiziksel ilanın yayına girmesi için iade politikası gerekir; yoksa taslak yine açılır, satıcıya söylenir.
+  const draftWarnings: string[] = [];
+  let returnPolicyId: number | undefined;
+  try {
+    returnPolicyId = Number((await returnPolicies(env, shop.shopId, fetcher))[0]?.return_policy_id) || undefined;
+  } catch (error) {
+    if (error instanceof EtsyIntegrationError && error.code === "AUTH_FAILED") throw error;
+  }
+  if (!returnPolicyId) draftWarnings.push("İade politikası yok: yayınlamadan önce Yardım → Mağaza hazırlığı → 'İade politikası oluştur'.");
 
   let readinessStateId: number | undefined;
   try {
@@ -793,6 +804,7 @@ export async function createEtsyPhysicalDraft(
     shipping_profile_id: String(shippingProfile.shipping_profile_id)
   });
   if (readinessStateId) form.set("readiness_state_id", String(readinessStateId));
+  if (returnPolicyId) form.set("return_policy_id", String(returnPolicyId));
   if (productionPartnerId) form.set("production_partner_ids", String(productionPartnerId));
   if (tags.length) form.set("tags", tags.join(","));
   const materials = listing.materials.map((value) => value.replace(/[^\p{L}\p{Nd}\p{Zs}]/gu, " ").trim()).filter(Boolean);
@@ -806,7 +818,7 @@ export async function createEtsyPhysicalDraft(
   if (!listingId) throw new EtsyIntegrationError("UPSTREAM_FAILED", "Etsy taslak ilan numarası döndürmedi.", 502);
   if (mappingKey) await store.put(mappingKey, String(listingId));
 
-  const warnings: string[] = [];
+  const warnings: string[] = [...draftWarnings];
   for (const [index, url] of input.imageUrls.entries()) {
     try {
       const stored = readMedia ? await readMedia(url) : undefined;
