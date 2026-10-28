@@ -6,10 +6,15 @@
     "version": "0.8.6",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
+    "icon": "./assets/icon.png",
     "android": {
       "package": "com.gxl.akillisatici",
       "versionCode": 16,
-      "adaptiveIcon": { "backgroundColor": "#12261F" }
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "monochromeImage": "./assets/monochrome-icon.png",
+        "backgroundColor": "#12261F"
+      }
     },
     "plugins": [
       "expo-secure-store",
