@@ -783,7 +783,7 @@ export async function createEtsyPhysicalDraft(
 
   const profiles = await etsyRequest<{ results?: Array<{ shipping_profile_id?: number; is_deleted?: boolean }> }>(env, `/application/shops/${shop.shopId}/shipping-profiles`, {}, fetcher);
   const shippingProfile = (profiles.results || []).find((profile) => profile.shipping_profile_id && !profile.is_deleted);
-  if (!shippingProfile) throw new EtsyIntegrationError("VALIDATION_FAILED", "Etsy'de kargo profili yok. Yardım → Mağaza hazırlığı → 'Kargo profili oluştur' ile tek dokunuşla oluşturun (ABD'ye ücretsiz kargo; kargo bedeli fiyata dahil).", 400);
+  if (!shippingProfile) throw new EtsyIntegrationError("VALIDATION_FAILED", "Etsy'de kargo profili yok. Mağaza hazırlığı listesindeki 'Kargo profili oluştur' ile tek dokunuşla oluşturun (basit modda Yardım, uzman modda Etsy → Kılavuz; ABD'ye ücretsiz kargo, kargo bedeli fiyata dahil).", 400);
 
   // Fiziksel ilanın yayına girmesi için iade politikası gerekir; yoksa taslak yine açılır, satıcıya söylenir.
   const draftWarnings: string[] = [];
@@ -793,7 +793,7 @@ export async function createEtsyPhysicalDraft(
   } catch (error) {
     if (error instanceof EtsyIntegrationError && error.code === "AUTH_FAILED") throw error;
   }
-  if (!returnPolicyId) draftWarnings.push("İade politikası yok: yayınlamadan önce Yardım → Mağaza hazırlığı → 'İade politikası oluştur'.");
+  if (!returnPolicyId) draftWarnings.push("İade politikası yok: yayınlamadan önce Mağaza hazırlığı listesinden 'İade politikası oluştur' (basit modda Yardım, uzman modda Etsy → Kılavuz).");
 
   let readinessStateId: number | undefined;
   try {

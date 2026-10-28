@@ -1087,7 +1087,7 @@ function EtsyScreen({ online, channels, initialSection = "Trend" }: any) {
     <View style={section === "Stüdyo" ? undefined : styles.hidden}><StudioPanel online={online} active={section === "Stüdyo"} etsyReady={shopReady} seed={studioSeed} onUpload={(prefill: any) => { setUploadPrefill(prefill); setSection("Dijital"); }} /></View>
     {section === "Dijital" && <DigitalPanel online={online} shopReady={shopReady} prefill={uploadPrefill} onPrefillUsed={() => setUploadPrefill(undefined)} />}
     {section === "Pinterest" && <PinterestPanel online={online} />}
-    {section === "Kılavuz" && <><ShopReadinessCard online={online} onSell={() => setSection("Stüdyo")} /><ShopListingsScorecard online={online} /><ShopSettingsCard online={online} shopReady={shopReady} /><EtsyGuide shopReady={shopReady} authorized={authorized} /></>}
+    {section === "Kılavuz" && <><ShopReadinessCard online={online} onSell={() => setSection("Stüdyo")} /><ShopSettingsCard online={online} shopReady={shopReady} /><ShopListingsScorecard online={online} /><EtsyGuide shopReady={shopReady} authorized={authorized} /></>}
   </>;
 }
 
@@ -2179,7 +2179,7 @@ const ETSY_GUIDE: Array<{ id: string; title: string; icon: any; steps: string[] 
   ] },
   { id: "setup", title: "Mağaza açılışı ve bir kez yapılacak ayarlar", icon: "storefront-outline", steps: [
     "etsy.com/sell adresinde mağaza açılışını tamamlayın. Mağaza adı GXLMarketStudio'dur. Kimlik, banka ve kart bilgilerini yalnızca Etsy'nin kendi sayfasına girin.",
-    "Kargo profili: Shop Manager (Mağaza Yöneticisi) → Settings (Ayarlar) → Shipping settings (Kargo ayarları). ABD için 'Free shipping' (ücretsiz kargo) seçin; kargo bedeli fiyata zaten dahil edilir.",
+    "Kargo profili ve iade politikası: Mağaza hazırlığı listesinde 'Kargo profili oluştur' ve 'İade politikası oluştur' ile uygulama Etsy'de sizin yerinize oluşturur (ABD'ye ücretsiz kargo; kargo bedeli fiyata dahil). Elle yapmak isterseniz: Shop Manager (Mağaza Yöneticisi) → Settings (Ayarlar) → Shipping settings (Kargo ayarları).",
     "Üretim ortağı: ustaya yaptırdığınız ürünler için Shop Manager (Mağaza Yöneticisi) → Settings (Ayarlar) → Production partners (Üretim ortakları) bölümünden usta veya atölyeyi ekleyin.",
     "Mağaza politikaları: iade koşullarını yazın ve dijital ürünlerin iade edilmediğini belirtin.",
     "Açılıştan sonra Başla ekranındaki Durum kartında (uzman modda Özet) Etsy 'Mağaza bağlı' görünür. Taslak ve yayınlama düğmeleri o zaman açılır."
@@ -2650,7 +2650,7 @@ function ShopReadinessCard({ online, onSell }: any) {
     if (item.action === "create_shipping_profile") return setForm(form === "shipping" ? undefined : "shipping");
     if (item.action === "create_return_policy") return setForm(form === "returns" ? undefined : "returns");
     if (item.action === "sell") return onSell?.();
-    if (item.action === "shop_settings") return Alert.alert("Mağaza vitrini", "Bu kartın hemen altındaki 'Mağaza vitrini' kartından başlık, duyuru ve satış mesajlarını tek dokunuşla Etsy'ye yazın.");
+    if (item.action === "shop_settings") return Alert.alert("Mağaza vitrini", "Bu kartın hemen altındaki 'Mağaza vitrini' kartını açın; başlık, duyuru ve satış mesajları tek dokunuşla Etsy'ye yazılır.");
   };
   const post = async (path: string, body: any, done: string) => {
     setBusy(true);
@@ -2691,7 +2691,7 @@ function ShopReadinessCard({ online, onSell }: any) {
         </View>
         <View style={{ flexDirection: "row", gap: 10 }}>
           <View style={{ flex: 1 }}><Field label="Kargoya veriş (en çok gün)" value={processing} onChangeText={setProcessing} keyboardType="number-pad" /></View>
-          <View style={{ flex: 1 }}><Field label="Posta kodunuz (isteğe bağlı)" value={postal} onChangeText={setPostal} keyboardType="number-pad" placeholder="34000" /></View>
+          <View style={{ flex: 1 }}><Field label="Posta kodunuz (önerilir)" value={postal} onChangeText={setPostal} keyboardType="number-pad" placeholder="34000" /></View>
         </View>
         <Pressable style={[styles.primary, { marginTop: 10, marginBottom: 0 }, (busy || !online) && styles.primaryDisabled]} disabled={busy || !online} onPress={() => post("/api/etsy/shipping-profile", { postalCode: postal.trim() || undefined, minDeliveryDays: Number(minDays), maxDeliveryDays: Number(maxDays), maxProcessingDays: Number(processing) }, "Kargo profili Etsy'de oluşturuldu.")}>{busy ? <ActivityIndicator color="white" /> : <Ionicons name="cube" size={18} color="white" />}<Text style={styles.primaryText}>Kargo profilini oluştur</Text></Pressable>
       </View>}
@@ -2747,7 +2747,7 @@ function EtsyOrdersPanel({ online, compact }: any) {
     {loading && !data && <ActivityIndicator color="#C88B47" />}
     {!!error && (noShop
       ? <Empty icon="storefront-outline" title="Siparişler mağaza açılınca gelir" text="Etsy mağazası açılıp ilk sipariş geldiğinde burada son kargo tarihiyle görünür." />
-      : <Text style={styles.shopierBlocker}>{error}</Text>)}
+      : <View><Text style={styles.shopierBlocker}>{error}</Text>{/yetki|izin/i.test(error) && <Pressable style={[styles.secondaryButton, { alignSelf: "flex-start", marginTop: 8 }]} onPress={connectEtsy}><Text style={styles.secondaryButtonText}>Etsy bağlantısını yenile</Text></Pressable>}</View>)}
     {!!data && !compact && <Text style={styles.analysisLine}>Gönderilecek: {data.counts?.toShip ?? 0} · Geciken: {data.counts?.late ?? 0}</Text>}
     {!!data && !orders.length && !compact && <Empty icon="receipt-outline" title="Henüz sipariş yok" text="İlk sipariş gelince burada son kargo tarihiyle görünür." />}
     {visible.map((order: any) => <OrderCard key={order.receiptId} order={order} online={online} canAddTracking={Boolean(data?.canAddTracking)} carriers={carriers} onNeedCarriers={loadCarriers} onUpdated={(next: any) => setData((current: any) => ({ ...current, orders: current.orders.map((row: any) => row.receiptId === next.receiptId ? next : row) }))} />)}
@@ -2916,7 +2916,10 @@ const SELL_BACK: Record<SellRoute, SellRoute> = { choose: "choose", where: "choo
 function SellScreen({ online, channels, route, setRoute, onStepChange, setTab }: any) {
   const etsy = channels?.etsy || {};
   const etsyReady = Boolean(etsy.shopReady || etsy.shopId);
-  const back = route !== "choose" && <Pressable style={[styles.secondaryButton, { alignSelf: "flex-start", marginBottom: 12 }]} onPress={() => setRoute(SELL_BACK[route as SellRoute])}><Text style={styles.secondaryButtonText}>← Geri</Text></Pressable>;
+  const goBack = () => route === "photo"
+    ? Alert.alert("Geri dönülsün mü?", "Bu üründe yazdıklarınız ve seçtiğiniz fotoğraflar silinir.", [{ text: "Vazgeç", style: "cancel" }, { text: "Geri dön", style: "destructive", onPress: () => setRoute("where") }])
+    : setRoute(SELL_BACK[route as SellRoute]);
+  const back = route !== "choose" && <Pressable style={[styles.secondaryButton, { alignSelf: "flex-start", marginBottom: 12 }]} onPress={goBack}><Text style={styles.secondaryButtonText}>{route === "photo" ? "← Ürün seçimine dön" : "← Geri"}</Text></Pressable>;
   if (route === "choose") return <>
     <Text style={styles.homeHello}>Ne satacaksınız?</Text>
     <ChoiceTile icon="cube-outline" title="Elimdeki bir ürünü" text="Tesbih, vintage eşya, örgü kazak/hırka ya da başka bir ürün. Fotoğrafını çekip satarsınız." onPress={() => setRoute("where")} />
@@ -2946,7 +2949,7 @@ function SellScreen({ online, channels, route, setRoute, onStepChange, setTab }:
   return <>
     {back}
     {route === "digital" && <View style={styles.guardrail}><Ionicons name="information-circle-outline" size={20} color="#315B4C" /><Text style={[styles.guardrailText, { flex: 1 }]}>PDF ve desen işi üç adımdır: 1) Trend'den konu seçin ("Bu nişte PDF hazırla"), 2) Stüdyo'nun verdiği tek paketi ChatGPT ya da Claude'a gönderip dosyayı aldırın, 3) Dijital bölümünden Etsy'ye yükleyin.</Text></View>}
-    <EtsyScreen online={online} channels={channels} initialSection={route === "digital" ? "Stüdyo" : "Trend"} />
+    <EtsyScreen key={route} online={online} channels={channels} initialSection={route === "digital" ? "Stüdyo" : "Trend"} />
   </>;
 }
 

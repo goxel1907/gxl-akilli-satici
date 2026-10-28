@@ -53,6 +53,12 @@ export async function shopReadiness(env: EtsyRuntimeEnv, fetcher: Fetcher = fetc
     try {
       shop = await getConnectedShop(env, fetcher);
     } catch (error) {
+      if (error instanceof EtsyIntegrationError && error.code === "AUTH_FAILED") {
+        // Bağlantının süresi dolmuş ya da izin geri alınmış: diğer adımlar okunamaz, önce bağlantı yenilenir.
+        items.push({ id: "auth", titleTr: "Etsy bağlantısını yenile", state: "todo", detailTr: "Etsy bağlantısının süresi dolmuş ya da izin geri alınmış. Yenileyip Etsy'de onaylayın; sonra liste yeniden okunur.", action: "reauth" });
+        const counted = items.filter((item) => item.state !== "manual");
+        return { items, done: counted.filter((item) => item.state === "done").length, total: counted.length };
+      }
       if (!(error instanceof EtsyIntegrationError && (error.code === "NOT_CONNECTED" || error.code === "NOT_FOUND"))) throw error;
     }
   }
@@ -68,7 +74,7 @@ export async function shopReadiness(env: EtsyRuntimeEnv, fetcher: Fetcher = fetc
     const [profiles, policies] = await Promise.all([shippingProfiles(env, shop.shopId, fetcher), returnPolicies(env, shop.shopId, fetcher)]);
     items.push(profiles.length
       ? { id: "shipping", titleTr: "Kargo profili var", state: "done", detailTr: `${profiles.length} kargo profili tanımlı.` }
-      : { id: "shipping", titleTr: "Kargo profili oluştur", state: "todo", detailTr: "Fiziksel ürün (tesbih, vintage, örgü) için gerekli. Uygulama Türkiye'den ABD'ye ücretsiz kargolu profili sizin yerinize oluşturur; kargo bedeli fiyata zaten eklenir.", action: "create_shipping_profile" });
+      : { id: "shipping", titleTr: "Kargo profili oluştur", state: "todo", detailTr: "Fiziksel ürün (tesbih, vintage, örgü) için gerekli. Uygulama Türkiye'den ABD'ye ücretsiz kargolu profili sizin yerinize oluşturur; kargo bedeli fiyata zaten eklenir. Başka ülkelere göndermek isterseniz Etsy'de profile ülke ekleyebilirsiniz.", action: "create_shipping_profile" });
     items.push(policies.length
       ? { id: "returns", titleTr: "İade politikası var", state: "done", detailTr: policies[0].accepts_returns ? `İade kabul: ${policies[0].return_deadline || "?"} gün.` : "İade kabul edilmiyor." }
       : { id: "returns", titleTr: "İade politikası oluştur", state: "todo", detailTr: "Fiziksel ilanın yayına girmesi için gerekir. Önerilen: 30 gün içinde iade ve değişim (iade kargosunu alıcı öder).", action: "create_return_policy" });
@@ -118,7 +124,15 @@ export async function createShippingProfile(env: EtsyRuntimeEnv, input: ReturnTy
     processing_time_unit: "business_days"
   });
   if (input.postalCode) form.set("origin_postal_code", input.postalCode);
-  const created = await etsyRequest<Row>(env, `/application/shops/${shop.shopId}/shipping-profiles`, { method: "POST", form }, fetcher);
+  let created: Row;
+  try {
+    created = await etsyRequest<Row>(env, `/application/shops/${shop.shopId}/shipping-profiles`, { method: "POST", form }, fetcher);
+  } catch (error) {
+    if (error instanceof EtsyIntegrationError && error.code === "VALIDATION_FAILED" && /postal/i.test(error.message)) {
+      throw new EtsyIntegrationError("VALIDATION_FAILED", "Etsy gönderen posta kodunu istiyor. Posta kodunuzu (5 rakam) yazıp tekrar deneyin.", 400);
+    }
+    throw error;
+  }
   const shippingProfileId = Number(created.shipping_profile_id);
   if (!shippingProfileId) throw new EtsyIntegrationError("UPSTREAM_FAILED", "Etsy kargo profili numarası döndürmedi.", 502);
   return { shippingProfileId, alreadyExisted: false };

@@ -620,7 +620,13 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
       return json(200, await assistBuyerMessage(normalizeMessageInput(await readBody(request)), env));
     }
     if (request.method === "POST" && url.pathname === "/api/marketing/plan") {
-      return json(200, { plan: await buildMarketingPlan(normalizeMarketingInput(await readBody(request)), env) });
+      const input = normalizeMarketingInput(await readBody(request));
+      // Etsy reklam eşiği dolar fiyata bakar; telefon fiyatı TL gönderir, güncel kurla çevrilir.
+      if (input.channel === "etsy" && input.priceTry && !input.priceUsd) {
+        const rate = await getUsdTryRate(env.ETSY_OAUTH as unknown as KeyValueStore | undefined).catch(() => undefined);
+        if (rate) input.priceUsd = Math.round((input.priceTry / rate) * 100) / 100;
+      }
+      return json(200, { plan: await buildMarketingPlan(input, env) });
     }
     if (request.method === "POST" && url.pathname === "/api/products/photo-analyze") {
       const input = await readBody(request);
