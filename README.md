@@ -38,9 +38,9 @@ npx eas-cli build --platform android --profile preview
 
 Derleme tamamlandığında oluşan güvenli indirme bağlantısı Android telefonda açılır ve APK yüklenir. Xiaomi/HyperOS ilk kurulumda tarayıcıya “bilinmeyen uygulama yükleme” izni sorabilir. İzin yalnızca resmi derleme bağlantısından indirilen bu APK için verilmelidir.
 
-### GitHub üzerinden bilgisayarsız APK
+### Bilgisayarsız APK ve APK kurmadan güncelleme
 
-Depodaki `GXL Android APK` iş akışı `main` dalına yapılan her mobil uygulama güncellemesinde kurulabilir debug APK üretir. GitHub'da **Actions → GXL Android APK → son çalışma → Artifacts → GXL-Akilli-Satici-APK** yolundan ZIP indirilir; ZIP içindeki `app-debug.apk` telefona kurulur.
+APK, expo.dev → proje → **Build from GitHub** ile derlenir (Base directory `apps/mobile`, Ref `main`, Profile `preview`). Sonraki ekran ve metin düzeltmeleri APK kurmadan gelir: `main`'e birleşen mobil değişikliği Expo'nun iş akışı (`apps/mobile/.eas/workflows/publish-update.yml`) yayınlar. Ayrıntılar: [docs/UYGULAMA_GUNCELLEME_TR.md](docs/UYGULAMA_GUNCELLEME_TR.md).
 
 ## Güvenli otomasyon modeli
 
