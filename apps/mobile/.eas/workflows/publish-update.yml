@@ -1,0 +1,20 @@
+# Telefondaki uygulamaya APK kurmadan gidecek güncellemeyi yayınlar (EAS Update).
+#
+# GitHub Actions bu hesapta ödeme kilidi nedeniyle çalışmadığı için güncelleme Expo'nun kendi sunucularında
+# (EAS Workflows) yayınlanır; APK derlemesinde kullanılan Expo–GitHub bağlantısı yeterlidir, anahtar gerekmez.
+# "preview" dalı, preview profiliyle derlenen APK'nin dinlediği "preview" kanalına bağlıdır.
+# Yalnız JavaScript değişiklikleri böyle gider; yeni native paket app.json "version" yükseltilip yeni APK ile gelir.
+name: Uygulama güncellemesi
+
+on:
+  push:
+    branches: ['main']
+    paths: ['apps/mobile/**']
+
+jobs:
+  publish_update:
+    name: Güncellemeyi yayınla
+    type: update
+    params:
+      branch: preview
+      platform: android

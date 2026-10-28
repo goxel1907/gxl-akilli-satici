@@ -16,8 +16,13 @@ test("a new or changed app package always comes with a new app version and APK",
   assert.deepEqual(pkg.dependencies, snapshot.dependencies, "app packages changed: raise app.json version (a new APK is needed), then update apps/mobile/native-modules.json");
 });
 
-test("every APK build profile listens to an update channel", () => {
+test("every APK build profile listens to an update channel and updates are published to the preview APK's channel", () => {
   const eas = read("eas.json");
   assert.equal(eas.build.preview.channel, "preview");
   assert.equal(eas.build.production.channel, "production");
+  // GitHub Actions bu hesapta ödeme kilidiyle çalışmıyor; güncellemeyi Expo'nun iş akışı yayınlar.
+  const workflow = readFileSync(new URL("../../mobile/.eas/workflows/publish-update.yml", import.meta.url), "utf8");
+  assert.match(workflow, /^\s+type: update$/m);
+  assert.match(workflow, /^\s+branch: preview$/m, "the workflow must publish to the branch the preview APK listens to");
+  assert.match(workflow, /^\s+platform: android$/m);
 });
