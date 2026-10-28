@@ -18,7 +18,9 @@ const apiHeaders = (json = false) => ({
   ...(json ? { "content-type": "application/json" } : {}),
   ...(activeApiToken ? { authorization: `Bearer ${activeApiToken}` } : {})
 });
-type Tab = "Özet" | "Shopier" | "Etsy" | "Ajan" | "Onaylar" | "Müşteriler" | "Ürünler";
+type Tab = "Özet" | "Shopier" | "Etsy" | "Ajan" | "Onaylar" | "Müşteriler" | "Ürünler" | "Başla" | "Sat" | "Müşteri" | "Yardım";
+type AppMode = "simple" | "expert";
+type SellRoute = "choose" | "where" | "photo" | "shopier" | "digital" | "trend";
 type ProductOrigin = "made_by_seller" | "designed_by_seller" | "vintage" | "craft_supply" | "commercial_resale" | "unknown";
 
 const demo = {
@@ -66,7 +68,14 @@ const demoShopierCenter = {
 };
 
 const navigationTabs: Tab[] = ["Etsy", "Özet", "Shopier", "Ajan", "Onaylar", "Müşteriler", "Ürünler"];
+// Basit mod: hiç bilmeyen biri için dört kapı. Uzman mod bugünkü tüm sekmeleri gösterir.
+const simpleTabs: Tab[] = ["Başla", "Sat", "Müşteri", "Yardım"];
+const APP_MODE_KEY = "gxl.appMode";
 const navigationIcons: Record<Tab, any> = {
+  "Başla": "home",
+  "Sat": "camera",
+  "Müşteri": "megaphone",
+  "Yardım": "help-circle",
   "Özet": "grid",
   "Shopier": "bag-handle",
   "Etsy": "color-palette",
@@ -188,7 +197,22 @@ function OfflineNotice({ reason, busy, onRetry, onResetKey }: { reason: OfflineR
 function App() {
   const insets = useSafeAreaInsets();
   useAppUpdates();
-  const [tab, setTab] = useState<Tab>("Etsy");
+  const [mode, setMode] = useState<AppMode>("simple");
+  const [tab, setTab] = useState<Tab>("Başla");
+  const [sellRoute, setSellRoute] = useState<SellRoute>("choose");
+  const scrollRef = useRef<ScrollView>(null);
+  useEffect(() => {
+    AsyncStorage.getItem(APP_MODE_KEY).then((value) => { if (value === "expert") { setMode("expert"); setTab("Etsy"); } }).catch(() => undefined);
+  }, []);
+  useEffect(() => { scrollRef.current?.scrollTo({ y: 0, animated: false }); }, [tab]);
+  const scrollTop = () => scrollRef.current?.scrollTo({ y: 0, animated: true });
+  const changeMode = (next: AppMode) => {
+    setMode(next);
+    setTab(next === "simple" ? "Başla" : "Etsy");
+    AsyncStorage.setItem(APP_MODE_KEY, next).catch(() => undefined);
+  };
+  // Yarım kalan fotoğraflı ilan, ana sayfadan "Ürün sat"a dönünce silinmez.
+  const openSell = (route: SellRoute) => { setSellRoute((current) => route === "choose" && current === "photo" ? current : route); setTab("Sat"); };
   const [data, setData] = useState<any>(demo);
   const [loading, setLoading] = useState(true);
   const [online, setOnline] = useState(false);
@@ -368,12 +392,16 @@ function App() {
           <Text style={styles.eyebrow}>SATIŞ MERKEZİ</Text>
           <Text style={styles.title}>GXL Akıllı Satıcı</Text>
         </View>
-        <View style={[styles.agentBadge, !online && styles.localBadge]}><View style={[styles.dot, !online && styles.localDot]} /><Text style={styles.agentText}>{online ? "Ajan bağlı" : "Yerel mod"}</Text></View>
+        <View style={[styles.agentBadge, !online && styles.localBadge]}><View style={[styles.dot, !online && styles.localDot]} /><Text style={styles.agentText}>{online ? "Bağlı" : "Bağlantı yok"}</Text></View>
       </View>
       {loading ? <ActivityIndicator style={{ marginTop: 40 }} color="#C88B47" /> : (
-        <ScrollView contentContainerStyle={[styles.content, { paddingBottom: 110 + insets.bottom }]}>
+        <ScrollView ref={scrollRef} contentContainerStyle={[styles.content, { paddingBottom: 110 + insets.bottom }]}>
           {!online && <OfflineNotice reason={offlineReason} busy={reconnecting} onRetry={reconnect} onResetKey={confirmResetToken} />}
-          {tab === "Özet" && <Overview data={data} setTab={setTab} online={online} channels={channels} />}
+          {tab === "Başla" && <HomeScreen online={online} channels={channels} setTab={setTab} openSell={openSell} />}
+          {mode === "simple" && <View style={tab === "Sat" ? undefined : styles.hidden}><SellScreen online={online} channels={channels} route={sellRoute} setRoute={setSellRoute} onStepChange={scrollTop} setTab={setTab} /></View>}
+          {tab === "Müşteri" && <SalesPlanCard online={online} shopierProducts={shopierCenter?.products} etsyActiveListings={channels?.etsy?.activeListings} />}
+          {tab === "Yardım" && <HelpScreen channels={channels} onExpert={() => changeMode("expert")} />}
+          {tab === "Özet" && <Overview data={data} setTab={setTab} online={online} channels={channels} onSimple={() => changeMode("simple")} />}
           {tab === "Shopier" && <ShopierScreen center={shopierCenter} online={online} onRefresh={refresh} etsyReady={Boolean(channels?.etsy?.shopReady || channels?.etsy?.shopId)} />}
           {tab === "Etsy" && <EtsyScreen online={online} channels={channels} />}
           {tab === "Ajan" && <AgentScreen center={opportunityCenter} online={online} onRefresh={refresh} shopierProducts={shopierCenter?.products} etsyActiveListings={channels?.etsy?.activeListings} />}
@@ -383,7 +411,7 @@ function App() {
         </ScrollView>
       )}
       <View style={[styles.nav, { height: 78 + insets.bottom, paddingBottom: 10 + insets.bottom }]}>
-        {navigationTabs.map((item) => (
+        {(mode === "simple" ? simpleTabs : navigationTabs).map((item) => (
           <Pressable key={item} style={styles.navItem} onPress={() => setTab(item)}>
             <Ionicons name={navigationIcons[item]} size={21} color={tab === item ? "#C88B47" : "#748079"} />
             <Text style={[styles.navText, tab === item && styles.navTextActive]}>{item}</Text>
@@ -460,7 +488,7 @@ function etsyOpeningText(etsy: any): string {
   return parts.length ? ` · ${parts.join(" · ")}` : "";
 }
 
-function Overview({ data, setTab, online, channels }: any) {
+function Overview({ data, setTab, online, channels, onSimple }: any) {
   const shopier = channels?.shopier;
   const shopierStatus = shopier?.connected
     ? `Bağlı · ${shopier.productCount} ürün · 30 günde ${shopier.recentOrderCount} sipariş`
@@ -506,6 +534,7 @@ function Overview({ data, setTab, online, channels }: any) {
     <Text style={styles.versionText}>{appVersionText()}</Text>
     <Text style={styles.versionMeta}>{updateChannelText()}</Text>
     <UpdateCheckButton />
+    {!!onSimple && <Pressable style={styles.updateCheck} onPress={onSimple}><Ionicons name="happy-outline" size={15} color="#315B4C" /><Text style={styles.updateCheckText}>Basit moda geç</Text></Pressable>}
   </>;
 }
 
@@ -1034,8 +1063,8 @@ function errorText(error: unknown) {
 
 type EtsySection = "Trend" | "Stüdyo" | "Dijital" | "Pinterest" | "Kılavuz";
 
-function EtsyScreen({ online, channels }: any) {
-  const [section, setSection] = useState<EtsySection>("Trend");
+function EtsyScreen({ online, channels, initialSection = "Trend" }: any) {
+  const [section, setSection] = useState<EtsySection>(initialSection);
   const [studioSeed, setStudioSeed] = useState<any>();
   const [uploadPrefill, setUploadPrefill] = useState<any>();
   const etsy = channels?.etsy || {};
@@ -2149,15 +2178,15 @@ const ETSY_GUIDE: Array<{ id: string; title: string; icon: any; steps: string[] 
     "Kargo profili: Shop Manager (Mağaza Yöneticisi) → Settings (Ayarlar) → Shipping settings (Kargo ayarları). ABD için 'Free shipping' (ücretsiz kargo) seçin; kargo bedeli fiyata zaten dahil edilir.",
     "Üretim ortağı: ustaya yaptırdığınız ürünler için Shop Manager (Mağaza Yöneticisi) → Settings (Ayarlar) → Production partners (Üretim ortakları) bölümünden usta veya atölyeyi ekleyin.",
     "Mağaza politikaları: iade koşullarını yazın ve dijital ürünlerin iade edilmediğini belirtin.",
-    "Açılıştan sonra Özet sekmesindeki Etsy kanalı 'Bağlı' görünür. Taslak ve yayınlama düğmeleri o zaman açılır."
+    "Açılıştan sonra Başla ekranındaki Durum kartında (uzman modda Özet) Etsy 'Mağaza bağlı' görünür. Taslak ve yayınlama düğmeleri o zaman açılır."
   ] },
   { id: "trouble", title: "Sorun giderme", icon: "construct-outline", steps: [
-    "Uygulama düzeltmeleri APK kurmadan gelir: 'Güncelleme hazır' sorusu çıkarsa 'Yeniden başlat' deyin. Hangi sürümde olduğunuz Özet ekranının en altında yazar; ekran görüntüsü gönderirken o satır görünsün. Beklediğiniz güncelleme gelmediyse aynı yerdeki 'Güncellemeyi denetle' düğmesine basın; sonucu ekranda yazar.",
+    "Uygulama düzeltmeleri APK kurmadan gelir: 'Güncelleme hazır' sorusu çıkarsa 'Yeniden başlat' deyin. Hangi sürümde olduğunuz Yardım (uzman modda Özet) ekranının en altında yazar; ekran görüntüsü gönderirken o satır görünsün. Beklediğiniz güncelleme gelmediyse aynı yerdeki 'Güncellemeyi denetle' düğmesine basın; sonucu ekranda yazar.",
     "'Etsy mağazası hazır değil': mağaza açılışı bitmemiş ya da yetki yenilenmesi gerekiyor. Aşağıdaki düğmelerle kuruluma devam edin.",
     "'Tarama durdu' veya 'çok fazla istek': Etsy'nin istek sınırına takıldınız. Birkaç dakika sonra tekrar deneyin; otomatik keşif kendi hızında devam eder.",
     "'Yayınlanamadı': ilanda en az bir fotoğraf, bir kargo profili ve fiyat olmalıdır. Taslağı Etsy'de açıp eksik alanı tamamlayın.",
     "'Keşfedilenler' boş görünüyorsa ilk otomatik taramalar birkaç saat sürer. Hızlandırmak için gruplarda 'Tümünü tara' düğmesine basın.",
-    "Üstte 'Yerel mod' görünüyorsa sunucuya bağlanılamıyordur. Uygulama bir kez kendisi yeniden dener; olmazsa internet veya VPN bağlantısını kontrol edip 'Yeniden bağlan' düğmesine basın. Kayıtlı anahtar yalnız sunucu onu reddederse yeniden istenir."
+    "Üstte 'Bağlantı yok' görünüyorsa sunucuya bağlanılamıyordur. Uygulama bir kez kendisi yeniden dener; olmazsa internet veya VPN bağlantısını kontrol edip 'Yeniden bağlan' düğmesine basın. Kayıtlı anahtar yalnız sunucu onu reddederse yeniden istenir."
   ] }
 ];
 
@@ -2515,7 +2544,119 @@ async function shrinkPhoto(photo: { uri: string; width?: number; height?: number
 }
 
 // Shopier'e eklemeden: fotoğraf → ürün türü ve ölçüler → Etsy araştırması → başlık, etiket, açıklama, fiyat → taslak → yayın.
-function PhotoListingStudio({ online, etsyReady }: any) {
+// ——— Basit mod ekranları ———
+
+function HomeTile({ icon, title, text, onPress }: any) {
+  return <Pressable style={({ pressed }) => [styles.homeTile, pressed && styles.rowPressed]} onPress={onPress} accessibilityRole="button">
+    <View style={styles.homeTileIcon}><Ionicons name={icon} size={24} color="white" /></View>
+    <View style={{ flex: 1 }}><Text style={styles.homeTileTitle}>{title}</Text><Text style={styles.homeTileText}>{text}</Text></View>
+    <Ionicons name="chevron-forward" size={20} color="#748079" />
+  </Pressable>;
+}
+
+function HomeScreen({ online, channels, setTab, openSell }: any) {
+  const etsy = channels?.etsy || {};
+  const shopier = channels?.shopier || {};
+  const etsyShop = Boolean(etsy.shopReady || etsy.shopId);
+  const etsyLine = etsyShop
+    ? `Mağaza bağlı${typeof etsy.activeListings === "number" ? ` · ${etsy.activeListings} ilan yayında` : ""}${etsy.paymentsReady === false ? " · ödeme kurulumu bitmedi" : ""}`
+    : etsy.authorized || etsy.connected ? "Hesap bağlı · mağaza açılışı bitmedi" : "Bağlı değil";
+  const shopierLine = shopier.connected ? `Bağlı · ${shopier.productCount ?? 0} ürün` : "Bağlı değil";
+  const nextStep = !online
+    ? "Önce internete bağlanın; üstteki 'Yeniden bağlan' düğmesine basın."
+    : !etsyShop || etsy.paymentsReady === false
+      ? "Etsy mağazası henüz satışa açık değil. Ürünlerinizi şimdiden hazırlayabilirsiniz; mağaza açılınca Etsy'ye gönderilir. Mağaza açılış adımları Yardım bölümünde."
+      : etsy.activeListings === 0
+        ? "Mağazada yayında ilan yok. 'Ürün sat' ile ilk ilanınızı hazırlayın."
+        : "İlanlarınızı alıcılara göstermek için 'Müşteri bul' planını hazırlayın.";
+  return <>
+    <Text style={styles.homeHello}>Ne yapmak istiyorsunuz?</Text>
+    <HomeTile icon="camera" title="Ürün sat" text="Ürünün fotoğrafını çekin; başlık, açıklama, etiket ve fiyat sizin için hazırlanır." onPress={() => openSell("choose")} />
+    <HomeTile icon="megaphone" title="Müşteri bul" text="Ürününüz için Instagram, WhatsApp ve Etsy'de ne yapılacağı ve reklam bütçesi." onPress={() => setTab("Müşteri")} />
+    <HomeTile icon="trending-up" title="Ne satsam?" text="Etsy'de şu an aranan ürünler ve yaklaşan özel günler." onPress={() => openSell("trend")} />
+    <HomeTile icon="help-circle" title="Yardım ve adımlar" text="Etsy mağazası nasıl açılır, para nereye gelir, sorun olursa ne yapılır." onPress={() => setTab("Yardım")} />
+    <View style={styles.card}>
+      <Text style={styles.cardTitle}>Durum</Text>
+      <Text style={styles.analysisLine}>Etsy: {etsyLine}</Text>
+      <Text style={styles.analysisLine}>Shopier: {shopierLine}</Text>
+      <Text style={[styles.nextAction, { marginTop: 8 }]}>Sıradaki adım: {nextStep}</Text>
+    </View>
+  </>;
+}
+
+function ChoiceTile({ icon, title, text, onPress }: any) {
+  return <Pressable style={({ pressed }) => [styles.homeTile, pressed && styles.rowPressed]} onPress={onPress} accessibilityRole="button">
+    <View style={[styles.homeTileIcon, { backgroundColor: "#A86B2E" }]}><Ionicons name={icon} size={22} color="white" /></View>
+    <View style={{ flex: 1 }}><Text style={styles.homeTileTitle}>{title}</Text><Text style={styles.homeTileText}>{text}</Text></View>
+  </Pressable>;
+}
+
+const SELL_BACK: Record<SellRoute, SellRoute> = { choose: "choose", where: "choose", photo: "where", shopier: "where", digital: "choose", trend: "choose" };
+
+function SellScreen({ online, channels, route, setRoute, onStepChange, setTab }: any) {
+  const etsy = channels?.etsy || {};
+  const etsyReady = Boolean(etsy.shopReady || etsy.shopId);
+  const back = route !== "choose" && <Pressable style={[styles.secondaryButton, { alignSelf: "flex-start", marginBottom: 12 }]} onPress={() => setRoute(SELL_BACK[route as SellRoute])}><Text style={styles.secondaryButtonText}>← Geri</Text></Pressable>;
+  if (route === "choose") return <>
+    <Text style={styles.homeHello}>Ne satacaksınız?</Text>
+    <ChoiceTile icon="cube-outline" title="Elimdeki bir ürünü" text="Tesbih, vintage eşya, örgü kazak/hırka ya da başka bir ürün. Fotoğrafını çekip satarsınız." onPress={() => setRoute("where")} />
+    <ChoiceTile icon="document-text-outline" title="PDF ürünü ya da hobi deseni" text="Planlayıcı, boyama sayfası, örgü tarifi gibi indirilebilir dosya. Kargo yok; bir kez hazırlanır, çok satılır." onPress={() => setRoute("digital")} />
+    <ChoiceTile icon="bulb-outline" title="Bilmiyorum, fikir ver" text="Etsy'de şu an aranan ve rakibi az olan ürünleri gösteririm." onPress={() => setRoute("trend")} />
+  </>;
+  if (route === "where") return <>
+    {back}
+    <Text style={styles.homeHello}>Nerede satılsın?</Text>
+    <ChoiceTile icon="globe-outline" title="Etsy (ABD'deki alıcılar)" text="Dolarla satış, yurt dışına kargo. İlan İngilizce hazırlanır; size Türkçesi gösterilir." onPress={() => setRoute("photo")} />
+    <ChoiceTile icon="bag-handle-outline" title="Shopier (Türkiye'deki alıcılar)" text="TL ile satış, yurt içi kargo. Instagram ve WhatsApp'tan gelen müşteri için." onPress={() => setRoute("shopier")} />
+  </>;
+  if (route === "photo") return <>{back}<PhotoListingStudio online={online} etsyReady={etsyReady} wizard onStepChange={onStepChange} /></>;
+  if (route === "shopier") return <>
+    {back}
+    <View style={styles.analysisCard}>
+      <Text style={styles.cardTitle}>Shopier'de ürün ekleme</Text>
+      <Text style={styles.analysisLine}>1. Shopier uygulamasını ya da shopier.com'u açın → Ürünler → Yeni ürün.</Text>
+      <Text style={styles.analysisLine}>2. Fotoğraf, Türkçe ürün adı, açıklama, fiyat (TL), kargo ve stok girin; kaydedin.</Text>
+      <Text style={styles.analysisLine}>3. Ürün birkaç dakika içinde bu uygulamada görünür (Shopier bağlıysa).</Text>
+      <Text style={styles.analysisLine}>4. Sonra 'Müşteri bul' bölümünde ürünü seçin: Instagram gönderi metni, WhatsApp 'Bana yaz' bağlantısı ve hazır yanıtlar hazırlanır.</Text>
+    </View>
+    <Pressable style={styles.primary} onPress={() => openUrl("https://www.shopier.com/", "Shopier")}><Text style={styles.primaryText}>Shopier'i aç</Text><Ionicons name="open-outline" size={18} color="white" /></Pressable>
+    <Pressable style={styles.secondaryButton} onPress={() => setTab("Müşteri")}><Text style={styles.secondaryButtonText}>Müşteri bul'a geç</Text></Pressable>
+  </>;
+  return <>
+    {back}
+    {route === "digital" && <View style={styles.guardrail}><Ionicons name="information-circle-outline" size={20} color="#315B4C" /><Text style={[styles.guardrailText, { flex: 1 }]}>PDF ve desen işi üç adımdır: 1) Trend'den konu seçin ("Bu nişte PDF hazırla"), 2) Stüdyo'nun verdiği tek paketi ChatGPT ya da Claude'a gönderip dosyayı aldırın, 3) Dijital bölümünden Etsy'ye yükleyin.</Text></View>}
+    <EtsyScreen online={online} channels={channels} initialSection={route === "digital" ? "Stüdyo" : "Trend"} />
+  </>;
+}
+
+function HelpScreen({ channels, onExpert }: any) {
+  const etsy = channels?.etsy || {};
+  return <>
+    <EtsyGuide shopReady={Boolean(etsy.shopReady || etsy.shopId)} authorized={Boolean(etsy.authorized || etsy.connected)} />
+    <View style={styles.card}>
+      <Text style={styles.cardTitle}>Uzman mod</Text>
+      <Text style={styles.evidence}>Shopier yönetimi, Onaylar, Müşteriler, Pinterest, PDF stüdyosu ve ayrıntılı trend ekranları uzman moddadır. İstediğiniz zaman Özet ekranının altından basit moda dönebilirsiniz.</Text>
+      <Pressable style={[styles.secondaryButton, { alignSelf: "flex-start", marginTop: 10 }]} onPress={onExpert}><Text style={styles.secondaryButtonText}>Uzman moda geç</Text></Pressable>
+    </View>
+    <Text style={styles.versionText}>{appVersionText()}</Text>
+    <Text style={styles.versionMeta}>{updateChannelText()}</Text>
+    <UpdateCheckButton />
+  </>;
+}
+
+// wizard: basit modda aynı form beş adıma bölünür; her adımda yalnız o konunun alanları görünür ve
+// "İleri" eksik bilgiyi söyler. Uzman modda form tek sayfadır.
+const WIZARD_STEPS = ["Fotoğraflar", "Ürün bilgisi", "Renk ve özellikler", "Fiyat ve kargo", "Önizleme ve gönder"];
+const WIZARD_HINTS = [
+  "Ürünün 1–10 fotoğrafını çekin ya da galeriden seçin. Gün ışığında, sade zeminde; önden, arkadan ve yakın plan. İleri'ye basınca yapay zekâ fotoğrafa bakar.",
+  "Ürünün ne olduğunu doğrulayın. Fotoğraftan anlaşılanlar dolduruldu; yanlışsa düzeltin. Emin olmadığınız bilgiyi yazmayın.",
+  "Renkleri ve öne çıkan özellikleri Türkçe yazabilirsiniz; sistem İngilizceye çevirir. Bu adım isteğe bağlıdır.",
+  "Satıştan elinize geçmesini istediğiniz tutarı ve ABD'ye kargo ücretini yazın. Etsy kesintileri ve kargo fiyata eklenir.",
+  "Uygulama Etsy'de alıcıların aramalarını tarar; İngilizce başlık, 13 etiket, açıklama ve fiyatı hazırlar. Türkçe karşılığına bakıp Etsy'ye gönderin."
+];
+
+function PhotoListingStudio({ online, etsyReady, wizard, onStepChange }: any) {
+  const [step, setStep] = useState(1);
   const [sourceId, setSourceId] = useState(() => `photo-${Date.now()}`);
   const [photos, setPhotos] = useState<Array<{ uri: string; width?: number; height?: number }>>([]);
   const uploaded = useRef<Record<string, string>>({});
@@ -2668,7 +2809,29 @@ function PhotoListingStudio({ online, etsyReady }: any) {
     return { ...current, imageUrls };
   };
 
+  const show = (n: number) => !wizard || step === n;
+  const goTo = (n: number) => { setStep(n); onStepChange?.(); };
+  const next = async () => {
+    if (step === 1) {
+      if (!photos.length) return Alert.alert("Fotoğraf gerekli", "Etsy ilanı için en az bir fotoğraf ekleyin; 5 ve üzeri önerilir.");
+      if (online && !analysis && !analyzing) await analyze();
+    }
+    if (step === 2) {
+      if (!kind) return Alert.alert("Ürün türü", "Ürünün türünü seçin: örgü giyim, tesbih, vintage ya da diğer.");
+      if (nameTr.trim().length < 3) return Alert.alert("Ürün adı", "Ürünün Türkçe adını yazın (ör. 925 gümüş tesbih).");
+      const vintage = kind === "vintage" || origin === "vintage";
+      const year = Number(yearMade);
+      if (vintage && !(year >= 1800 && year <= new Date().getFullYear() - 20)) return Alert.alert("Üretim yılı", "Vintage ürün en az 20 yıllık olmalı. Yaklaşık üretim yılını yazın (ör. 1975).");
+    }
+    if (step === 4) {
+      if (!parseAmount(priceTry)) return Alert.alert("Elinize geçecek tutar", "Bu üründen elinize geçmesini istediğiniz tutarı TL olarak yazın.");
+      if (!parseAmount(shippingTry)) return Alert.alert("ABD'ye kargo ücreti", "Kargo ücretini yazmazsanız fiyata eklenmez ve zarar edersiniz. Bilmiyorsanız ürünü paketleyip tartın; PTT'ye ya da kargo firmasına ağırlığı söyleyip ABD fiyatını sorun.");
+    }
+    goTo(Math.min(WIZARD_STEPS.length, step + 1));
+  };
+
   const reset = () => {
+    setStep(1);
     setSourceId(`photo-${Date.now()}`);
     uploaded.current = {};
     setPhotos([]); setKind(""); setOrigin("made_by_seller"); setMaker("me"); setCraft(""); setAudience("women");
@@ -2678,10 +2841,17 @@ function PhotoListingStudio({ online, etsyReady }: any) {
   };
 
   return <>
-    <View style={styles.analysisCard}>
+    {wizard && <View style={styles.analysisCard}>
+      <View style={styles.stepBar}>{WIZARD_STEPS.map((label, index) => <View key={label} style={[styles.stepDot, index < step && styles.stepDotActive]} />)}</View>
+      <Text style={styles.small}>Adım {step}/{WIZARD_STEPS.length}</Text>
+      <Text style={styles.cardTitle}>{WIZARD_STEPS[step - 1]}</Text>
+      <Text style={styles.analysisLine}>{WIZARD_HINTS[step - 1]}</Text>
+    </View>}
+    {!wizard && <View style={styles.analysisCard}>
       <Text style={styles.cardTitle}>Elinizdeki ürünü Etsy'de satın</Text>
       <Text style={styles.analysisLine}>Fotoğrafları çekin ve ürün türünü seçin. Uygulama fotoğrafa bakar, Etsy'de alıcıların aramalarını tarar; başlık, 13 etiket, İngilizce açıklama ve fiyatı hazırlar. Shopier gerekmez.</Text>
-    </View>
+    </View>}
+    {show(1) && <>
     <Text style={styles.fieldLabel}>Fotoğraflar ({photos.length}/{MAX_LISTING_PHOTOS}) · kapak yapmak için fotoğrafa dokunun</Text>
     {!!photos.length && <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 10 }}>
       {photos.map((photo, index) => <View key={photo.uri} style={styles.photoThumbWrap}>
@@ -2695,7 +2865,10 @@ function PhotoListingStudio({ online, etsyReady }: any) {
       <Pressable style={styles.secondaryButton} onPress={() => addPhotos(false)}><Text style={styles.secondaryButtonText}>Galeriden seç</Text></Pressable>
     </View>
     <Text style={styles.formHint}>Gün ışığında, sade zeminde çekin: önden, arkadan, doku veya damga yakın planı ve ölçü gösteren bir kare. Etsy'de 5 ve üzeri fotoğraf satışı artırır.</Text>
-    <Pressable style={[styles.analyzeButton, (analyzing || !online) && styles.primaryDisabled]} disabled={analyzing || !online} onPress={analyze}>{analyzing ? <ActivityIndicator color="white" /> : <Ionicons name="sparkles" size={18} color="white" />}<Text style={styles.primaryText}>{analyzing ? "Fotoğraflar inceleniyor…" : "Fotoğraflara bak, alanları doldur"}</Text></Pressable>
+    {!wizard && <Pressable style={[styles.analyzeButton, (analyzing || !online) && styles.primaryDisabled]} disabled={analyzing || !online} onPress={analyze}>{analyzing ? <ActivityIndicator color="white" /> : <Ionicons name="sparkles" size={18} color="white" />}<Text style={styles.primaryText}>{analyzing ? "Fotoğraflar inceleniyor…" : "Fotoğraflara bak, alanları doldur"}</Text></Pressable>}
+    {wizard && analyzing && <Text style={styles.formHint}>Yapay zekâ fotoğrafa bakıyor…</Text>}
+    </>}
+    {show(2) && <>
     {analysis && <View style={styles.analysisCard}>
       <Text style={styles.cardTitle}>Fotoğraftan anlaşılan</Text>
       <Text style={styles.analysisLine}>{analysis.nameTr}{analysis.productNounEn ? ` · ${analysis.productNounEn}` : ""} · %{Math.round(analysis.confidence * 100)} güven</Text>
@@ -2706,7 +2879,7 @@ function PhotoListingStudio({ online, etsyReady }: any) {
     <Text style={[styles.fieldLabel, { marginTop: 12 }]}>Ürün türü</Text>
     <ChipGroup options={PHOTO_KINDS} value={kind} onChange={chooseKind} />
     <Field label="Ürün adı (Türkçe)" value={nameTr} onChangeText={setNameTr} placeholder="ör. Krem tığ işi oversize kazak" />
-    <Field label="İngilizce ürün adı (boş bırakın, sistem bulur)" value={productNounEn} onChangeText={setProductNounEn} autoCapitalize="none" placeholder="crochet sweater = tığ işi kazak" />
+    {!wizard && <Field label="İngilizce ürün adı (boş bırakın, sistem bulur)" value={productNounEn} onChangeText={setProductNounEn} autoCapitalize="none" placeholder="crochet sweater = tığ işi kazak" />}
     {knit && <>
       <Text style={styles.fieldLabel}>Kim ördü?</Text>
       <ChipGroup options={KNIT_MAKER_OPTIONS} value={maker} onChange={setMaker} />
@@ -2744,19 +2917,31 @@ function PhotoListingStudio({ online, etsyReady }: any) {
         <Text style={styles.formHint}>Türkçe not yazarsanız İngilizce açıklamaya girmez; seçtiğiniz durum İngilizce cümleye çevrilir.</Text>
       </>}
     </>}
+    </>}
+    {show(3) && <>
     <Field label="Renkler (Türkçe yazabilirsiniz, virgülle)" value={colors} onChangeText={setColors} autoCapitalize="none" placeholder="krem, adaçayı yeşili, bordo" />
     <Field label="Öne çıkan özellikler (Türkçe yazabilirsiniz, virgülle)" value={attributes} onChangeText={setAttributes} autoCapitalize="none" placeholder="bol kesim, kare motif, püsküllü, telkari" />
     <Text style={styles.formHint}>Sistem bunları İngilizceye çevirir. Çeviremediği kelimeyi ilana koymaz ve size söyler; yanlış İngilizce yazılmaz.</Text>
+    </>}
+    {show(4) && <>
     <View style={{ flexDirection: "row", gap: 10 }}>
       <View style={{ flex: 1 }}><Field label="Elinize geçecek (TL)" value={priceTry} onChangeText={setPriceTry} keyboardType="decimal-pad" placeholder="2500" /></View>
       <View style={{ flex: 1 }}><Field label="ABD'ye kargo (TL)" value={shippingTry} onChangeText={setShippingTry} keyboardType="decimal-pad" placeholder="900" /></View>
       <View style={{ width: 70 }}><Field label="Adet" value={quantity} onChangeText={setQuantity} keyboardType="number-pad" /></View>
     </View>
     <Toggle label="Hazır, hemen gönderilebilir" value={readyToShip} onChange={setReadyToShip} />
+    {wizard && <Text style={styles.formHint}>Elinize geçecek: Etsy kesintileri ve kargo düşüldükten sonra size kalacak tutar. Etsy fiyatı buna göre hesaplanır. ABD'ye kargo: paketli ağırlığı PTT'ye ya da kargo firmasına söyleyip sorun. "Hazır" kapalıysa ürün sipariş gelince yapılır demektir.</Text>}
+    </>}
+    {show(5) && <>
     <Pressable style={[styles.analyzeButton, { marginTop: 12 }, (Boolean(progress) || !online) && styles.primaryDisabled]} disabled={Boolean(progress) || !online} onPress={prepare}>{progress ? <ActivityIndicator color="white" /> : <Ionicons name="search" size={18} color="white" />}<Text style={styles.primaryText}>{plan ? "Yeniden araştır" : "Etsy'de araştır ve ilanı hazırla"}</Text></Pressable>
     {!!progress && <Text style={styles.formHint}>{progress}</Text>}
     {plan && <EtsyPlanResult plan={plan} payload={payload} etsyReady={etsyReady} priceSourceLabel="Elinize geçecek tutar" prepareProduct={uploadPhotos} />}
-    {(plan || photos.length > 0) && <Pressable style={[styles.secondaryButton, { alignSelf: "flex-start", marginTop: 14 }]} onPress={reset}><Text style={styles.secondaryButtonText}>Yeni ürüne başla</Text></Pressable>}
+    </>}
+    {wizard && <View style={styles.wizardNav}>
+      {step > 1 && <Pressable style={styles.secondaryButton} onPress={() => goTo(step - 1)}><Text style={styles.secondaryButtonText}>← Geri</Text></Pressable>}
+      {step < WIZARD_STEPS.length && <Pressable style={[styles.primary, { flex: 1, marginBottom: 0 }, analyzing && styles.primaryDisabled]} disabled={analyzing} onPress={next}>{analyzing ? <ActivityIndicator color="white" /> : null}<Text style={styles.primaryText}>{step === 3 ? "İleri (isteğe bağlı adım)" : "İleri"}</Text><Ionicons name="arrow-forward" size={18} color="white" /></Pressable>}
+    </View>}
+    {(!wizard || step === WIZARD_STEPS.length) && (plan || photos.length > 0) && <Pressable style={[styles.secondaryButton, { alignSelf: "flex-start", marginTop: 14 }]} onPress={reset}><Text style={styles.secondaryButtonText}>Yeni ürüne başla</Text></Pressable>}
   </>;
 }
 
@@ -2877,6 +3062,15 @@ const styles = StyleSheet.create({
   formSafe: { flex: 1, backgroundColor: "#F5F2EA" },
   versionText: { color: "#8A948F", fontSize: 11, textAlign: "center", marginTop: 18 },
   versionMeta: { color: "#A3ACA7", fontSize: 10, textAlign: "center", marginTop: 3 },
+  homeHello: { fontSize: 22, fontWeight: "900", color: "#17221E", marginBottom: 12, marginTop: 4 },
+  homeTile: { flexDirection: "row", alignItems: "center", gap: 14, backgroundColor: "white", borderRadius: 18, padding: 16, marginBottom: 12, borderWidth: 1, borderColor: "#E7E3D9" },
+  homeTileIcon: { width: 48, height: 48, borderRadius: 16, backgroundColor: "#315B4C", alignItems: "center", justifyContent: "center" },
+  homeTileTitle: { fontSize: 17, fontWeight: "900", color: "#17221E" },
+  homeTileText: { fontSize: 13, color: "#5A655F", lineHeight: 19, marginTop: 3 },
+  stepBar: { flexDirection: "row", gap: 6, marginBottom: 8 },
+  stepDot: { flex: 1, height: 6, borderRadius: 3, backgroundColor: "#E1DDD3" },
+  stepDotActive: { backgroundColor: "#C88B47" },
+  wizardNav: { flexDirection: "row", alignItems: "center", gap: 10, marginTop: 16 },
   updateCheck: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, alignSelf: "center", marginTop: 10, paddingVertical: 8, paddingHorizontal: 14, borderRadius: 999, backgroundColor: "#E7EFEB" },
   updateCheckText: { color: "#315B4C", fontWeight: "800", fontSize: 12 },
   offlineCard: { backgroundColor: "#FFF7EA", borderRadius: 14, padding: 12, marginBottom: 12, gap: 10 },
