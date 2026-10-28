@@ -4,7 +4,8 @@ const ETSY_AUTHORIZE_ENDPOINT = "https://www.etsy.com/oauth/connect";
 const OAUTH_STATE_PREFIX = "etsy:oauth:";
 const TOKEN_KEY = "etsy:tokens";
 // shops_w: mağaza başlığı, duyuru, satış mesajları ve bölümler uygulamadan ayarlanabilsin diye.
-const OAUTH_SCOPES = ["shops_r", "shops_w", "listings_r", "listings_w", "transactions_r"];
+// transactions_w: sipariş takip numarasını Etsy'ye yazmak için (eski bağlantılarda yoksa kullanıcı izni yeniler).
+const OAUTH_SCOPES = ["shops_r", "shops_w", "listings_r", "listings_w", "transactions_r", "transactions_w"];
 
 type Fetcher = typeof fetch;
 
