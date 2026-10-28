@@ -152,6 +152,7 @@ test("physical Etsy draft uses shipping, processing, production partner, taxonom
     if (url.hostname === "cdn.shopier.example") return new Response(new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3]));
     if (url.pathname === "/v3/application/users/123/shops") return Response.json({ shop_id: 777, currency_code: "USD" });
     if (url.pathname.endsWith("/shipping-profiles")) return Response.json({ results: [{ shipping_profile_id: 55, is_deleted: false }] });
+    if (url.pathname.endsWith("/policies/return")) return Response.json({ results: [{ return_policy_id: 66, accepts_returns: true, return_deadline: 30 }] });
     if (url.pathname.endsWith("/readiness-state-definitions")) return Response.json({ results: [{ readiness_state_id: 8, readiness_state: "made_to_order" }, { readiness_state_id: 9, readiness_state: "ready_to_ship" }] });
     if (url.pathname.endsWith("/production-partners")) return Response.json({ results: [{ production_partner_id: 31, partner_name: "Atölye" }] });
     if (url.pathname === "/v3/application/seller-taxonomy/nodes") return Response.json({ results: [{ id: 1, name: "Accessories", children: [{ id: 2, name: "Prayer Beads", children: [] }] }] });
@@ -173,6 +174,7 @@ test("physical Etsy draft uses shipping, processing, production partner, taxonom
   assert.equal(form.get("when_made"), "2020_2026");
   assert.equal(form.get("shipping_profile_id"), "55");
   assert.equal(form.get("readiness_state_id"), "9");
+  assert.equal(form.get("return_policy_id"), "66", "physical listings carry the shop's return policy");
   assert.equal(form.get("production_partner_ids"), "31");
   assert.equal(form.get("taxonomy_id"), "2");
   assert.equal(form.get("price"), "189.99");

@@ -30,6 +30,8 @@ import { buildProductPlan, createEtsyPhysicalDraft, detectProductSignals, getUsd
 import { analyzeListingPhotos, PhotoListingError } from "./photo-listing.js";
 import { buildMarketingPlan, MarketingPlanError, normalizeMarketingInput } from "./marketing-plan.js";
 import { addEtsyTracking, listEtsyOrders, listShippingCarriers, normalizeTrackingInput } from "./etsy-orders.js";
+import { createReturnPolicy, createShippingProfile, normalizeReturnPolicyInput, normalizeShippingProfileInput, shopReadiness } from "./etsy-setup.js";
+import { normalizeScorecardInput, scoreListing, scoreShopListings } from "./listing-scorecard.js";
 import { assistBuyerMessage, MessageAssistError, normalizeMessageInput } from "./message-assist.js";
 import { explainListingTr } from "./tr-glossary.js";
 import { turkishFor, turkishForPhrases } from "./phrase-tr.js";
@@ -590,6 +592,21 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
     if (request.method === "POST" && url.pathname === "/api/explain-tr") {
       return json(200, explainListingTr(await readBody(request)));
     }
+    if (request.method === "POST" && url.pathname === "/api/listings/scorecard") {
+      return json(200, scoreListing(normalizeScorecardInput(await readBody(request))));
+    }
+    if (request.method === "GET" && url.pathname === "/api/etsy/listings/scorecard") {
+      return json(200, await scoreShopListings(env));
+    }
+    if (request.method === "GET" && url.pathname === "/api/etsy/readiness") {
+      return json(200, await shopReadiness(env));
+    }
+    if (request.method === "POST" && url.pathname === "/api/etsy/shipping-profile") {
+      return json(200, await createShippingProfile(env, normalizeShippingProfileInput(await readBody(request))));
+    }
+    if (request.method === "POST" && url.pathname === "/api/etsy/return-policy") {
+      return json(200, await createReturnPolicy(env, normalizeReturnPolicyInput(await readBody(request))));
+    }
     if (request.method === "GET" && url.pathname === "/api/etsy/orders") {
       return json(200, await listEtsyOrders(env));
     }
@@ -603,7 +620,13 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
       return json(200, await assistBuyerMessage(normalizeMessageInput(await readBody(request)), env));
     }
     if (request.method === "POST" && url.pathname === "/api/marketing/plan") {
-      return json(200, { plan: await buildMarketingPlan(normalizeMarketingInput(await readBody(request)), env) });
+      const input = normalizeMarketingInput(await readBody(request));
+      // Etsy reklam eşiği dolar fiyata bakar; telefon fiyatı TL gönderir, güncel kurla çevrilir.
+      if (input.channel === "etsy" && input.priceTry && !input.priceUsd) {
+        const rate = await getUsdTryRate(env.ETSY_OAUTH as unknown as KeyValueStore | undefined).catch(() => undefined);
+        if (rate) input.priceUsd = Math.round((input.priceTry / rate) * 100) / 100;
+      }
+      return json(200, { plan: await buildMarketingPlan(input, env) });
     }
     if (request.method === "POST" && url.pathname === "/api/products/photo-analyze") {
       const input = await readBody(request);
@@ -944,14 +967,16 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
     if (error instanceof MessageAssistError) return json(error.status, { error: error.message });
     if (error instanceof PinterestError) return json(error.status, { error: error.message, code: error.code });
     if (error instanceof EtsyIntegrationError) {
-      if (error.code === "NOT_CONFIGURED") return json(503, { error: "Etsy keystring ve shared secret henüz sunucuya eklenmedi." });
-      if (error.code === "STORAGE_NOT_CONFIGURED") return json(503, { error: "Etsy güvenli token deposu henüz bağlanmadı." });
-      if (error.code === "NOT_CONNECTED") return json(error.status === 409 ? 409 : 401, { error: error.status === 409 ? "Etsy mağazası henüz açılmadı." : "Etsy hesabı henüz bağlanmadı." });
-      if (error.code === "AUTH_FAILED") return json(401, { error: error.message });
-      if (error.code === "RATE_LIMITED") return json(429, { error: error.message });
-      if (error.code === "VALIDATION_FAILED") return json(400, { error: error.message });
-      if (error.code === "NOT_FOUND") return json(404, { error: error.message });
-      return json(502, { error: "Etsy geçici olarak yanıt vermedi." });
+      // code: uygulama hatanın türünü Türkçe metinden değil bu koddan anlar (ör. mağaza yok → boş durum).
+      const code = error.code;
+      if (code === "NOT_CONFIGURED") return json(503, { error: "Etsy keystring ve shared secret henüz sunucuya eklenmedi.", code });
+      if (code === "STORAGE_NOT_CONFIGURED") return json(503, { error: "Etsy güvenli token deposu henüz bağlanmadı.", code });
+      if (code === "NOT_CONNECTED") return json(error.status === 409 ? 409 : 401, { error: error.status === 409 ? "Etsy mağazası henüz açılmadı." : "Etsy hesabı henüz bağlanmadı.", code });
+      if (code === "AUTH_FAILED") return json(401, { error: error.message, code });
+      if (code === "RATE_LIMITED") return json(429, { error: error.message, code });
+      if (code === "VALIDATION_FAILED") return json(400, { error: error.message, code });
+      if (code === "NOT_FOUND") return json(404, { error: error.message, code });
+      return json(502, { error: "Etsy geçici olarak yanıt vermedi.", code });
     }
     if (error instanceof ShopierIntegrationError) {
       if (error.code === "NOT_CONFIGURED") return json(503, { error: "Shopier erişim anahtarı henüz sunucuya eklenmedi." });

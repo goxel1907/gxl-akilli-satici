@@ -67,21 +67,26 @@ export async function turkishForPhrases(phrases: string[], env: AiRuntimeEnv, st
         JSON.stringify(batch)
       ].join("\n")
     }, env);
-    let added = 0;
+    const fresh: Record<string, string> = {};
     for (const item of raw.items || []) {
       const en = normalize(String(item.en || ""));
       const tr = String(item.tr || "").replace(/\s+/g, " ").trim();
       if (!batch.includes(en) || !tr || tr.length > 90 || /[\n<>{}]/.test(tr)) continue;
       out[en] = tr;
-      cache[en] = tr;
-      added += 1;
+      fresh[en] = tr;
     }
-    if (added && store) {
-      const entries = Object.entries(cache);
+    // Yapay zekânın atladığı ya da geçersiz döndürdüğü ifade için sözlük karşılığı saklanır; her açılışta
+    // yeniden sorulup ekranı bekletmez.
+    for (const phrase of batch) if (!fresh[phrase]) fresh[phrase] = out[phrase];
+    if (store) {
+      // Aynı anda gelen başka isteğin yazdıklarını silmemek için yazmadan önce son hâl yeniden okunur.
+      let latest: Record<string, string> = {};
+      try { latest = JSON.parse((await store.get(CACHE_KEY)) || "{}") || {}; } catch { latest = {}; }
+      const entries = Object.entries({ ...latest, ...fresh });
       await store.put(CACHE_KEY, JSON.stringify(Object.fromEntries(entries.slice(-MAX_CACHE_ENTRIES))));
     }
   } catch {
-    // Sözlük karşılığı kalır; sonraki açılışta yeniden denenir.
+    // Yapay zekâ yanıt vermedi: sözlük karşılığı kalır; sonraki açılışta yeniden denenir.
   }
   return out;
 }

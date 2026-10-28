@@ -39,9 +39,12 @@ function receipt(id: number, shipInDays: number, extra: Record<string, unknown> 
 
 test("orders show the ship-by date in plain words, latest problems first", () => {
   assert.equal(summarizeReceipt(receipt(1, -1.5), NOW).urgency, "late");
-  assert.equal(summarizeReceipt(receipt(1, -1.5), NOW).daysLeft, -1);
-  assert.equal(summarizeReceipt(receipt(2, 0.3), NOW).urgency, "soon", "a few hours left counts as 1 day");
-  assert.equal(summarizeReceipt(receipt(2, -0.2), NOW).urgency, "today");
+  assert.equal(summarizeReceipt(receipt(1, -1.5), NOW).daysLeft, -2);
+  assert.equal(summarizeReceipt(receipt(2, -0.2), NOW).urgency, "late", "a ship-by time a few hours ago is already late, not 'today'");
+  assert.equal(summarizeReceipt(receipt(2, -0.2), NOW).daysLeft, -1);
+  assert.equal(summarizeReceipt(receipt(2, 0.3), NOW).urgency, "today", "less than 24 hours left means ship today");
+  assert.equal(summarizeReceipt(receipt(2, 1.5), NOW).daysLeft, 1);
+  assert.equal(summarizeReceipt(receipt(2, 1.5), NOW).urgency, "soon");
   assert.equal(summarizeReceipt(receipt(3, 5), NOW).urgency, "ok");
   const shipped = summarizeReceipt(receipt(4, 3, { is_shipped: true, shipments: [{ carrier_name: "PTT", tracking_code: "RR123456789TR" }] }), NOW);
   assert.equal(shipped.urgency, "done");
@@ -59,16 +62,25 @@ test("the orders list reads paid Etsy receipts and says whether tracking can be 
   const kv = memoryKv();
   await kv.store.put("etsy:tokens", JSON.stringify({ accessToken: "123.token", refreshToken: "r", expiresAt: Date.now() + 3_600_000, scope: "shops_r transactions_r", userId: "123" }));
   const env = { ETSY_API_KEY: "key", ETSY_SHARED_SECRET: "secret", ETSY_OAUTH: kv.store };
-  let query: URLSearchParams | undefined;
+  const queries: URLSearchParams[] = [];
   const fetcher = (async (input: string | URL | Request) => {
     const url = new URL(String(input));
     if (url.pathname === "/v3/application/users/123/shops") return Response.json({ shop_id: 777, shop_name: "GXLMarketStudio" });
-    if (url.pathname === "/v3/application/shops/777/receipts") { query = url.searchParams; return Response.json({ results: [receipt(10, 4), receipt(11, -1), receipt(12, 1)] }); }
+    if (url.pathname === "/v3/application/shops/777/receipts") {
+      queries.push(url.searchParams);
+      return Response.json({ results: url.searchParams.get("was_shipped") === "false" ? [receipt(10, 4), receipt(11, -1), receipt(12, 1.5)] : [receipt(10, 4)] });
+    }
     return Response.json({}, { status: 404 });
   }) as typeof fetch;
   const result = await listEtsyOrders(env, fetcher, NOW);
-  assert.equal(query?.get("was_paid"), "true");
-  assert.equal(query?.get("was_canceled"), "false");
+  assert.equal(queries.length, 2, "all unshipped orders plus the latest shipped ones");
+  for (const query of queries) {
+    assert.equal(query.get("was_paid"), "true");
+    assert.equal(query.get("was_canceled"), "false");
+  }
+  const unshipped = queries.find((query) => query.get("was_shipped") === "false");
+  assert.equal(unshipped?.get("limit"), "100");
+  assert.equal(unshipped?.get("sort_order"), "asc", "the oldest (most overdue) unshipped orders are read first");
   assert.deepEqual(result.orders.map((order) => order.receiptId), [11, 12, 10], "late first, then the closest deadline");
   assert.deepEqual(result.counts, { toShip: 3, late: 1 });
   assert.equal(result.canAddTracking, false, "an old connection without transactions_w must be renewed");

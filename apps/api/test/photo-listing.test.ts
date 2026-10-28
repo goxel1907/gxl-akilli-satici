@@ -233,6 +233,7 @@ test("the Etsy draft reads the app's own photos from storage instead of fetching
     if (url.hostname === "gxl.example") throw new Error("the Worker must not fetch its own media URL");
     if (url.pathname === "/v3/application/users/123/shops") return Response.json({ shop_id: 777, currency_code: "USD" });
     if (url.pathname.endsWith("/shipping-profiles")) return Response.json({ results: [{ shipping_profile_id: 55 }] });
+    if (url.pathname.endsWith("/policies/return")) return Response.json({ results: [{ return_policy_id: 66, accepts_returns: true, return_deadline: 30 }] });
     if (url.pathname.endsWith("/readiness-state-definitions")) return Response.json({ results: [{ readiness_state_id: 9, readiness_state: "ready_to_ship" }] });
     if (url.pathname === "/v3/application/seller-taxonomy/nodes") return Response.json({ results: [{ id: 1, name: "Clothing", children: [{ id: 3, name: "Women's Clothing", children: [{ id: 20, name: "Sweaters", children: [] }] }] }] });
     if (url.pathname === "/v3/application/shops/777/listings") { forms.listing = init?.body as URLSearchParams; return Response.json({ listing_id: 902 }, { status: 201 }); }

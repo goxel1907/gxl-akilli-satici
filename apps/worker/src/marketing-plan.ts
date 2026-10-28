@@ -247,8 +247,8 @@ function etsyAds(input: MarketingPlanInput, margin?: number): ChannelAdvice {
     stopRuleTr,
     stepsTr: steps,
     copy: [],
-    openUrl: "https://www.etsy.com/your/shops/me/advertising",
-    openLabelTr: "Etsy Ads sayfasını aç"
+    openUrl: "https://www.etsy.com/your/shops/me/dashboard",
+    openLabelTr: "Etsy Mağaza Yöneticisini aç"
   });
 }
 
@@ -273,8 +273,8 @@ function etsyOffers(): ChannelAdvice {
       "'Thank you' (teşekkür) kuponuyla ilk alıcıya ikinci alışveriş için %10 verin."
     ],
     copy: [],
-    openUrl: "https://www.etsy.com/your/shops/me/sales-discounts",
-    openLabelTr: "İndirimler sayfasını aç"
+    openUrl: "https://www.etsy.com/your/shops/me/dashboard",
+    openLabelTr: "Etsy Mağaza Yöneticisini aç"
   });
 }
 

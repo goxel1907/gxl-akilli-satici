@@ -1,6 +1,7 @@
 import { evaluateMarketplacePolicies, type ProductOrigin, type RiskFlag } from "../../api/src/marketplace-policy.js";
 import { generateStructuredObject, hasAiProvider, type AiRuntimeEnv } from "../../api/src/structured-ai.js";
 import { etsyRequest, EtsyIntegrationError, getConnectedShop, type EtsyRuntimeEnv } from "./etsy.js";
+import { returnPolicies, shippingProfiles } from "./etsy-setup.js";
 import type { TrendResult } from "./etsy-trends.js";
 import { normalizeEtsyTags, normalizeEtsyTitle, validateEtsyListingText } from "./pattern-studio.js";
 import { termsToEnglish } from "./tr-glossary.js";
@@ -527,7 +528,31 @@ function buildTags(input: ProductPlanInput, signals: ProductSignals, primary: st
     signals.isTesbih ? "islamic gift" : "",
     signals.isTesbih ? "muslim gift for him" : ""
   ];
-  return normalizeEtsyTags(withoutFalseAntique(input, [primary, ...candidates, ...ranked, ...generated].filter(Boolean)));
+  // Canlı Etsy taraması yoksa liste 13'ü doldurmaz; Etsy'nin izin verdiği 13 etiketin boş kalanı ürüne uyan,
+  // doğru ve alıcının yazdığı genel ifadelerle doldurulur (sona eklenir; yalnız yer kalırsa kullanılır).
+  const decade = signals.isVintage && input.yearMade ? `${Math.floor(input.yearMade / 10) * 10}s` : "";
+  // "cozy" yalnız sıcak tutan örgüler için doğru bir sözdür (yazlık bluz için değil).
+  const WARM_KNITS = new Set(["sweater", "cardigan", "beanie", "scarf", "shawl", "blanket", "poncho", "vest", "mittens"]);
+  const midCentury = signals.isVintage && input.yearMade && input.yearMade >= 1945 && input.yearMade <= 1975;
+  const fillers = signals.isTesbih ? [
+    input.beadCount ? `${input.beadCount} bead tasbih` : "",
+    "dhikr beads", "muslim prayer beads", "turkish tasbih", "muslim gift", "eid gift", "ramadan gift", "tesbih"
+  ] : signals.isVintage ? [
+    decade ? `${decade} ${lastNoun}` : "",
+    signals.material ? `vintage ${signals.material.short}` : "",
+    midCentury ? `mid century ${lastNoun}` : "",
+    `retro ${lastNoun}`, "vintage gift", "vintage find", "vintage collectible", "gift for collector"
+  ] : signals.isKnitwear ? [
+    input.colors[1] ? `${input.colors[1]} ${lastNoun}` : "",
+    signals.attributes[1] ? `${signals.attributes[1]} ${lastNoun}` : "",
+    signals.craft === "crochet" ? "crochet clothing" : "hand knit clothing",
+    "handmade clothing", WARM_KNITS.has(lastNoun) ? `cozy ${lastNoun}` : "", "slow fashion", "handmade gift",
+    input.audience === "women" ? "gift for mom" : ""
+  ] : [
+    input.origin === "made_by_seller" && signals.noun !== "item" ? `handmade ${lastNoun}` : "",
+    signals.noun !== "item" ? `${lastNoun} gift` : "", "turkish gift", "unique gift", "gift idea"
+  ];
+  return normalizeEtsyTags(withoutFalseAntique(input, [primary, ...candidates, ...ranked, ...generated, ...fillers].filter(Boolean)));
 }
 
 function buildTitle(input: ProductPlanInput, signals: ProductSignals, primary: string, candidates: string[], tags: string[]): string {
@@ -561,7 +586,9 @@ function buildTitle(input: ProductPlanInput, signals: ProductSignals, primary: s
   const originSegment = input.origin === "vintage" && input.yearMade
     ? (primaryWords.has("vintage") ? decade : `Vintage ${decade}`)
     : input.origin === "made_by_seller" ? "Handmade in Türkiye" : "";
-  const giftTag = tags.find((tag) => tag.includes("gift"));
+  // Hediye ifadesi başlığa yalnız yeni bir kelime getiriyorsa eklenir ("Vintage Gift" ikinci kez "vintage" demez).
+  // Vintage başlığında hediye ifadesi yer kaplar; dönem ve ölçü daha önemlidir.
+  const giftTag = signals.isVintage ? undefined : tags.find((tag) => tag.includes("gift") && tag.split(/\s+/).some((word) => word !== "gift" && !said.has(word)));
   const segments = [
     signals.isKnitwear && !descriptors.length ? `${titleCase(primary)}${audience}` : titleCase(primary),
     ...secondary.map(titleCase),
@@ -756,9 +783,21 @@ export async function createEtsyPhysicalDraft(
     throw new EtsyIntegrationError("VALIDATION_FAILED", `Mağaza para birimi ${currency}; şimdilik yalnızca USD ve TL destekleniyor.`, 400);
   }
 
-  const profiles = await etsyRequest<{ results?: Array<{ shipping_profile_id?: number; is_deleted?: boolean }> }>(env, `/application/shops/${shop.shopId}/shipping-profiles`, {}, fetcher);
-  const shippingProfile = (profiles.results || []).find((profile) => profile.shipping_profile_id && !profile.is_deleted);
-  if (!shippingProfile) throw new EtsyIntegrationError("VALIDATION_FAILED", "Etsy'de önce bir kargo profili oluşturun: Shop Manager → Settings → Shipping settings. ABD için ücretsiz kargo seçin; kargo bedeli fiyata dahil edildi.", 400);
+  const shippingProfile = (await shippingProfiles(env, shop.shopId, fetcher))[0];
+  if (!shippingProfile) throw new EtsyIntegrationError("VALIDATION_FAILED", "Etsy'de kargo profili yok. Mağaza hazırlığı listesindeki 'Kargo profili oluştur' ile tek dokunuşla oluşturun (basit modda Yardım, uzman modda Etsy → Kılavuz; ABD'ye ücretsiz kargo, kargo bedeli fiyata dahil).", 400);
+
+  // Fiziksel ilanın yayına girmesi için iade politikası gerekir; yoksa taslak yine açılır, satıcıya söylenir.
+  const draftWarnings: string[] = [];
+  let returnPolicyId: number | undefined;
+  let policyReadFailed = false;
+  try {
+    returnPolicyId = Number((await returnPolicies(env, shop.shopId, fetcher))[0]?.return_policy_id) || undefined;
+  } catch (error) {
+    if (error instanceof EtsyIntegrationError && error.code === "AUTH_FAILED") throw error;
+    policyReadFailed = true;
+  }
+  if (policyReadFailed) draftWarnings.push("İade politikası Etsy'den okunamadı ve taslağa eklenmedi. Yayınlamadan önce Etsy'de taslağı açıp iade politikasını seçin.");
+  else if (!returnPolicyId) draftWarnings.push("İade politikası yok: yayınlamadan önce Mağaza hazırlığı listesinden 'İade politikası oluştur' (basit modda Yardım, uzman modda Etsy → Kılavuz).");
 
   let readinessStateId: number | undefined;
   try {
@@ -793,6 +832,7 @@ export async function createEtsyPhysicalDraft(
     shipping_profile_id: String(shippingProfile.shipping_profile_id)
   });
   if (readinessStateId) form.set("readiness_state_id", String(readinessStateId));
+  if (returnPolicyId) form.set("return_policy_id", String(returnPolicyId));
   if (productionPartnerId) form.set("production_partner_ids", String(productionPartnerId));
   if (tags.length) form.set("tags", tags.join(","));
   const materials = listing.materials.map((value) => value.replace(/[^\p{L}\p{Nd}\p{Zs}]/gu, " ").trim()).filter(Boolean);
@@ -806,7 +846,7 @@ export async function createEtsyPhysicalDraft(
   if (!listingId) throw new EtsyIntegrationError("UPSTREAM_FAILED", "Etsy taslak ilan numarası döndürmedi.", 502);
   if (mappingKey) await store.put(mappingKey, String(listingId));
 
-  const warnings: string[] = [];
+  const warnings: string[] = [...draftWarnings];
   for (const [index, url] of input.imageUrls.entries()) {
     try {
       const stored = readMedia ? await readMedia(url) : undefined;
