@@ -26,3 +26,14 @@ test("every APK build profile listens to an update channel and updates are publi
   assert.match(workflow, /^\s+branch: preview$/m, "the workflow must publish to the branch the preview APK listens to");
   assert.match(workflow, /^\s+platform: android$/m);
 });
+
+// Geçici internet kesintisinde kayıtlı bağlantı anahtarı silinmemeli; silme yalnız sunucu anahtarı reddedince
+// ve onay sorulduktan sonra yapılır. Güncelleme gelmediğinde nedeni Özet'teki düğmeyle görülebilmeli.
+test("a dropped connection offers a retry and never deletes the saved key without asking", () => {
+  const app = readFileSync(new URL("../../mobile/App.tsx", import.meta.url), "utf8");
+  assert.doesNotMatch(app, /onPress=\{resetApiToken\}/, "deleting the saved key must go through the confirmation dialog");
+  assert.match(app, /reason === "key" && <Pressable style=\{styles\.offlineButton\} onPress=\{onResetKey\}>/);
+  assert.match(app, /response\.status === 401 \? "key" : "server"/);
+  assert.match(app, /<OfflineNotice reason=\{offlineReason\} busy=\{reconnecting\} onRetry=\{reconnect\} onResetKey=\{confirmResetToken\} \/>/);
+  assert.match(app, /<UpdateCheckButton \/>/);
+});
