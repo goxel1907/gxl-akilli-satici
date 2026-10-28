@@ -212,7 +212,11 @@ interface EtsyListingRow {
   converted_price?: EtsyMoney;
 }
 
+// Bir tarama 6 saat taze sayılır; daha eskisi istendiğinde yeniden taranır.
 const CACHE_TTL_SECONDS = 6 * 60 * 60;
+// Otomatik keşif 30 dakikada bir tek arama tarar; kuyruktaki her arama ancak 1-2 günde bir yenilenir.
+// Sonuç 6 saatte silinseydi trend listesi çoğu zaman boş ("–") görünürdü; son sonuç 8 gün saklanır ve yaşıyla gösterilir.
+const KEEP_SECONDS = 8 * 24 * 60 * 60;
 const FORCE_REFRESH_AFTER_MS = 30 * 60 * 1000;
 const PAGE_ONE_SIZE = 48;
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -405,7 +409,7 @@ export async function scanTrend(
     ...scoreTrend(keyword, payload, now, niche?.group || input.group || inferTrendGroup(keyword)),
     ...(niche ? { nicheId: niche.id, labelTr: niche.labelTr, craft: niche.craft, ...(niche.kind ? { kind: niche.kind } : {}) } : {})
   };
-  if (store) await store.put(cacheKey(keyword), JSON.stringify(result), { expirationTtl: CACHE_TTL_SECONDS });
+  if (store) await store.put(cacheKey(keyword), JSON.stringify(result), { expirationTtl: KEEP_SECONDS });
   return result;
 }
 

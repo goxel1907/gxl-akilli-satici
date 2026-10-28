@@ -791,7 +791,9 @@ function ProductForm({ visible, onClose, onSave }: any) {
   </Modal>;
 }
 
-function Field({ label, ...props }: any) { return <View style={styles.field}><Text style={styles.fieldLabel}>{label}</Text><TextInput style={styles.input} placeholderTextColor="#9AA39F" {...props} /></View>; }
+// Alanların çoğu İngilizce ilan metni taşır; telefonun Türkçe yazım denetimi her kelimenin altını kırmızı çizip
+// hata varmış gibi gösterir, otomatik düzeltme de İngilizce kelimeyi Türkçeye çevirebilir. İkisi de kapalı.
+function Field({ label, ...props }: any) { return <View style={styles.field}><Text style={styles.fieldLabel}>{label}</Text><TextInput style={styles.input} placeholderTextColor="#9AA39F" spellCheck={false} autoCorrect={false} {...props} /></View>; }
 
 function Empty({ icon, title, text }: any) { return <View style={styles.empty}><Ionicons name={icon} size={42} color="#315B4C" /><Text style={styles.cardTitle}>{title}</Text><Text style={styles.muted}>{text}</Text></View>; }
 
@@ -854,6 +856,14 @@ function scoreStyle(score?: number) {
   return score >= 65 ? styles.scoreHigh : score >= 45 ? styles.scoreMid : styles.scoreLow;
 }
 
+// Otomatik keşif her aramayı 1-2 günde bir yeniler; puanın ne kadar eski olduğu kartta yazılır.
+function scanAgeText(scannedAt?: string): string {
+  const time = scannedAt ? Date.parse(scannedAt) : NaN;
+  if (!Number.isFinite(time)) return "";
+  const hours = Math.max(0, Math.floor((Date.now() - time) / 3_600_000));
+  return hours < 1 ? " · az önce taranmış" : hours < 24 ? ` · ${hours} saat önce taranmış` : ` · ${Math.floor(hours / 24)} gün önce taranmış`;
+}
+
 function TrendCard({ title, result, expanded, onToggle, onUse, scanning, group, trendsRange = "today 12-m" }: any) {
   const activeGroup = result?.group || group || "patterns";
   const isPattern = activeGroup === "patterns";
@@ -861,7 +871,7 @@ function TrendCard({ title, result, expanded, onToggle, onUse, scanning, group, 
   const keyword = result?.keyword || "";
   return <View style={styles.card}>
     <Pressable style={styles.shopierProductTop} onPress={onToggle}>
-      <View style={{ flex: 1 }}><Text style={styles.cardTitle}>{title}</Text><Text style={styles.small}>{result?.keyword || ""}{result?.cached ? " · önbellek" : ""}</Text></View>
+      <View style={{ flex: 1 }}><Text style={styles.cardTitle}>{title}</Text><Text style={styles.small}>{result?.keyword || ""}{scanAgeText(result?.scannedAt)}</Text></View>
       {scanning ? <ActivityIndicator color="#A86B2E" /> : <View style={[styles.scoreBadge, scoreStyle(result?.score)]}><Text style={styles.scoreBadgeText}>{result ? result.score : "—"}</Text></View>}
     </Pressable>
     {!!result && <>
@@ -999,7 +1009,7 @@ function TrendPanel({ online, onUse }: any) {
     <View style={styles.guardrail}><Ionicons name="information-circle-outline" size={20} color="#315B4C" /><Text style={[styles.guardrailText, { flex: 1 }]}>{board?.method || "Etsy resmî aramasındaki üst ilanlar puanlanır. Etsy satış adedini paylaşmadığı için puan tahmindir."}</Text></View>
     {board && !board.configured && <Text style={styles.shopierBlocker}>Etsy API anahtarı (keystring ve shared secret) sunucuya eklenince tarama başlar.</Text>}
     <View style={styles.chatInputRow}>
-      <TextInput style={styles.chatInput} value={keyword} onChangeText={setKeyword} placeholder="Arama tara (Google Trends ifadesi de olur): crochet bag pattern, misbaha" placeholderTextColor="#9AA39F" autoCapitalize="none" />
+      <TextInput style={styles.chatInput} value={keyword} onChangeText={setKeyword} placeholder="Arama tara (Google Trends ifadesi de olur): crochet bag pattern, misbaha" placeholderTextColor="#9AA39F" spellCheck={false} autoCorrect={false} autoCapitalize="none" />
       <Pressable style={styles.sendButton} onPress={scanKeyword} disabled={!online || Boolean(scanning)}><Ionicons name="search" size={19} color="white" /></Pressable>
     </View>
     {custom.map((result) => <TrendCard key={`custom:${result.keyword}`} title={`Arama: ${result.keyword}`} result={result} expanded={expanded === `custom:${result.keyword}`} onToggle={() => setExpanded(expanded === `custom:${result.keyword}` ? undefined : `custom:${result.keyword}`)} onUse={() => use({ keyword: result.keyword }, result)} />)}
