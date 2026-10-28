@@ -1,4 +1,4 @@
-import { etsyGrantedScopes, etsyRequest, EtsyIntegrationError, getConnectedShop, type EtsyRuntimeEnv } from "./etsy.js";
+import { etsyConnection, etsyRequest, EtsyIntegrationError, getConnectedShop, type EtsyRuntimeEnv } from "./etsy.js";
 
 type Fetcher = typeof fetch;
 
@@ -27,7 +27,8 @@ const rows = (payload: unknown): Row[] => {
   return Array.isArray(root.results) ? root.results.filter((row): row is Row => Boolean(row) && typeof row === "object") : [];
 };
 
-async function shippingProfiles(env: EtsyRuntimeEnv, shopId: number, fetcher: Fetcher) {
+// Kullanılabilir (silinmemiş) kargo profilleri; hazırlık listesi ve ilan taslağı aynı kuralı kullanır.
+export async function shippingProfiles(env: EtsyRuntimeEnv, shopId: number, fetcher: Fetcher = fetch) {
   return rows(await etsyRequest(env, `/application/shops/${shopId}/shipping-profiles`, {}, fetcher)).filter((row) => row.shipping_profile_id && row.is_deleted !== true);
 }
 
@@ -37,19 +38,20 @@ export async function returnPolicies(env: EtsyRuntimeEnv, shopId: number, fetche
 
 export async function shopReadiness(env: EtsyRuntimeEnv, fetcher: Fetcher = fetch): Promise<{ items: ReadinessItem[]; done: number; total: number }> {
   const items: ReadinessItem[] = [];
-  const scopes = await etsyGrantedScopes(env).catch(() => [] as string[]);
-  if (!scopes.length) {
+  const connection = await etsyConnection(env).catch(() => ({ connected: false, scopes: [] as string[], scopesKnown: false }));
+  const scopes = connection.scopes;
+  if (!connection.connected) {
     items.push({ id: "account", titleTr: "Etsy hesabını uygulamaya bağla", state: "todo", detailTr: "Etsy'de giriş yapıp uygulamaya izin verin. Şifreniz uygulamaya gelmez.", action: "connect" });
   } else {
     items.push({ id: "account", titleTr: "Etsy hesabı bağlı", state: "done", detailTr: "Uygulama Etsy hesabınıza izinle bağlı." });
-    const missing = REQUIRED_SCOPES.filter((scope) => !scopes.includes(scope));
+    const missing = connection.scopesKnown ? REQUIRED_SCOPES.filter((scope) => !scopes.includes(scope)) : REQUIRED_SCOPES;
     items.push(missing.length
       ? { id: "permissions", titleTr: "Etsy iznini yenile", state: "todo", detailTr: "Uygulamaya yeni izinler eklendi (ilan, mağaza ayarı, sipariş kargo bilgisi). Bir kez yenileyip Etsy'de onaylayın.", action: "reauth" }
       : { id: "permissions", titleTr: "İzinler güncel", state: "done", detailTr: "İlan, mağaza ayarı ve sipariş izinleri verilmiş." });
   }
 
   let shop: Awaited<ReturnType<typeof getConnectedShop>> | undefined;
-  if (scopes.length) {
+  if (connection.connected) {
     try {
       shop = await getConnectedShop(env, fetcher);
     } catch (error) {

@@ -136,11 +136,11 @@ export function scoreListing(input: ScorecardInput): Scorecard {
 // Mağazadaki yayında ve taslak ilanların karnesi (en düşük puan önce).
 export async function scoreShopListings(env: EtsyRuntimeEnv, fetcher: Fetcher = fetch) {
   const shop = await getConnectedShop(env, fetcher);
-  const listings: Array<Record<string, unknown>> = [];
-  for (const state of ["active", "draft"]) {
-    const payload = await etsyRequest<{ results?: Array<Record<string, unknown>> }>(env, `/application/shops/${shop.shopId}/listings`, { query: { state, limit: 25, includes: "Images" } }, fetcher);
-    for (const row of payload.results || []) listings.push({ ...row, _state: state });
-  }
+  const pages = await Promise.all(["active", "draft"].map(async (state) => {
+    const payload = await etsyRequest<{ results?: Array<Record<string, unknown>> }>(env, `/application/shops/${shop.shopId}/listings`, { query: { state, limit: 100, includes: "Images" } }, fetcher);
+    return (payload.results || []).map((row) => ({ ...row, _state: state }));
+  }));
+  const listings: Array<Record<string, unknown>> = pages.flat();
   const items = listings.map((row) => {
     const price = row.price && typeof row.price === "object" ? row.price as Record<string, unknown> : {};
     const card = scoreListing({

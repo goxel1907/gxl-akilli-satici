@@ -1,7 +1,7 @@
 import { evaluateMarketplacePolicies, type ProductOrigin, type RiskFlag } from "../../api/src/marketplace-policy.js";
 import { generateStructuredObject, hasAiProvider, type AiRuntimeEnv } from "../../api/src/structured-ai.js";
 import { etsyRequest, EtsyIntegrationError, getConnectedShop, type EtsyRuntimeEnv } from "./etsy.js";
-import { returnPolicies } from "./etsy-setup.js";
+import { returnPolicies, shippingProfiles } from "./etsy-setup.js";
 import type { TrendResult } from "./etsy-trends.js";
 import { normalizeEtsyTags, normalizeEtsyTitle, validateEtsyListingText } from "./pattern-studio.js";
 import { termsToEnglish } from "./tr-glossary.js";
@@ -781,8 +781,7 @@ export async function createEtsyPhysicalDraft(
     throw new EtsyIntegrationError("VALIDATION_FAILED", `Mağaza para birimi ${currency}; şimdilik yalnızca USD ve TL destekleniyor.`, 400);
   }
 
-  const profiles = await etsyRequest<{ results?: Array<{ shipping_profile_id?: number; is_deleted?: boolean }> }>(env, `/application/shops/${shop.shopId}/shipping-profiles`, {}, fetcher);
-  const shippingProfile = (profiles.results || []).find((profile) => profile.shipping_profile_id && !profile.is_deleted);
+  const shippingProfile = (await shippingProfiles(env, shop.shopId, fetcher))[0];
   if (!shippingProfile) throw new EtsyIntegrationError("VALIDATION_FAILED", "Etsy'de kargo profili yok. Mağaza hazırlığı listesindeki 'Kargo profili oluştur' ile tek dokunuşla oluşturun (basit modda Yardım, uzman modda Etsy → Kılavuz; ABD'ye ücretsiz kargo, kargo bedeli fiyata dahil).", 400);
 
   // Fiziksel ilanın yayına girmesi için iade politikası gerekir; yoksa taslak yine açılır, satıcıya söylenir.

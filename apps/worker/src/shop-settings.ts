@@ -1,4 +1,4 @@
-import { etsyGrantedScopes, etsyRequest, EtsyIntegrationError, getConnectedShop, type EtsyRuntimeEnv } from "./etsy.js";
+import { etsyConnection, etsyRequest, EtsyIntegrationError, getConnectedShop, mayUseScope, type EtsyRuntimeEnv } from "./etsy.js";
 import { findIpRisks } from "./ip-guard.js";
 import { listDigitalProducts, type DigitalStore } from "./digital-delivery.js";
 
@@ -116,16 +116,16 @@ export function normalizeShopSettings(raw: Record<string, unknown>): Partial<Sho
 }
 
 export async function shopSettingsStatus(env: EtsyRuntimeEnv) {
-  const scopes = await etsyGrantedScopes(env).catch(() => [] as string[]);
+  const connection = await etsyConnection(env).catch(() => ({ connected: false, scopes: [] as string[], scopesKnown: false }));
   const products = env.ETSY_OAUTH ? await listDigitalProducts(env.ETSY_OAUTH as unknown as DigitalStore).catch(() => []) : [];
   const recommendation = recommendAudience(products);
-  return { defaults: settingsOf(SHOP_PRESETS[recommendation.audience]), presets: SHOP_PRESETS, recommended: recommendation.audience, reasonTr: recommendation.reasonTr, limits: SHOP_LIMITS, canWrite: scopes.includes("shops_w"), connected: scopes.length > 0 };
+  return { defaults: settingsOf(SHOP_PRESETS[recommendation.audience]), presets: SHOP_PRESETS, recommended: recommendation.audience, reasonTr: recommendation.reasonTr, limits: SHOP_LIMITS, canWrite: mayUseScope(connection, "shops_w"), connected: connection.connected };
 }
 
 export async function applyShopSettings(env: EtsyRuntimeEnv, raw: Record<string, unknown>, fetcher: Fetcher = fetch) {
   const settings = normalizeShopSettings(raw);
-  const scopes = await etsyGrantedScopes(env);
-  if (!scopes.includes("shops_w")) {
+  const connection = await etsyConnection(env);
+  if (!mayUseScope(connection, "shops_w")) {
     throw new ShopSettingsError("SCOPE_MISSING", "Mağaza ayarlarını değiştirmek için Etsy bağlantısını yenileyin (Etsy → Kılavuz → Etsy iznini yenile). Yeni izin: mağaza düzenleme.", 403);
   }
   const shop = await getConnectedShop(env, fetcher);

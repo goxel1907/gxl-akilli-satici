@@ -103,16 +103,30 @@ let updateOffered = false;
 
 type UpdateCheckResult = "offered" | "none" | "disabled";
 
-async function checkAndOfferUpdate(): Promise<UpdateCheckResult> {
+// Arka plandaki denetim ve "Güncellemeyi denetle" aynı anda çalışırsa tek indirme yapılır; indirilmiş güncelleme
+// yeniden indirilmez, yalnız yeniden başlatma sorulur.
+let updateCheckRunning: Promise<UpdateCheckResult> | null = null;
+
+function offerRestart() {
+  Alert.alert("Güncelleme hazır", "Uygulamanın yeni sürümü indirildi. Şimdi yeniden başlatılsın mı? Girdiğiniz bilgiler kaybolmaz; yarım kalan form varsa önce kaydedin.", [
+    { text: "Sonra", style: "cancel" },
+    { text: "Yeniden başlat", onPress: () => { Updates.reloadAsync().catch(() => undefined); } }
+  ]);
+}
+
+function checkAndOfferUpdate(): Promise<UpdateCheckResult> {
+  if (updateOffered) { offerRestart(); return Promise.resolve("offered"); }
+  if (!updateCheckRunning) updateCheckRunning = runUpdateCheck().finally(() => { updateCheckRunning = null; });
+  return updateCheckRunning;
+}
+
+async function runUpdateCheck(): Promise<UpdateCheckResult> {
   if (__DEV__ || !Updates.isEnabled) return "disabled";
   const result = await Updates.checkForUpdateAsync();
   if (!result.isAvailable) return "none";
   await Updates.fetchUpdateAsync();
   updateOffered = true;
-  Alert.alert("Güncelleme hazır", "Uygulamanın yeni sürümü indirildi. Şimdi yeniden başlatılsın mı? Girdiğiniz bilgiler kaybolmaz; yarım kalan form varsa önce kaydedin.", [
-    { text: "Sonra", style: "cancel" },
-    { text: "Yeniden başlat", onPress: () => { Updates.reloadAsync().catch(() => undefined); } }
-  ]);
+  offerRestart();
   return "offered";
 }
 
@@ -1054,11 +1068,16 @@ const SKILL_OPTIONS = [
 ];
 const CRAFT_WORDS = /\b(crochet|knitting|knit|embroidery|cross stitch|sewing|macrame|punch needle|amigurumi|pattern|pdf)\b/gi;
 
+// Hata, sunucunun Türkçe mesajını ve türünü (code, ör. NOT_CONNECTED) taşır; ekranlar türe göre davranır.
 async function apiJson(path: string, init: RequestInit = {}) {
   const response = await fetch(`${API_URL}${path}`, init);
   const body = await response.json().catch(() => ({})) as any;
-  if (!response.ok) throw new Error(body.error || "İstek tamamlanamadı.");
+  if (!response.ok) throw Object.assign(new Error(body.error || "İstek tamamlanamadı."), { code: body.code ? String(body.code) : undefined, status: response.status });
   return body;
+}
+
+function errorCode(error: unknown): string | undefined {
+  return error && typeof error === "object" && "code" in error ? (error as any).code : undefined;
 }
 
 function errorText(error: unknown) {
@@ -2426,21 +2445,25 @@ function EtsyPlanResult({ plan, payload, etsyReady, priceSourceLabel, preparePro
     rescore(plan.title, plan.tags.join(", "), plan.pricing ? String(plan.pricing.recommendedUsd) : "");
   }, [plan]);
   // İlan karnesi: başlık, etiket, açıklama, fotoğraf ve fiyat sunucuda açık eşiklerle puanlanır.
-  const rescore = async (nextTitle = title, nextTags = tags, nextPrice = priceUsd) => {
+  const rescore = async (nextTitle = title, nextTags = tags, nextPrice = priceUsd): Promise<any> => {
     setScoring(true);
     try {
-      setScorecard(await apiJson("/api/listings/scorecard", { method: "POST", headers: apiHeaders(true), body: JSON.stringify({
+      const card = await apiJson("/api/listings/scorecard", { method: "POST", headers: apiHeaders(true), body: JSON.stringify({
         title: nextTitle, tags: nextTags.split(",").map((tag: string) => tag.trim()).filter(Boolean), description: plan.description,
         photoCount: typeof photoCount === "number" ? photoCount : undefined, priceUsd: Number(String(nextPrice).replace(",", ".")) || undefined,
         medianPriceUsd: plan.pricing?.medianUsd, primaryKeyword: plan.primaryKeyword
-      }) }));
-    } catch { setScorecard(undefined); }
+      }) });
+      setScorecard(card);
+      return card;
+    } catch { setScorecard(undefined); return undefined; }
     finally { setScoring(false); }
   };
-  const createDraft = () => {
+  const createDraft = async () => {
     if (!etsyReady) return Alert.alert("Etsy mağazası hazır değil", "Mağaza açılıp Etsy bağlantısı 'Bağlı' görünene kadar taslak oluşturulamaz.");
     if (!(Number(priceUsd.replace(",", ".")) > 0)) return Alert.alert("Fiyat", "Etsy fiyatını (USD) yazın.");
-    if (scorecard && scorecard.score < 50) return Alert.alert(`İlan karnesi düşük (${scorecard.score}/100)`, "Bu haliyle ilan aramada zor görünür. Karnedeki düzeltmeleri yapmanız önerilir.", [
+    // Karne, başlık/etiket/fiyattaki son değişikliklerle yeniden hesaplanır; eski puana göre karar verilmez.
+    const fresh = await rescore();
+    if (fresh && fresh.score < 50) return Alert.alert(`İlan karnesi düşük (${fresh.score}/100)`, "Bu haliyle ilan aramada zor görünür. Karnedeki düzeltmeleri yapmanız önerilir.", [
       { text: "Düzelteyim", style: "cancel" },
       { text: "Yine de devam", onPress: confirmDraft }
     ]);
@@ -2596,18 +2619,20 @@ function ScorecardView({ card, busy, onRefresh }: any) {
 function ShopListingsScorecard({ online }: any) {
   const [data, setData] = useState<any>();
   const [error, setError] = useState("");
+  const [code, setCode] = useState<string>();
   const [loading, setLoading] = useState(false);
   const load = async () => {
     setLoading(true);
-    try { setData(await apiJson("/api/etsy/listings/scorecard", { headers: apiHeaders() })); setError(""); }
-    catch (err) { setError(errorText(err)); }
+    try { setData(await apiJson("/api/etsy/listings/scorecard", { headers: apiHeaders() })); setError(""); setCode(undefined); }
+    catch (err) { setError(errorText(err)); setCode(errorCode(err)); }
     finally { setLoading(false); }
   };
   return <View style={styles.analysisCard}>
     <View style={styles.shopierProductTop}><Ionicons name="ribbon-outline" size={22} color="#315B4C" /><Text style={[styles.cardTitle, { flex: 1 }]}>İlanlarımın karnesi</Text></View>
     <Text style={styles.evidence}>Etsy'deki yayında ve taslak ilanlarınızı başlık, etiket, açıklama ve fotoğraf açısından puanlar; en zayıf ilan en üstte.</Text>
     <Pressable style={[styles.secondaryButton, { alignSelf: "flex-start", marginTop: 8 }, (!online || loading) && styles.primaryDisabled]} disabled={!online || loading} onPress={load}><Text style={styles.secondaryButtonText}>{loading ? "Puanlanıyor…" : data ? "Yenile" : "Karneleri göster"}</Text></Pressable>
-    {!!error && <Text style={styles.shopierBlocker}>{/mağazası henüz açılmadı|hesabı henüz bağlanmadı/i.test(error) ? "Etsy mağazası açılınca ilanlarınız burada puanlanır." : error}</Text>}
+    {!!error && <Text style={styles.shopierBlocker}>{code === "NOT_CONNECTED" ? "Etsy mağazası açılınca ilanlarınız burada puanlanır." : error}</Text>}
+    {code === "AUTH_FAILED" && <Pressable style={[styles.secondaryButton, { alignSelf: "flex-start", marginTop: 8 }]} onPress={connectEtsy}><Text style={styles.secondaryButtonText}>Etsy bağlantısını yenile</Text></Pressable>}
     {!!data && !data.items.length && <Text style={styles.small}>Etsy'de henüz ilan yok.</Text>}
     {(data?.items || []).map((item: any) => <View key={item.listingId} style={styles.card}>
       <View style={styles.shopierProductTop}>
@@ -2721,12 +2746,13 @@ function urgencyText(order: any): string {
 function EtsyOrdersPanel({ online, compact }: any) {
   const [data, setData] = useState<any>();
   const [error, setError] = useState("");
+  const [code, setCode] = useState<string>();
   const [loading, setLoading] = useState(false);
   const [carriers, setCarriers] = useState<string[]>([]);
   const load = async () => {
     setLoading(true);
-    try { setData(await apiJson("/api/etsy/orders", { headers: apiHeaders() })); setError(""); }
-    catch (err) { setError(errorText(err)); }
+    try { setData(await apiJson("/api/etsy/orders", { headers: apiHeaders() })); setError(""); setCode(undefined); }
+    catch (err) { setError(errorText(err)); setCode(errorCode(err)); }
     finally { setLoading(false); }
   };
   const loadCarriers = async () => {
@@ -2737,7 +2763,7 @@ function EtsyOrdersPanel({ online, compact }: any) {
   const orders = data?.orders || [];
   const visible = compact ? orders.filter((order: any) => !order.shipped && !order.digitalOnly).slice(0, 3) : orders;
   if (compact && !visible.length) return null;
-  const noShop = /mağazası henüz açılmadı|hesabı henüz bağlanmadı/i.test(error);
+  const noShop = code === "NOT_CONNECTED";
   return <>
     <View style={styles.sectionHeading}>
       <Text style={styles.sectionTitle}>{compact ? "Gönderilecek Etsy siparişleri" : "Etsy siparişleri"}</Text>
@@ -2747,7 +2773,7 @@ function EtsyOrdersPanel({ online, compact }: any) {
     {loading && !data && <ActivityIndicator color="#C88B47" />}
     {!!error && (noShop
       ? <Empty icon="storefront-outline" title="Siparişler mağaza açılınca gelir" text="Etsy mağazası açılıp ilk sipariş geldiğinde burada son kargo tarihiyle görünür." />
-      : <View><Text style={styles.shopierBlocker}>{error}</Text>{/yetki|izin/i.test(error) && <Pressable style={[styles.secondaryButton, { alignSelf: "flex-start", marginTop: 8 }]} onPress={connectEtsy}><Text style={styles.secondaryButtonText}>Etsy bağlantısını yenile</Text></Pressable>}</View>)}
+      : <View><Text style={styles.shopierBlocker}>{error}</Text>{code === "AUTH_FAILED" && <Pressable style={[styles.secondaryButton, { alignSelf: "flex-start", marginTop: 8 }]} onPress={connectEtsy}><Text style={styles.secondaryButtonText}>Etsy bağlantısını yenile</Text></Pressable>}</View>)}
     {!!data && !compact && <Text style={styles.analysisLine}>Gönderilecek: {data.counts?.toShip ?? 0} · Geciken: {data.counts?.late ?? 0}</Text>}
     {!!data && !orders.length && !compact && <Empty icon="receipt-outline" title="Henüz sipariş yok" text="İlk sipariş gelince burada son kargo tarihiyle görünür." />}
     {visible.map((order: any) => <OrderCard key={order.receiptId} order={order} online={online} canAddTracking={Boolean(data?.canAddTracking)} carriers={carriers} onNeedCarriers={loadCarriers} onUpdated={(next: any) => setData((current: any) => ({ ...current, orders: current.orders.map((row: any) => row.receiptId === next.receiptId ? next : row) }))} />)}
@@ -2916,10 +2942,16 @@ const SELL_BACK: Record<SellRoute, SellRoute> = { choose: "choose", where: "choo
 function SellScreen({ online, channels, route, setRoute, onStepChange, setTab }: any) {
   const etsy = channels?.etsy || {};
   const etsyReady = Boolean(etsy.shopReady || etsy.shopId);
-  const goBack = () => route === "photo"
-    ? Alert.alert("Geri dönülsün mü?", "Bu üründe yazdıklarınız ve seçtiğiniz fotoğraflar silinir.", [{ text: "Vazgeç", style: "cancel" }, { text: "Geri dön", style: "destructive", onPress: () => setRoute("where") }])
-    : setRoute(SELL_BACK[route as SellRoute]);
-  const back = route !== "choose" && <Pressable style={[styles.secondaryButton, { alignSelf: "flex-start", marginBottom: 12 }]} onPress={goBack}><Text style={styles.secondaryButtonText}>{route === "photo" ? "← Ürün seçimine dön" : "← Geri"}</Text></Pressable>;
+  const back = route !== "choose" && <Pressable style={[styles.secondaryButton, { alignSelf: "flex-start", marginBottom: 12 }]} onPress={() => setRoute(SELL_BACK[route as SellRoute])}><Text style={styles.secondaryButtonText}>{route === "photo" ? "← Ürün seçimine dön" : "← Geri"}</Text></Pressable>;
+  // Fotoğraflı ilan her zaman yüklü kalır (yalnız gizlenir): başka ekrana geçmek yarım kalan ilanı silmez.
+  // Yeni ürün için sihirbazın sonundaki "Yeni ürüne başla" kullanılır.
+  return <>
+    <View style={route === "photo" ? undefined : styles.hidden}>{route === "photo" && back}<PhotoListingStudio online={online} etsyReady={etsyReady} wizard onStepChange={onStepChange} /></View>
+    {route !== "photo" && <SellRouteContent online={online} channels={channels} route={route} setRoute={setRoute} setTab={setTab} back={back} />}
+  </>;
+}
+
+function SellRouteContent({ online, channels, route, setRoute, setTab, back }: any) {
   if (route === "choose") return <>
     <Text style={styles.homeHello}>Ne satacaksınız?</Text>
     <ChoiceTile icon="cube-outline" title="Elimdeki bir ürünü" text="Tesbih, vintage eşya, örgü kazak/hırka ya da başka bir ürün. Fotoğrafını çekip satarsınız." onPress={() => setRoute("where")} />
@@ -2933,7 +2965,6 @@ function SellScreen({ online, channels, route, setRoute, onStepChange, setTab }:
     <ChoiceTile icon="globe-outline" title="Etsy (ABD'deki alıcılar)" text="Dolarla satış, yurt dışına kargo. İlan İngilizce hazırlanır; size Türkçesi gösterilir." onPress={() => setRoute("photo")} />
     <ChoiceTile icon="bag-handle-outline" title="Shopier (Türkiye'deki alıcılar)" text="TL ile satış, yurt içi kargo. Instagram ve WhatsApp'tan gelen müşteri için." onPress={() => setRoute("shopier")} />
   </>;
-  if (route === "photo") return <>{back}<PhotoListingStudio online={online} etsyReady={etsyReady} wizard onStepChange={onStepChange} /></>;
   if (route === "shopier") return <>
     {back}
     <View style={styles.analysisCard}>

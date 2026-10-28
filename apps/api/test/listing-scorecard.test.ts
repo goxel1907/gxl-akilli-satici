@@ -86,6 +86,6 @@ test("the scorecard is shown before sending to Etsy and needs the app key", asyn
   assert.equal((await ok.json() as { grade: string }).grade, "D");
   const app = readFileSync(new URL("../../mobile/App.tsx", import.meta.url), "utf8");
   assert.match(app, /<ScorecardView card=\{scorecard\} busy=\{scoring\} onRefresh=\{\(\) => rescore\(\)\} \/>/);
-  assert.match(app, /scorecard && scorecard\.score < 50/, "a weak listing asks before creating the Etsy draft");
+  assert.match(app, /fresh && fresh\.score < 50/, "a weak listing asks before creating the Etsy draft");
   assert.match(app, /photoCount=\{photos\.length\}/);
 });

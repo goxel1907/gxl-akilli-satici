@@ -33,6 +33,7 @@ interface EtsyOAuthState {
   verifier: string;
   redirectUri: string;
   createdAt: number;
+  scopes?: string[];
 }
 
 interface EtsyTokenResponse {
@@ -139,6 +140,26 @@ export async function etsyGrantedScopes(env: EtsyRuntimeEnv): Promise<string[]> 
   return tokens ? tokens.scope.split(/[\s,]+/).filter(Boolean) : [];
 }
 
+// Etsy'nin token yanıtı izin listesini içermeyebilir; izinler bağlantı başlatılırken istenenlerden kaydedilir.
+// Bu düzeltmeden önce kurulan bağlantılarda liste boştur: o zaman izin "bilinmiyor" sayılır, işlem denenir ve
+// Etsy reddederse kullanıcıya bağlantıyı yenilemesi söylenir.
+export interface EtsyConnection {
+  connected: boolean;
+  scopes: string[];
+  scopesKnown: boolean;
+}
+
+export async function etsyConnection(env: EtsyRuntimeEnv): Promise<EtsyConnection> {
+  const { store } = requireConfiguration(env);
+  const tokens = await loadTokens(store);
+  const scopes = tokens ? tokens.scope.split(/[\s,]+/).filter(Boolean) : [];
+  return { connected: Boolean(tokens), scopes, scopesKnown: scopes.length > 0 };
+}
+
+export function mayUseScope(connection: EtsyConnection, scope: string): boolean {
+  return connection.connected && (!connection.scopesKnown || connection.scopes.includes(scope));
+}
+
 async function validAccessToken(env: EtsyRuntimeEnv): Promise<{ token: string; userId: string }> {
   const { apiKey, store } = requireConfiguration(env);
   let tokens = await loadTokens(store);
@@ -150,6 +171,8 @@ async function validAccessToken(env: EtsyRuntimeEnv): Promise<{ token: string; u
       client_id: apiKey,
       refresh_token: tokens.refreshToken
     })));
+    // Yenileme yanıtında izin listesi yoksa önceki liste korunur.
+    if (!refreshed.scope) refreshed.scope = tokens.scope;
     await saveTokens(store, refreshed);
     tokens = refreshed;
   }
@@ -289,7 +312,7 @@ export async function createEtsyConnectSession(request: Request, env: EtsyRuntim
   const verifier = randomToken(48);
   const redirectUri = callbackUrl(request);
   const challenge = await sha256Base64Url(verifier);
-  const stateRecord: EtsyOAuthState = { verifier, redirectUri, createdAt: Date.now() };
+  const stateRecord: EtsyOAuthState = { verifier, redirectUri, createdAt: Date.now(), scopes: OAUTH_SCOPES };
   await store.put(`${OAUTH_STATE_PREFIX}${state}`, JSON.stringify(stateRecord), { expirationTtl: 600 });
 
   const url = new URL(ETSY_AUTHORIZE_ENDPOINT);
@@ -342,6 +365,8 @@ export async function handleEtsyCallback(request: Request, env: EtsyRuntimeEnv):
     code,
     code_verifier: record.verifier
   })));
+  // Etsy izin ekranı ya hepsini onaylar ya hiçbirini; yanıt izin listesini vermezse istenen izinler kaydedilir.
+  if (!tokens.scope) tokens.scope = (record.scopes?.length ? record.scopes : OAUTH_SCOPES).join(" ");
   await saveTokens(store, tokens);
   return callbackHtml(true, "Hesap yetkisi güvenli biçimde kaydedildi. Erişim anahtarı uygulamada veya GitHub'da tutulmadı.");
 }

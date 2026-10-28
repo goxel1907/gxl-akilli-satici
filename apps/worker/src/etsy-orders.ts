@@ -1,4 +1,4 @@
-import { etsyGrantedScopes, etsyRequest, EtsyIntegrationError, getConnectedShop, type EtsyRuntimeEnv } from "./etsy.js";
+import { etsyConnection, etsyRequest, EtsyIntegrationError, getConnectedShop, mayUseScope, type EtsyRuntimeEnv } from "./etsy.js";
 import type { TrendStore } from "./etsy-trends.js";
 
 type Fetcher = typeof fetch;
@@ -69,7 +69,9 @@ export function summarizeReceipt(raw: unknown, now = Date.now()): EtsyOrder {
   const shipped = receipt.is_shipped === true;
   const shipDates = transactions.map((row) => epoch(row.expected_ship_date)).filter((value): value is number => value !== undefined);
   const shipByMs = shipDates.length ? Math.min(...shipDates) : undefined;
-  const daysLeft = shipByMs === undefined ? undefined : Math.ceil((shipByMs - now) / DAY_MS);
+  // Geçmiş tarih her zaman "gecikti" (en az 1 gün); 24 saatten az kaldıysa "bugün"; sonra tam gün sayısı.
+  const msLeft = shipByMs === undefined ? undefined : shipByMs - now;
+  const daysLeft = msLeft === undefined ? undefined : msLeft < 0 ? -Math.max(1, Math.ceil(-msLeft / DAY_MS)) : Math.floor(msLeft / DAY_MS);
   const urgency: OrderUrgency = shipped ? "done"
     : digitalOnly ? "digital"
     : daysLeft === undefined ? "ok"
@@ -103,15 +105,19 @@ const URGENCY_ORDER: Record<OrderUrgency, number> = { late: 0, today: 1, soon: 2
 
 export async function listEtsyOrders(env: EtsyRuntimeEnv, fetcher: Fetcher = fetch, now = Date.now()) {
   const shop = await getConnectedShop(env, fetcher);
-  const payload = await etsyRequest<{ results?: unknown[] }>(env, `/application/shops/${shop.shopId}/receipts`, {
-    query: { was_paid: true, was_canceled: false, limit: 25, sort_on: "created", sort_order: "desc" }
+  // Gönderilmemiş siparişlerin hepsi (en eskisi en çok gecikmiş olandır) ve son gönderilen 10 sipariş.
+  const receipts = (shipped: boolean, limit: number) => etsyRequest<{ results?: unknown[] }>(env, `/application/shops/${shop.shopId}/receipts`, {
+    query: { was_paid: true, was_canceled: false, was_shipped: shipped, limit, sort_on: "created", sort_order: "desc" }
   }, fetcher);
-  const orders = (payload.results || []).map((row) => summarizeReceipt(row, now)).filter((order) => order.receiptId > 0)
+  const [open, done] = await Promise.all([receipts(false, 100), receipts(true, 10)]);
+  const seen = new Set<number>();
+  const orders = [...(open.results || []), ...(done.results || [])].map((row) => summarizeReceipt(row, now))
+    .filter((order) => order.receiptId > 0 && !seen.has(order.receiptId) && Boolean(seen.add(order.receiptId)))
     .sort((a, b) => URGENCY_ORDER[a.urgency] - URGENCY_ORDER[b.urgency] || (a.daysLeft ?? 99) - (b.daysLeft ?? 99));
-  const scopes = await etsyGrantedScopes(env).catch(() => [] as string[]);
+  const connection = await etsyConnection(env);
   return {
     shopName: shop.shopName,
-    canAddTracking: scopes.includes("transactions_w"),
+    canAddTracking: mayUseScope(connection, "transactions_w"),
     counts: {
       toShip: orders.filter((order) => !order.shipped && !order.digitalOnly).length,
       late: orders.filter((order) => order.urgency === "late").length
@@ -146,8 +152,7 @@ export function normalizeTrackingInput(raw: Record<string, unknown>) {
 }
 
 export async function addEtsyTracking(env: EtsyRuntimeEnv, input: ReturnType<typeof normalizeTrackingInput>, fetcher: Fetcher = fetch, now = Date.now()) {
-  const scopes = await etsyGrantedScopes(env);
-  if (!scopes.includes("transactions_w")) {
+  if (!mayUseScope(await etsyConnection(env), "transactions_w")) {
     throw new EtsyIntegrationError("AUTH_FAILED", "Takip numarasını Etsy'ye göndermek için Etsy iznini bir kez yenileyin (Siparişler ekranındaki 'Etsy iznini yenile').", 403);
   }
   const shop = await getConnectedShop(env, fetcher);

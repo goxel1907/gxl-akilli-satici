@@ -967,14 +967,16 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
     if (error instanceof MessageAssistError) return json(error.status, { error: error.message });
     if (error instanceof PinterestError) return json(error.status, { error: error.message, code: error.code });
     if (error instanceof EtsyIntegrationError) {
-      if (error.code === "NOT_CONFIGURED") return json(503, { error: "Etsy keystring ve shared secret henüz sunucuya eklenmedi." });
-      if (error.code === "STORAGE_NOT_CONFIGURED") return json(503, { error: "Etsy güvenli token deposu henüz bağlanmadı." });
-      if (error.code === "NOT_CONNECTED") return json(error.status === 409 ? 409 : 401, { error: error.status === 409 ? "Etsy mağazası henüz açılmadı." : "Etsy hesabı henüz bağlanmadı." });
-      if (error.code === "AUTH_FAILED") return json(401, { error: error.message });
-      if (error.code === "RATE_LIMITED") return json(429, { error: error.message });
-      if (error.code === "VALIDATION_FAILED") return json(400, { error: error.message });
-      if (error.code === "NOT_FOUND") return json(404, { error: error.message });
-      return json(502, { error: "Etsy geçici olarak yanıt vermedi." });
+      // code: uygulama hatanın türünü Türkçe metinden değil bu koddan anlar (ör. mağaza yok → boş durum).
+      const code = error.code;
+      if (code === "NOT_CONFIGURED") return json(503, { error: "Etsy keystring ve shared secret henüz sunucuya eklenmedi.", code });
+      if (code === "STORAGE_NOT_CONFIGURED") return json(503, { error: "Etsy güvenli token deposu henüz bağlanmadı.", code });
+      if (code === "NOT_CONNECTED") return json(error.status === 409 ? 409 : 401, { error: error.status === 409 ? "Etsy mağazası henüz açılmadı." : "Etsy hesabı henüz bağlanmadı.", code });
+      if (code === "AUTH_FAILED") return json(401, { error: error.message, code });
+      if (code === "RATE_LIMITED") return json(429, { error: error.message, code });
+      if (code === "VALIDATION_FAILED") return json(400, { error: error.message, code });
+      if (code === "NOT_FOUND") return json(404, { error: error.message, code });
+      return json(502, { error: "Etsy geçici olarak yanıt vermedi.", code });
     }
     if (error instanceof ShopierIntegrationError) {
       if (error.code === "NOT_CONFIGURED") return json(503, { error: "Shopier erişim anahtarı henüz sunucuya eklenmedi." });
