@@ -29,6 +29,8 @@ import { autopilotStatus, listDiscoveries, recordScan, runAutopilot } from "./di
 import { buildProductPlan, createEtsyPhysicalDraft, detectProductSignals, getUsdTryRate, keywordCandidates, normalizeProductInput, publishEtsyListing, type KeyValueStore } from "./product-studio.js";
 import { analyzeListingPhotos, PhotoListingError } from "./photo-listing.js";
 import { buildMarketingPlan, MarketingPlanError, normalizeMarketingInput } from "./marketing-plan.js";
+import { addEtsyTracking, listEtsyOrders, listShippingCarriers, normalizeTrackingInput } from "./etsy-orders.js";
+import { assistBuyerMessage, MessageAssistError, normalizeMessageInput } from "./message-assist.js";
 import { explainListingTr } from "./tr-glossary.js";
 import { turkishFor, turkishForPhrases } from "./phrase-tr.js";
 import { buildPatternBrief, createDigitalListing, normalizeDigitalListingInput, normalizePatternPlanInput } from "./pattern-studio.js";
@@ -588,6 +590,18 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
     if (request.method === "POST" && url.pathname === "/api/explain-tr") {
       return json(200, explainListingTr(await readBody(request)));
     }
+    if (request.method === "GET" && url.pathname === "/api/etsy/orders") {
+      return json(200, await listEtsyOrders(env));
+    }
+    if (request.method === "GET" && url.pathname === "/api/etsy/carriers") {
+      return json(200, { carriers: await listShippingCarriers(env, env.ETSY_OAUTH as unknown as TrendStore | undefined) });
+    }
+    if (request.method === "POST" && url.pathname === "/api/etsy/orders/tracking") {
+      return json(200, { order: await addEtsyTracking(env, normalizeTrackingInput(await readBody(request))) });
+    }
+    if (request.method === "POST" && url.pathname === "/api/messages/assist") {
+      return json(200, await assistBuyerMessage(normalizeMessageInput(await readBody(request)), env));
+    }
     if (request.method === "POST" && url.pathname === "/api/marketing/plan") {
       return json(200, { plan: await buildMarketingPlan(normalizeMarketingInput(await readBody(request)), env) });
     }
@@ -927,6 +941,7 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
     if (error instanceof ShopSettingsError) return json(error.status, { error: error.message, code: error.code });
     if (error instanceof PhotoListingError) return json(error.status, { error: error.message });
     if (error instanceof MarketingPlanError) return json(error.status, { error: error.message });
+    if (error instanceof MessageAssistError) return json(error.status, { error: error.message });
     if (error instanceof PinterestError) return json(error.status, { error: error.message, code: error.code });
     if (error instanceof EtsyIntegrationError) {
       if (error.code === "NOT_CONFIGURED") return json(503, { error: "Etsy keystring ve shared secret henüz sunucuya eklenmedi." });

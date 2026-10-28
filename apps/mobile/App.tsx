@@ -18,7 +18,7 @@ const apiHeaders = (json = false) => ({
   ...(json ? { "content-type": "application/json" } : {}),
   ...(activeApiToken ? { authorization: `Bearer ${activeApiToken}` } : {})
 });
-type Tab = "Özet" | "Shopier" | "Etsy" | "Ajan" | "Onaylar" | "Müşteriler" | "Ürünler" | "Başla" | "Sat" | "Müşteri" | "Yardım";
+type Tab = "Özet" | "Shopier" | "Etsy" | "Ajan" | "Onaylar" | "Müşteriler" | "Ürünler" | "Başla" | "Sat" | "Siparişler" | "Müşteri" | "Yardım";
 type AppMode = "simple" | "expert";
 type SellRoute = "choose" | "where" | "photo" | "shopier" | "digital" | "trend";
 type ProductOrigin = "made_by_seller" | "designed_by_seller" | "vintage" | "craft_supply" | "commercial_resale" | "unknown";
@@ -69,11 +69,12 @@ const demoShopierCenter = {
 
 const navigationTabs: Tab[] = ["Etsy", "Özet", "Shopier", "Ajan", "Onaylar", "Müşteriler", "Ürünler"];
 // Basit mod: hiç bilmeyen biri için dört kapı. Uzman mod bugünkü tüm sekmeleri gösterir.
-const simpleTabs: Tab[] = ["Başla", "Sat", "Müşteri", "Yardım"];
+const simpleTabs: Tab[] = ["Başla", "Sat", "Siparişler", "Müşteri", "Yardım"];
 const APP_MODE_KEY = "gxl.appMode";
 const navigationIcons: Record<Tab, any> = {
   "Başla": "home",
   "Sat": "camera",
+  "Siparişler": "receipt",
   "Müşteri": "megaphone",
   "Yardım": "help-circle",
   "Özet": "grid",
@@ -399,7 +400,8 @@ function App() {
           {!online && <OfflineNotice reason={offlineReason} busy={reconnecting} onRetry={reconnect} onResetKey={confirmResetToken} />}
           {tab === "Başla" && <HomeScreen online={online} channels={channels} setTab={setTab} openSell={openSell} />}
           {mode === "simple" && <View style={tab === "Sat" ? undefined : styles.hidden}><SellScreen online={online} channels={channels} route={sellRoute} setRoute={setSellRoute} onStepChange={scrollTop} setTab={setTab} /></View>}
-          {tab === "Müşteri" && <SalesPlanCard online={online} shopierProducts={shopierCenter?.products} etsyActiveListings={channels?.etsy?.activeListings} />}
+          {tab === "Siparişler" && <EtsyOrdersPanel online={online} />}
+          {tab === "Müşteri" && <><SalesPlanCard online={online} shopierProducts={shopierCenter?.products} etsyActiveListings={channels?.etsy?.activeListings} /><MessageHelperCard online={online} /></>}
           {tab === "Yardım" && <HelpScreen channels={channels} onExpert={() => changeMode("expert")} />}
           {tab === "Özet" && <Overview data={data} setTab={setTab} online={online} channels={channels} onSimple={() => changeMode("simple")} />}
           {tab === "Shopier" && <ShopierScreen center={shopierCenter} online={online} onRefresh={refresh} etsyReady={Boolean(channels?.etsy?.shopReady || channels?.etsy?.shopId)} />}
@@ -506,6 +508,7 @@ function Overview({ data, setTab, online, channels, onSimple }: any) {
           ? "Güvenli token deposu bekleniyor"
           : "Bağlanmak için dokun");
   return <>
+    <EtsyOrdersPanel online={online} compact />
     <Text style={styles.sectionTitle}>Bugünün görünümü</Text>
     <View style={styles.metrics}>
       <Metric value={data.metrics.activeLeads} label="Aktif müşteri" icon="people" />
@@ -888,6 +891,7 @@ function AgentScreen({ center, online, onRefresh, shopierProducts, etsyActiveLis
     </View>
 
     <SalesPlanCard online={online} shopierProducts={shopierProducts} etsyActiveListings={etsyActiveListings} />
+    <MessageHelperCard online={online} />
 
     <Text style={styles.sectionTitle}>Ajanla konuş</Text>
     <View style={styles.chatCard}>
@@ -2185,6 +2189,8 @@ const ETSY_GUIDE: Array<{ id: string; title: string; icon: any; steps: string[] 
     "'Etsy mağazası hazır değil': mağaza açılışı bitmemiş ya da yetki yenilenmesi gerekiyor. Aşağıdaki düğmelerle kuruluma devam edin.",
     "'Tarama durdu' veya 'çok fazla istek': Etsy'nin istek sınırına takıldınız. Birkaç dakika sonra tekrar deneyin; otomatik keşif kendi hızında devam eder.",
     "'Yayınlanamadı': ilanda en az bir fotoğraf, bir kargo profili ve fiyat olmalıdır. Taslağı Etsy'de açıp eksik alanı tamamlayın.",
+    "Takip numarası gönderilemiyorsa: Siparişler ekranındaki 'Etsy iznini yenile' düğmesine basın; Etsy'de izin ekranını onaylayın. Bu, sipariş kargo bilgisini yazma iznidir ve bir kez yapılır.",
+    "Alıcı WhatsApp, e-posta ya da PayPal ile iletişim/ödeme isterse kabul etmeyin; Etsy dışına çıkmak kurala aykırıdır ve dolandırıcılıkların çoğu böyle başlar. Mesaj yardımcısı bu işaretleri kırmızıyla gösterir.",
     "'Keşfedilenler' boş görünüyorsa ilk otomatik taramalar birkaç saat sürer. Hızlandırmak için gruplarda 'Tümünü tara' düğmesine basın.",
     "Üstte 'Bağlantı yok' görünüyorsa sunucuya bağlanılamıyordur. Uygulama bir kez kendisi yeniden dener; olmazsa internet veya VPN bağlantısını kontrol edip 'Yeniden bağlan' düğmesine basın. Kayıtlı anahtar yalnız sunucu onu reddederse yeniden istenir."
   ] }
@@ -2544,6 +2550,164 @@ async function shrinkPhoto(photo: { uri: string; width?: number; height?: number
 }
 
 // Shopier'e eklemeden: fotoğraf → ürün türü ve ölçüler → Etsy araştırması → başlık, etiket, açıklama, fiyat → taslak → yayın.
+// ——— Etsy siparişleri ———
+// En önemli bilgi son kargo tarihi: geç kargo yeni mağazanın puanını düşürür. Takip numarası buradan Etsy'ye
+// yazılınca alıcıya Etsy'den bildirim gider.
+const SHIPPED_NOTE_EN = "Your order is on its way from Türkiye! You can follow it with the tracking number. Thank you for your purchase!";
+
+function urgencyText(order: any): string {
+  if (order.urgency === "late") return `GECİKTİ · ${Math.abs(order.daysLeft ?? 0)} gün`;
+  if (order.urgency === "today") return "BUGÜN kargola";
+  if (order.urgency === "digital") return "Dijital · kargo yok";
+  if (order.urgency === "done") return "Kargoda";
+  return typeof order.daysLeft === "number" ? `${order.daysLeft} gün kaldı` : "Kargo bekliyor";
+}
+
+function EtsyOrdersPanel({ online, compact }: any) {
+  const [data, setData] = useState<any>();
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [carriers, setCarriers] = useState<string[]>([]);
+  const load = async () => {
+    setLoading(true);
+    try { setData(await apiJson("/api/etsy/orders", { headers: apiHeaders() })); setError(""); }
+    catch (err) { setError(errorText(err)); }
+    finally { setLoading(false); }
+  };
+  const loadCarriers = async () => {
+    if (carriers.length) return;
+    try { setCarriers((await apiJson("/api/etsy/carriers", { headers: apiHeaders() })).carriers || []); } catch { /* elle yazılır */ }
+  };
+  useEffect(() => { if (online) load(); }, [online]);
+  const orders = data?.orders || [];
+  const visible = compact ? orders.filter((order: any) => !order.shipped && !order.digitalOnly).slice(0, 3) : orders;
+  if (compact && !visible.length) return null;
+  const noShop = /mağazası henüz açılmadı|hesabı henüz bağlanmadı/i.test(error);
+  return <>
+    <View style={styles.sectionHeading}>
+      <Text style={styles.sectionTitle}>{compact ? "Gönderilecek Etsy siparişleri" : "Etsy siparişleri"}</Text>
+      <Pressable style={[styles.secondaryButton, (!online || loading) && styles.primaryDisabled]} disabled={!online || loading} onPress={load}><Text style={styles.secondaryButtonText}>{loading ? "Yükleniyor…" : "Yenile"}</Text></Pressable>
+    </View>
+    {!compact && <View style={styles.guardrail}><Ionicons name="information-circle-outline" size={20} color="#315B4C" /><Text style={[styles.guardrailText, { flex: 1 }]}>Sipariş gelince: ürünü paketleyin, kargoya verin, takip numarasını buradan girin; Etsy alıcıya bildirir. Son kargo tarihini kaçırmayın, geç kargo mağaza puanını düşürür. Siparişten anında haberdar olmak için telefonunuza Etsy'nin "Sell on Etsy" uygulamasını da kurun.</Text></View>}
+    {loading && !data && <ActivityIndicator color="#C88B47" />}
+    {!!error && (noShop
+      ? <Empty icon="storefront-outline" title="Siparişler mağaza açılınca gelir" text="Etsy mağazası açılıp ilk sipariş geldiğinde burada son kargo tarihiyle görünür." />
+      : <Text style={styles.shopierBlocker}>{error}</Text>)}
+    {!!data && !compact && <Text style={styles.analysisLine}>Gönderilecek: {data.counts?.toShip ?? 0} · Geciken: {data.counts?.late ?? 0}</Text>}
+    {!!data && !orders.length && !compact && <Empty icon="receipt-outline" title="Henüz sipariş yok" text="İlk sipariş gelince burada son kargo tarihiyle görünür." />}
+    {visible.map((order: any) => <OrderCard key={order.receiptId} order={order} online={online} canAddTracking={Boolean(data?.canAddTracking)} carriers={carriers} onNeedCarriers={loadCarriers} onUpdated={(next: any) => setData((current: any) => ({ ...current, orders: current.orders.map((row: any) => row.receiptId === next.receiptId ? next : row) }))} />)}
+  </>;
+}
+
+function OrderCard({ order, online, canAddTracking, carriers, onNeedCarriers, onUpdated }: any) {
+  const [open, setOpen] = useState(order.urgency === "late" || order.urgency === "today");
+  const [carrier, setCarrier] = useState("");
+  const [code, setCode] = useState("");
+  const [note, setNote] = useState(SHIPPED_NOTE_EN);
+  const [sending, setSending] = useState(false);
+  const [noteHelp, setNoteHelp] = useState<any>();
+  const [translating, setTranslating] = useState(false);
+  const pillStyle = order.urgency === "late" || order.urgency === "today" ? styles.scoreLow : order.urgency === "soon" ? styles.scoreMid : styles.scoreHigh;
+  const needsShipping = !order.shipped && !order.digitalOnly;
+  useEffect(() => { if (open && needsShipping) onNeedCarriers(); }, [open]);
+  const send = async () => {
+    setSending(true);
+    try {
+      const result = await apiJson("/api/etsy/orders/tracking", { method: "POST", headers: apiHeaders(true), body: JSON.stringify({ receiptId: order.receiptId, trackingCode: code, carrierName: carrier, noteToBuyer: note }) });
+      onUpdated(result.order);
+      Alert.alert("Gönderildi", "Takip numarası Etsy'ye yazıldı; alıcıya Etsy'den bildirim gitti.");
+    } catch (err) { Alert.alert("Takip numarası gönderilemedi", errorText(err)); }
+    finally { setSending(false); }
+  };
+  const translateNote = async () => {
+    setTranslating(true);
+    try { setNoteHelp(await apiJson("/api/messages/assist", { method: "POST", headers: apiHeaders(true), body: JSON.stringify({ text: order.buyerNote, productName: order.items?.[0]?.title }) })); }
+    catch (err) { Alert.alert("Çevrilemedi", errorText(err)); }
+    finally { setTranslating(false); }
+  };
+  const created = order.createdAt ? new Date(order.createdAt).toLocaleDateString("tr-TR", { day: "numeric", month: "long" }) : "";
+  const shipBy = order.shipBy ? new Date(order.shipBy).toLocaleDateString("tr-TR", { day: "numeric", month: "long", weekday: "long" }) : "";
+  return <View style={styles.card}>
+    <Pressable style={styles.shopierProductTop} onPress={() => setOpen(!open)}>
+      <View style={{ flex: 1 }}>
+        <Text style={styles.cardTitle}>{order.buyerName}{order.countryIso ? ` · ${order.countryIso}` : ""}</Text>
+        <Text style={styles.small}>{created ? `${created} · ` : ""}{order.totalText || ""}{order.isGift ? " · hediye" : ""}</Text>
+      </View>
+      <View style={[styles.kindPill, pillStyle]}><Text style={styles.kindText}>{urgencyText(order)}</Text></View>
+    </Pressable>
+    {order.items.map((item: any, index: number) => <Text style={styles.analysisLine} key={`${item.listingId}-${index}`}>• {item.quantity} × {item.title}{item.variations.length ? ` (${item.variations.join(", ")})` : ""}</Text>)}
+    {!!shipBy && needsShipping && <Text style={styles.nextAction}>Son kargo tarihi: {shipBy}</Text>}
+    {open && <>
+      {!!order.address && <View style={styles.adviceBox}>
+        <Text style={styles.rowTitle}>Kargo adresi (kargo fişine aynen yazın)</Text>
+        <Text selectable style={styles.evidence}>{order.address}</Text>
+        <Pressable style={[styles.secondaryButton, { alignSelf: "flex-start", marginTop: 8 }]} onPress={() => Share.share({ message: order.address })}><Text style={styles.secondaryButtonText}>Adresi kopyala / paylaş</Text></Pressable>
+      </View>}
+      {!!order.giftMessage && <Text style={styles.evidence}>Hediye notu (pakete koyun): {order.giftMessage}</Text>}
+      {!!order.buyerNote && <View style={styles.adviceBox}>
+        <Text style={styles.rowTitle}>Alıcının notu</Text>
+        <Text selectable style={styles.evidence}>{order.buyerNote}</Text>
+        {!noteHelp && <Pressable style={[styles.secondaryButton, { alignSelf: "flex-start", marginTop: 8 }, (!online || translating) && styles.primaryDisabled]} disabled={!online || translating} onPress={translateNote}><Text style={styles.secondaryButtonText}>{translating ? "Çevriliyor…" : "Türkçesi ve cevap önerisi"}</Text></Pressable>}
+        {!!noteHelp && <MessageResult result={noteHelp} />}
+      </View>}
+      {order.tracking.map((row: any) => <Text style={styles.analysisLine} key={row.code}>Takip: {row.carrier} · {row.code}</Text>)}
+      {needsShipping && (canAddTracking ? <View style={styles.adviceBox}>
+        <Text style={styles.rowTitle}>Kargoya verdim</Text>
+        {carriers.length ? <ChipGroup options={carriers.map((name: string) => ({ id: name, label: name }))} value={carrier} onChange={setCarrier} />
+          : <Field label="Kargo firması" value={carrier} onChangeText={setCarrier} placeholder="PTT, UPS, DHL…" />}
+        <Field label="Takip numarası (kargo fişindeki)" value={code} onChangeText={setCode} autoCapitalize="characters" placeholder="ör. RR123456789TR" />
+        <Field label="Alıcıya not (İngilizce, hazır)" value={note} onChangeText={setNote} multiline />
+        <Pressable style={[styles.primary, { marginTop: 10, marginBottom: 0 }, (sending || !online) && styles.primaryDisabled]} disabled={sending || !online} onPress={send}>{sending ? <ActivityIndicator color="white" /> : <Ionicons name="paper-plane" size={18} color="white" />}<Text style={styles.primaryText}>Takip numarasını Etsy'ye gönder</Text></Pressable>
+      </View> : <View style={styles.adviceBox}>
+        <Text style={styles.evidence}>Takip numarasını uygulamadan göndermek için Etsy iznini bir kez yenilemeniz gerekir (yeni izin: sipariş kargo bilgisi yazma).</Text>
+        <Pressable style={[styles.secondaryButton, { alignSelf: "flex-start", marginTop: 8 }]} onPress={connectEtsy}><Text style={styles.secondaryButtonText}>Etsy iznini yenile</Text></Pressable>
+      </View>)}
+    </>}
+    <Pressable onPress={() => setOpen(!open)}><Text style={styles.linkNote}>{open ? "Kapat" : "Adres, not ve kargo için dokunun"}</Text></Pressable>
+  </View>;
+}
+
+// ——— Alıcı mesajı yardımcısı ———
+// Etsy mesajlaşmayı programlara açmaz: satıcı mesajı yapıştırır, cevabı kopyalayıp Etsy'ye yapıştırır.
+function MessageResult({ result }: any) {
+  return <View style={{ marginTop: 10 }}>
+    {!!result.noticeTr && <Text style={styles.shopierBlocker}>{result.noticeTr}</Text>}
+    {(result.warningsTr || []).map((warning: string) => <Text style={styles.warningText} key={warning}>⚠ {warning}</Text>)}
+    {!!result.translationTr && <><Text style={styles.rowTitle}>Türkçesi</Text><Text selectable style={styles.evidence}>{result.translationTr}</Text></>}
+    {!!result.intentTr && <Text style={styles.nextAction}>Ne istiyor: {result.intentTr}</Text>}
+    {!!result.replyEn && <View style={styles.adviceBox}>
+      <Text style={styles.rowTitle}>Önerilen cevap (İngilizce, Etsy'ye yapıştırın)</Text>
+      <Text selectable style={styles.evidence}>{result.replyEn}</Text>
+      {/\[[^\]]+\]/.test(result.replyEn) && <Text style={styles.warningText}>Köşeli parantezli yerleri ([…]) göndermeden önce doldurun.</Text>}
+      <Pressable style={[styles.secondaryButton, { alignSelf: "flex-start", marginTop: 8 }]} onPress={() => Share.share({ message: result.replyEn })}><Text style={styles.secondaryButtonText}>Cevabı kopyala / paylaş</Text></Pressable>
+      {!!result.replyTr && <Text style={[styles.small, { marginTop: 8 }]}>Türkçe anlamı: {result.replyTr}</Text>}
+    </View>}
+  </View>;
+}
+
+function MessageHelperCard({ online }: any) {
+  const [text, setText] = useState("");
+  const [note, setNote] = useState("");
+  const [result, setResult] = useState<any>();
+  const [busy, setBusy] = useState(false);
+  const run = async () => {
+    if (text.trim().length < 2) return Alert.alert("Mesaj", "Alıcının mesajını kopyalayıp buraya yapıştırın (kutuya uzun basın → Yapıştır).");
+    setBusy(true);
+    try { setResult(await apiJson("/api/messages/assist", { method: "POST", headers: apiHeaders(true), body: JSON.stringify({ text, sellerNoteTr: note }) })); }
+    catch (err) { Alert.alert("Hazırlanamadı", errorText(err)); }
+    finally { setBusy(false); }
+  };
+  return <View style={styles.analysisCard}>
+    <View style={styles.shopierProductTop}><Ionicons name="chatbubbles-outline" size={22} color="#315B4C" /><Text style={[styles.cardTitle, { flex: 1 }]}>Alıcı mesajı yardımcısı</Text></View>
+    <Text style={styles.evidence}>Etsy'de gelen İngilizce mesajı kopyalayıp buraya yapıştırın. Türkçesini, alıcının ne istediğini ve gönderebileceğiniz İngilizce cevabı hazırlarım. Etsy mesajları uygulamalara kapalı olduğu için cevabı siz kopyalayıp Etsy'ye yapıştırırsınız.</Text>
+    <Field label="Alıcının mesajı" value={text} onChangeText={setText} multiline placeholder="Hi! Is this available in size L?" />
+    <Field label="Ne cevap vermek istersiniz? (Türkçe, isteğe bağlı)" value={note} onChangeText={setNote} multiline placeholder="ör. L beden yok, M var; göğüs 54 cm" />
+    <Pressable style={[styles.primary, { marginTop: 10, marginBottom: 0 }, (busy || !online) && styles.primaryDisabled]} disabled={busy || !online} onPress={run}>{busy ? <ActivityIndicator color="white" /> : <Ionicons name="language" size={18} color="white" />}<Text style={styles.primaryText}>{busy ? "Hazırlanıyor…" : "Türkçesini ve cevabı hazırla"}</Text></Pressable>
+    {!!result && <MessageResult result={result} />}
+    <Pressable style={[styles.secondaryButton, { alignSelf: "flex-start", marginTop: 12 }]} onPress={() => openUrl("https://www.etsy.com/messages", "Etsy mesajları")}><Text style={styles.secondaryButtonText}>Etsy mesajlarını aç</Text></Pressable>
+  </View>;
+}
+
 // ——— Basit mod ekranları ———
 
 function HomeTile({ icon, title, text, onPress }: any) {
@@ -2572,6 +2736,7 @@ function HomeScreen({ online, channels, setTab, openSell }: any) {
   return <>
     <Text style={styles.homeHello}>Ne yapmak istiyorsunuz?</Text>
     <HomeTile icon="camera" title="Ürün sat" text="Ürünün fotoğrafını çekin; başlık, açıklama, etiket ve fiyat sizin için hazırlanır." onPress={() => openSell("choose")} />
+    <HomeTile icon="receipt" title="Siparişler" text="Gelen Etsy siparişleri, son kargo tarihi ve takip numarası." onPress={() => setTab("Siparişler")} />
     <HomeTile icon="megaphone" title="Müşteri bul" text="Ürününüz için Instagram, WhatsApp ve Etsy'de ne yapılacağı ve reklam bütçesi." onPress={() => setTab("Müşteri")} />
     <HomeTile icon="trending-up" title="Ne satsam?" text="Etsy'de şu an aranan ürünler ve yaklaşan özel günler." onPress={() => openSell("trend")} />
     <HomeTile icon="help-circle" title="Yardım ve adımlar" text="Etsy mağazası nasıl açılır, para nereye gelir, sorun olursa ne yapılır." onPress={() => setTab("Yardım")} />

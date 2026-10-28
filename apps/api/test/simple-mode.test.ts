@@ -6,7 +6,7 @@ const app = readFileSync(new URL("../../mobile/App.tsx", import.meta.url), "utf8
 
 // Hiç bilmeyen biri için: dört kapı, adım adım satış, düz Türkçe. Uzman mod bugünkü ekranları korur.
 test("the app opens in simple mode with four plain doors and keeps expert mode one tap away", () => {
-  assert.match(app, /const simpleTabs: Tab\[\] = \["Başla", "Sat", "Müşteri", "Yardım"\];/);
+  assert.match(app, /const simpleTabs: Tab\[\] = \["Başla", "Sat", "Siparişler", "Müşteri", "Yardım"\];/);
   assert.match(app, /const \[mode, setMode\] = useState<AppMode>\("simple"\);/);
   assert.match(app, /\(mode === "simple" \? simpleTabs : navigationTabs\)\.map/);
   assert.match(app, /onExpert=\{\(\) => changeMode\("expert"\)\}/);
