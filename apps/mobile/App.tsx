@@ -376,7 +376,7 @@ function App() {
           {tab === "Özet" && <Overview data={data} setTab={setTab} online={online} channels={channels} />}
           {tab === "Shopier" && <ShopierScreen center={shopierCenter} online={online} onRefresh={refresh} etsyReady={Boolean(channels?.etsy?.shopReady || channels?.etsy?.shopId)} />}
           {tab === "Etsy" && <EtsyScreen online={online} channels={channels} />}
-          {tab === "Ajan" && <AgentScreen center={opportunityCenter} online={online} onRefresh={refresh} />}
+          {tab === "Ajan" && <AgentScreen center={opportunityCenter} online={online} onRefresh={refresh} shopierProducts={shopierCenter?.products} etsyActiveListings={channels?.etsy?.activeListings} />}
           {tab === "Onaylar" && <Approvals items={pending} decide={decide} />}
           {tab === "Müşteriler" && <Leads items={data.leads} />}
           {tab === "Ürünler" && <Products items={data.products} addProduct={addProduct} />}
@@ -691,7 +691,120 @@ function ShopierProductForm({ visible, product, saving, online, onClose, onSave 
   </Modal>;
 }
 
-function AgentScreen({ center, online, onRefresh }: any) {
+// Müşteri bul ve reklam planı: seçilen ürün için kanal kanal ne yapılacağı, reklamın ne zaman açılacağı, bütçe,
+// durdurma kuralı ve kopyalanacak hazır metinler. Uygulama kimseye kendiliğinden mesaj atmaz.
+const SALES_KINDS = [
+  { id: "tesbih", label: "Tesbih" }, { id: "vintage", label: "Vintage" }, { id: "knitwear", label: "Örgü giyim" },
+  { id: "pdf", label: "PDF ürünü" }, { id: "pattern", label: "Hobi deseni" }, { id: "other", label: "Diğer" }
+];
+const SALES_CHANNELS = [{ id: "shopier", label: "Shopier'de (Türkiye)" }, { id: "etsy", label: "Etsy'de (ABD)" }];
+const WHATSAPP_NUMBER_KEY = "gxl.whatsappNumber";
+
+function guessSalesKind(title: string): string {
+  if (/tesbih|tespih|kehribar|oltu|misbaha/i.test(title)) return "tesbih";
+  if (/vintage|antika|eski|nostalji/i.test(title)) return "vintage";
+  if (/kazak|hırka|yelek|bere|atkı|örgü|tığ/i.test(title)) return "knitwear";
+  if (/planlayıcı|planner|pdf|boyama/i.test(title)) return "pdf";
+  if (/desen|pattern/i.test(title)) return "pattern";
+  return "other";
+}
+
+function SalesPlanCard({ online, shopierProducts, etsyActiveListings }: any) {
+  const products = (shopierProducts || []).filter((item: any) => item?.title).slice(0, 8);
+  const [productId, setProductId] = useState<string>();
+  const [name, setName] = useState("");
+  const [kind, setKind] = useState("tesbih");
+  const [channel, setChannel] = useState(products.length ? "shopier" : "etsy");
+  const [price, setPrice] = useState("");
+  const [profit, setProfit] = useState("");
+  const [link, setLink] = useState("");
+  const [whatsapp, setWhatsapp] = useState("");
+  const [plan, setPlan] = useState<any>();
+  const [busy, setBusy] = useState(false);
+  const [open, setOpen] = useState<string>();
+  useEffect(() => { AsyncStorage.getItem(WHATSAPP_NUMBER_KEY).then((value) => value && setWhatsapp(value)).catch(() => undefined); }, []);
+  const choose = (item: any) => {
+    setProductId(String(item.id));
+    setName(String(item.title));
+    setLink(item.url ? String(item.url) : "");
+    if (item.price) setPrice(String(item.price));
+    setKind(guessSalesKind(String(item.title)));
+    setChannel("shopier");
+    setPlan(undefined);
+  };
+  const decisionStyle = (decision: string) => decision === "skip" ? styles.scoreLow : decision === "later" ? styles.scoreMid : styles.scoreHigh;
+  const prepare = async () => {
+    if (name.trim().length < 3) return Alert.alert("Ürün adı", "Ürünü seçin ya da adını yazın (ör. 925 gümüş tesbih).");
+    setBusy(true);
+    try {
+      if (whatsapp.trim()) await AsyncStorage.setItem(WHATSAPP_NUMBER_KEY, whatsapp.trim()).catch(() => undefined);
+      const result = await apiJson("/api/marketing/plan", {
+        method: "POST",
+        headers: apiHeaders(true),
+        body: JSON.stringify({
+          productName: name.trim(), kind, channel, priceTry: parseAmount(price), profitTry: parseAmount(profit), link: link.trim() || undefined,
+          activeEtsyListings: channel === "etsy" && typeof etsyActiveListings === "number" ? etsyActiveListings : undefined,
+          whatsappNumber: channel === "shopier" ? whatsapp.trim() || undefined : undefined
+        })
+      });
+      setPlan(result.plan);
+      setOpen(result.plan?.channels?.find((item: any) => item.decision === "now" || item.decision === "always")?.id);
+    } catch (error) { Alert.alert("Plan hazırlanamadı", errorText(error)); }
+    finally { setBusy(false); }
+  };
+  return <View style={styles.analysisCard}>
+    <View style={styles.shopierProductTop}><Ionicons name="megaphone-outline" size={22} color="#315B4C" /><Text style={[styles.cardTitle, { flex: 1 }]}>Müşteri bul ve reklam planı</Text></View>
+    <Text style={styles.evidence}>Ürününüzü seçin; uygulama her kanal için ne yapılacağını, reklamın açılıp açılmayacağını, bütçeyi, ne zaman durdurulacağını ve kopyalanacak hazır metinleri verir. Uygulama kimseye kendiliğinden mesaj atmaz; ürününüzü doğru kişilerin görmesini sağlar.</Text>
+    {!!products.length && <>
+      <Text style={styles.fieldLabel}>Shopier ürünlerinizden seçin</Text>
+      <View style={styles.chips}>{products.map((item: any) => <Pressable key={item.id} style={[styles.chip, productId === String(item.id) && styles.chipActive]} onPress={() => choose(item)}><Text style={[styles.chipText, productId === String(item.id) && styles.chipTextActive]} numberOfLines={1}>{item.title}</Text></Pressable>)}</View>
+    </>}
+    <Field label="Ürün adı" value={name} onChangeText={(value: string) => { setName(value); setProductId(undefined); }} placeholder="ör. 925 gümüş tesbih, tığ işi hırka" />
+    <Text style={styles.fieldLabel}>Ürün türü</Text>
+    <ChipGroup options={SALES_KINDS} value={kind} onChange={setKind} />
+    <Text style={styles.fieldLabel}>Nerede satılıyor?</Text>
+    <ChipGroup options={SALES_CHANNELS} value={channel} onChange={setChannel} />
+    <View style={{ flexDirection: "row", gap: 10 }}>
+      <View style={{ flex: 1 }}><Field label="Satış fiyatı (TL)" value={price} onChangeText={setPrice} keyboardType="decimal-pad" placeholder="1500" /></View>
+      <View style={{ flex: 1 }}><Field label="Size kalan kâr (TL, isteğe bağlı)" value={profit} onChangeText={setProfit} keyboardType="decimal-pad" placeholder="600" /></View>
+    </View>
+    <Field label={channel === "etsy" ? "Etsy ilan bağlantısı (isteğe bağlı)" : "Shopier ürün bağlantısı"} value={link} onChangeText={setLink} autoCapitalize="none" keyboardType="url" placeholder="https://..." />
+    {channel === "shopier" && <Field label="WhatsApp numaranız (yalnız bu telefonda saklanır)" value={whatsapp} onChangeText={setWhatsapp} keyboardType="phone-pad" placeholder="05xx xxx xx xx" />}
+    <Pressable style={[styles.primary, { marginTop: 12, marginBottom: 0 }, (busy || !online) && styles.primaryDisabled]} disabled={busy || !online} onPress={prepare}>
+      {busy ? <ActivityIndicator color="white" /> : <Ionicons name="sparkles" size={18} color="white" />}
+      <Text style={styles.primaryText}>{busy ? "Hazırlanıyor…" : "Planı hazırla"}</Text>
+    </Pressable>
+    {!!plan && <>
+      <Text style={[styles.trendVerdict, { marginTop: 14 }]}>{plan.headlineTr}</Text>
+      {plan.channels.map((item: any) => <View key={item.id} style={styles.card}>
+        <Pressable style={styles.shopierProductTop} onPress={() => setOpen(open === item.id ? undefined : item.id)}>
+          <Text style={[styles.cardTitle, { flex: 1 }]}>{item.titleTr}</Text>
+          <View style={[styles.kindPill, decisionStyle(item.decision)]}><Text style={styles.kindText}>{item.decisionTr}</Text></View>
+        </Pressable>
+        <Text style={styles.evidence}>{item.whyTr}</Text>
+        {!!item.budgetTr && <Text style={styles.analysisLine}>Bütçe: {item.budgetTr}</Text>}
+        {open === item.id && <>
+          {item.stepsTr.map((step: string, index: number) => <Text style={styles.analysisLine} key={step}>{index + 1}. {step}</Text>)}
+          {!!item.stopRuleTr && <Text style={styles.warningText}>Ne zaman durdurulur: {item.stopRuleTr}</Text>}
+          {item.copy.map((block: any) => <View key={block.labelTr} style={styles.adviceBox}>
+            <Text style={styles.rowTitle}>{block.labelTr}</Text>
+            <Text selectable style={styles.evidence}>{block.text}</Text>
+            <Pressable style={[styles.secondaryButton, { alignSelf: "flex-start", marginTop: 8 }]} onPress={() => Share.share({ message: block.text })}><Text style={styles.secondaryButtonText}>Kopyala / paylaş</Text></Pressable>
+          </View>)}
+          {!!item.openUrl && <Pressable style={[styles.primary, { marginTop: 12, marginBottom: 0 }]} onPress={() => openUrl(item.openUrl, item.titleTr)}><Text style={styles.primaryText}>{item.openLabelTr || "Aç"}</Text><Ionicons name="open-outline" size={18} color="white" /></Pressable>}
+        </>}
+        <Pressable onPress={() => setOpen(open === item.id ? undefined : item.id)}><Text style={styles.linkNote}>{open === item.id ? "Kapat" : "Adımlar ve hazır metinler için dokunun"}</Text></Pressable>
+      </View>)}
+      {!plan.aiCopy && <Text style={styles.small}>Hazır metinler şablondan yazıldı (yapay zekâ bağlı değil ya da yanıt vermedi). Paylaşmadan önce ürüne göre düzenleyin.</Text>}
+      <View style={styles.guardrail}><Ionicons name="shield-checkmark" size={21} color="#315B4C" /><View style={{ flex: 1 }}>
+        <Text style={styles.rowTitle}>Yapılmaması gerekenler</Text>
+        {plan.rulesTr.map((rule: string) => <Text style={styles.guardrailText} key={rule}>• {rule}</Text>)}
+      </View></View>
+    </>}
+  </View>;
+}
+
+function AgentScreen({ center, online, onRefresh, shopierProducts, etsyActiveListings }: any) {
   const [question, setQuestion] = useState("");
   const [sending, setSending] = useState(false);
   const [chat, setChat] = useState<Array<{ role: "owner" | "agent"; text: string; warnings?: string[]; actions?: string[] }>>([
@@ -744,6 +857,8 @@ function AgentScreen({ center, online, onRefresh }: any) {
         <View style={styles.agentCount}><Text style={styles.agentCountValue}>{center?.counts?.marketSignals || 0}</Text><Text style={styles.agentCountLabel}>Pazar sinyali</Text></View>
       </View>
     </View>
+
+    <SalesPlanCard online={online} shopierProducts={shopierProducts} etsyActiveListings={etsyActiveListings} />
 
     <Text style={styles.sectionTitle}>Ajanla konuş</Text>
     <View style={styles.chatCard}>

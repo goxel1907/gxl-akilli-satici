@@ -12,9 +12,10 @@ function memoryKv() {
   let writes = 0;
   const store = {
     async get(key: string) { return values.get(key) ?? null; },
-    async put(key: string, value: string) { writes += 1; values.set(key, value); }
+    async put(key: string, value: string) { writes += 1; values.set(key, value); },
+    async delete(key: string) { values.delete(key); }
   };
-  return { values, store: store as TrendStore, writes: () => writes };
+  return { values, store: store as TrendStore & { delete(key: string): Promise<void> }, writes: () => writes };
 }
 
 // Hiç İngilizce bilmeyen satıcı kartta ürünün Türkçe adını görür; İngilizce arama altında küçük yazar.
