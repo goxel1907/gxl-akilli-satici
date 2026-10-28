@@ -28,6 +28,7 @@ import { seasonalBoard } from "./seasonal.js";
 import { autopilotStatus, listDiscoveries, recordScan, runAutopilot } from "./discovery.js";
 import { buildProductPlan, createEtsyPhysicalDraft, detectProductSignals, getUsdTryRate, keywordCandidates, normalizeProductInput, publishEtsyListing, type KeyValueStore } from "./product-studio.js";
 import { analyzeListingPhotos, PhotoListingError } from "./photo-listing.js";
+import { explainListingTr } from "./tr-glossary.js";
 import { buildPatternBrief, createDigitalListing, normalizeDigitalListingInput, normalizePatternPlanInput } from "./pattern-studio.js";
 import { PRIVACY_PATHS, privacyPolicyPage } from "./legal-pages.js";
 import { applyShopSettings, shopSettingsStatus, ShopSettingsError } from "./shop-settings.js";
@@ -571,6 +572,9 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
 
     if (request.method === "POST" && url.pathname === "/api/products/photos") {
       return json(201, await storeListingPhoto(env, await readMultipart(request), url.origin));
+    }
+    if (request.method === "POST" && url.pathname === "/api/explain-tr") {
+      return json(200, explainListingTr(await readBody(request)));
     }
     if (request.method === "POST" && url.pathname === "/api/products/photo-analyze") {
       const input = await readBody(request);

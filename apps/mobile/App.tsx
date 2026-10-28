@@ -1,5 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, Alert, AppState, Image, Linking, Modal, Pressable, SafeAreaView, ScrollView, Share, StatusBar, StyleSheet, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Alert, AppState, Image, Linking, Modal, Pressable, ScrollView, Share, StatusBar, StyleSheet, Text, TextInput, View } from "react-native";
+import { SafeAreaProvider, SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import * as Updates from "expo-updates";
+import Constants from "expo-constants";
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as DocumentPicker from "expo-document-picker";
@@ -79,7 +82,53 @@ const productImages: Record<string, any> = {
   "gxl-gumus-telkari": require("./assets/products/gxl-telkari-1.jpg")
 };
 
-export default function App() {
+// Ekran kenarları (durum çubuğu, alt gezinme çubuğu) her telefonda farklı; güvenli alan ölçüsü kütüphaneden okunur.
+export default function Root() {
+  return <SafeAreaProvider><App /></SafeAreaProvider>;
+}
+
+// Uygulama açılınca ve öne gelince yeni sürümü denetler. APK yeniden kurulmadan gelen düzeltmeler (EAS Update)
+// indirilir ve kullanıcıya yeniden başlatma sorulur. Aynı oturumda bir kez sorulur.
+let updateOffered = false;
+
+function useAppUpdates() {
+  useEffect(() => {
+    if (__DEV__ || !Updates.isEnabled) return;
+    let busy = false;
+    const check = async () => {
+      if (busy || updateOffered) return;
+      busy = true;
+      try {
+        const result = await Updates.checkForUpdateAsync();
+        if (!result.isAvailable) return;
+        await Updates.fetchUpdateAsync();
+        updateOffered = true;
+        Alert.alert("Güncelleme hazır", "Uygulamanın yeni sürümü indirildi. Şimdi yeniden başlatılsın mı? Girdiğiniz bilgiler kaybolmaz; yarım kalan form varsa önce kaydedin.", [
+          { text: "Sonra", style: "cancel" },
+          { text: "Yeniden başlat", onPress: () => { Updates.reloadAsync().catch(() => undefined); } }
+        ]);
+      } catch {
+        // İnternet yoksa veya sunucu yanıt vermezse bir sonraki açılışta yeniden denenir.
+      } finally {
+        busy = false;
+      }
+    };
+    check();
+    const subscription = AppState.addEventListener("change", (state) => { if (state === "active") check(); });
+    return () => subscription.remove();
+  }, []);
+}
+
+// Hangi sürümün çalıştığı ekran görüntüsünden anlaşılsın diye Özet'in altında gösterilir.
+function appVersionText(): string {
+  const version = Constants.expoConfig?.version || "";
+  if (!Updates.isEnabled || Updates.isEmbeddedLaunch || !Updates.createdAt) return `Uygulama ${version} · APK ile gelen sürüm`;
+  return `Uygulama ${version} · güncelleme ${Updates.createdAt.toLocaleDateString("tr-TR")} ${Updates.createdAt.toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })}`;
+}
+
+function App() {
+  const insets = useSafeAreaInsets();
+  useAppUpdates();
   const [tab, setTab] = useState<Tab>("Etsy");
   const [data, setData] = useState<any>(demo);
   const [loading, setLoading] = useState(true);
@@ -222,9 +271,9 @@ export default function App() {
   if (!apiToken) return <AccessSetup onSave={saveApiToken} />;
 
   return (
-    <SafeAreaView style={styles.safe}>
+    <View style={styles.safe}>
       <StatusBar barStyle="light-content" backgroundColor="#12261F" />
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: 20 + insets.top }]}>
         <View>
           <Text style={styles.eyebrow}>SATIŞ MERKEZİ</Text>
           <Text style={styles.title}>GXL Akıllı Satıcı</Text>
@@ -232,7 +281,7 @@ export default function App() {
         <View style={[styles.agentBadge, !online && styles.localBadge]}><View style={[styles.dot, !online && styles.localDot]} /><Text style={styles.agentText}>{online ? "Ajan bağlı" : "Yerel mod"}</Text></View>
       </View>
       {loading ? <ActivityIndicator style={{ marginTop: 40 }} color="#C88B47" /> : (
-        <ScrollView contentContainerStyle={styles.content}>
+        <ScrollView contentContainerStyle={[styles.content, { paddingBottom: 110 + insets.bottom }]}>
           {!online && <Pressable style={styles.tokenReset} onPress={resetApiToken}><Ionicons name="key-outline" size={16} color="#8A521F" /><Text style={styles.tokenResetText}>Bağlantı anahtarını yeniden gir</Text></Pressable>}
           {tab === "Özet" && <Overview data={data} setTab={setTab} online={online} channels={channels} />}
           {tab === "Shopier" && <ShopierScreen center={shopierCenter} online={online} onRefresh={refresh} etsyReady={Boolean(channels?.etsy?.shopReady || channels?.etsy?.shopId)} />}
@@ -243,7 +292,7 @@ export default function App() {
           {tab === "Ürünler" && <Products items={data.products} addProduct={addProduct} />}
         </ScrollView>
       )}
-      <View style={styles.nav}>
+      <View style={[styles.nav, { height: 78 + insets.bottom, paddingBottom: 10 + insets.bottom }]}>
         {navigationTabs.map((item) => (
           <Pressable key={item} style={styles.navItem} onPress={() => setTab(item)}>
             <Ionicons name={navigationIcons[item]} size={21} color={tab === item ? "#C88B47" : "#748079"} />
@@ -251,7 +300,7 @@ export default function App() {
           </Pressable>
         ))}
       </View>
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -301,6 +350,26 @@ async function connectEtsy() {
   }
 }
 
+// Shopier açıklaması HTML olarak gelir; kartta düz metin gösterilir. Editörden yapıştırmayla kalan yorum parçaları ("<!--TgQPHd...-->") atılır.
+function stripHtmlComments(html: string): string {
+  return html.replace(/<!--[\s\S]*?-->/g, "").replace(/&lt;!--[\s\S]*?--(?:&gt;|>)/g, "");
+}
+
+function plainText(html?: string): string {
+  return stripHtmlComments(String(html || ""))
+    .replace(/<\s*br\s*\/?>/gi, "\n").replace(/<\/(p|li|div|h\d)>/gi, "\n").replace(/<li[^>]*>/gi, "• ").replace(/<[^>]+>/g, "")
+    .replace(/&nbsp;/g, " ").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, "\"").replace(/&#39;/g, "'").replace(/&amp;/g, "&")
+    .replace(/[ \t]+/g, " ").replace(/\s*\n\s*/g, "\n").trim();
+}
+
+// Etsy mağaza kaydı açılışın ilk adımında oluşur; ödeme kurulumu ve aktif ilan sayısı mağazanın gerçekten açılıp açılmadığını gösterir.
+function etsyOpeningText(etsy: any): string {
+  const parts: string[] = [];
+  if (etsy?.paymentsReady === false) parts.push("ödeme kurulumu bekliyor");
+  if (typeof etsy?.activeListings === "number") parts.push(`${etsy.activeListings} aktif ilan`);
+  return parts.length ? ` · ${parts.join(" · ")}` : "";
+}
+
 function Overview({ data, setTab, online, channels }: any) {
   const shopier = channels?.shopier;
   const shopierStatus = shopier?.connected
@@ -310,7 +379,7 @@ function Overview({ data, setTab, online, channels }: any) {
   const etsyAuthorized = Boolean(etsy?.authorized || etsy?.connected);
   const etsyShopReady = Boolean(etsy?.shopReady || etsy?.shopId);
   const etsyStatus = etsyShopReady
-    ? `Bağlı${etsy.shopName ? ` · ${etsy.shopName}` : ""}`
+    ? `Bağlı${etsy.shopName ? ` · ${etsy.shopName}` : ""}${etsyOpeningText(etsy)}`
     : etsyAuthorized
       ? "Hesap yetkili · mağaza kurulumunu tamamla"
       : etsy?.message || (!etsy?.configured
@@ -323,7 +392,7 @@ function Overview({ data, setTab, online, channels }: any) {
     <View style={styles.metrics}>
       <Metric value={data.metrics.activeLeads} label="Aktif müşteri" icon="people" />
       <Metric value={data.metrics.pendingApprovals} label="Onay bekliyor" icon="time" accent />
-      <Metric value={data.metrics.catalogProducts} label="Ürün" icon="cube" />
+      <Metric value={shopier?.connected ? shopier.productCount : data.metrics.catalogProducts} label={shopier?.connected ? "Shopier ürünü" : "Ürün"} icon="cube" />
       <Metric value={data.metrics.conversations} label="Görüşme" icon="chatbubbles" />
     </View>
     <View style={styles.callout}>
@@ -344,6 +413,7 @@ function Overview({ data, setTab, online, channels }: any) {
       ]) : etsyAuthorized ? openUrl("https://www.etsy.com/sell", "Etsy mağaza kurulumu") : connectEtsy()} />
       <Channel name="E-posta" status={SALES_EMAIL} icon="mail-outline" onPress={() => openUrl(`mailto:${SALES_EMAIL}?subject=${encodeURIComponent("GXL Market Studio")}`, "E-posta")} />
     </View>
+    <Text style={styles.versionText}>{appVersionText()}</Text>
   </>;
 }
 
@@ -420,7 +490,7 @@ function ShopierScreen({ center, online, onRefresh, etsyReady }: any) {
     {!products.length ? <Empty icon="bag-outline" title="Canlı ürün görünmüyor" text="Shopier'e ürün eklendiğinde veya bağlantı yenilendiğinde burada görünür." /> : products.map((product: any) => <View style={styles.card} key={product.id}>
       <View style={styles.shopierProductTop}><View style={{ flex: 1 }}><Text style={styles.cardTitle}>{product.title}</Text><Text style={styles.small}>#{product.id} · {product.stockStatus === "outOfStock" ? "Stokta yok" : `${product.stockQuantity ?? "?"} stok`}</Text></View><Pressable style={styles.editButton} onPress={() => openEdit(product)} disabled={!capabilities.updateProducts}><Ionicons name="create-outline" size={19} color={capabilities.updateProducts ? "#315B4C" : "#A8ADA9"} /></Pressable></View>
       <Text style={styles.price}>{product.price ? `${product.price} ${product.currency || "TRY"}` : "Fiyat alınamadı"}</Text>
-      {!!product.description && <Text style={styles.evidence} numberOfLines={3}>{product.description}</Text>}
+      {!!plainText(product.description) && <Text style={styles.evidence} numberOfLines={3}>{plainText(product.description)}</Text>}
       <View style={styles.inlineActions}>
         {!!product.url && <Pressable style={styles.secondaryButton} onPress={() => openUrl(product.url, product.title)}><Text style={styles.secondaryButtonText}>Satış sayfası</Text></Pressable>}
         <Pressable style={styles.secondaryButton} onPress={() => openEdit(product)} disabled={!capabilities.updateProducts}><Text style={styles.secondaryButtonText}>Fiyat / stok düzenle</Text></Pressable>
@@ -459,7 +529,7 @@ function ShopierProductForm({ visible, product, saving, online, onClose, onSave 
   useEffect(() => {
     if (!visible) return;
     setTitle(product?.title || "");
-    setDescription(product?.description || "");
+    setDescription(stripHtmlComments(product?.description || ""));
     setImageUrl(product?.media?.[0]?.url || "");
     setPrice(product?.basePrice || product?.price || "");
     setShippingPrice(product?.shippingPrice || "");
@@ -508,7 +578,7 @@ function ShopierProductForm({ visible, product, saving, online, onClose, onSave 
   };
 
   return <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
-    <SafeAreaView style={styles.formSafe}><ScrollView contentContainerStyle={styles.formContent}>
+    <SafeAreaView style={styles.formSafe}><StatusBar barStyle="dark-content" /><ScrollView contentContainerStyle={styles.formContent}>
       <View style={styles.formHeader}><Text style={styles.sectionTitle}>{product?.id ? "Shopier ürününü düzenle" : "Shopier'de canlı ürün oluştur"}</Text><Pressable onPress={onClose}><Ionicons name="close" size={28} color="#17221E" /></Pressable></View>
       <Text style={styles.formHint}>Bu form yalnızca Shopier mağazasını değiştirir; Etsy'ye veri göndermez.</Text>
       <Field label="Ürün adı" value={title} onChangeText={setTitle} placeholder="Shopier'de görünecek başlık" />
@@ -688,7 +758,7 @@ function ProductForm({ visible, onClose, onSave }: any) {
   };
   const origins: Array<[ProductOrigin, string]> = [["made_by_seller", "Ben ürettim"], ["designed_by_seller", "Ben tasarladım"], ["vintage", "Vintage"], ["craft_supply", "El işi malzemesi"], ["commercial_resale", "Hazır ürün"], ["unknown", "Bilmiyorum"]];
   return <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
-    <SafeAreaView style={styles.formSafe}><ScrollView contentContainerStyle={styles.formContent}>
+    <SafeAreaView style={styles.formSafe}><StatusBar barStyle="dark-content" /><ScrollView contentContainerStyle={styles.formContent}>
       <View style={styles.formHeader}><Text style={styles.sectionTitle}>Akıllı ürün ekle</Text><Pressable onPress={onClose}><Ionicons name="close" size={28} color="#17221E" /></Pressable></View>
       <Pressable style={styles.imagePicker} onPress={chooseImage}>{imageUri ? <Image source={{ uri: imageUri }} style={styles.formImage} /> : <><Ionicons name="camera-outline" size={32} color="#315B4C" /><Text style={styles.rowTitle}>Ürün fotoğrafını seç</Text><Text style={styles.small}>Etiket, damga ve kusurlar net görünsün</Text></>}</Pressable>
       <Text style={styles.fieldLabel}>Ürün kaynağı</Text>
@@ -764,7 +834,7 @@ function EtsyScreen({ online, channels }: any) {
   const authorized = Boolean(etsy.authorized || etsy.connected);
   return <>
     <View style={styles.agentHero}>
-      <View style={styles.agentHeroTop}><View style={styles.shopierLogo}><Ionicons name="color-palette" size={22} color="white" /></View><View style={{ flex: 1 }}><Text style={styles.agentHeroTitle}>Etsy Merkezi</Text><Text style={styles.agentHeroText}>{shopReady ? `Mağaza bağlı${etsy.shopName ? ` · ${etsy.shopName}` : ""} · otomatik keşif açık` : "Trend, otomatik keşif ve stüdyo mağaza açılmadan da çalışır. Taslak ve yayınlama mağaza açılınca etkinleşir."}</Text></View></View>
+      <View style={styles.agentHeroTop}><View style={styles.shopierLogo}><Ionicons name="color-palette" size={22} color="white" /></View><View style={{ flex: 1 }}><Text style={styles.agentHeroTitle}>Etsy Merkezi</Text><Text style={styles.agentHeroText}>{shopReady ? `Mağaza bağlı${etsy.shopName ? ` · ${etsy.shopName}` : ""}${etsyOpeningText(etsy)} · otomatik keşif açık` : "Trend, otomatik keşif ve stüdyo mağaza açılmadan da çalışır. Taslak ve yayınlama mağaza açılınca etkinleşir."}</Text></View></View>
     </View>
     {!shopReady && section !== "Kılavuz" && <Pressable style={styles.guardrail} onPress={() => setSection("Kılavuz")}><Ionicons name="storefront-outline" size={20} color="#315B4C" /><Text style={[styles.guardrailText, { flex: 1 }]}>{authorized ? "Etsy hesabı yetkili, mağaza açılışı bekleniyor. Adımlar için dokunun: Kılavuz → Mağaza açılışı." : "Etsy mağazası henüz bağlı değil. Adımlar için dokunun: Kılavuz → Mağaza açılışı."}</Text><Ionicons name="chevron-forward" size={18} color="#315B4C" /></Pressable>}
     <View style={styles.segment}>
@@ -1187,6 +1257,7 @@ function PrintableStudio({ online, seed, seeding, onReseed, onPickKind, onUpload
       <Text style={styles.small}>{listing.checks.titleLength}/140 karakter · {listing.checks.tagCount}/13 etiket</Text>
       <View style={[styles.chips, { marginTop: 8 }]}>{listing.tags.map((tag: string) => <View style={styles.chip} key={tag}><Text style={styles.chipText}>{tag}</Text></View>)}</View>
       {listing.checks.issues.map((issue: string) => <Text style={styles.warningText} key={issue}>• {issue}</Text>)}
+      <TurkishGloss title={listing.title} tags={listing.tags} />
       {listing.warnings.map((warning: string) => <Text style={styles.warningText} key={warning}>• {warning}</Text>)}
       <View style={styles.inlineActions}>
         <Pressable style={styles.secondaryButton} onPress={() => Share.share({ message: `${listing.title}\n\n${listing.description}\n\nTags: ${listing.tags.join(", ")}` })}><Text style={styles.secondaryButtonText}>İlan metnini kopyala</Text></Pressable>
@@ -1389,6 +1460,7 @@ function StudioPanel({ online, active, seed, onUpload, etsyReady }: any) {
       <Text style={styles.small}>{listing.checks.titleLength}/140 karakter · {listing.checks.tagCount}/13 etiket</Text>
       <View style={[styles.chips, { marginTop: 8 }]}>{listing.tags.map((tag: string) => <View style={styles.chip} key={tag}><Text style={styles.chipText}>{tag}</Text></View>)}</View>
       {listing.checks.issues.map((issue: string) => <Text style={styles.warningText} key={issue}>• {issue}</Text>)}
+      <TurkishGloss title={listing.title} tags={listing.tags} />
       {listing.warnings.map((warning: string) => <Text style={styles.warningText} key={warning}>• {warning}</Text>)}
       <View style={styles.inlineActions}>
         <Pressable style={styles.secondaryButton} onPress={() => Share.share({ message: `${listing.title}\n\n${listing.description}\n\nTags: ${listing.tags.join(", ")}` })}><Text style={styles.secondaryButtonText}>İlan metnini kopyala</Text></Pressable>
@@ -1483,7 +1555,7 @@ function DigitalUploadForm({ visible, prefill, onClose, onSaved }: any) {
     ]);
   };
   return <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
-    <SafeAreaView style={styles.formSafe}><ScrollView contentContainerStyle={styles.formContent}>
+    <SafeAreaView style={styles.formSafe}><StatusBar barStyle="dark-content" /><ScrollView contentContainerStyle={styles.formContent}>
       <View style={styles.formHeader}><Text style={styles.sectionTitle}>Dijital PDF yükle</Text><Pressable onPress={onClose}><Ionicons name="close" size={26} color="#315B4C" /></Pressable></View>
       <Pressable style={styles.uploadRow} onPress={pickFiles}><Ionicons name="document-text-outline" size={22} color="#315B4C" /><Text style={[styles.rowTitle, { flex: 1 }]}>{files.length ? `${files.length}/5 dosya seçildi · eklemek için dokunun` : "PDF dosyalarını seç (birden çok seçilebilir, en fazla 5)"}</Text></Pressable>
       {files.map((file) => <View key={file.name} style={styles.fileRow}><Ionicons name={/\.zip$/i.test(file.name || "") ? "archive-outline" : "document-outline"} size={18} color="#56615C" /><Text style={[styles.small, { flex: 1 }]} numberOfLines={1}>{file.name} · {Math.round((file.size || 0) / 1024)} KB</Text><Pressable onPress={() => setFiles(files.filter((item) => item.name !== file.name))}><Ionicons name="close-circle-outline" size={20} color="#B4483A" /></Pressable></View>)}
@@ -1780,7 +1852,7 @@ const ETSY_GUIDE: Array<{ id: string; title: string; icon: any; steps: string[] 
     "Shopier'de zaten olan ürünler için Shopier sekmesindeki 'Etsy ilanı hazırla' da aynı motoru kullanır."
   ] },
   { id: "delivery", title: "PDF teslimi ve koruma", icon: "lock-closed-outline", steps: [
-    "Etsy satışında PDF'i Etsy teslim eder. Alıcı ödeme yaptıktan sonra dosyayı Etsy'deki 'Purchases' sayfasından indirir. Ödeme yapmayan erişemez.",
+    "Etsy satışında PDF'i Etsy teslim eder. Alıcı ödeme yaptıktan sonra dosyayı Etsy'deki 'Purchases' (Satın alımlar) sayfasından indirir. Ödeme yapmayan erişemez.",
     "Shopier veya doğrudan satışta: ödeme gelince Dijital → ürün → 'Satış bağlantısı' ile siparişe özel bir bağlantı oluşturun (varsayılan 3 indirme, 14 gün) ve alıcıya gönderin.",
     "İade olursa veya bağlantının paylaşıldığından şüphelenirseniz bağlantıyı 'Bağlantılar' bölümünden kapatın.",
     "İndirilmiş bir dosyanın kopyalanmasını hiçbir sistem tamamen engelleyemez. PDF'teki telif altbilgisi ve lisans sayfası caydırıcıdır. Kopyayı görürseniz Etsy'nin fikrî mülkiyet bildirim formunu kullanın."
@@ -1795,12 +1867,13 @@ const ETSY_GUIDE: Array<{ id: string; title: string; icon: any; steps: string[] 
   ] },
   { id: "setup", title: "Mağaza açılışı ve bir kez yapılacak ayarlar", icon: "storefront-outline", steps: [
     "etsy.com/sell adresinde mağaza açılışını tamamlayın. Mağaza adı GXLMarketStudio'dur. Kimlik, banka ve kart bilgilerini yalnızca Etsy'nin kendi sayfasına girin.",
-    "Kargo profili: Shop Manager → Settings → Shipping settings. ABD için ücretsiz kargo seçin; kargo bedeli fiyata zaten dahil edilir.",
-    "Üretim ortağı: ustaya yaptırdığınız ürünler için Shop Manager → Settings → Production partners bölümünden usta veya atölyeyi ekleyin.",
+    "Kargo profili: Shop Manager (Mağaza Yöneticisi) → Settings (Ayarlar) → Shipping settings (Kargo ayarları). ABD için 'Free shipping' (ücretsiz kargo) seçin; kargo bedeli fiyata zaten dahil edilir.",
+    "Üretim ortağı: ustaya yaptırdığınız ürünler için Shop Manager (Mağaza Yöneticisi) → Settings (Ayarlar) → Production partners (Üretim ortakları) bölümünden usta veya atölyeyi ekleyin.",
     "Mağaza politikaları: iade koşullarını yazın ve dijital ürünlerin iade edilmediğini belirtin.",
     "Açılıştan sonra Özet sekmesindeki Etsy kanalı 'Bağlı' görünür. Taslak ve yayınlama düğmeleri o zaman açılır."
   ] },
   { id: "trouble", title: "Sorun giderme", icon: "construct-outline", steps: [
+    "Uygulama düzeltmeleri APK kurmadan gelir: 'Güncelleme hazır' sorusu çıkarsa 'Yeniden başlat' deyin. Hangi sürümde olduğunuz Özet ekranının en altında yazar; ekran görüntüsü gönderirken o satır görünsün.",
     "'Etsy mağazası hazır değil': mağaza açılışı bitmemiş ya da yetki yenilenmesi gerekiyor. Aşağıdaki düğmelerle kuruluma devam edin.",
     "'Tarama durdu' veya 'çok fazla istek': Etsy'nin istek sınırına takıldınız. Birkaç dakika sonra tekrar deneyin; otomatik keşif kendi hızında devam eder.",
     "'Yayınlanamadı': ilanda en az bir fotoğraf, bir kargo profili ve fiyat olmalıdır. Taslağı Etsy'de açıp eksik alanı tamamlayın.",
@@ -1870,7 +1943,7 @@ function ShopSettingsCard({ online, shopReady }: any) {
       <Field label="Satış sonrası mesaj" value={saleMessage} onChangeText={setSaleMessage} multiline style={[styles.input, { minHeight: 80, textAlignVertical: "top" }]} />
       <Field label="Dijital ürün satış mesajı" value={digitalSaleMessage} onChangeText={setDigitalSaleMessage} multiline style={[styles.input, { minHeight: 90, textAlignVertical: "top" }]} />
       <Field label="Bölümler (virgülle, her biri en fazla 24 karakter)" value={sections} onChangeText={setSections} />
-      <Text style={styles.formHint}>Logo (500×500), afiş (3360×840) ve "Hakkında" metni için Etsy API'si yok; bunları Etsy Shop Manager'dan yükleyin.</Text>
+      <Text style={styles.formHint}>Logo (500×500), afiş (3360×840) ve "Hakkında" metni için Etsy API'si yok; bunları Etsy'de Shop Manager (Mağaza Yöneticisi) → Settings (Ayarlar) → Info & appearance (Bilgi ve görünüm) bölümünden yükleyin.</Text>
       <Pressable style={[styles.analyzeButton, { marginTop: 12 }, (saving || !online || !status?.canWrite || !shopReady) && styles.primaryDisabled]} disabled={saving || !online || !status?.canWrite || !shopReady} onPress={apply}>{saving ? <ActivityIndicator color="white" /> : <Ionicons name="cloud-upload-outline" size={18} color="white" />}<Text style={styles.primaryText}>Etsy'ye uygula</Text></Pressable>
     </>}
   </View>;
@@ -1946,7 +2019,7 @@ function EtsyProductPlanner({ product, etsyReady, onClose }: any) {
     const base: any = {
       sourceId: product.id,
       titleTr: product.title,
-      descriptionTr: product.description,
+      descriptionTr: plainText(product.description),
       priceTry: (product.currency || "TRY") === "TRY" ? product.price : undefined,
       origin,
       yearMade: yearMade || undefined,
@@ -1970,7 +2043,7 @@ function EtsyProductPlanner({ product, etsyReady, onClose }: any) {
     finally { setProgress(""); }
   };
   return <Modal visible={Boolean(product)} animationType="slide" onRequestClose={onClose}>
-    <SafeAreaView style={styles.formSafe}><ScrollView contentContainerStyle={styles.formContent}>
+    <SafeAreaView style={styles.formSafe}><StatusBar barStyle="dark-content" /><ScrollView contentContainerStyle={styles.formContent}>
       <View style={styles.formHeader}><Text style={[styles.sectionTitle, { flex: 1 }]}>Etsy ilanı hazırla</Text><Pressable onPress={onClose}><Ionicons name="close" size={26} color="#315B4C" /></Pressable></View>
       <Text style={styles.cardTitle}>{product?.title}</Text>
       <Text style={styles.price}>{product?.price} {product?.currency || "TRY"}</Text>
@@ -1994,6 +2067,28 @@ function EtsyProductPlanner({ product, etsyReady, onClose }: any) {
       {plan && <EtsyPlanResult plan={plan} payload={payload} etsyReady={etsyReady} priceSourceLabel="Shopier fiyatı" />}
     </ScrollView></SafeAreaView>
   </Modal>;
+}
+
+// İlan İngilizce kalır (alıcı ABD'de); satıcı ne yazıldığını anlasın diye başlık ve etiketlerin Türkçe karşılığı gösterilir.
+function TurkishGloss({ title, tags }: { title: string; tags: string[] }) {
+  const [gloss, setGloss] = useState<any>();
+  const tagKey = tags.join("|");
+  useEffect(() => {
+    let alive = true;
+    setGloss(undefined);
+    if (!title) return;
+    apiJson("/api/explain-tr", { method: "POST", headers: apiHeaders(true), body: JSON.stringify({ title, tags }) })
+      .then((result) => { if (alive) setGloss(result); })
+      .catch(() => { /* açıklama yalnız yardımcıdır; alınamazsa ilan yine hazırlanır */ });
+    return () => { alive = false; };
+  }, [title, tagKey]);
+  if (!gloss) return null;
+  return <View style={styles.analysisCard}>
+    <Text style={styles.cardTitle}>Türkçesi (yalnız sizin kontrolünüz için)</Text>
+    <Text style={styles.analysisLine}>Başlık: {gloss.titleTr}</Text>
+    {gloss.tags.map((row: any) => <Text style={styles.analysisLine} key={row.tag}>• {row.tag} = {row.tr}</Text>)}
+    <Text style={styles.formHint}>İlan İngilizce kalır; Etsy alıcıları ağırlıkla ABD'de. Türkçesinde anlamsız bir şey görürseniz İngilizce kelimeyi değiştirin veya silin.</Text>
+  </View>;
 }
 
 // Planın sonucu, taslak ve yayın: iki akışta da aynı. prepareProduct taslaktan hemen önce çalışır (ör. fotoğrafları yükler).
@@ -2074,6 +2169,7 @@ function EtsyPlanResult({ plan, payload, etsyReady, priceSourceLabel, preparePro
       </View>}
       <Field label={`Başlık (${title.length}/140)`} value={title} onChangeText={setTitle} multiline />
       <Field label="Etiketler (13 adet)" value={tags} onChangeText={setTags} multiline autoCapitalize="none" />
+      <TurkishGloss title={plan.title} tags={plan.tags} />
       <Field label="Etsy fiyatı (USD)" value={priceUsd} onChangeText={setPriceUsd} keyboardType="decimal-pad" />
       <View style={styles.analysisCard}>
         <View style={styles.shopierProductTop}><Text style={[styles.cardTitle, { flex: 1 }]}>Açıklama (İngilizce)</Text><Pressable style={styles.secondaryButton} onPress={() => Share.share({ message: `${title}\n\n${plan.description}\n\nTags: ${tags}` })}><Text style={styles.secondaryButtonText}>Kopyala</Text></Pressable></View>
@@ -2114,6 +2210,12 @@ const RISK_LABELS: Record<string, string> = {
   branded_product: "Marka logosu görünüyor: orijinallik kanıtı olmadan Etsy'ye otomatik konmaz."
 };
 const MAX_LISTING_PHOTOS = 10;
+const CONDITION_OPTIONS = [
+  { id: "excellent", label: "Kusursuz" },
+  { id: "light_wear", label: "Hafif kullanım izi" },
+  { id: "visible_wear", label: "Belirgin aşınma / patina" },
+  { id: "repaired", label: "Onarım görmüş" }
+];
 
 // "2.500" Türkçede iki bin beş yüz demektir; sunucuya 2500 gitmeli.
 function parseAmount(text: string): number | undefined {
@@ -2159,6 +2261,7 @@ function PhotoListingStudio({ online, etsyReady }: any) {
   const [beadCount, setBeadCount] = useState("");
   const [yearMade, setYearMade] = useState("");
   const [conditionNote, setConditionNote] = useState("");
+  const [conditionLevel, setConditionLevel] = useState("");
   const [priceTry, setPriceTry] = useState("");
   const [shippingTry, setShippingTry] = useState("");
   const [quantity, setQuantity] = useState("1");
@@ -2247,6 +2350,7 @@ function PhotoListingStudio({ online, etsyReady }: any) {
       weightGrams: parseAmount(weightGrams),
       beadCount: kind === "tesbih" ? parseAmount(beadCount) : undefined,
       yearMade: vintage ? Number(yearMade) || undefined : undefined,
+      conditionLevel: vintage && conditionLevel ? conditionLevel : undefined,
       conditionNote: vintage ? conditionNote.trim() || undefined : undefined,
       priceTry: net,
       shippingTry: parseAmount(shippingTry),
@@ -2290,7 +2394,7 @@ function PhotoListingStudio({ online, etsyReady }: any) {
     uploaded.current = {};
     setPhotos([]); setKind(""); setOrigin("made_by_seller"); setMaker("me"); setCraft(""); setAudience("women");
     setNameTr(""); setProductNounEn(""); setMaterial(""); setMaterialVerified(false); setSize(""); setChestCm(""); setLengthCm(""); setWidthCm("");
-    setFiber(""); setCare("hand_wash"); setColors(""); setAttributes(""); setWeightGrams(""); setBeadCount(""); setYearMade(""); setConditionNote("");
+    setFiber(""); setCare("hand_wash"); setColors(""); setAttributes(""); setWeightGrams(""); setBeadCount(""); setYearMade(""); setConditionNote(""); setConditionLevel("");
     setPriceTry(""); setShippingTry(""); setQuantity("1"); setReadyToShip(true); setAnalysis(undefined); setRiskFlags([]); setPlan(undefined); setPayload(undefined);
   };
 
@@ -2323,11 +2427,11 @@ function PhotoListingStudio({ online, etsyReady }: any) {
     <Text style={[styles.fieldLabel, { marginTop: 12 }]}>Ürün türü</Text>
     <ChipGroup options={PHOTO_KINDS} value={kind} onChange={chooseKind} />
     <Field label="Ürün adı (Türkçe)" value={nameTr} onChangeText={setNameTr} placeholder="ör. Krem tığ işi oversize kazak" />
-    <Field label="İngilizce ürün adı (boşsa sistem bulur)" value={productNounEn} onChangeText={setProductNounEn} autoCapitalize="none" placeholder="crochet sweater, prayer beads, copper tray" />
+    <Field label="İngilizce ürün adı (boş bırakın, sistem bulur)" value={productNounEn} onChangeText={setProductNounEn} autoCapitalize="none" placeholder="crochet sweater = tığ işi kazak" />
     {knit && <>
       <Text style={styles.fieldLabel}>Kim ördü?</Text>
       <ChipGroup options={KNIT_MAKER_OPTIONS} value={maker} onChange={setMaker} />
-      {maker === "member" && <Text style={styles.formHint}>Etsy'de o kişiyi mağaza üyesi olarak ekleyin: Shop Manager → Settings → About your shop → Shop members. İlan "A member of my shop" olarak açılır.</Text>}
+      {maker === "member" && <Text style={styles.formHint}>Etsy'de o kişiyi mağaza üyesi olarak ekleyin: Shop Manager (Mağaza Yöneticisi) → Settings (Ayarlar) → About your shop (Mağaza hakkında) → Shop members (Mağaza üyeleri). İlan "A member of my shop" (mağazamın bir üyesi yaptı) olarak açılır.</Text>}
       <Text style={styles.fieldLabel}>Teknik</Text>
       <ChipGroup options={KNIT_CRAFT_OPTIONS} value={craft} onChange={setCraft} />
       <Text style={styles.fieldLabel}>Kimin için?</Text>
@@ -2354,10 +2458,16 @@ function PhotoListingStudio({ online, etsyReady }: any) {
           : <View style={{ flex: 1 }}><Field label="En (cm)" value={widthCm} onChangeText={setWidthCm} keyboardType="decimal-pad" /></View>}
         <View style={{ flex: 1 }}><Field label="Uzunluk (cm)" value={lengthCm} onChangeText={setLengthCm} keyboardType="decimal-pad" /></View>
       </View>
-      {(kind === "vintage" || origin === "vintage") && <Field label="Durum notu (İngilizce; fotoğraf analizi doldurur)" value={conditionNote} onChangeText={setConditionNote} multiline placeholder="Light surface scratches consistent with age." />}
+      {(kind === "vintage" || origin === "vintage") && <>
+        <Text style={styles.fieldLabel}>Ürünün durumu</Text>
+        <ChipGroup options={CONDITION_OPTIONS} value={conditionLevel} onChange={setConditionLevel} />
+        <Field label="Ek durum notu (isteğe bağlı, yalnız İngilizce; fotoğraf analizi doldurur)" value={conditionNote} onChangeText={setConditionNote} multiline placeholder="Small dent on the rim." />
+        <Text style={styles.formHint}>Türkçe not yazarsanız İngilizce açıklamaya girmez; seçtiğiniz durum İngilizce cümleye çevrilir.</Text>
+      </>}
     </>}
-    <Field label="Renkler (İngilizce, virgülle)" value={colors} onChangeText={setColors} autoCapitalize="none" placeholder="cream, sage green" />
-    <Field label="Öne çıkan özellikler (İngilizce, virgülle)" value={attributes} onChangeText={setAttributes} autoCapitalize="none" placeholder="oversized, granny square, filigree" />
+    <Field label="Renkler (Türkçe yazabilirsiniz, virgülle)" value={colors} onChangeText={setColors} autoCapitalize="none" placeholder="krem, adaçayı yeşili, bordo" />
+    <Field label="Öne çıkan özellikler (Türkçe yazabilirsiniz, virgülle)" value={attributes} onChangeText={setAttributes} autoCapitalize="none" placeholder="bol kesim, kare motif, püsküllü, telkari" />
+    <Text style={styles.formHint}>Sistem bunları İngilizceye çevirir. Çeviremediği kelimeyi ilana koymaz ve size söyler; yanlış İngilizce yazılmaz.</Text>
     <View style={{ flexDirection: "row", gap: 10 }}>
       <View style={{ flex: 1 }}><Field label="Elinize geçecek (TL)" value={priceTry} onChangeText={setPriceTry} keyboardType="decimal-pad" placeholder="2500" /></View>
       <View style={{ flex: 1 }}><Field label="ABD'ye kargo (TL)" value={shippingTry} onChangeText={setShippingTry} keyboardType="decimal-pad" placeholder="900" /></View>
@@ -2487,6 +2597,7 @@ const styles = StyleSheet.create({
   linkNote: { color: "#315B4C", fontSize: 11, fontWeight: "700", marginTop: 6 },
   empty: { alignItems: "center", padding: 45, gap: 8 },
   formSafe: { flex: 1, backgroundColor: "#F5F2EA" },
+  versionText: { color: "#8A948F", fontSize: 11, textAlign: "center", marginTop: 18 },
   formContent: { padding: 20, paddingBottom: 50 },
   formHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 14 },
   imagePicker: { height: 180, borderRadius: 18, borderWidth: 1, borderStyle: "dashed", borderColor: "#AEB9B4", backgroundColor: "#EDF2EF", alignItems: "center", justifyContent: "center", gap: 8, marginBottom: 18, overflow: "hidden" },

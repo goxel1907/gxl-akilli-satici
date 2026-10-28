@@ -3,6 +3,7 @@ import { generateStructuredObject, hasAiProvider, type AiRuntimeEnv } from "../.
 import { etsyRequest, EtsyIntegrationError, getConnectedShop, type EtsyRuntimeEnv } from "./etsy.js";
 import type { TrendResult } from "./etsy-trends.js";
 import { normalizeEtsyTags, normalizeEtsyTitle, validateEtsyListingText } from "./pattern-studio.js";
+import { termsToEnglish } from "./tr-glossary.js";
 
 type Fetcher = typeof fetch;
 
@@ -43,9 +44,23 @@ export interface ProductPlanInput {
   care?: CareOption;
   colors: string[];
   attributesEn: string[];
+  conditionLevel?: ConditionLevel;
   conditionNote?: string;
   riskFlags: RiskFlag[];
+  // Türkçe yazılıp çevrilemeyen kelimeler (ilana girmez) ve sözlükte olmayıp olduğu gibi kalan kelimeler (kontrol için).
+  droppedTerms: string[];
+  uncheckedTerms: string[];
 }
+
+export type ConditionLevel = "excellent" | "light_wear" | "visible_wear" | "repaired";
+
+// Satıcı durumu Türkçe seçer; ilana giden cümle İngilizce ve dürüst kalır.
+export const CONDITION_TEXT: Record<ConditionLevel, string> = {
+  excellent: "Excellent vintage condition with no notable wear.",
+  light_wear: "Good vintage condition with light signs of use consistent with age.",
+  visible_wear: "Visible wear and patina consistent with age; please see every photo.",
+  repaired: "Shows an old repair; please see the close-up photos."
+};
 
 export type ProductKind = "tesbih" | "vintage" | "knitwear" | "other";
 export type CareOption = "hand_wash" | "machine_gentle" | "dry_clean";
@@ -233,6 +248,9 @@ const ORIGINS = new Set<ProductOrigin>(["made_by_seller", "designed_by_seller", 
 
 export function normalizeProductInput(raw: Record<string, unknown>): ProductPlanInput {
   const titleTr = String(raw.titleTr || "").replace(/\s+/g, " ").trim().slice(0, 200);
+  const colors = termsToEnglish(raw.colors, "color", 3);
+  const features = termsToEnglish(raw.attributesEn, "feature", 4);
+  const note = raw.conditionNote ? String(raw.conditionNote).replace(/\s+/g, " ").trim().slice(0, 400) : "";
   if (titleTr.length < 3) throw new Error("PRODUCT_TITLE_REQUIRED");
   const origin = String(raw.origin || "unknown") as ProductOrigin;
   const yearMade = positiveNumber(raw.yearMade, new Date().getUTCFullYear());
@@ -265,10 +283,14 @@ export function normalizeProductInput(raw: Record<string, unknown>): ProductPlan
     widthCm: positiveNumber(raw.widthCm, 1_000),
     fiber: raw.fiber ? String(raw.fiber).replace(/\s+/g, " ").trim().slice(0, 80) || undefined : undefined,
     care: Object.hasOwn(CARE_TEXT, String(raw.care)) ? raw.care as CareOption : undefined,
-    colors: englishWords(raw.colors, 3),
-    attributesEn: englishWords(raw.attributesEn, 4),
-    conditionNote: raw.conditionNote ? String(raw.conditionNote).replace(/\s+/g, " ").trim().slice(0, 400) || undefined : undefined,
-    riskFlags: (Array.isArray(raw.riskFlags) ? raw.riskFlags : []).map(String).filter((flag): flag is RiskFlag => RISK_FLAGS.has(flag as RiskFlag))
+    colors: colors.terms,
+    attributesEn: features.terms,
+    conditionLevel: Object.hasOwn(CONDITION_TEXT, String(raw.conditionLevel)) ? raw.conditionLevel as ConditionLevel : undefined,
+    // Açıklama İngilizce; Türkçe yazılmış not ilana girmez, uyarı olarak gösterilir.
+    conditionNote: note && !/[çğıöşüÇĞİÖŞÜ]/.test(note) ? note : undefined,
+    riskFlags: (Array.isArray(raw.riskFlags) ? raw.riskFlags : []).map(String).filter((flag): flag is RiskFlag => RISK_FLAGS.has(flag as RiskFlag)),
+    droppedTerms: [...colors.dropped, ...features.dropped, ...(note && /[çğıöşüÇĞİÖŞÜ]/.test(note) ? ["durum notu"] : [])],
+    uncheckedTerms: [...colors.unchecked, ...features.unchecked]
   };
 }
 
@@ -278,12 +300,6 @@ function canSayAntique(input: ProductPlanInput): boolean {
 }
 
 const withoutFalseAntique = (input: ProductPlanInput, phrases: string[]) => canSayAntique(input) ? phrases : phrases.filter((phrase) => !/\bantique\b/.test(phrase));
-
-// Fotoğraf analizinden gelen renk ve özellikler İngilizce, kısa ve harf/boşluktan oluşmalı; ilan metnine doğrudan girer.
-function englishWords(value: unknown, limit: number): string[] {
-  const list = (Array.isArray(value) ? value : []).map((item) => String(item).toLowerCase().replace(/[^a-z\s-]/g, " ").replace(/\s+/g, " ").trim()).filter((item) => item.length >= 3 && item.length <= 24);
-  return [...new Set(list)].slice(0, limit);
-}
 
 // İplik içeriği Türkçe yazılabilir ("%100 pamuk"); açıklama İngilizce olduğu için bilinen malzemeler çevrilir, çevrilemeyen metin açıklamaya girmez.
 export function fiberEnglish(text: string | undefined): string | undefined {
@@ -606,7 +622,7 @@ function buildDescription(input: ProductPlanInput, signals: ProductSignals, elig
     "DETAILS",
     ...details,
     ...(origin ? ["", origin] : []),
-    ...(input.conditionNote ? ["", "CONDITION", input.conditionNote] : []),
+    ...(input.conditionLevel || input.conditionNote ? ["", "CONDITION", [input.conditionLevel ? CONDITION_TEXT[input.conditionLevel] : "", input.conditionNote || ""].filter(Boolean).join(" ")] : []),
     "",
     "The item you receive is the one shown in the photos. Please review every photo and message us before ordering if you need an extra measurement or a closer look.",
     "",
@@ -642,7 +658,9 @@ export function buildProductPlan(input: ProductPlanInput, phrases: string[], sca
     ...(signals.noun === "item" ? ["Ürünün İngilizce adı anlaşılamadı; 'İngilizce ürün adı' alanını doldurun."] : []),
     ...(signals.isKnitwear && (!input.size || !input.chestCm || !input.lengthCm) ? ["Beden, göğüs genişliği ve boy girilmedi; giyimde alıcılar ölçüye bakıp karar verir, iade de çoğunlukla bu yüzden olur."] : []),
     ...(signals.isKnitwear && input.fiber && !fiberEnglish(input.fiber) ? ["İplik içeriği İngilizceye çevrilemedi; açıklamaya girmedi. Ör. '%100 pamuk' veya '%50 yün %50 akrilik' yazın."] : []),
-    ...(signals.isVintage && !input.conditionNote ? ["Durum notu yok; vintage alıcılar kusurları açıkça görmek ister. Fotoğraflarda görünen aşınmayı yazın."] : [])
+    ...(signals.isVintage && !input.conditionLevel && !input.conditionNote ? ["Ürünün durumunu seçin (kusursuz, hafif kullanım izi, belirgin aşınma, onarım); vintage alıcılar kusurları açıkça görmek ister."] : []),
+    ...(input.droppedTerms.length ? [`İngilizceye çevrilemediği için ilana girmedi: ${input.droppedTerms.join(", ")}. Listedeki bir kelimeyi kullanın ya da boş bırakın.`] : []),
+    ...(input.uncheckedTerms.length ? [`Sözlükte olmayan kelime olduğu gibi İngilizce kabul edildi: ${input.uncheckedTerms.join(", ")}. Türkçe yazdıysanız düzeltin.`] : [])
   ];
   return {
     primaryKeyword: primary,

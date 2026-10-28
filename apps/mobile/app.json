@@ -3,13 +3,24 @@
     "name": "GXL Akıllı Satıcı",
     "slug": "gxl-akilli-satici",
     "owner": "goxel34",
-    "version": "0.8.5",
+    "version": "0.8.6",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
+    "icon": "./assets/icon.png",
     "android": {
       "package": "com.gxl.akillisatici",
-      "versionCode": 15,
-      "adaptiveIcon": { "backgroundColor": "#12261F" }
+      "versionCode": 16,
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "monochromeImage": "./assets/monochrome-icon.png",
+        "backgroundColor": "#12261F"
+      }
+    },
+    "runtimeVersion": { "policy": "appVersion" },
+    "updates": {
+      "url": "https://u.expo.dev/59b0b7f2-67d8-4c15-b106-772d936f422c",
+      "checkAutomatically": "ON_LOAD",
+      "fallbackToCacheTimeout": 0
     },
     "plugins": [
       "expo-secure-store",

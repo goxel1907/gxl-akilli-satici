@@ -1,0 +1,56 @@
+name: GXL uygulama güncellemesi (EAS Update)
+
+# main'e mobil kod değişikliği gelince telefondaki uygulamaya APK kurmadan gidecek güncellemeyi yayınlar.
+# Yalnız JavaScript değişiklikleri böyle gider; yeni native modül gerektiren değişiklik app.json "version"
+# yükseltilip yeni APK ile gelir (runtimeVersion = uygulama sürümü, eski APK uyumsuz güncellemeyi almaz).
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "apps/mobile/**"
+      - ".github/workflows/eas-update.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: eas-update
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+    steps:
+      - name: Expo anahtarı kontrolü
+        if: env.EXPO_TOKEN == ''
+        run: echo "::notice title=Güncelleme yayınlanmadı::GitHub'da EXPO_TOKEN gizli değeri yok. Kurulum için docs/UYGULAMA_GUNCELLEME_TR.md dosyasına bakın."
+
+      - name: Kaynak kodu al
+        if: env.EXPO_TOKEN != ''
+        uses: actions/checkout@v4
+
+      - name: Node.js kur
+        if: env.EXPO_TOKEN != ''
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: apps/mobile/package-lock.json
+
+      - name: Paketleri kur
+        if: env.EXPO_TOKEN != ''
+        working-directory: apps/mobile
+        run: npm ci
+
+      - name: Güncellemeyi yayınla (preview kanalı)
+        if: env.EXPO_TOKEN != ''
+        working-directory: apps/mobile
+        env:
+          COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
+        run: |
+          MESSAGE="$(printf '%s' "${COMMIT_MESSAGE:-Elle başlatılan güncelleme}" | head -n 1 | cut -c1-120)"
+          npx --yes eas-cli@26 update --channel preview --platform android --message "$MESSAGE" --non-interactive
