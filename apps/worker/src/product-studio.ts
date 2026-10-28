@@ -528,7 +528,29 @@ function buildTags(input: ProductPlanInput, signals: ProductSignals, primary: st
     signals.isTesbih ? "islamic gift" : "",
     signals.isTesbih ? "muslim gift for him" : ""
   ];
-  return normalizeEtsyTags(withoutFalseAntique(input, [primary, ...candidates, ...ranked, ...generated].filter(Boolean)));
+  // Canlı Etsy taraması yoksa liste 13'ü doldurmaz; Etsy'nin izin verdiği 13 etiketin boş kalanı ürüne uyan,
+  // doğru ve alıcının yazdığı genel ifadelerle doldurulur (sona eklenir; yalnız yer kalırsa kullanılır).
+  const decade = signals.isVintage && input.yearMade ? `${Math.floor(input.yearMade / 10) * 10}s` : "";
+  const midCentury = signals.isVintage && input.yearMade && input.yearMade >= 1945 && input.yearMade <= 1975;
+  const fillers = signals.isTesbih ? [
+    input.beadCount ? `${input.beadCount} bead tasbih` : "",
+    "dhikr beads", "muslim prayer beads", "turkish tasbih", "muslim gift", "eid gift", "ramadan gift", "tesbih"
+  ] : signals.isVintage ? [
+    decade ? `${decade} ${lastNoun}` : "",
+    signals.material ? `vintage ${signals.material.short}` : "",
+    midCentury ? `mid century ${lastNoun}` : "",
+    `retro ${lastNoun}`, "vintage gift", "vintage find", "vintage collectible", "gift for collector"
+  ] : signals.isKnitwear ? [
+    input.colors[1] ? `${input.colors[1]} ${lastNoun}` : "",
+    signals.attributes[1] ? `${signals.attributes[1]} ${lastNoun}` : "",
+    signals.craft === "crochet" ? "crochet clothing" : "hand knit clothing",
+    "handmade clothing", `cozy ${lastNoun}`, "slow fashion", "handmade gift",
+    input.audience === "women" ? "gift for mom" : ""
+  ] : [
+    input.origin === "made_by_seller" ? `handmade ${lastNoun}` : "",
+    `${lastNoun} gift`, "turkish gift", "unique gift", "gift idea"
+  ];
+  return normalizeEtsyTags(withoutFalseAntique(input, [primary, ...candidates, ...ranked, ...generated, ...fillers].filter(Boolean)));
 }
 
 function buildTitle(input: ProductPlanInput, signals: ProductSignals, primary: string, candidates: string[], tags: string[]): string {
@@ -562,7 +584,9 @@ function buildTitle(input: ProductPlanInput, signals: ProductSignals, primary: s
   const originSegment = input.origin === "vintage" && input.yearMade
     ? (primaryWords.has("vintage") ? decade : `Vintage ${decade}`)
     : input.origin === "made_by_seller" ? "Handmade in Türkiye" : "";
-  const giftTag = tags.find((tag) => tag.includes("gift"));
+  // Hediye ifadesi başlığa yalnız yeni bir kelime getiriyorsa eklenir ("Vintage Gift" ikinci kez "vintage" demez).
+  // Vintage başlığında hediye ifadesi yer kaplar; dönem ve ölçü daha önemlidir.
+  const giftTag = signals.isVintage ? undefined : tags.find((tag) => tag.includes("gift") && tag.split(/\s+/).some((word) => word !== "gift" && !said.has(word)));
   const segments = [
     signals.isKnitwear && !descriptors.length ? `${titleCase(primary)}${audience}` : titleCase(primary),
     ...secondary.map(titleCase),

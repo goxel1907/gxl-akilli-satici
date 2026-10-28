@@ -31,6 +31,7 @@ import { analyzeListingPhotos, PhotoListingError } from "./photo-listing.js";
 import { buildMarketingPlan, MarketingPlanError, normalizeMarketingInput } from "./marketing-plan.js";
 import { addEtsyTracking, listEtsyOrders, listShippingCarriers, normalizeTrackingInput } from "./etsy-orders.js";
 import { createReturnPolicy, createShippingProfile, normalizeReturnPolicyInput, normalizeShippingProfileInput, shopReadiness } from "./etsy-setup.js";
+import { normalizeScorecardInput, scoreListing, scoreShopListings } from "./listing-scorecard.js";
 import { assistBuyerMessage, MessageAssistError, normalizeMessageInput } from "./message-assist.js";
 import { explainListingTr } from "./tr-glossary.js";
 import { turkishFor, turkishForPhrases } from "./phrase-tr.js";
@@ -590,6 +591,12 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
     }
     if (request.method === "POST" && url.pathname === "/api/explain-tr") {
       return json(200, explainListingTr(await readBody(request)));
+    }
+    if (request.method === "POST" && url.pathname === "/api/listings/scorecard") {
+      return json(200, scoreListing(normalizeScorecardInput(await readBody(request))));
+    }
+    if (request.method === "GET" && url.pathname === "/api/etsy/listings/scorecard") {
+      return json(200, await scoreShopListings(env));
     }
     if (request.method === "GET" && url.pathname === "/api/etsy/readiness") {
       return json(200, await shopReadiness(env));
