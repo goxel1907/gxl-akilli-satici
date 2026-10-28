@@ -78,7 +78,9 @@ test("the orders list reads paid Etsy receipts and says whether tracking can be 
     assert.equal(query.get("was_paid"), "true");
     assert.equal(query.get("was_canceled"), "false");
   }
-  assert.equal(queries.find((query) => query.get("was_shipped") === "false")?.get("limit"), "100", "old unshipped orders are not cut off");
+  const unshipped = queries.find((query) => query.get("was_shipped") === "false");
+  assert.equal(unshipped?.get("limit"), "100");
+  assert.equal(unshipped?.get("sort_order"), "asc", "the oldest (most overdue) unshipped orders are read first");
   assert.deepEqual(result.orders.map((order) => order.receiptId), [11, 12, 10], "late first, then the closest deadline");
   assert.deepEqual(result.counts, { toShip: 3, late: 1 });
   assert.equal(result.canAddTracking, false, "an old connection without transactions_w must be renewed");

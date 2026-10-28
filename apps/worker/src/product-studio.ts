@@ -531,6 +531,8 @@ function buildTags(input: ProductPlanInput, signals: ProductSignals, primary: st
   // Canlı Etsy taraması yoksa liste 13'ü doldurmaz; Etsy'nin izin verdiği 13 etiketin boş kalanı ürüne uyan,
   // doğru ve alıcının yazdığı genel ifadelerle doldurulur (sona eklenir; yalnız yer kalırsa kullanılır).
   const decade = signals.isVintage && input.yearMade ? `${Math.floor(input.yearMade / 10) * 10}s` : "";
+  // "cozy" yalnız sıcak tutan örgüler için doğru bir sözdür (yazlık bluz için değil).
+  const WARM_KNITS = new Set(["sweater", "cardigan", "beanie", "scarf", "shawl", "blanket", "poncho", "vest", "mittens"]);
   const midCentury = signals.isVintage && input.yearMade && input.yearMade >= 1945 && input.yearMade <= 1975;
   const fillers = signals.isTesbih ? [
     input.beadCount ? `${input.beadCount} bead tasbih` : "",
@@ -544,11 +546,11 @@ function buildTags(input: ProductPlanInput, signals: ProductSignals, primary: st
     input.colors[1] ? `${input.colors[1]} ${lastNoun}` : "",
     signals.attributes[1] ? `${signals.attributes[1]} ${lastNoun}` : "",
     signals.craft === "crochet" ? "crochet clothing" : "hand knit clothing",
-    "handmade clothing", `cozy ${lastNoun}`, "slow fashion", "handmade gift",
+    "handmade clothing", WARM_KNITS.has(lastNoun) ? `cozy ${lastNoun}` : "", "slow fashion", "handmade gift",
     input.audience === "women" ? "gift for mom" : ""
   ] : [
-    input.origin === "made_by_seller" ? `handmade ${lastNoun}` : "",
-    `${lastNoun} gift`, "turkish gift", "unique gift", "gift idea"
+    input.origin === "made_by_seller" && signals.noun !== "item" ? `handmade ${lastNoun}` : "",
+    signals.noun !== "item" ? `${lastNoun} gift` : "", "turkish gift", "unique gift", "gift idea"
   ];
   return normalizeEtsyTags(withoutFalseAntique(input, [primary, ...candidates, ...ranked, ...generated, ...fillers].filter(Boolean)));
 }
@@ -787,12 +789,15 @@ export async function createEtsyPhysicalDraft(
   // Fiziksel ilanın yayına girmesi için iade politikası gerekir; yoksa taslak yine açılır, satıcıya söylenir.
   const draftWarnings: string[] = [];
   let returnPolicyId: number | undefined;
+  let policyReadFailed = false;
   try {
     returnPolicyId = Number((await returnPolicies(env, shop.shopId, fetcher))[0]?.return_policy_id) || undefined;
   } catch (error) {
     if (error instanceof EtsyIntegrationError && error.code === "AUTH_FAILED") throw error;
+    policyReadFailed = true;
   }
-  if (!returnPolicyId) draftWarnings.push("İade politikası yok: yayınlamadan önce Mağaza hazırlığı listesinden 'İade politikası oluştur' (basit modda Yardım, uzman modda Etsy → Kılavuz).");
+  if (policyReadFailed) draftWarnings.push("İade politikası Etsy'den okunamadı ve taslağa eklenmedi. Yayınlamadan önce Etsy'de taslağı açıp iade politikasını seçin.");
+  else if (!returnPolicyId) draftWarnings.push("İade politikası yok: yayınlamadan önce Mağaza hazırlığı listesinden 'İade politikası oluştur' (basit modda Yardım, uzman modda Etsy → Kılavuz).");
 
   let readinessStateId: number | undefined;
   try {

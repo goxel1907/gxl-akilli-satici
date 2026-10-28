@@ -106,8 +106,9 @@ const URGENCY_ORDER: Record<OrderUrgency, number> = { late: 0, today: 1, soon: 2
 export async function listEtsyOrders(env: EtsyRuntimeEnv, fetcher: Fetcher = fetch, now = Date.now()) {
   const shop = await getConnectedShop(env, fetcher);
   // Gönderilmemiş siparişlerin hepsi (en eskisi en çok gecikmiş olandır) ve son gönderilen 10 sipariş.
+  // Gönderilmemişler en eskiden alınır: 100'den fazla açık sipariş olsa bile en çok gecikenler listede kalır.
   const receipts = (shipped: boolean, limit: number) => etsyRequest<{ results?: unknown[] }>(env, `/application/shops/${shop.shopId}/receipts`, {
-    query: { was_paid: true, was_canceled: false, was_shipped: shipped, limit, sort_on: "created", sort_order: "desc" }
+    query: { was_paid: true, was_canceled: false, was_shipped: shipped, limit, sort_on: "created", sort_order: shipped ? "desc" : "asc" }
   }, fetcher);
   const [open, done] = await Promise.all([receipts(false, 100), receipts(true, 10)]);
   const seen = new Set<number>();

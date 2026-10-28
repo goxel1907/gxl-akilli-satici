@@ -2990,7 +2990,7 @@ function HelpScreen({ online, channels, onExpert, onSell }: any) {
   return <>
     <ShopReadinessCard online={online} onSell={onSell} />
     <ShopSettingsCard online={online} shopReady={shopReady} />
-    <EtsyGuide shopReady={Boolean(etsy.shopReady || etsy.shopId)} authorized={Boolean(etsy.authorized || etsy.connected)} />
+    <EtsyGuide shopReady={shopReady} authorized={Boolean(etsy.authorized || etsy.connected)} />
     <View style={styles.card}>
       <Text style={styles.cardTitle}>Uzman mod</Text>
       <Text style={styles.evidence}>Shopier yönetimi, Onaylar, Müşteriler, Pinterest, PDF stüdyosu ve ayrıntılı trend ekranları uzman moddadır. İstediğiniz zaman Özet ekranının altından basit moda dönebilirsiniz.</Text>
