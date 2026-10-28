@@ -16,6 +16,12 @@
         "backgroundColor": "#12261F"
       }
     },
+    "runtimeVersion": { "policy": "appVersion" },
+    "updates": {
+      "url": "https://u.expo.dev/59b0b7f2-67d8-4c15-b106-772d936f422c",
+      "checkAutomatically": "ON_LOAD",
+      "fallbackToCacheTimeout": 0
+    },
     "plugins": [
       "expo-secure-store",
       [

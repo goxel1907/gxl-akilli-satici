@@ -1,5 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, Alert, AppState, Image, Linking, Modal, Platform, Pressable, SafeAreaView, ScrollView, Share, StatusBar, StyleSheet, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Alert, AppState, Image, Linking, Modal, Pressable, ScrollView, Share, StatusBar, StyleSheet, Text, TextInput, View } from "react-native";
+import { SafeAreaProvider, SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import * as Updates from "expo-updates";
+import Constants from "expo-constants";
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as DocumentPicker from "expo-document-picker";
@@ -79,7 +82,53 @@ const productImages: Record<string, any> = {
   "gxl-gumus-telkari": require("./assets/products/gxl-telkari-1.jpg")
 };
 
-export default function App() {
+// Ekran kenarları (durum çubuğu, alt gezinme çubuğu) her telefonda farklı; güvenli alan ölçüsü kütüphaneden okunur.
+export default function Root() {
+  return <SafeAreaProvider><App /></SafeAreaProvider>;
+}
+
+// Uygulama açılınca ve öne gelince yeni sürümü denetler. APK yeniden kurulmadan gelen düzeltmeler (EAS Update)
+// indirilir ve kullanıcıya yeniden başlatma sorulur. Aynı oturumda bir kez sorulur.
+let updateOffered = false;
+
+function useAppUpdates() {
+  useEffect(() => {
+    if (__DEV__ || !Updates.isEnabled) return;
+    let busy = false;
+    const check = async () => {
+      if (busy || updateOffered) return;
+      busy = true;
+      try {
+        const result = await Updates.checkForUpdateAsync();
+        if (!result.isAvailable) return;
+        await Updates.fetchUpdateAsync();
+        updateOffered = true;
+        Alert.alert("Güncelleme hazır", "Uygulamanın yeni sürümü indirildi. Şimdi yeniden başlatılsın mı? Girdiğiniz bilgiler kaybolmaz; yarım kalan form varsa önce kaydedin.", [
+          { text: "Sonra", style: "cancel" },
+          { text: "Yeniden başlat", onPress: () => { Updates.reloadAsync().catch(() => undefined); } }
+        ]);
+      } catch {
+        // İnternet yoksa veya sunucu yanıt vermezse bir sonraki açılışta yeniden denenir.
+      } finally {
+        busy = false;
+      }
+    };
+    check();
+    const subscription = AppState.addEventListener("change", (state) => { if (state === "active") check(); });
+    return () => subscription.remove();
+  }, []);
+}
+
+// Hangi sürümün çalıştığı ekran görüntüsünden anlaşılsın diye Özet'in altında gösterilir.
+function appVersionText(): string {
+  const version = Constants.expoConfig?.version || "";
+  if (!Updates.isEnabled || Updates.isEmbeddedLaunch || !Updates.createdAt) return `Uygulama ${version} · APK ile gelen sürüm`;
+  return `Uygulama ${version} · güncelleme ${Updates.createdAt.toLocaleDateString("tr-TR")} ${Updates.createdAt.toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })}`;
+}
+
+function App() {
+  const insets = useSafeAreaInsets();
+  useAppUpdates();
   const [tab, setTab] = useState<Tab>("Etsy");
   const [data, setData] = useState<any>(demo);
   const [loading, setLoading] = useState(true);
@@ -222,9 +271,9 @@ export default function App() {
   if (!apiToken) return <AccessSetup onSave={saveApiToken} />;
 
   return (
-    <SafeAreaView style={styles.safe}>
+    <View style={styles.safe}>
       <StatusBar barStyle="light-content" backgroundColor="#12261F" />
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: 20 + insets.top }]}>
         <View>
           <Text style={styles.eyebrow}>SATIŞ MERKEZİ</Text>
           <Text style={styles.title}>GXL Akıllı Satıcı</Text>
@@ -232,7 +281,7 @@ export default function App() {
         <View style={[styles.agentBadge, !online && styles.localBadge]}><View style={[styles.dot, !online && styles.localDot]} /><Text style={styles.agentText}>{online ? "Ajan bağlı" : "Yerel mod"}</Text></View>
       </View>
       {loading ? <ActivityIndicator style={{ marginTop: 40 }} color="#C88B47" /> : (
-        <ScrollView contentContainerStyle={styles.content}>
+        <ScrollView contentContainerStyle={[styles.content, { paddingBottom: 110 + insets.bottom }]}>
           {!online && <Pressable style={styles.tokenReset} onPress={resetApiToken}><Ionicons name="key-outline" size={16} color="#8A521F" /><Text style={styles.tokenResetText}>Bağlantı anahtarını yeniden gir</Text></Pressable>}
           {tab === "Özet" && <Overview data={data} setTab={setTab} online={online} channels={channels} />}
           {tab === "Shopier" && <ShopierScreen center={shopierCenter} online={online} onRefresh={refresh} etsyReady={Boolean(channels?.etsy?.shopReady || channels?.etsy?.shopId)} />}
@@ -243,7 +292,7 @@ export default function App() {
           {tab === "Ürünler" && <Products items={data.products} addProduct={addProduct} />}
         </ScrollView>
       )}
-      <View style={styles.nav}>
+      <View style={[styles.nav, { height: 78 + insets.bottom, paddingBottom: 10 + insets.bottom }]}>
         {navigationTabs.map((item) => (
           <Pressable key={item} style={styles.navItem} onPress={() => setTab(item)}>
             <Ionicons name={navigationIcons[item]} size={21} color={tab === item ? "#C88B47" : "#748079"} />
@@ -251,7 +300,7 @@ export default function App() {
           </Pressable>
         ))}
       </View>
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -364,6 +413,7 @@ function Overview({ data, setTab, online, channels }: any) {
       ]) : etsyAuthorized ? openUrl("https://www.etsy.com/sell", "Etsy mağaza kurulumu") : connectEtsy()} />
       <Channel name="E-posta" status={SALES_EMAIL} icon="mail-outline" onPress={() => openUrl(`mailto:${SALES_EMAIL}?subject=${encodeURIComponent("GXL Market Studio")}`, "E-posta")} />
     </View>
+    <Text style={styles.versionText}>{appVersionText()}</Text>
   </>;
 }
 
@@ -528,7 +578,7 @@ function ShopierProductForm({ visible, product, saving, online, onClose, onSave 
   };
 
   return <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
-    <SafeAreaView style={styles.formSafe}><ScrollView contentContainerStyle={styles.formContent}>
+    <SafeAreaView style={styles.formSafe}><StatusBar barStyle="dark-content" /><ScrollView contentContainerStyle={styles.formContent}>
       <View style={styles.formHeader}><Text style={styles.sectionTitle}>{product?.id ? "Shopier ürününü düzenle" : "Shopier'de canlı ürün oluştur"}</Text><Pressable onPress={onClose}><Ionicons name="close" size={28} color="#17221E" /></Pressable></View>
       <Text style={styles.formHint}>Bu form yalnızca Shopier mağazasını değiştirir; Etsy'ye veri göndermez.</Text>
       <Field label="Ürün adı" value={title} onChangeText={setTitle} placeholder="Shopier'de görünecek başlık" />
@@ -708,7 +758,7 @@ function ProductForm({ visible, onClose, onSave }: any) {
   };
   const origins: Array<[ProductOrigin, string]> = [["made_by_seller", "Ben ürettim"], ["designed_by_seller", "Ben tasarladım"], ["vintage", "Vintage"], ["craft_supply", "El işi malzemesi"], ["commercial_resale", "Hazır ürün"], ["unknown", "Bilmiyorum"]];
   return <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
-    <SafeAreaView style={styles.formSafe}><ScrollView contentContainerStyle={styles.formContent}>
+    <SafeAreaView style={styles.formSafe}><StatusBar barStyle="dark-content" /><ScrollView contentContainerStyle={styles.formContent}>
       <View style={styles.formHeader}><Text style={styles.sectionTitle}>Akıllı ürün ekle</Text><Pressable onPress={onClose}><Ionicons name="close" size={28} color="#17221E" /></Pressable></View>
       <Pressable style={styles.imagePicker} onPress={chooseImage}>{imageUri ? <Image source={{ uri: imageUri }} style={styles.formImage} /> : <><Ionicons name="camera-outline" size={32} color="#315B4C" /><Text style={styles.rowTitle}>Ürün fotoğrafını seç</Text><Text style={styles.small}>Etiket, damga ve kusurlar net görünsün</Text></>}</Pressable>
       <Text style={styles.fieldLabel}>Ürün kaynağı</Text>
@@ -1505,7 +1555,7 @@ function DigitalUploadForm({ visible, prefill, onClose, onSaved }: any) {
     ]);
   };
   return <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
-    <SafeAreaView style={styles.formSafe}><ScrollView contentContainerStyle={styles.formContent}>
+    <SafeAreaView style={styles.formSafe}><StatusBar barStyle="dark-content" /><ScrollView contentContainerStyle={styles.formContent}>
       <View style={styles.formHeader}><Text style={styles.sectionTitle}>Dijital PDF yükle</Text><Pressable onPress={onClose}><Ionicons name="close" size={26} color="#315B4C" /></Pressable></View>
       <Pressable style={styles.uploadRow} onPress={pickFiles}><Ionicons name="document-text-outline" size={22} color="#315B4C" /><Text style={[styles.rowTitle, { flex: 1 }]}>{files.length ? `${files.length}/5 dosya seçildi · eklemek için dokunun` : "PDF dosyalarını seç (birden çok seçilebilir, en fazla 5)"}</Text></Pressable>
       {files.map((file) => <View key={file.name} style={styles.fileRow}><Ionicons name={/\.zip$/i.test(file.name || "") ? "archive-outline" : "document-outline"} size={18} color="#56615C" /><Text style={[styles.small, { flex: 1 }]} numberOfLines={1}>{file.name} · {Math.round((file.size || 0) / 1024)} KB</Text><Pressable onPress={() => setFiles(files.filter((item) => item.name !== file.name))}><Ionicons name="close-circle-outline" size={20} color="#B4483A" /></Pressable></View>)}
@@ -1823,6 +1873,7 @@ const ETSY_GUIDE: Array<{ id: string; title: string; icon: any; steps: string[] 
     "Açılıştan sonra Özet sekmesindeki Etsy kanalı 'Bağlı' görünür. Taslak ve yayınlama düğmeleri o zaman açılır."
   ] },
   { id: "trouble", title: "Sorun giderme", icon: "construct-outline", steps: [
+    "Uygulama düzeltmeleri APK kurmadan gelir: 'Güncelleme hazır' sorusu çıkarsa 'Yeniden başlat' deyin. Hangi sürümde olduğunuz Özet ekranının en altında yazar; ekran görüntüsü gönderirken o satır görünsün.",
     "'Etsy mağazası hazır değil': mağaza açılışı bitmemiş ya da yetki yenilenmesi gerekiyor. Aşağıdaki düğmelerle kuruluma devam edin.",
     "'Tarama durdu' veya 'çok fazla istek': Etsy'nin istek sınırına takıldınız. Birkaç dakika sonra tekrar deneyin; otomatik keşif kendi hızında devam eder.",
     "'Yayınlanamadı': ilanda en az bir fotoğraf, bir kargo profili ve fiyat olmalıdır. Taslağı Etsy'de açıp eksik alanı tamamlayın.",
@@ -1992,7 +2043,7 @@ function EtsyProductPlanner({ product, etsyReady, onClose }: any) {
     finally { setProgress(""); }
   };
   return <Modal visible={Boolean(product)} animationType="slide" onRequestClose={onClose}>
-    <SafeAreaView style={styles.formSafe}><ScrollView contentContainerStyle={styles.formContent}>
+    <SafeAreaView style={styles.formSafe}><StatusBar barStyle="dark-content" /><ScrollView contentContainerStyle={styles.formContent}>
       <View style={styles.formHeader}><Text style={[styles.sectionTitle, { flex: 1 }]}>Etsy ilanı hazırla</Text><Pressable onPress={onClose}><Ionicons name="close" size={26} color="#315B4C" /></Pressable></View>
       <Text style={styles.cardTitle}>{product?.title}</Text>
       <Text style={styles.price}>{product?.price} {product?.currency || "TRY"}</Text>
@@ -2430,9 +2481,6 @@ function PhotoListingStudio({ online, etsyReady }: any) {
   </>;
 }
 
-// Android uygulamayı ekranın en üstünden çizer (edge-to-edge); başlık durum çubuğunun altında kalmasın diye o kadar aşağı itilir.
-const STATUS_BAR_INSET = Platform.OS === "android" ? StatusBar.currentHeight || 24 : 0;
-
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: "#F5F2EA" },
   setupSafe: { flex: 1, backgroundColor: "#12261F", justifyContent: "center", padding: 22 },
@@ -2445,7 +2493,7 @@ const styles = StyleSheet.create({
   setupButtonText: { color: "white", fontWeight: "900", fontSize: 15 },
   tokenReset: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7, backgroundColor: "#FFF0D8", borderRadius: 12, padding: 11, marginBottom: 12 },
   tokenResetText: { color: "#8A521F", fontWeight: "800", fontSize: 12 },
-  header: { backgroundColor: "#12261F", paddingHorizontal: 20, paddingTop: 20 + STATUS_BAR_INSET, paddingBottom: 22, flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  header: { backgroundColor: "#12261F", paddingHorizontal: 20, paddingTop: 20, paddingBottom: 22, flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   eyebrow: { color: "#C5D2CC", fontSize: 10, letterSpacing: 2, fontWeight: "700" },
   title: { color: "white", fontSize: 26, fontWeight: "800", marginTop: 3 },
   agentBadge: { flexDirection: "row", alignItems: "center", backgroundColor: "#244438", paddingVertical: 7, paddingHorizontal: 10, borderRadius: 99 },
@@ -2548,7 +2596,8 @@ const styles = StyleSheet.create({
   stockNote: { color: "#8B6F47", fontSize: 10, marginTop: 3 },
   linkNote: { color: "#315B4C", fontSize: 11, fontWeight: "700", marginTop: 6 },
   empty: { alignItems: "center", padding: 45, gap: 8 },
-  formSafe: { flex: 1, backgroundColor: "#F5F2EA", paddingTop: STATUS_BAR_INSET },
+  formSafe: { flex: 1, backgroundColor: "#F5F2EA" },
+  versionText: { color: "#8A948F", fontSize: 11, textAlign: "center", marginTop: 18 },
   formContent: { padding: 20, paddingBottom: 50 },
   formHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 14 },
   imagePicker: { height: 180, borderRadius: 18, borderWidth: 1, borderStyle: "dashed", borderColor: "#AEB9B4", backgroundColor: "#EDF2EF", alignItems: "center", justifyContent: "center", gap: 8, marginBottom: 18, overflow: "hidden" },
