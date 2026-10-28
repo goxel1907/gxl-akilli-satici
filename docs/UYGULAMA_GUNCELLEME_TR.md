@@ -14,7 +14,7 @@
 ## Güncelleme telefona gelmiyorsa
 
 1. Özet'in en altındaki **Güncellemeyi denetle** düğmesine basın; sonuç ekranda yazar (güncel, indirildi ya da hata ayrıntısı). Aynı yerde telefonun dinlediği kanal ve çalışma sürümü yazar: `Kanal preview · çalışma sürümü 0.8.6`.
-2. expo.dev → proje → **Channels** (Kanallar) sayfasında `preview` kanalı bir dala bağlı olmalı ve o dalda aynı çalışma sürümüne (0.8.6) ait Android güncellemesi bulunmalı. Kanal hiçbir dala bağlı değilse kanalı açıp `preview` dalını bağlayın.
+2. expo.dev → proje → **Channels** (Kanallar) sayfasında `preview` kanalı bir dala bağlı olmalı ve o dalda aynı çalışma sürümüne (0.8.6) ait Android güncellemesi bulunmalı. Kanal hiçbir dala bağlı değilse ("No branches are mapped to this channel") **Edit** (Düzenle) ile `preview` dalını bağlayın. Bu durumda iş akışı da "kanal zaten var" hatasıyla durur; bağladıktan sonra yeniden çalıştırın.
 3. Güncelleme sayfasında **Total downloads** (toplam indirme) 0 kalıyorsa telefon güncellemeyi hiç istememiş demektir; kanal bağlantısını ve telefonun internet/VPN bağlantısını kontrol edin.
 
 ## Neden GitHub Actions değil?

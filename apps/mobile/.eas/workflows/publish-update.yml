@@ -2,9 +2,10 @@
 #
 # GitHub Actions bu hesapta ödeme kilidi nedeniyle çalışmadığı için güncelleme Expo'nun kendi sunucularında
 # (EAS Workflows) yayınlanır; APK derlemesinde kullanılan Expo–GitHub bağlantısı yeterlidir, anahtar gerekmez.
-# Güncelleme, preview profiliyle derlenen APK'nin dinlediği "preview" kanalına yayınlanır. Kanal yoksa
-# EAS onu aynı adlı dala bağlayarak oluşturur; kanal başka bir dala bağlıysa o dala yayınlar.
-# (Dal adıyla yayınlanan güncelleme, kanal o dala bağlı değilse telefona ulaşmaz.)
+# Güncelleme, preview profiliyle derlenen APK'nin dinlediği "preview" kanalına yayınlanır: kanal bir dala
+# bağlıysa o dala yayınlanır; kanal hiç yoksa EAS onu aynı adlı dala bağlayarak oluşturur. Kanal var ama
+# hiçbir dala bağlı değilse iş hata verir; o zaman expo.dev → Channels → preview → Edit ile "preview" dalını
+# bağlayın. (Dal adıyla yayınlanan güncelleme, kanal o dala bağlı değilse telefona sessizce ulaşmıyordu.)
 # Yalnız JavaScript değişiklikleri böyle gider; yeni native paket app.json "version" yükseltilip yeni APK ile gelir.
 name: Uygulama güncellemesi
 
