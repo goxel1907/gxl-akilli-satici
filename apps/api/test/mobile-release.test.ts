@@ -23,7 +23,8 @@ test("every APK build profile listens to an update channel and updates are publi
   // GitHub Actions bu hesapta ödeme kilidiyle çalışmıyor; güncellemeyi Expo'nun iş akışı yayınlar.
   const workflow = readFileSync(new URL("../../mobile/.eas/workflows/publish-update.yml", import.meta.url), "utf8");
   assert.match(workflow, /^\s+type: update$/m);
-  assert.match(workflow, /^\s+branch: preview$/m, "the workflow must publish to the branch the preview APK listens to");
+  assert.match(workflow, /^\s+channel: preview$/m, "the workflow must publish to the channel the preview APK listens to");
+  assert.doesNotMatch(workflow, /^\s+branch:/m, "publishing by branch name reaches no phone when the channel is not linked to that branch");
   assert.match(workflow, /^\s+platform: android$/m);
 });
 
