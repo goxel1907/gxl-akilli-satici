@@ -91,6 +91,21 @@ export default function Root() {
 // indirilir ve kullanıcıya yeniden başlatma sorulur. Aynı oturumda bir kez sorulur.
 let updateOffered = false;
 
+type UpdateCheckResult = "offered" | "none" | "disabled";
+
+async function checkAndOfferUpdate(): Promise<UpdateCheckResult> {
+  if (__DEV__ || !Updates.isEnabled) return "disabled";
+  const result = await Updates.checkForUpdateAsync();
+  if (!result.isAvailable) return "none";
+  await Updates.fetchUpdateAsync();
+  updateOffered = true;
+  Alert.alert("Güncelleme hazır", "Uygulamanın yeni sürümü indirildi. Şimdi yeniden başlatılsın mı? Girdiğiniz bilgiler kaybolmaz; yarım kalan form varsa önce kaydedin.", [
+    { text: "Sonra", style: "cancel" },
+    { text: "Yeniden başlat", onPress: () => { Updates.reloadAsync().catch(() => undefined); } }
+  ]);
+  return "offered";
+}
+
 function useAppUpdates() {
   useEffect(() => {
     if (__DEV__ || !Updates.isEnabled) return;
@@ -99,14 +114,7 @@ function useAppUpdates() {
       if (busy || updateOffered) return;
       busy = true;
       try {
-        const result = await Updates.checkForUpdateAsync();
-        if (!result.isAvailable) return;
-        await Updates.fetchUpdateAsync();
-        updateOffered = true;
-        Alert.alert("Güncelleme hazır", "Uygulamanın yeni sürümü indirildi. Şimdi yeniden başlatılsın mı? Girdiğiniz bilgiler kaybolmaz; yarım kalan form varsa önce kaydedin.", [
-          { text: "Sonra", style: "cancel" },
-          { text: "Yeniden başlat", onPress: () => { Updates.reloadAsync().catch(() => undefined); } }
-        ]);
+        await checkAndOfferUpdate();
       } catch {
         // İnternet yoksa veya sunucu yanıt vermezse bir sonraki açılışta yeniden denenir.
       } finally {
@@ -126,6 +134,57 @@ function appVersionText(): string {
   return `Uygulama ${version} · güncelleme ${Updates.createdAt.toLocaleDateString("tr-TR")} ${Updates.createdAt.toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })}`;
 }
 
+// Güncelleme gelmediğinde nedenini görmek için: hangi kanalı dinlediği ve elle denetleme düğmesi.
+function updateChannelText(): string {
+  if (!Updates.isEnabled) return "Uzaktan güncelleme kapalı";
+  return `Kanal ${Updates.channel || "-"} · çalışma sürümü ${Updates.runtimeVersion || "-"}`;
+}
+
+function UpdateCheckButton() {
+  const [busy, setBusy] = useState(false);
+  const run = async () => {
+    setBusy(true);
+    try {
+      const result = await checkAndOfferUpdate();
+      if (result === "disabled") Alert.alert("Güncelleme", "Bu kurulumda uzaktan güncelleme kapalı. Yeni sürüm APK ile kurulur.");
+      if (result === "none") Alert.alert("Güncel", "Telefondaki sürüm en yenisi; indirilecek güncelleme yok.");
+    } catch (error: any) {
+      Alert.alert("Güncelleme denetlenemedi", `İnternet veya VPN bağlantısını kontrol edip yeniden deneyin.\n\nAyrıntı: ${String(error?.message || error).slice(0, 160)}`);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return <Pressable style={styles.updateCheck} onPress={run} disabled={busy}>
+    {busy ? <ActivityIndicator size="small" color="#315B4C" /> : <Ionicons name="cloud-download-outline" size={15} color="#315B4C" />}
+    <Text style={styles.updateCheckText}>{busy ? "Denetleniyor…" : "Güncellemeyi denetle"}</Text>
+  </Pressable>;
+}
+
+type OfflineReason = "" | "network" | "key" | "server";
+
+// Bağlantı koptuğunda nedenini söyler. Anahtarı silme seçeneği yalnız sunucu anahtarı reddettiğinde çıkar;
+// geçici internet kesintisinde kayıtlı anahtar silinmez.
+function OfflineNotice({ reason, busy, onRetry, onResetKey }: { reason: OfflineReason; busy: boolean; onRetry: () => void; onResetKey: () => void }) {
+  const text = reason === "key"
+    ? "Sunucu kayıtlı bağlantı anahtarını kabul etmedi."
+    : reason === "server"
+      ? "Sunucu şu an yanıt vermiyor. Biraz sonra yeniden deneyin."
+      : "Sunucuya ulaşılamadı. İnternet veya VPN bağlantısını kontrol edip yeniden deneyin.";
+  return <View style={styles.offlineCard}>
+    <Text style={styles.offlineText}>{text}</Text>
+    <View style={styles.offlineActions}>
+      <Pressable style={styles.offlineButton} onPress={onRetry} disabled={busy}>
+        {busy ? <ActivityIndicator size="small" color="#8A521F" /> : <Ionicons name="refresh" size={16} color="#8A521F" />}
+        <Text style={styles.tokenResetText}>{busy ? "Bağlanıyor…" : "Yeniden bağlan"}</Text>
+      </Pressable>
+      {reason === "key" && <Pressable style={styles.offlineButton} onPress={onResetKey}>
+        <Ionicons name="key-outline" size={16} color="#8A521F" />
+        <Text style={styles.tokenResetText}>Anahtarı yeniden gir</Text>
+      </Pressable>}
+    </View>
+  </View>;
+}
+
 function App() {
   const insets = useSafeAreaInsets();
   useAppUpdates();
@@ -133,6 +192,9 @@ function App() {
   const [data, setData] = useState<any>(demo);
   const [loading, setLoading] = useState(true);
   const [online, setOnline] = useState(false);
+  const [offlineReason, setOfflineReason] = useState<OfflineReason>("");
+  const [reconnecting, setReconnecting] = useState(false);
+  const retryTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const [channels, setChannels] = useState<any>({
     shopier: { configured: false, connected: false },
     etsy: { configured: false, storageConfigured: false, connected: false }
@@ -142,13 +204,18 @@ function App() {
   const [tokenReady, setTokenReady] = useState(false);
   const [apiToken, setApiToken] = useState("");
 
-  const refresh = async () => {
+  const refresh = async (attempt = 0) => {
     if (!API_URL) {
       setData(demo);
       setOnline(false);
       setLoading(false);
       return;
     }
+    if (retryTimer.current) {
+      clearTimeout(retryTimer.current);
+      retryTimer.current = undefined;
+    }
+    let reason: OfflineReason = "network";
     try {
       const [response, channelResponse, opportunityResponse, shopierResponse] = await Promise.all([
         fetch(`${API_URL}/api/dashboard`, { headers: apiHeaders() }),
@@ -156,7 +223,12 @@ function App() {
         fetch(`${API_URL}/api/opportunities`, { headers: apiHeaders() }),
         fetch(`${API_URL}/api/shopier/center`, { headers: apiHeaders() })
       ]);
-      if (!response.ok) throw new Error();
+      if (!response.ok) {
+        reason = response.status === 401 ? "key" : "server";
+        throw new Error();
+      }
+      // Bundan sonraki hata (bozuk yanıt) internet değil sunucu kaynaklıdır.
+      reason = "server";
       setData(await response.json());
       if (channelResponse.ok) setChannels(await channelResponse.json());
       else setChannels({
@@ -168,13 +240,26 @@ function App() {
       if (shopierResponse.ok) setShopierCenter(await shopierResponse.json());
       else setShopierCenter(demoShopierCenter);
       setOnline(true);
+      setOfflineReason("");
     } catch {
       setData(demo);
       setOpportunityCenter(demoOpportunityCenter);
       setShopierCenter(demoShopierCenter);
       setOnline(false);
+      setOfflineReason(reason);
+      // Uygulama öne gelirken veya VPN bağlanırken ilk istek düşebilir; bir kez kendiliğinden yeniden denenir.
+      if (reason === "network" && attempt === 0) retryTimer.current = setTimeout(() => { refresh(1); }, 4000);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const reconnect = async () => {
+    setReconnecting(true);
+    try {
+      await refresh(1);
+    } finally {
+      setReconnecting(false);
     }
   };
 
@@ -265,6 +350,11 @@ function App() {
     setOnline(false);
   };
 
+  const confirmResetToken = () => Alert.alert("Bağlantı anahtarı", "Kayıtlı anahtar silinip giriş ekranı açılacak. Cloudflare'a kaydettiğiniz APP_ACCESS_TOKEN değerini yeniden girmeniz gerekir. Devam edilsin mi?", [
+    { text: "Vazgeç", style: "cancel" },
+    { text: "Sil ve yeniden gir", style: "destructive", onPress: () => { resetApiToken(); } }
+  ]);
+
   if (!tokenReady) {
     return <SafeAreaView style={styles.safe}><ActivityIndicator style={{ marginTop: 80 }} color="#C88B47" /></SafeAreaView>;
   }
@@ -282,7 +372,7 @@ function App() {
       </View>
       {loading ? <ActivityIndicator style={{ marginTop: 40 }} color="#C88B47" /> : (
         <ScrollView contentContainerStyle={[styles.content, { paddingBottom: 110 + insets.bottom }]}>
-          {!online && <Pressable style={styles.tokenReset} onPress={resetApiToken}><Ionicons name="key-outline" size={16} color="#8A521F" /><Text style={styles.tokenResetText}>Bağlantı anahtarını yeniden gir</Text></Pressable>}
+          {!online && <OfflineNotice reason={offlineReason} busy={reconnecting} onRetry={reconnect} onResetKey={confirmResetToken} />}
           {tab === "Özet" && <Overview data={data} setTab={setTab} online={online} channels={channels} />}
           {tab === "Shopier" && <ShopierScreen center={shopierCenter} online={online} onRefresh={refresh} etsyReady={Boolean(channels?.etsy?.shopReady || channels?.etsy?.shopId)} />}
           {tab === "Etsy" && <EtsyScreen online={online} channels={channels} />}
@@ -414,6 +504,8 @@ function Overview({ data, setTab, online, channels }: any) {
       <Channel name="E-posta" status={SALES_EMAIL} icon="mail-outline" onPress={() => openUrl(`mailto:${SALES_EMAIL}?subject=${encodeURIComponent("GXL Market Studio")}`, "E-posta")} />
     </View>
     <Text style={styles.versionText}>{appVersionText()}</Text>
+    <Text style={styles.versionMeta}>{updateChannelText()}</Text>
+    <UpdateCheckButton />
   </>;
 }
 
@@ -838,11 +930,11 @@ function EtsyScreen({ online, channels }: any) {
     <View style={styles.agentHero}>
       <View style={styles.agentHeroTop}><View style={styles.shopierLogo}><Ionicons name="color-palette" size={22} color="white" /></View><View style={{ flex: 1 }}><Text style={styles.agentHeroTitle}>Etsy Merkezi</Text><Text style={styles.agentHeroText}>{shopReady ? `Mağaza bağlı${etsy.shopName ? ` · ${etsy.shopName}` : ""}${etsyOpeningText(etsy)} · otomatik keşif açık` : "Trend, otomatik keşif ve stüdyo mağaza açılmadan da çalışır. Taslak ve yayınlama mağaza açılınca etkinleşir."}</Text></View></View>
     </View>
-    {!shopReady && section !== "Kılavuz" && <Pressable style={styles.guardrail} onPress={() => setSection("Kılavuz")}><Ionicons name="storefront-outline" size={20} color="#315B4C" /><Text style={[styles.guardrailText, { flex: 1 }]}>{authorized ? "Etsy hesabı yetkili, mağaza açılışı bekleniyor. Adımlar için dokunun: Kılavuz → Mağaza açılışı." : "Etsy mağazası henüz bağlı değil. Adımlar için dokunun: Kılavuz → Mağaza açılışı."}</Text><Ionicons name="chevron-forward" size={18} color="#315B4C" /></Pressable>}
+    {!shopReady && online && section !== "Kılavuz" && <Pressable style={styles.guardrail} onPress={() => setSection("Kılavuz")}><Ionicons name="storefront-outline" size={20} color="#315B4C" /><Text style={[styles.guardrailText, { flex: 1 }]}>{authorized ? "Etsy hesabı yetkili, mağaza açılışı bekleniyor. Adımlar için dokunun: Kılavuz → Mağaza açılışı." : "Etsy mağazası henüz bağlı değil. Adımlar için dokunun: Kılavuz → Mağaza açılışı."}</Text><Ionicons name="chevron-forward" size={18} color="#315B4C" /></Pressable>}
     <View style={styles.segment}>
       {(["Trend", "Stüdyo", "Dijital", "Pinterest", "Kılavuz"] as const).map((item) => <Pressable key={item} style={[styles.segmentItem, section === item && styles.segmentActive]} onPress={() => setSection(item)}><Text style={[styles.segmentText, section === item && styles.segmentTextActive]}>{item}</Text></Pressable>)}
     </View>
-    {!online && section !== "Kılavuz" && <Text style={styles.shopierBlocker}>Sunucu bağlantısı yok. Trend tarama, prompt üretimi ve PDF yükleme için uygulamanın sunucuya bağlı olması gerekir.</Text>}
+    {!online && section !== "Kılavuz" && <Text style={styles.shopierBlocker}>Sunucu bağlantısı yok. Trend tarama, prompt üretimi, mağaza durumu ve PDF yükleme için sunucuya bağlanmak gerekir; üstteki "Yeniden bağlan" düğmesine basın.</Text>}
     {section === "Trend" && <TrendPanel online={online} onUse={(seed: any) => { setStudioSeed(seed); setSection("Stüdyo"); }} />}
     <View style={section === "Stüdyo" ? undefined : styles.hidden}><StudioPanel online={online} active={section === "Stüdyo"} etsyReady={shopReady} seed={studioSeed} onUpload={(prefill: any) => { setUploadPrefill(prefill); setSection("Dijital"); }} /></View>
     {section === "Dijital" && <DigitalPanel online={online} shopReady={shopReady} prefill={uploadPrefill} onPrefillUsed={() => setUploadPrefill(undefined)} />}
@@ -1883,12 +1975,12 @@ const ETSY_GUIDE: Array<{ id: string; title: string; icon: any; steps: string[] 
     "Açılıştan sonra Özet sekmesindeki Etsy kanalı 'Bağlı' görünür. Taslak ve yayınlama düğmeleri o zaman açılır."
   ] },
   { id: "trouble", title: "Sorun giderme", icon: "construct-outline", steps: [
-    "Uygulama düzeltmeleri APK kurmadan gelir: 'Güncelleme hazır' sorusu çıkarsa 'Yeniden başlat' deyin. Hangi sürümde olduğunuz Özet ekranının en altında yazar; ekran görüntüsü gönderirken o satır görünsün.",
+    "Uygulama düzeltmeleri APK kurmadan gelir: 'Güncelleme hazır' sorusu çıkarsa 'Yeniden başlat' deyin. Hangi sürümde olduğunuz Özet ekranının en altında yazar; ekran görüntüsü gönderirken o satır görünsün. Beklediğiniz güncelleme gelmediyse aynı yerdeki 'Güncellemeyi denetle' düğmesine basın; sonucu ekranda yazar.",
     "'Etsy mağazası hazır değil': mağaza açılışı bitmemiş ya da yetki yenilenmesi gerekiyor. Aşağıdaki düğmelerle kuruluma devam edin.",
     "'Tarama durdu' veya 'çok fazla istek': Etsy'nin istek sınırına takıldınız. Birkaç dakika sonra tekrar deneyin; otomatik keşif kendi hızında devam eder.",
     "'Yayınlanamadı': ilanda en az bir fotoğraf, bir kargo profili ve fiyat olmalıdır. Taslağı Etsy'de açıp eksik alanı tamamlayın.",
     "'Keşfedilenler' boş görünüyorsa ilk otomatik taramalar birkaç saat sürer. Hızlandırmak için gruplarda 'Tümünü tara' düğmesine basın.",
-    "Üstte 'Yerel mod' görünüyorsa sunucuya bağlanılamıyordur. 'Bağlantı anahtarını yeniden gir' ile anahtarı tekrar girin."
+    "Üstte 'Yerel mod' görünüyorsa sunucuya bağlanılamıyordur. Uygulama bir kez kendisi yeniden dener; olmazsa internet veya VPN bağlantısını kontrol edip 'Yeniden bağlan' düğmesine basın. Kayıtlı anahtar yalnız sunucu onu reddederse yeniden istenir."
   ] }
 ];
 
@@ -2501,7 +2593,6 @@ const styles = StyleSheet.create({
   setupInput: { backgroundColor: "#F7F6F2", borderWidth: 1, borderColor: "#D8D4CA", borderRadius: 13, paddingHorizontal: 14, paddingVertical: 14, color: "#17221E", marginBottom: 12 },
   setupButton: { backgroundColor: "#315B4C", borderRadius: 13, padding: 15, alignItems: "center" },
   setupButtonText: { color: "white", fontWeight: "900", fontSize: 15 },
-  tokenReset: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7, backgroundColor: "#FFF0D8", borderRadius: 12, padding: 11, marginBottom: 12 },
   tokenResetText: { color: "#8A521F", fontWeight: "800", fontSize: 12 },
   header: { backgroundColor: "#12261F", paddingHorizontal: 20, paddingTop: 20, paddingBottom: 22, flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   eyebrow: { color: "#C5D2CC", fontSize: 10, letterSpacing: 2, fontWeight: "700" },
@@ -2608,6 +2699,13 @@ const styles = StyleSheet.create({
   empty: { alignItems: "center", padding: 45, gap: 8 },
   formSafe: { flex: 1, backgroundColor: "#F5F2EA" },
   versionText: { color: "#8A948F", fontSize: 11, textAlign: "center", marginTop: 18 },
+  versionMeta: { color: "#A3ACA7", fontSize: 10, textAlign: "center", marginTop: 3 },
+  updateCheck: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, alignSelf: "center", marginTop: 10, paddingVertical: 8, paddingHorizontal: 14, borderRadius: 999, backgroundColor: "#E7EFEB" },
+  updateCheckText: { color: "#315B4C", fontWeight: "800", fontSize: 12 },
+  offlineCard: { backgroundColor: "#FFF7EA", borderRadius: 14, padding: 12, marginBottom: 12, gap: 10 },
+  offlineText: { color: "#8A521F", fontSize: 13, lineHeight: 19 },
+  offlineActions: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  offlineButton: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7, backgroundColor: "#FFF0D8", borderRadius: 12, paddingVertical: 10, paddingHorizontal: 14, flexGrow: 1 },
   formContent: { padding: 20, paddingBottom: 50 },
   formHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 14 },
   imagePicker: { height: 180, borderRadius: 18, borderWidth: 1, borderStyle: "dashed", borderColor: "#AEB9B4", backgroundColor: "#EDF2EF", alignItems: "center", justifyContent: "center", gap: 8, marginBottom: 18, overflow: "hidden" },

@@ -23,6 +23,18 @@ test("every APK build profile listens to an update channel and updates are publi
   // GitHub Actions bu hesapta ödeme kilidiyle çalışmıyor; güncellemeyi Expo'nun iş akışı yayınlar.
   const workflow = readFileSync(new URL("../../mobile/.eas/workflows/publish-update.yml", import.meta.url), "utf8");
   assert.match(workflow, /^\s+type: update$/m);
-  assert.match(workflow, /^\s+branch: preview$/m, "the workflow must publish to the branch the preview APK listens to");
+  assert.match(workflow, /^\s+channel: preview$/m, "the workflow must publish to the channel the preview APK listens to");
+  assert.doesNotMatch(workflow, /^\s+branch:/m, "publishing by branch name reaches no phone when the channel is not linked to that branch");
   assert.match(workflow, /^\s+platform: android$/m);
+});
+
+// Geçici internet kesintisinde kayıtlı bağlantı anahtarı silinmemeli; silme yalnız sunucu anahtarı reddedince
+// ve onay sorulduktan sonra yapılır. Güncelleme gelmediğinde nedeni Özet'teki düğmeyle görülebilmeli.
+test("a dropped connection offers a retry and never deletes the saved key without asking", () => {
+  const app = readFileSync(new URL("../../mobile/App.tsx", import.meta.url), "utf8");
+  assert.doesNotMatch(app, /onPress=\{resetApiToken\}/, "deleting the saved key must go through the confirmation dialog");
+  assert.match(app, /reason === "key" && <Pressable style=\{styles\.offlineButton\} onPress=\{onResetKey\}>/);
+  assert.match(app, /response\.status === 401 \? "key" : "server"/);
+  assert.match(app, /<OfflineNotice reason=\{offlineReason\} busy=\{reconnecting\} onRetry=\{reconnect\} onResetKey=\{confirmResetToken\} \/>/);
+  assert.match(app, /<UpdateCheckButton \/>/);
 });
