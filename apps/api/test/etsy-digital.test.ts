@@ -365,6 +365,26 @@ test("Etsy status treats a missing shop as setup pending instead of an outage", 
   }
 });
 
+test("Etsy status tells whether the shop opening is finished: payments set up and listings active", async () => {
+  const kv = memoryKv();
+  await kv.store.put("etsy:tokens", JSON.stringify({ accessToken: "123.token", refreshToken: "refresh", expiresAt: Date.now() + 3_600_000, scope: "shops_r", userId: "123" }));
+  const env = { ETSY_API_KEY: "key", ETSY_SHARED_SECRET: "secret", ETSY_OAUTH: kv.store };
+  const originalFetch = globalThis.fetch;
+  let shop: Record<string, unknown> = { shop_id: 777, shop_name: "GXLMarketStudio", currency_code: "USD", is_etsy_payments_onboarded: false, listing_active_count: 0 };
+  globalThis.fetch = (async () => Response.json(shop)) as typeof fetch;
+  try {
+    const pending = await getEtsyStatus(env) as { shopReady?: boolean; paymentsReady?: boolean; activeListings?: number };
+    assert.equal(pending.shopReady, true);
+    assert.equal(pending.paymentsReady, false);
+    assert.equal(pending.activeListings, 0);
+    shop = { shop_id: 777, shop_name: "GXLMarketStudio" };
+    const unknown = await getEtsyStatus(env);
+    assert.ok(!("paymentsReady" in unknown), "a missing field must not be reported as 'not set up'");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("a digital product carries up to 5 files (PDFs and a ZIP) to Etsy and to protected links", async () => {
   const kv = memoryKv();
   await kv.store.put("etsy:tokens", JSON.stringify({ accessToken: "123.token", refreshToken: "refresh", expiresAt: Date.now() + 3_600_000, scope: "listings_w", userId: "123" }));

@@ -261,3 +261,34 @@ test("model output is clamped to safe, short values", () => {
   assert.deepEqual(clean.colors, ["blue"]);
   assert.equal(clean.questionsTr.length, 5);
 });
+
+test("a Turkish seller can type colours and details in Turkish; nothing half-translated reaches the listing", async () => {
+  const { termsToEnglish, glossTr, explainListingTr } = await import("../../worker/src/tr-glossary.js");
+  assert.deepEqual(termsToEnglish(["krem", "Adaçayı yeşili", "Bordo"], "color", 3).terms, ["cream", "sage green", "burgundy"]);
+  const mixed = termsToEnglish(["kırmızımsı", "heather gray", "oversize"], "color", 3);
+  assert.deepEqual(mixed.dropped, ["kırmızımsı"], "a Turkish word that is not in the dictionary is left out, never mangled");
+  assert.deepEqual(mixed.unchecked, ["heather gray", "oversize"]);
+  assert.deepEqual(termsToEnglish(["kare motif", "püsküllü", "Bol kesim"], "feature", 4).terms, ["granny square", "tassel", "oversized"]);
+
+  const product = normalizeProductInput({ titleTr: "Tığ işi hırka", origin: "made_by_seller", colors: ["krem", "kırmızımsı"], attributesEn: ["kare motif"], conditionNote: "Hafif çizik var" });
+  assert.deepEqual(product.colors, ["cream"]);
+  assert.deepEqual(product.attributesEn, ["granny square"]);
+  assert.equal(product.conditionNote, undefined, "a Turkish condition note never lands in the English description");
+  const plan = buildProductPlan(product, ruleKeywordCandidates(product), [], {});
+  assert.doesNotMatch(plan.description, /kırmız|çizik/);
+  assert.ok(plan.warnings.some((warning) => warning.includes("kırmızımsı") && warning.includes("durum notu")));
+
+  const vintage = buildProductPlan(normalizeProductInput({ titleTr: "Vintage bakır tepsi", origin: "vintage", yearMade: 1975, conditionLevel: "visible_wear" }), [], [], {});
+  assert.match(vintage.description, /CONDITION\nVisible wear and patina consistent with age/);
+
+  assert.equal(glossTr("Crochet Sweater for Women"), "tığ işi kazak kadınlar için");
+  assert.equal(glossTr("gift for her"), "kadına hediye");
+  assert.equal(glossTr("1970s"), "1970'ler");
+  const explained = explainListingTr({ title: "Crochet Sweater, Cream Cotton Oversized Sweater for Women, Size M, Handmade in Türkiye, Gift for Her", tags: ["sage green cardigan", "prayer beads"] });
+  assert.equal(explained.titleTr, "tığ işi kazak · krem pamuk bol kesim kazak kadınlar için · beden M · Türkiye'de el yapımı · kadına hediye");
+  assert.deepEqual(explained.tags, [{ tag: "sage green cardigan", tr: "adaçayı yeşili hırka" }, { tag: "prayer beads", tr: "tesbih" }]);
+
+  const response = await handleRequest(new Request("https://gxl.example/api/explain-tr", { method: "POST", headers: { authorization: "Bearer app-token", "content-type": "application/json" }, body: JSON.stringify({ title: "Undated Printable Planner", tags: ["habit tracker"] }) }), { APP_ACCESS_TOKEN: "app-token" });
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { titleTr: "tarihsiz yazdırılabilir planlayıcı", tags: [{ tag: "habit tracker", tr: "alışkanlık takip sayfası" }] });
+});

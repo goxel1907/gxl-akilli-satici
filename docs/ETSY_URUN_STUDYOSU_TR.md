@@ -22,6 +22,13 @@ Tesbih, gümüş, vintage, örgü/tığ işi ve benzeri fiziksel ürünlerde Ets
 4. **Etsy araştırması ve plan:** Aşağıdaki "Sistemin yaptıkları" adımları uygulanır.
 5. **Taslak:** Fotoğraflar ancak bu adımda 3000 piksele küçültülüp tek tek yüklenir (`POST /api/products/photos`). Uygulamanın kendi deposuna (KV veya R2) kaydedilir ve Etsy taslağına aktarılır. Aynı ürün için ikinci kez taslak açılmaz.
 
+**Türkçe yazım ve kontrol:**
+
+- Renk ve özellik alanlarına Türkçe yazılabilir (ör. "krem, adaçayı yeşili", "bol kesim, kare motif"). Sistem sözlükten İngilizceye çevirir.
+- Türkçe harf içeren ve sözlükte olmayan kelime ilana **girmez**; uyarıda adıyla gösterilir. Sözlükte olmayıp olduğu gibi kalan kelime de kontrol için listelenir.
+- Vintage durumu Türkçe seçilir (kusursuz, hafif kullanım izi, belirgin aşınma/patina, onarım görmüş) ve İngilizce cümleye çevrilir. Türkçe yazılmış ek not İngilizce açıklamaya girmez.
+- Hazırlanan İngilizce başlık ve etiketlerin altında **"Türkçesi"** kartı çıkar (`POST /api/explain-tr`). İlan İngilizce kalır; kart yalnız satıcının ne yazıldığını anlaması içindir. Aynı kart PDF ve desen stüdyosu sonuçlarında da vardır.
+
 **Örgü ürünlerinde:**
 
 - **Başlık:** "Crochet Sweater, Cream Cotton Oversized Sweater, Size M, Handmade in Türkiye, Gift for Her" düzenindedir.

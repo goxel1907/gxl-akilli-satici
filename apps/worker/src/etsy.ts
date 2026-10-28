@@ -204,7 +204,8 @@ export async function etsyRequest<T>(env: EtsyRuntimeEnv, path: string, options:
   return payload as T;
 }
 
-function safeShopSummary(payload: unknown): { shopId?: number; shopName?: string; title?: string; currencyCode?: string } {
+// Mağaza kaydı Etsy açılışının ilk adımında (ad seçimi) oluşur. Açılışın bitip bitmediğini ödeme kurulumu ve aktif ilan sayısı gösterir.
+function safeShopSummary(payload: unknown): { shopId?: number; shopName?: string; title?: string; currencyCode?: string; paymentsReady?: boolean; activeListings?: number } {
   const root = payload && typeof payload === "object" ? payload as Record<string, unknown> : {};
   const rows = Array.isArray(root.results) ? root.results : [];
   const shop = rows[0] && typeof rows[0] === "object" ? rows[0] as Record<string, unknown> : root;
@@ -212,7 +213,9 @@ function safeShopSummary(payload: unknown): { shopId?: number; shopName?: string
     shopId: shop.shop_id ? Number(shop.shop_id) : undefined,
     shopName: shop.shop_name ? String(shop.shop_name) : undefined,
     title: shop.title ? String(shop.title) : undefined,
-    currencyCode: shop.currency_code ? String(shop.currency_code) : undefined
+    currencyCode: shop.currency_code ? String(shop.currency_code) : undefined,
+    ...(typeof shop.is_etsy_payments_onboarded === "boolean" ? { paymentsReady: shop.is_etsy_payments_onboarded } : {}),
+    ...(typeof shop.listing_active_count === "number" ? { activeListings: shop.listing_active_count } : {})
   };
 }
 

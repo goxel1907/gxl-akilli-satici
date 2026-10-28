@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, Alert, AppState, Image, Linking, Modal, Pressable, SafeAreaView, ScrollView, Share, StatusBar, StyleSheet, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Alert, AppState, Image, Linking, Modal, Platform, Pressable, SafeAreaView, ScrollView, Share, StatusBar, StyleSheet, Text, TextInput, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as DocumentPicker from "expo-document-picker";
@@ -301,6 +301,26 @@ async function connectEtsy() {
   }
 }
 
+// Shopier açıklaması HTML olarak gelir; kartta düz metin gösterilir. Editörden yapıştırmayla kalan yorum parçaları ("<!--TgQPHd...-->") atılır.
+function stripHtmlComments(html: string): string {
+  return html.replace(/<!--[\s\S]*?-->/g, "").replace(/&lt;!--[\s\S]*?--(?:&gt;|>)/g, "");
+}
+
+function plainText(html?: string): string {
+  return stripHtmlComments(String(html || ""))
+    .replace(/<\s*br\s*\/?>/gi, "\n").replace(/<\/(p|li|div|h\d)>/gi, "\n").replace(/<li[^>]*>/gi, "• ").replace(/<[^>]+>/g, "")
+    .replace(/&nbsp;/g, " ").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, "\"").replace(/&#39;/g, "'").replace(/&amp;/g, "&")
+    .replace(/[ \t]+/g, " ").replace(/\s*\n\s*/g, "\n").trim();
+}
+
+// Etsy mağaza kaydı açılışın ilk adımında oluşur; ödeme kurulumu ve aktif ilan sayısı mağazanın gerçekten açılıp açılmadığını gösterir.
+function etsyOpeningText(etsy: any): string {
+  const parts: string[] = [];
+  if (etsy?.paymentsReady === false) parts.push("ödeme kurulumu bekliyor");
+  if (typeof etsy?.activeListings === "number") parts.push(`${etsy.activeListings} aktif ilan`);
+  return parts.length ? ` · ${parts.join(" · ")}` : "";
+}
+
 function Overview({ data, setTab, online, channels }: any) {
   const shopier = channels?.shopier;
   const shopierStatus = shopier?.connected
@@ -310,7 +330,7 @@ function Overview({ data, setTab, online, channels }: any) {
   const etsyAuthorized = Boolean(etsy?.authorized || etsy?.connected);
   const etsyShopReady = Boolean(etsy?.shopReady || etsy?.shopId);
   const etsyStatus = etsyShopReady
-    ? `Bağlı${etsy.shopName ? ` · ${etsy.shopName}` : ""}`
+    ? `Bağlı${etsy.shopName ? ` · ${etsy.shopName}` : ""}${etsyOpeningText(etsy)}`
     : etsyAuthorized
       ? "Hesap yetkili · mağaza kurulumunu tamamla"
       : etsy?.message || (!etsy?.configured
@@ -323,7 +343,7 @@ function Overview({ data, setTab, online, channels }: any) {
     <View style={styles.metrics}>
       <Metric value={data.metrics.activeLeads} label="Aktif müşteri" icon="people" />
       <Metric value={data.metrics.pendingApprovals} label="Onay bekliyor" icon="time" accent />
-      <Metric value={data.metrics.catalogProducts} label="Ürün" icon="cube" />
+      <Metric value={shopier?.connected ? shopier.productCount : data.metrics.catalogProducts} label={shopier?.connected ? "Shopier ürünü" : "Ürün"} icon="cube" />
       <Metric value={data.metrics.conversations} label="Görüşme" icon="chatbubbles" />
     </View>
     <View style={styles.callout}>
@@ -420,7 +440,7 @@ function ShopierScreen({ center, online, onRefresh, etsyReady }: any) {
     {!products.length ? <Empty icon="bag-outline" title="Canlı ürün görünmüyor" text="Shopier'e ürün eklendiğinde veya bağlantı yenilendiğinde burada görünür." /> : products.map((product: any) => <View style={styles.card} key={product.id}>
       <View style={styles.shopierProductTop}><View style={{ flex: 1 }}><Text style={styles.cardTitle}>{product.title}</Text><Text style={styles.small}>#{product.id} · {product.stockStatus === "outOfStock" ? "Stokta yok" : `${product.stockQuantity ?? "?"} stok`}</Text></View><Pressable style={styles.editButton} onPress={() => openEdit(product)} disabled={!capabilities.updateProducts}><Ionicons name="create-outline" size={19} color={capabilities.updateProducts ? "#315B4C" : "#A8ADA9"} /></Pressable></View>
       <Text style={styles.price}>{product.price ? `${product.price} ${product.currency || "TRY"}` : "Fiyat alınamadı"}</Text>
-      {!!product.description && <Text style={styles.evidence} numberOfLines={3}>{product.description}</Text>}
+      {!!plainText(product.description) && <Text style={styles.evidence} numberOfLines={3}>{plainText(product.description)}</Text>}
       <View style={styles.inlineActions}>
         {!!product.url && <Pressable style={styles.secondaryButton} onPress={() => openUrl(product.url, product.title)}><Text style={styles.secondaryButtonText}>Satış sayfası</Text></Pressable>}
         <Pressable style={styles.secondaryButton} onPress={() => openEdit(product)} disabled={!capabilities.updateProducts}><Text style={styles.secondaryButtonText}>Fiyat / stok düzenle</Text></Pressable>
@@ -459,7 +479,7 @@ function ShopierProductForm({ visible, product, saving, online, onClose, onSave 
   useEffect(() => {
     if (!visible) return;
     setTitle(product?.title || "");
-    setDescription(product?.description || "");
+    setDescription(stripHtmlComments(product?.description || ""));
     setImageUrl(product?.media?.[0]?.url || "");
     setPrice(product?.basePrice || product?.price || "");
     setShippingPrice(product?.shippingPrice || "");
@@ -764,7 +784,7 @@ function EtsyScreen({ online, channels }: any) {
   const authorized = Boolean(etsy.authorized || etsy.connected);
   return <>
     <View style={styles.agentHero}>
-      <View style={styles.agentHeroTop}><View style={styles.shopierLogo}><Ionicons name="color-palette" size={22} color="white" /></View><View style={{ flex: 1 }}><Text style={styles.agentHeroTitle}>Etsy Merkezi</Text><Text style={styles.agentHeroText}>{shopReady ? `Mağaza bağlı${etsy.shopName ? ` · ${etsy.shopName}` : ""} · otomatik keşif açık` : "Trend, otomatik keşif ve stüdyo mağaza açılmadan da çalışır. Taslak ve yayınlama mağaza açılınca etkinleşir."}</Text></View></View>
+      <View style={styles.agentHeroTop}><View style={styles.shopierLogo}><Ionicons name="color-palette" size={22} color="white" /></View><View style={{ flex: 1 }}><Text style={styles.agentHeroTitle}>Etsy Merkezi</Text><Text style={styles.agentHeroText}>{shopReady ? `Mağaza bağlı${etsy.shopName ? ` · ${etsy.shopName}` : ""}${etsyOpeningText(etsy)} · otomatik keşif açık` : "Trend, otomatik keşif ve stüdyo mağaza açılmadan da çalışır. Taslak ve yayınlama mağaza açılınca etkinleşir."}</Text></View></View>
     </View>
     {!shopReady && section !== "Kılavuz" && <Pressable style={styles.guardrail} onPress={() => setSection("Kılavuz")}><Ionicons name="storefront-outline" size={20} color="#315B4C" /><Text style={[styles.guardrailText, { flex: 1 }]}>{authorized ? "Etsy hesabı yetkili, mağaza açılışı bekleniyor. Adımlar için dokunun: Kılavuz → Mağaza açılışı." : "Etsy mağazası henüz bağlı değil. Adımlar için dokunun: Kılavuz → Mağaza açılışı."}</Text><Ionicons name="chevron-forward" size={18} color="#315B4C" /></Pressable>}
     <View style={styles.segment}>
@@ -1187,6 +1207,7 @@ function PrintableStudio({ online, seed, seeding, onReseed, onPickKind, onUpload
       <Text style={styles.small}>{listing.checks.titleLength}/140 karakter · {listing.checks.tagCount}/13 etiket</Text>
       <View style={[styles.chips, { marginTop: 8 }]}>{listing.tags.map((tag: string) => <View style={styles.chip} key={tag}><Text style={styles.chipText}>{tag}</Text></View>)}</View>
       {listing.checks.issues.map((issue: string) => <Text style={styles.warningText} key={issue}>• {issue}</Text>)}
+      <TurkishGloss title={listing.title} tags={listing.tags} />
       {listing.warnings.map((warning: string) => <Text style={styles.warningText} key={warning}>• {warning}</Text>)}
       <View style={styles.inlineActions}>
         <Pressable style={styles.secondaryButton} onPress={() => Share.share({ message: `${listing.title}\n\n${listing.description}\n\nTags: ${listing.tags.join(", ")}` })}><Text style={styles.secondaryButtonText}>İlan metnini kopyala</Text></Pressable>
@@ -1389,6 +1410,7 @@ function StudioPanel({ online, active, seed, onUpload, etsyReady }: any) {
       <Text style={styles.small}>{listing.checks.titleLength}/140 karakter · {listing.checks.tagCount}/13 etiket</Text>
       <View style={[styles.chips, { marginTop: 8 }]}>{listing.tags.map((tag: string) => <View style={styles.chip} key={tag}><Text style={styles.chipText}>{tag}</Text></View>)}</View>
       {listing.checks.issues.map((issue: string) => <Text style={styles.warningText} key={issue}>• {issue}</Text>)}
+      <TurkishGloss title={listing.title} tags={listing.tags} />
       {listing.warnings.map((warning: string) => <Text style={styles.warningText} key={warning}>• {warning}</Text>)}
       <View style={styles.inlineActions}>
         <Pressable style={styles.secondaryButton} onPress={() => Share.share({ message: `${listing.title}\n\n${listing.description}\n\nTags: ${listing.tags.join(", ")}` })}><Text style={styles.secondaryButtonText}>İlan metnini kopyala</Text></Pressable>
@@ -1780,7 +1802,7 @@ const ETSY_GUIDE: Array<{ id: string; title: string; icon: any; steps: string[] 
     "Shopier'de zaten olan ürünler için Shopier sekmesindeki 'Etsy ilanı hazırla' da aynı motoru kullanır."
   ] },
   { id: "delivery", title: "PDF teslimi ve koruma", icon: "lock-closed-outline", steps: [
-    "Etsy satışında PDF'i Etsy teslim eder. Alıcı ödeme yaptıktan sonra dosyayı Etsy'deki 'Purchases' sayfasından indirir. Ödeme yapmayan erişemez.",
+    "Etsy satışında PDF'i Etsy teslim eder. Alıcı ödeme yaptıktan sonra dosyayı Etsy'deki 'Purchases' (Satın alımlar) sayfasından indirir. Ödeme yapmayan erişemez.",
     "Shopier veya doğrudan satışta: ödeme gelince Dijital → ürün → 'Satış bağlantısı' ile siparişe özel bir bağlantı oluşturun (varsayılan 3 indirme, 14 gün) ve alıcıya gönderin.",
     "İade olursa veya bağlantının paylaşıldığından şüphelenirseniz bağlantıyı 'Bağlantılar' bölümünden kapatın.",
     "İndirilmiş bir dosyanın kopyalanmasını hiçbir sistem tamamen engelleyemez. PDF'teki telif altbilgisi ve lisans sayfası caydırıcıdır. Kopyayı görürseniz Etsy'nin fikrî mülkiyet bildirim formunu kullanın."
@@ -1795,8 +1817,8 @@ const ETSY_GUIDE: Array<{ id: string; title: string; icon: any; steps: string[] 
   ] },
   { id: "setup", title: "Mağaza açılışı ve bir kez yapılacak ayarlar", icon: "storefront-outline", steps: [
     "etsy.com/sell adresinde mağaza açılışını tamamlayın. Mağaza adı GXLMarketStudio'dur. Kimlik, banka ve kart bilgilerini yalnızca Etsy'nin kendi sayfasına girin.",
-    "Kargo profili: Shop Manager → Settings → Shipping settings. ABD için ücretsiz kargo seçin; kargo bedeli fiyata zaten dahil edilir.",
-    "Üretim ortağı: ustaya yaptırdığınız ürünler için Shop Manager → Settings → Production partners bölümünden usta veya atölyeyi ekleyin.",
+    "Kargo profili: Shop Manager (Mağaza Yöneticisi) → Settings (Ayarlar) → Shipping settings (Kargo ayarları). ABD için 'Free shipping' (ücretsiz kargo) seçin; kargo bedeli fiyata zaten dahil edilir.",
+    "Üretim ortağı: ustaya yaptırdığınız ürünler için Shop Manager (Mağaza Yöneticisi) → Settings (Ayarlar) → Production partners (Üretim ortakları) bölümünden usta veya atölyeyi ekleyin.",
     "Mağaza politikaları: iade koşullarını yazın ve dijital ürünlerin iade edilmediğini belirtin.",
     "Açılıştan sonra Özet sekmesindeki Etsy kanalı 'Bağlı' görünür. Taslak ve yayınlama düğmeleri o zaman açılır."
   ] },
@@ -1870,7 +1892,7 @@ function ShopSettingsCard({ online, shopReady }: any) {
       <Field label="Satış sonrası mesaj" value={saleMessage} onChangeText={setSaleMessage} multiline style={[styles.input, { minHeight: 80, textAlignVertical: "top" }]} />
       <Field label="Dijital ürün satış mesajı" value={digitalSaleMessage} onChangeText={setDigitalSaleMessage} multiline style={[styles.input, { minHeight: 90, textAlignVertical: "top" }]} />
       <Field label="Bölümler (virgülle, her biri en fazla 24 karakter)" value={sections} onChangeText={setSections} />
-      <Text style={styles.formHint}>Logo (500×500), afiş (3360×840) ve "Hakkında" metni için Etsy API'si yok; bunları Etsy Shop Manager'dan yükleyin.</Text>
+      <Text style={styles.formHint}>Logo (500×500), afiş (3360×840) ve "Hakkında" metni için Etsy API'si yok; bunları Etsy'de Shop Manager (Mağaza Yöneticisi) → Settings (Ayarlar) → Info & appearance (Bilgi ve görünüm) bölümünden yükleyin.</Text>
       <Pressable style={[styles.analyzeButton, { marginTop: 12 }, (saving || !online || !status?.canWrite || !shopReady) && styles.primaryDisabled]} disabled={saving || !online || !status?.canWrite || !shopReady} onPress={apply}>{saving ? <ActivityIndicator color="white" /> : <Ionicons name="cloud-upload-outline" size={18} color="white" />}<Text style={styles.primaryText}>Etsy'ye uygula</Text></Pressable>
     </>}
   </View>;
@@ -1946,7 +1968,7 @@ function EtsyProductPlanner({ product, etsyReady, onClose }: any) {
     const base: any = {
       sourceId: product.id,
       titleTr: product.title,
-      descriptionTr: product.description,
+      descriptionTr: plainText(product.description),
       priceTry: (product.currency || "TRY") === "TRY" ? product.price : undefined,
       origin,
       yearMade: yearMade || undefined,
@@ -1994,6 +2016,28 @@ function EtsyProductPlanner({ product, etsyReady, onClose }: any) {
       {plan && <EtsyPlanResult plan={plan} payload={payload} etsyReady={etsyReady} priceSourceLabel="Shopier fiyatı" />}
     </ScrollView></SafeAreaView>
   </Modal>;
+}
+
+// İlan İngilizce kalır (alıcı ABD'de); satıcı ne yazıldığını anlasın diye başlık ve etiketlerin Türkçe karşılığı gösterilir.
+function TurkishGloss({ title, tags }: { title: string; tags: string[] }) {
+  const [gloss, setGloss] = useState<any>();
+  const tagKey = tags.join("|");
+  useEffect(() => {
+    let alive = true;
+    setGloss(undefined);
+    if (!title) return;
+    apiJson("/api/explain-tr", { method: "POST", headers: apiHeaders(true), body: JSON.stringify({ title, tags }) })
+      .then((result) => { if (alive) setGloss(result); })
+      .catch(() => { /* açıklama yalnız yardımcıdır; alınamazsa ilan yine hazırlanır */ });
+    return () => { alive = false; };
+  }, [title, tagKey]);
+  if (!gloss) return null;
+  return <View style={styles.analysisCard}>
+    <Text style={styles.cardTitle}>Türkçesi (yalnız sizin kontrolünüz için)</Text>
+    <Text style={styles.analysisLine}>Başlık: {gloss.titleTr}</Text>
+    {gloss.tags.map((row: any) => <Text style={styles.analysisLine} key={row.tag}>• {row.tag} = {row.tr}</Text>)}
+    <Text style={styles.formHint}>İlan İngilizce kalır; Etsy alıcıları ağırlıkla ABD'de. Türkçesinde anlamsız bir şey görürseniz İngilizce kelimeyi değiştirin veya silin.</Text>
+  </View>;
 }
 
 // Planın sonucu, taslak ve yayın: iki akışta da aynı. prepareProduct taslaktan hemen önce çalışır (ör. fotoğrafları yükler).
@@ -2074,6 +2118,7 @@ function EtsyPlanResult({ plan, payload, etsyReady, priceSourceLabel, preparePro
       </View>}
       <Field label={`Başlık (${title.length}/140)`} value={title} onChangeText={setTitle} multiline />
       <Field label="Etiketler (13 adet)" value={tags} onChangeText={setTags} multiline autoCapitalize="none" />
+      <TurkishGloss title={plan.title} tags={plan.tags} />
       <Field label="Etsy fiyatı (USD)" value={priceUsd} onChangeText={setPriceUsd} keyboardType="decimal-pad" />
       <View style={styles.analysisCard}>
         <View style={styles.shopierProductTop}><Text style={[styles.cardTitle, { flex: 1 }]}>Açıklama (İngilizce)</Text><Pressable style={styles.secondaryButton} onPress={() => Share.share({ message: `${title}\n\n${plan.description}\n\nTags: ${tags}` })}><Text style={styles.secondaryButtonText}>Kopyala</Text></Pressable></View>
@@ -2114,6 +2159,12 @@ const RISK_LABELS: Record<string, string> = {
   branded_product: "Marka logosu görünüyor: orijinallik kanıtı olmadan Etsy'ye otomatik konmaz."
 };
 const MAX_LISTING_PHOTOS = 10;
+const CONDITION_OPTIONS = [
+  { id: "excellent", label: "Kusursuz" },
+  { id: "light_wear", label: "Hafif kullanım izi" },
+  { id: "visible_wear", label: "Belirgin aşınma / patina" },
+  { id: "repaired", label: "Onarım görmüş" }
+];
 
 // "2.500" Türkçede iki bin beş yüz demektir; sunucuya 2500 gitmeli.
 function parseAmount(text: string): number | undefined {
@@ -2159,6 +2210,7 @@ function PhotoListingStudio({ online, etsyReady }: any) {
   const [beadCount, setBeadCount] = useState("");
   const [yearMade, setYearMade] = useState("");
   const [conditionNote, setConditionNote] = useState("");
+  const [conditionLevel, setConditionLevel] = useState("");
   const [priceTry, setPriceTry] = useState("");
   const [shippingTry, setShippingTry] = useState("");
   const [quantity, setQuantity] = useState("1");
@@ -2247,6 +2299,7 @@ function PhotoListingStudio({ online, etsyReady }: any) {
       weightGrams: parseAmount(weightGrams),
       beadCount: kind === "tesbih" ? parseAmount(beadCount) : undefined,
       yearMade: vintage ? Number(yearMade) || undefined : undefined,
+      conditionLevel: vintage && conditionLevel ? conditionLevel : undefined,
       conditionNote: vintage ? conditionNote.trim() || undefined : undefined,
       priceTry: net,
       shippingTry: parseAmount(shippingTry),
@@ -2290,7 +2343,7 @@ function PhotoListingStudio({ online, etsyReady }: any) {
     uploaded.current = {};
     setPhotos([]); setKind(""); setOrigin("made_by_seller"); setMaker("me"); setCraft(""); setAudience("women");
     setNameTr(""); setProductNounEn(""); setMaterial(""); setMaterialVerified(false); setSize(""); setChestCm(""); setLengthCm(""); setWidthCm("");
-    setFiber(""); setCare("hand_wash"); setColors(""); setAttributes(""); setWeightGrams(""); setBeadCount(""); setYearMade(""); setConditionNote("");
+    setFiber(""); setCare("hand_wash"); setColors(""); setAttributes(""); setWeightGrams(""); setBeadCount(""); setYearMade(""); setConditionNote(""); setConditionLevel("");
     setPriceTry(""); setShippingTry(""); setQuantity("1"); setReadyToShip(true); setAnalysis(undefined); setRiskFlags([]); setPlan(undefined); setPayload(undefined);
   };
 
@@ -2323,11 +2376,11 @@ function PhotoListingStudio({ online, etsyReady }: any) {
     <Text style={[styles.fieldLabel, { marginTop: 12 }]}>Ürün türü</Text>
     <ChipGroup options={PHOTO_KINDS} value={kind} onChange={chooseKind} />
     <Field label="Ürün adı (Türkçe)" value={nameTr} onChangeText={setNameTr} placeholder="ör. Krem tığ işi oversize kazak" />
-    <Field label="İngilizce ürün adı (boşsa sistem bulur)" value={productNounEn} onChangeText={setProductNounEn} autoCapitalize="none" placeholder="crochet sweater, prayer beads, copper tray" />
+    <Field label="İngilizce ürün adı (boş bırakın, sistem bulur)" value={productNounEn} onChangeText={setProductNounEn} autoCapitalize="none" placeholder="crochet sweater = tığ işi kazak" />
     {knit && <>
       <Text style={styles.fieldLabel}>Kim ördü?</Text>
       <ChipGroup options={KNIT_MAKER_OPTIONS} value={maker} onChange={setMaker} />
-      {maker === "member" && <Text style={styles.formHint}>Etsy'de o kişiyi mağaza üyesi olarak ekleyin: Shop Manager → Settings → About your shop → Shop members. İlan "A member of my shop" olarak açılır.</Text>}
+      {maker === "member" && <Text style={styles.formHint}>Etsy'de o kişiyi mağaza üyesi olarak ekleyin: Shop Manager (Mağaza Yöneticisi) → Settings (Ayarlar) → About your shop (Mağaza hakkında) → Shop members (Mağaza üyeleri). İlan "A member of my shop" (mağazamın bir üyesi yaptı) olarak açılır.</Text>}
       <Text style={styles.fieldLabel}>Teknik</Text>
       <ChipGroup options={KNIT_CRAFT_OPTIONS} value={craft} onChange={setCraft} />
       <Text style={styles.fieldLabel}>Kimin için?</Text>
@@ -2354,10 +2407,16 @@ function PhotoListingStudio({ online, etsyReady }: any) {
           : <View style={{ flex: 1 }}><Field label="En (cm)" value={widthCm} onChangeText={setWidthCm} keyboardType="decimal-pad" /></View>}
         <View style={{ flex: 1 }}><Field label="Uzunluk (cm)" value={lengthCm} onChangeText={setLengthCm} keyboardType="decimal-pad" /></View>
       </View>
-      {(kind === "vintage" || origin === "vintage") && <Field label="Durum notu (İngilizce; fotoğraf analizi doldurur)" value={conditionNote} onChangeText={setConditionNote} multiline placeholder="Light surface scratches consistent with age." />}
+      {(kind === "vintage" || origin === "vintage") && <>
+        <Text style={styles.fieldLabel}>Ürünün durumu</Text>
+        <ChipGroup options={CONDITION_OPTIONS} value={conditionLevel} onChange={setConditionLevel} />
+        <Field label="Ek durum notu (isteğe bağlı, yalnız İngilizce; fotoğraf analizi doldurur)" value={conditionNote} onChangeText={setConditionNote} multiline placeholder="Small dent on the rim." />
+        <Text style={styles.formHint}>Türkçe not yazarsanız İngilizce açıklamaya girmez; seçtiğiniz durum İngilizce cümleye çevrilir.</Text>
+      </>}
     </>}
-    <Field label="Renkler (İngilizce, virgülle)" value={colors} onChangeText={setColors} autoCapitalize="none" placeholder="cream, sage green" />
-    <Field label="Öne çıkan özellikler (İngilizce, virgülle)" value={attributes} onChangeText={setAttributes} autoCapitalize="none" placeholder="oversized, granny square, filigree" />
+    <Field label="Renkler (Türkçe yazabilirsiniz, virgülle)" value={colors} onChangeText={setColors} autoCapitalize="none" placeholder="krem, adaçayı yeşili, bordo" />
+    <Field label="Öne çıkan özellikler (Türkçe yazabilirsiniz, virgülle)" value={attributes} onChangeText={setAttributes} autoCapitalize="none" placeholder="bol kesim, kare motif, püsküllü, telkari" />
+    <Text style={styles.formHint}>Sistem bunları İngilizceye çevirir. Çeviremediği kelimeyi ilana koymaz ve size söyler; yanlış İngilizce yazılmaz.</Text>
     <View style={{ flexDirection: "row", gap: 10 }}>
       <View style={{ flex: 1 }}><Field label="Elinize geçecek (TL)" value={priceTry} onChangeText={setPriceTry} keyboardType="decimal-pad" placeholder="2500" /></View>
       <View style={{ flex: 1 }}><Field label="ABD'ye kargo (TL)" value={shippingTry} onChangeText={setShippingTry} keyboardType="decimal-pad" placeholder="900" /></View>
@@ -2371,6 +2430,9 @@ function PhotoListingStudio({ online, etsyReady }: any) {
   </>;
 }
 
+// Android uygulamayı ekranın en üstünden çizer (edge-to-edge); başlık durum çubuğunun altında kalmasın diye o kadar aşağı itilir.
+const STATUS_BAR_INSET = Platform.OS === "android" ? StatusBar.currentHeight || 24 : 0;
+
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: "#F5F2EA" },
   setupSafe: { flex: 1, backgroundColor: "#12261F", justifyContent: "center", padding: 22 },
@@ -2383,7 +2445,7 @@ const styles = StyleSheet.create({
   setupButtonText: { color: "white", fontWeight: "900", fontSize: 15 },
   tokenReset: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7, backgroundColor: "#FFF0D8", borderRadius: 12, padding: 11, marginBottom: 12 },
   tokenResetText: { color: "#8A521F", fontWeight: "800", fontSize: 12 },
-  header: { backgroundColor: "#12261F", paddingHorizontal: 20, paddingTop: 20, paddingBottom: 22, flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  header: { backgroundColor: "#12261F", paddingHorizontal: 20, paddingTop: 20 + STATUS_BAR_INSET, paddingBottom: 22, flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   eyebrow: { color: "#C5D2CC", fontSize: 10, letterSpacing: 2, fontWeight: "700" },
   title: { color: "white", fontSize: 26, fontWeight: "800", marginTop: 3 },
   agentBadge: { flexDirection: "row", alignItems: "center", backgroundColor: "#244438", paddingVertical: 7, paddingHorizontal: 10, borderRadius: 99 },
@@ -2486,7 +2548,7 @@ const styles = StyleSheet.create({
   stockNote: { color: "#8B6F47", fontSize: 10, marginTop: 3 },
   linkNote: { color: "#315B4C", fontSize: 11, fontWeight: "700", marginTop: 6 },
   empty: { alignItems: "center", padding: 45, gap: 8 },
-  formSafe: { flex: 1, backgroundColor: "#F5F2EA" },
+  formSafe: { flex: 1, backgroundColor: "#F5F2EA", paddingTop: STATUS_BAR_INSET },
   formContent: { padding: 20, paddingBottom: 50 },
   formHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 14 },
   imagePicker: { height: 180, borderRadius: 18, borderWidth: 1, borderStyle: "dashed", borderColor: "#AEB9B4", backgroundColor: "#EDF2EF", alignItems: "center", justifyContent: "center", gap: 8, marginBottom: 18, overflow: "hidden" },
