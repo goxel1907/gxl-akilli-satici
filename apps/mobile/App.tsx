@@ -376,7 +376,7 @@ function App() {
           {tab === "Özet" && <Overview data={data} setTab={setTab} online={online} channels={channels} />}
           {tab === "Shopier" && <ShopierScreen center={shopierCenter} online={online} onRefresh={refresh} etsyReady={Boolean(channels?.etsy?.shopReady || channels?.etsy?.shopId)} />}
           {tab === "Etsy" && <EtsyScreen online={online} channels={channels} />}
-          {tab === "Ajan" && <AgentScreen center={opportunityCenter} online={online} onRefresh={refresh} />}
+          {tab === "Ajan" && <AgentScreen center={opportunityCenter} online={online} onRefresh={refresh} shopierProducts={shopierCenter?.products} etsyActiveListings={channels?.etsy?.activeListings} />}
           {tab === "Onaylar" && <Approvals items={pending} decide={decide} />}
           {tab === "Müşteriler" && <Leads items={data.leads} />}
           {tab === "Ürünler" && <Products items={data.products} addProduct={addProduct} />}
@@ -691,7 +691,120 @@ function ShopierProductForm({ visible, product, saving, online, onClose, onSave 
   </Modal>;
 }
 
-function AgentScreen({ center, online, onRefresh }: any) {
+// Müşteri bul ve reklam planı: seçilen ürün için kanal kanal ne yapılacağı, reklamın ne zaman açılacağı, bütçe,
+// durdurma kuralı ve kopyalanacak hazır metinler. Uygulama kimseye kendiliğinden mesaj atmaz.
+const SALES_KINDS = [
+  { id: "tesbih", label: "Tesbih" }, { id: "vintage", label: "Vintage" }, { id: "knitwear", label: "Örgü giyim" },
+  { id: "pdf", label: "PDF ürünü" }, { id: "pattern", label: "Hobi deseni" }, { id: "other", label: "Diğer" }
+];
+const SALES_CHANNELS = [{ id: "shopier", label: "Shopier'de (Türkiye)" }, { id: "etsy", label: "Etsy'de (ABD)" }];
+const WHATSAPP_NUMBER_KEY = "gxl.whatsappNumber";
+
+function guessSalesKind(title: string): string {
+  if (/tesbih|tespih|kehribar|oltu|misbaha/i.test(title)) return "tesbih";
+  if (/vintage|antika|eski|nostalji/i.test(title)) return "vintage";
+  if (/kazak|hırka|yelek|bere|atkı|örgü|tığ/i.test(title)) return "knitwear";
+  if (/planlayıcı|planner|pdf|boyama/i.test(title)) return "pdf";
+  if (/desen|pattern/i.test(title)) return "pattern";
+  return "other";
+}
+
+function SalesPlanCard({ online, shopierProducts, etsyActiveListings }: any) {
+  const products = (shopierProducts || []).filter((item: any) => item?.title).slice(0, 8);
+  const [productId, setProductId] = useState<string>();
+  const [name, setName] = useState("");
+  const [kind, setKind] = useState("tesbih");
+  const [channel, setChannel] = useState(products.length ? "shopier" : "etsy");
+  const [price, setPrice] = useState("");
+  const [profit, setProfit] = useState("");
+  const [link, setLink] = useState("");
+  const [whatsapp, setWhatsapp] = useState("");
+  const [plan, setPlan] = useState<any>();
+  const [busy, setBusy] = useState(false);
+  const [open, setOpen] = useState<string>();
+  useEffect(() => { AsyncStorage.getItem(WHATSAPP_NUMBER_KEY).then((value) => value && setWhatsapp(value)).catch(() => undefined); }, []);
+  const choose = (item: any) => {
+    setProductId(String(item.id));
+    setName(String(item.title));
+    setLink(item.url ? String(item.url) : "");
+    if (item.price) setPrice(String(item.price));
+    setKind(guessSalesKind(String(item.title)));
+    setChannel("shopier");
+    setPlan(undefined);
+  };
+  const decisionStyle = (decision: string) => decision === "skip" ? styles.scoreLow : decision === "later" ? styles.scoreMid : styles.scoreHigh;
+  const prepare = async () => {
+    if (name.trim().length < 3) return Alert.alert("Ürün adı", "Ürünü seçin ya da adını yazın (ör. 925 gümüş tesbih).");
+    setBusy(true);
+    try {
+      if (whatsapp.trim()) await AsyncStorage.setItem(WHATSAPP_NUMBER_KEY, whatsapp.trim()).catch(() => undefined);
+      const result = await apiJson("/api/marketing/plan", {
+        method: "POST",
+        headers: apiHeaders(true),
+        body: JSON.stringify({
+          productName: name.trim(), kind, channel, priceTry: parseAmount(price), profitTry: parseAmount(profit), link: link.trim() || undefined,
+          activeEtsyListings: channel === "etsy" && typeof etsyActiveListings === "number" ? etsyActiveListings : undefined,
+          whatsappNumber: channel === "shopier" ? whatsapp.trim() || undefined : undefined
+        })
+      });
+      setPlan(result.plan);
+      setOpen(result.plan?.channels?.find((item: any) => item.decision === "now" || item.decision === "always")?.id);
+    } catch (error) { Alert.alert("Plan hazırlanamadı", errorText(error)); }
+    finally { setBusy(false); }
+  };
+  return <View style={styles.analysisCard}>
+    <View style={styles.shopierProductTop}><Ionicons name="megaphone-outline" size={22} color="#315B4C" /><Text style={[styles.cardTitle, { flex: 1 }]}>Müşteri bul ve reklam planı</Text></View>
+    <Text style={styles.evidence}>Ürününüzü seçin; uygulama her kanal için ne yapılacağını, reklamın açılıp açılmayacağını, bütçeyi, ne zaman durdurulacağını ve kopyalanacak hazır metinleri verir. Uygulama kimseye kendiliğinden mesaj atmaz; ürününüzü doğru kişilerin görmesini sağlar.</Text>
+    {!!products.length && <>
+      <Text style={styles.fieldLabel}>Shopier ürünlerinizden seçin</Text>
+      <View style={styles.chips}>{products.map((item: any) => <Pressable key={item.id} style={[styles.chip, productId === String(item.id) && styles.chipActive]} onPress={() => choose(item)}><Text style={[styles.chipText, productId === String(item.id) && styles.chipTextActive]} numberOfLines={1}>{item.title}</Text></Pressable>)}</View>
+    </>}
+    <Field label="Ürün adı" value={name} onChangeText={(value: string) => { setName(value); setProductId(undefined); }} placeholder="ör. 925 gümüş tesbih, tığ işi hırka" />
+    <Text style={styles.fieldLabel}>Ürün türü</Text>
+    <ChipGroup options={SALES_KINDS} value={kind} onChange={setKind} />
+    <Text style={styles.fieldLabel}>Nerede satılıyor?</Text>
+    <ChipGroup options={SALES_CHANNELS} value={channel} onChange={setChannel} />
+    <View style={{ flexDirection: "row", gap: 10 }}>
+      <View style={{ flex: 1 }}><Field label="Satış fiyatı (TL)" value={price} onChangeText={setPrice} keyboardType="decimal-pad" placeholder="1500" /></View>
+      <View style={{ flex: 1 }}><Field label="Size kalan kâr (TL, isteğe bağlı)" value={profit} onChangeText={setProfit} keyboardType="decimal-pad" placeholder="600" /></View>
+    </View>
+    <Field label={channel === "etsy" ? "Etsy ilan bağlantısı (isteğe bağlı)" : "Shopier ürün bağlantısı"} value={link} onChangeText={setLink} autoCapitalize="none" keyboardType="url" placeholder="https://..." />
+    {channel === "shopier" && <Field label="WhatsApp numaranız (yalnız bu telefonda saklanır)" value={whatsapp} onChangeText={setWhatsapp} keyboardType="phone-pad" placeholder="05xx xxx xx xx" />}
+    <Pressable style={[styles.primary, { marginTop: 12, marginBottom: 0 }, (busy || !online) && styles.primaryDisabled]} disabled={busy || !online} onPress={prepare}>
+      {busy ? <ActivityIndicator color="white" /> : <Ionicons name="sparkles" size={18} color="white" />}
+      <Text style={styles.primaryText}>{busy ? "Hazırlanıyor…" : "Planı hazırla"}</Text>
+    </Pressable>
+    {!!plan && <>
+      <Text style={[styles.trendVerdict, { marginTop: 14 }]}>{plan.headlineTr}</Text>
+      {plan.channels.map((item: any) => <View key={item.id} style={styles.card}>
+        <Pressable style={styles.shopierProductTop} onPress={() => setOpen(open === item.id ? undefined : item.id)}>
+          <Text style={[styles.cardTitle, { flex: 1 }]}>{item.titleTr}</Text>
+          <View style={[styles.kindPill, decisionStyle(item.decision)]}><Text style={styles.kindText}>{item.decisionTr}</Text></View>
+        </Pressable>
+        <Text style={styles.evidence}>{item.whyTr}</Text>
+        {!!item.budgetTr && <Text style={styles.analysisLine}>Bütçe: {item.budgetTr}</Text>}
+        {open === item.id && <>
+          {item.stepsTr.map((step: string, index: number) => <Text style={styles.analysisLine} key={step}>{index + 1}. {step}</Text>)}
+          {!!item.stopRuleTr && <Text style={styles.warningText}>Ne zaman durdurulur: {item.stopRuleTr}</Text>}
+          {item.copy.map((block: any) => <View key={block.labelTr} style={styles.adviceBox}>
+            <Text style={styles.rowTitle}>{block.labelTr}</Text>
+            <Text selectable style={styles.evidence}>{block.text}</Text>
+            <Pressable style={[styles.secondaryButton, { alignSelf: "flex-start", marginTop: 8 }]} onPress={() => Share.share({ message: block.text })}><Text style={styles.secondaryButtonText}>Kopyala / paylaş</Text></Pressable>
+          </View>)}
+          {!!item.openUrl && <Pressable style={[styles.primary, { marginTop: 12, marginBottom: 0 }]} onPress={() => openUrl(item.openUrl, item.titleTr)}><Text style={styles.primaryText}>{item.openLabelTr || "Aç"}</Text><Ionicons name="open-outline" size={18} color="white" /></Pressable>}
+        </>}
+        <Pressable onPress={() => setOpen(open === item.id ? undefined : item.id)}><Text style={styles.linkNote}>{open === item.id ? "Kapat" : "Adımlar ve hazır metinler için dokunun"}</Text></Pressable>
+      </View>)}
+      {!plan.aiCopy && <Text style={styles.small}>Hazır metinler şablondan yazıldı (yapay zekâ bağlı değil ya da yanıt vermedi). Paylaşmadan önce ürüne göre düzenleyin.</Text>}
+      <View style={styles.guardrail}><Ionicons name="shield-checkmark" size={21} color="#315B4C" /><View style={{ flex: 1 }}>
+        <Text style={styles.rowTitle}>Yapılmaması gerekenler</Text>
+        {plan.rulesTr.map((rule: string) => <Text style={styles.guardrailText} key={rule}>• {rule}</Text>)}
+      </View></View>
+    </>}
+  </View>;
+}
+
+function AgentScreen({ center, online, onRefresh, shopierProducts, etsyActiveListings }: any) {
   const [question, setQuestion] = useState("");
   const [sending, setSending] = useState(false);
   const [chat, setChat] = useState<Array<{ role: "owner" | "agent"; text: string; warnings?: string[]; actions?: string[] }>>([
@@ -744,6 +857,8 @@ function AgentScreen({ center, online, onRefresh }: any) {
         <View style={styles.agentCount}><Text style={styles.agentCountValue}>{center?.counts?.marketSignals || 0}</Text><Text style={styles.agentCountLabel}>Pazar sinyali</Text></View>
       </View>
     </View>
+
+    <SalesPlanCard online={online} shopierProducts={shopierProducts} etsyActiveListings={etsyActiveListings} />
 
     <Text style={styles.sectionTitle}>Ajanla konuş</Text>
     <View style={styles.chatCard}>
@@ -956,15 +1071,20 @@ function scanAgeText(scannedAt?: string): string {
   return hours < 1 ? " · az önce taranmış" : hours < 24 ? ` · ${hours} saat önce taranmış` : ` · ${Math.floor(hours / 24)} gün önce taranmış`;
 }
 
-function TrendCard({ title, result, expanded, onToggle, onUse, scanning, group, trendsRange = "today 12-m" }: any) {
+// Başlık Türkçe ad, altında Etsy'de aranan İngilizce ifade. Puanlanmamış kart dokununca taranır.
+function TrendCard({ title, keyword: plannedKeyword, result, expanded, onToggle, onUse, onScan, scanning, group, trendsRange = "today 12-m" }: any) {
   const activeGroup = result?.group || group || "patterns";
   const isPattern = activeGroup === "patterns";
   const isPrintable = activeGroup === "printables";
-  const keyword = result?.keyword || "";
+  const keyword = result?.keyword || plannedKeyword || "";
   return <View style={styles.card}>
-    <Pressable style={styles.shopierProductTop} onPress={onToggle}>
-      <View style={{ flex: 1 }}><Text style={styles.cardTitle}>{title}</Text><Text style={styles.small}>{result?.keyword || ""}{scanAgeText(result?.scannedAt)}</Text></View>
-      {scanning ? <ActivityIndicator color="#A86B2E" /> : <View style={[styles.scoreBadge, scoreStyle(result?.score)]}><Text style={styles.scoreBadgeText}>{result ? result.score : "—"}</Text></View>}
+    <Pressable style={styles.shopierProductTop} onPress={() => (!result && onScan ? onScan() : onToggle())}>
+      <View style={{ flex: 1 }}>
+        <Text style={styles.cardTitle}>{title}</Text>
+        {!!keyword && keyword.toLowerCase() !== String(title).toLowerCase() && <Text style={styles.small}>Etsy'de aranan: {keyword}{scanAgeText(result?.scannedAt)}</Text>}
+        {!result && !scanning && !!onScan && <Text style={styles.small}>Henüz puanlanmadı · dokunun, Etsy'de taransın</Text>}
+      </View>
+      {scanning ? <ActivityIndicator color="#A86B2E" /> : <View style={[styles.scoreBadge, scoreStyle(result?.score)]}><Text style={styles.scoreBadgeText}>{result ? result.score : "?"}</Text></View>}
     </Pressable>
     {!!result && <>
       <Text style={styles.trendVerdict}>{result.verdict}</Text>
@@ -981,6 +1101,7 @@ function TrendCard({ title, result, expanded, onToggle, onUse, scanning, group, 
         </View>}
         {(isPattern || isPrintable) && !!result.signals?.formats && <Text style={styles.small}>Rakiplerin başlık/etiketinde geçen format: {result.signals.formats.filter((item: any) => item.share > 0).map((item: any) => `${item.labelTr} %${Math.round(item.share * 100)}`).join(" · ") || "belirgin format bilgisi yok"} · Paket/set: %{Math.round((result.signals.bundleShare || 0) * 100)}{result.signals.pageCountMedian ? ` · Ortanca ${result.signals.pageCountMedian} sayfa` : ""}</Text>}
         <Text style={styles.warningTitle}>Üst ilanlarda en çok geçen etiketler</Text>
+        <Text style={styles.small}>Etiketler İngilizce kalır; Etsy'de alıcılar İngilizce arar. Kendi ilanınızda bunları kullanabilirsiniz.</Text>
         <View style={styles.chips}>{result.topTags.slice(0, 14).map((tag: any) => <View style={styles.chip} key={tag.tag}><Text style={styles.chipText}>{tag.tag} · {tag.count}</Text></View>)}</View>
         {!!result.risingTags?.length && <>
           <Text style={styles.warningTitle}>Yeni ilanlarda yükselen etiketler</Text>
@@ -1023,6 +1144,17 @@ function SeasonalPanel({ online, onUse }: any) {
     }
     setScanning(undefined);
   };
+  const scanOne = async (event: any, item: any) => {
+    const key = `${event.id}:${item.keyword}`;
+    if (!online || scanning) return;
+    setScanning(key);
+    try {
+      const result = await apiJson("/api/etsy/trends/scan", { method: "POST", headers: apiHeaders(true), body: JSON.stringify({ keyword: item.keyword }) });
+      setBoard((current: any) => ({ ...current, events: current.events.map((row: any) => row.id === event.id ? { ...row, keywords: row.keywords.map((entry: any) => entry.keyword === item.keyword ? { ...entry, result } : entry) } : row) }));
+      setExpanded(key);
+    } catch (error) { Alert.alert("Tarama yapılamadı", errorText(error)); }
+    finally { setScanning(undefined); }
+  };
   const dateText = (value: string) => new Date(`${value}T12:00:00Z`).toLocaleDateString("tr-TR", { day: "numeric", month: "long", year: "numeric" });
   return <>
     <View style={styles.guardrail}><Ionicons name="calendar-outline" size={20} color="#315B4C" /><Text style={[styles.guardrailText, { flex: 1 }]}>{board?.note || "ABD'de yaklaşan alışveriş dönemleri ve bu dönemlerde aranan ürünler."}</Text></View>
@@ -1037,8 +1169,8 @@ function SeasonalPanel({ online, onUse }: any) {
         </View>
         <Text style={styles.evidence}>{event.tipTr}</Text>
         <Text style={styles.analysisLine}>Fiziksel ürün son listeleme: {dateText(event.listByProducts)} · Desen son listeleme: {dateText(event.listByPatterns)}</Text>
-        {best && <Text style={styles.trendVerdict}>En güçlü arama: {best.keyword} ({best.result.score} puan)</Text>}
-        {event.keywords.map((item: any) => <TrendCard key={item.keyword} title={item.keyword} group={item.group} result={item.result} trendsRange="today 5-y" scanning={scanning === `${event.id}:${item.keyword}`} expanded={expanded === `${event.id}:${item.keyword}`} onToggle={() => setExpanded(expanded === `${event.id}:${item.keyword}` ? undefined : `${event.id}:${item.keyword}`)} onUse={() => onUse({ keyword: item.keyword, group: item.group }, item.result)} />)}
+        {best && <Text style={styles.trendVerdict}>En güçlü arama: {best.keywordTr || best.keyword} ({best.result.score} puan)</Text>}
+        {event.keywords.map((item: any) => <TrendCard key={item.keyword} title={item.keywordTr || item.keyword} keyword={item.keyword} onScan={() => scanOne(event, item)} group={item.group} result={item.result} trendsRange="today 5-y" scanning={scanning === `${event.id}:${item.keyword}`} expanded={expanded === `${event.id}:${item.keyword}`} onToggle={() => setExpanded(expanded === `${event.id}:${item.keyword}` ? undefined : `${event.id}:${item.keyword}`)} onUse={() => onUse({ keyword: item.keyword, group: item.group }, item.result)} />)}
         <Pressable style={[styles.addButton, { alignSelf: "flex-start" }, (!online || Boolean(scanning)) && styles.primaryDisabled]} disabled={!online || Boolean(scanning)} onPress={() => scanSeason(event)}><Ionicons name="pulse" size={16} color="white" /><Text style={styles.addButtonText}>{scanned.length ? "Yeniden tara" : "Bu sezonu tara"}</Text></Pressable>
       </View>;
     })}
@@ -1078,6 +1210,16 @@ function TrendPanel({ online, onUse }: any) {
     }
     setScanning(undefined);
   };
+  const scanOne = async (niche: any) => {
+    if (!online || !board?.configured || scanning) return;
+    setScanning(niche.id);
+    try {
+      const result = await scan({ nicheId: niche.id });
+      setBoard((current: any) => ({ ...current, niches: sortNiches(current.niches.map((row: any) => row.id === niche.id ? { ...row, result } : row)) }));
+      setExpanded(niche.id);
+    } catch (error) { Alert.alert("Tarama yapılamadı", errorText(error)); }
+    finally { setScanning(undefined); }
+  };
   const scanKeyword = async () => {
     if (keyword.trim().length < 3) return Alert.alert("Anahtar kelime", "İngilizce bir arama yazın (ör. crochet bag pattern).");
     setScanning("custom");
@@ -1104,22 +1246,52 @@ function TrendPanel({ online, onUse }: any) {
       <TextInput style={styles.chatInput} value={keyword} onChangeText={setKeyword} placeholder="Arama tara (Google Trends ifadesi de olur): crochet bag pattern, misbaha" placeholderTextColor="#9AA39F" spellCheck={false} autoCorrect={false} autoCapitalize="none" />
       <Pressable style={styles.sendButton} onPress={scanKeyword} disabled={!online || Boolean(scanning)}><Ionicons name="search" size={19} color="white" /></Pressable>
     </View>
-    {custom.map((result) => <TrendCard key={`custom:${result.keyword}`} title={`Arama: ${result.keyword}`} result={result} expanded={expanded === `custom:${result.keyword}`} onToggle={() => setExpanded(expanded === `custom:${result.keyword}` ? undefined : `custom:${result.keyword}`)} onUse={() => use({ keyword: result.keyword }, result)} />)}
+    {custom.map((result) => <TrendCard key={`custom:${result.keyword}`} title={result.keywordTr || `Arama: ${result.keyword}`} result={result} expanded={expanded === `custom:${result.keyword}`} onToggle={() => setExpanded(expanded === `custom:${result.keyword}` ? undefined : `custom:${result.keyword}`)} onUse={() => use({ keyword: result.keyword }, result)} />)}
     <View style={[styles.chips, { marginTop: 14 }]}>{groups.map((item: any) => <Pressable key={item.id} style={[styles.chip, group === item.id && styles.chipActive]} onPress={() => setGroup(item.id)}><Text style={[styles.chipText, group === item.id && styles.chipTextActive]}>{item.labelTr}</Text></Pressable>)}</View>
+    <GroupIntro group={group} />
     {group === "season" ? <SeasonalPanel online={online} onUse={use} /> : group === "discovered" ? <DiscoveryPanel online={online} onUse={use} /> : <>
     {!!topOverall.length && <View style={styles.analysisCard}>
-      <Text style={styles.cardTitle}>Taranan nişlerde en yüksek puanlar</Text>
+      <Text style={styles.cardTitle}>Taranmış ürün türlerinde en yüksek puanlar</Text>
       {topOverall.map((row: any) => <Text style={styles.analysisLine} key={row.id}>{row.result.score} · {row.labelTr} ({row.result.verdict})</Text>)}
     </View>}
     <InterestRanking rows={visibleNiches} />
     <View style={styles.sectionHeading}><Text style={styles.sectionTitle}>{groups.find((item: any) => item.id === group)?.labelTr || "Nişler"}</Text><Pressable style={[styles.addButton, (!online || !board?.configured || Boolean(scanning)) && styles.primaryDisabled]} disabled={!online || !board?.configured || Boolean(scanning)} onPress={scanAll}><Ionicons name="pulse" size={16} color="white" /><Text style={styles.addButtonText}>{scanning ? "Taranıyor…" : "Tümünü tara"}</Text></Pressable></View>
     {loading && <ActivityIndicator color="#C88B47" />}
-    {visibleNiches.map((row: any) => <TrendCard key={row.id} title={row.labelTr} group={row.group} result={row.result} scanning={scanning === row.id} expanded={expanded === row.id} onToggle={() => setExpanded(expanded === row.id ? undefined : row.id)} onUse={() => use(row, row.result)} />)}
+    {visibleNiches.map((row: any) => <TrendCard key={row.id} title={row.labelTr} keyword={row.keyword} onScan={() => scanOne(row)} group={row.group} result={row.result} scanning={scanning === row.id} expanded={expanded === row.id} onToggle={() => setExpanded(expanded === row.id ? undefined : row.id)} onUse={() => use(row, row.result)} />)}
     </>}
   </>;
 }
 
-const GROUP_LABELS: Record<string, string> = { patterns: "Desen", tesbih: "Tesbih", vintage: "Vintage", other: "Diğer" };
+const GROUP_LABELS: Record<string, string> = { patterns: "Hobi deseni", printables: "PDF ürünü", tesbih: "Tesbih", vintage: "Vintage", other: "Diğer" };
+
+// Her grup düğmesinin altında: içinde ne var, kim alır, nasıl teslim edilir. Hiç kullanmamış biri için.
+const GROUP_INTROS: Record<string, { title: string; text: string; icon: string }> = {
+  printables: { icon: "document-text-outline", title: "PDF ürünleri nedir?", text: "Alıcının satın alıp indirdiği ve kendi yazıcısında bastığı dosyalar: günlük/haftalık planlayıcı, bütçe defteri, boyama sayfası, duvar posteri, tarif kartı, parti oyunu. Kargo yok; bir kez hazırlanır, defalarca satılır. Etsy'de çoğu 2–15 USD." },
+  patterns: { icon: "color-palette-outline", title: "Hobi desenleri nedir?", text: "Örgü, tığ işi, nakış, kanaviçe, dikiş ve makrome için adım adım yapım tarifi (PDF). Alıcı ürünü kendisi yapar; siz yalnız tarifi satarsınız. Kargo yok. Etsy'de çoğu 2–12 USD." },
+  tesbih: { icon: "ellipse-outline", title: "Tesbih ve gümüş nedir?", text: "Elinizdeki gerçek tesbihler: 925 gümüş, kehribar, oltu, kuka ve İslami hediyeler. Fiziksel ürün: fotoğrafını çekip satarsınız, ABD'ye kargolarsınız. Etsy'de çoğu 15–250 USD." },
+  vintage: { icon: "time-outline", title: "Vintage nedir?", text: "En az 20 yıllık eski eşyalar: gümüş takı, broş, halı, kilim, bakır. Etsy kuralı: 20 yıldan yeni ürün 'vintage' diye satılamaz, 100 yıldan yeni ürüne 'antika' denmez. Fiziksel ürün, kargo gerekir." },
+  discovered: { icon: "compass-outline", title: "Keşfedilenler nedir?", text: "Sunucunun kendi bulduğu yeni aramalar. Her 30 dakikada Etsy'de bir arama taranır; son 120 günde açılıp hızla favori toplayan ilanların etiketlerinden alıcıların yeni kullandığı ifadeler çıkarılır. Her kartta ne olduğu Türkçe, nereden bulunduğu altında yazar." },
+  season: { icon: "calendar-outline", title: "Sezon fırsatları nedir?", text: "ABD'de yaklaşan özel günler (Sevgililer Günü, Anneler Günü, Noel, Ramazan…) ve o günlerde aranan ürünler. Kartta son listeleme tarihi yazar; o tarihten sonra listelenen ürün bayrama yetişmez." }
+};
+
+function GroupIntro({ group }: { group: string }) {
+  const intro = GROUP_INTROS[group];
+  if (!intro) return null;
+  return <View style={styles.guardrail}>
+    <Ionicons name={intro.icon as any} size={20} color="#315B4C" />
+    <View style={{ flex: 1 }}>
+      <Text style={styles.rowTitle}>{intro.title}</Text>
+      <Text style={styles.guardrailText}>{intro.text}</Text>
+      <Text style={[styles.small, { marginTop: 6 }]}>Puan (0–100): 65 ve üstü güçlü fırsat · 45–64 denenebilir · 45 altı zor (alıcı az ya da rakip çok). Puan, Etsy'deki üst ilanlardan hesaplanan tahmindir.</Text>
+    </View>
+  </View>;
+}
+
+function discoveryReason(item: any): string {
+  if (item.from === "elle arandı") return "Sizin yaptığınız aramadan eklendi; otomatik keşif bunu izlemeye devam eder.";
+  const source = item.fromTr && item.fromTr.toLowerCase() !== String(item.from).toLowerCase() ? `"${item.fromTr}" (${item.from})` : `"${item.from}"`;
+  return `Nasıl bulundu: ${source} aramasında son 120 günde açılıp hızla favori toplayan ilanların etiketlerinde görüldü. Alıcıların yeni kullandığı bir arama olabilir.`;
+}
 
 function timeAgo(value?: string) {
   if (!value) return "henüz çalışmadı";
@@ -1145,7 +1317,7 @@ function DiscoveryPanel({ online, onUse }: any) {
   useEffect(() => { if (online) load(); }, [online]);
   const all = data?.items || [];
   const items = all.filter((item: any) => filter === "all" || item.group === filter);
-  const filters = [{ id: "all", label: "Tümü" }, ...["patterns", "tesbih", "vintage", "other"].filter((id) => all.some((item: any) => item.group === id)).map((id) => ({ id, label: GROUP_LABELS[id] }))];
+  const filters = [{ id: "all", label: "Tümü" }, ...["printables", "patterns", "tesbih", "vintage", "other"].filter((id) => all.some((item: any) => item.group === id)).map((id) => ({ id, label: GROUP_LABELS[id] }))];
   const autopilot = data?.autopilot;
   const toggle = (key: string) => setExpanded(expanded === key ? undefined : key);
   const open = async (item: any) => {
@@ -1170,15 +1342,20 @@ function DiscoveryPanel({ online, onUse }: any) {
     {loading && <ActivityIndicator color="#C88B47" />}
     {!loading && !items.length && <Empty icon="compass-outline" title="Henüz keşif yok" text="İlk keşifler otomatik taramalarla birkaç saat içinde gelir. Hızlandırmak için diğer gruplarda 'Tümünü tara' düğmesine basın." />}
     {items.map((item: any) => results[item.keyword]
-      ? <TrendCard key={item.keyword} title={item.keyword} group={item.group} result={results[item.keyword]} expanded={expanded === item.keyword} onToggle={() => toggle(item.keyword)} onUse={() => onUse({ keyword: item.keyword, group: item.group }, results[item.keyword])} />
+      ? <TrendCard key={item.keyword} title={item.keywordTr || item.keyword} group={item.group} result={results[item.keyword]} expanded={expanded === item.keyword} onToggle={() => toggle(item.keyword)} onUse={() => onUse({ keyword: item.keyword, group: item.group }, results[item.keyword])} />
       : <Pressable key={item.keyword} style={styles.card} disabled={!online || Boolean(scanning)} onPress={() => open(item)}>
         <View style={styles.shopierProductTop}>
-          <View style={{ flex: 1 }}><Text style={styles.cardTitle}>{item.keyword}</Text><Text style={styles.small}>{GROUP_LABELS[item.group] || "Diğer"}{item.rising ? " · ↑ yükselen" : ""} · kaynak: {item.from}</Text></View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.cardTitle}>{item.keywordTr || item.keyword}</Text>
+            {item.keywordTr && item.keywordTr.toLowerCase() !== item.keyword.toLowerCase() && <Text style={styles.small}>Etsy'de aranan: {item.keyword}</Text>}
+            <Text style={styles.small}>{GROUP_LABELS[item.group] || "Diğer"}{item.rising ? " · ↑ yeni ilanlarda hızla artıyor" : ""}{item.discoveredAt ? ` · ${timeAgo(item.discoveredAt)} bulundu` : ""}</Text>
+            <Text style={styles.evidence}>{discoveryReason(item)}</Text>
+          </View>
           {scanning === item.keyword ? <ActivityIndicator color="#A86B2E" /> : <View style={[styles.scoreBadge, scoreStyle(item.summary?.score)]}><Text style={styles.scoreBadgeText}>{item.summary ? item.summary.score : "—"}</Text></View>}
         </View>
         {item.summary
           ? <><Text style={styles.trendVerdict}>{item.summary.verdict}</Text><Text style={styles.small}>Rakip: {Number(item.summary.activeListings).toLocaleString("tr-TR")} ilan · Talep: {demandText(item.summary)}{item.summary.medianPriceUsd ? ` · Ortanca ${item.summary.medianPriceUsd} USD` : ""} · {timeAgo(item.summary.scannedAt)}</Text></>
-          : <Text style={styles.small}>Henüz puanlanmadı. Dokunun, Etsy'de taransın.</Text>}
+          : <Text style={styles.small}>Henüz puanlanmadı · dokunun, Etsy'de taransın.</Text>}
       </Pressable>)}
   </>;
 }

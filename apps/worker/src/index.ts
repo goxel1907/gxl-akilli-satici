@@ -28,7 +28,9 @@ import { seasonalBoard } from "./seasonal.js";
 import { autopilotStatus, listDiscoveries, recordScan, runAutopilot } from "./discovery.js";
 import { buildProductPlan, createEtsyPhysicalDraft, detectProductSignals, getUsdTryRate, keywordCandidates, normalizeProductInput, publishEtsyListing, type KeyValueStore } from "./product-studio.js";
 import { analyzeListingPhotos, PhotoListingError } from "./photo-listing.js";
+import { buildMarketingPlan, MarketingPlanError, normalizeMarketingInput } from "./marketing-plan.js";
 import { explainListingTr } from "./tr-glossary.js";
+import { turkishFor, turkishForPhrases } from "./phrase-tr.js";
 import { buildPatternBrief, createDigitalListing, normalizeDigitalListingInput, normalizePatternPlanInput } from "./pattern-studio.js";
 import { PRIVACY_PATHS, privacyPolicyPage } from "./legal-pages.js";
 import { applyShopSettings, shopSettingsStatus, ShopSettingsError } from "./shop-settings.js";
@@ -487,7 +489,10 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
       return json(200, await getTrendBoard(env, env.ETSY_OAUTH as unknown as TrendStore | undefined));
     }
     if (request.method === "GET" && url.pathname === "/api/etsy/seasonal") {
-      return json(200, await seasonalBoard(env.ETSY_OAUTH as unknown as TrendStore | undefined));
+      const store = env.ETSY_OAUTH as unknown as TrendStore | undefined;
+      const board = await seasonalBoard(store);
+      const tr = await turkishForPhrases(board.events.flatMap((event) => event.keywords.map((item) => item.keyword)), env, store);
+      return json(200, { ...board, events: board.events.map((event) => ({ ...event, keywords: event.keywords.map((item) => ({ ...item, keywordTr: turkishFor(tr, item.keyword) })) })) });
     }
     if (request.method === "POST" && url.pathname === "/api/etsy/trends/scan") {
       const input = await readBody(request);
@@ -499,11 +504,18 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
         group: isTrendGroup(input.group) ? input.group : undefined
       }, store);
       const discovered = result.cached && input.track !== true ? [] : await recordScan(store, result, Date.now(), { track: input.track === true });
-      return json(200, { ...result, discovered: discovered.map((item) => item.keyword) });
+      const tr = await turkishForPhrases([result.keyword], env, store);
+      return json(200, { ...result, keywordTr: turkishFor(tr, result.keyword), discovered: discovered.map((item) => item.keyword) });
     }
     if (request.method === "GET" && url.pathname === "/api/etsy/discoveries") {
       const store = env.ETSY_OAUTH as unknown as TrendStore | undefined;
-      return json(200, { autopilot: await autopilotStatus(store), items: await listDiscoveries(store) });
+      const items = await listDiscoveries(store);
+      const manual = (from: string) => from === "elle arandı";
+      const tr = await turkishForPhrases([...items.map((item) => item.keyword), ...items.filter((item) => !manual(item.from)).map((item) => item.from)], env, store);
+      return json(200, {
+        autopilot: await autopilotStatus(store),
+        items: items.map((item) => ({ ...item, keywordTr: turkishFor(tr, item.keyword), fromTr: manual(item.from) ? undefined : turkishFor(tr, item.from) }))
+      });
     }
 
     if (request.method === "POST" && url.pathname === "/api/patterns/seed") {
@@ -575,6 +587,9 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
     }
     if (request.method === "POST" && url.pathname === "/api/explain-tr") {
       return json(200, explainListingTr(await readBody(request)));
+    }
+    if (request.method === "POST" && url.pathname === "/api/marketing/plan") {
+      return json(200, { plan: await buildMarketingPlan(normalizeMarketingInput(await readBody(request)), env) });
     }
     if (request.method === "POST" && url.pathname === "/api/products/photo-analyze") {
       const input = await readBody(request);
@@ -911,6 +926,7 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
     if (error instanceof DigitalDeliveryError) return json(error.status, { error: error.message });
     if (error instanceof ShopSettingsError) return json(error.status, { error: error.message, code: error.code });
     if (error instanceof PhotoListingError) return json(error.status, { error: error.message });
+    if (error instanceof MarketingPlanError) return json(error.status, { error: error.message });
     if (error instanceof PinterestError) return json(error.status, { error: error.message, code: error.code });
     if (error instanceof EtsyIntegrationError) {
       if (error.code === "NOT_CONFIGURED") return json(503, { error: "Etsy keystring ve shared secret henüz sunucuya eklenmedi." });
