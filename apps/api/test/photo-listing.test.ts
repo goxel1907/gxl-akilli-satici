@@ -129,7 +129,9 @@ test("yarn content in Turkish is translated, unknown words stay out of the Engli
   assert.equal(fiberEnglish("tiftik karışım"), undefined);
   const plan = buildProductPlan(normalizeProductInput({ titleTr: "Tığ işi bere", origin: "made_by_seller", fiber: "tiftik karışım" }), [], [], {});
   assert.ok(plan.warnings.some((warning) => warning.includes("İplik içeriği İngilizceye çevrilemedi")));
-  assert.ok(plan.warnings.some((warning) => warning.startsWith("Beden")));
+  // Bereye göğüs ölçüsü sorulmaz; kafa çevresi veya beden istenir.
+  assert.ok(plan.warnings.some((warning) => warning.startsWith("Bere için")));
+  assert.ok(!plan.warnings.some((warning) => /göğüs/.test(warning)));
 });
 
 test("a family member who crochets is listed as a shop member, child items wait for safety details", () => {

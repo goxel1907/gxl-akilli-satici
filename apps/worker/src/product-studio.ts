@@ -326,6 +326,8 @@ export function detectProductSignals(input: ProductPlanInput): ProductSignals {
   let noun = input.productNounEn || (isTesbih ? "prayer beads" : nounMatch?.en) || "item";
   const craftWord = craft === "crochet" ? "crochet" : craft === "knit" ? "hand knit" : "";
   if (isKnitwear && craftWord && noun !== "item" && !/\b(crochet|knit|knitted)\b/.test(noun)) noun = `${craftWord} ${noun}`;
+  // "Kilim yastık kılıfı" bir kilim değil, kilimden yastık kılıfıdır.
+  if (noun === "kilim" && hasStem(words, ["yastık", "yastik", "pillow", "kılıf", "kilif"])) noun = "kilim pillow cover";
   const attributes = [...new Set([
     ...ATTRIBUTES.filter((item) => hasStem(words, item.stems) && (!item.knitOnly || isKnitwear)).map((item) => item.en),
     ...input.attributesEn
@@ -509,7 +511,7 @@ function buildTags(input: ProductPlanInput, signals: ProductSignals, primary: st
     .filter(([tag]) => tag.split(/\s+/).some((word) => vocabulary.has(word.replace(/s$/, ""))))
     .sort((a, b) => b[1] - a[1])
     .map(([tag]) => tag);
-  const lastNoun = signals.noun.split(" ").at(-1) || signals.noun;
+  const lastNoun = headNoun(signals.noun);
   const generated = [
     signals.material ? `${signals.material.short} ${signals.noun}` : "",
     ...signals.attributes.map((attribute) => `${attribute} ${signals.noun}`),
@@ -533,21 +535,28 @@ function buildTags(input: ProductPlanInput, signals: ProductSignals, primary: st
   const decade = signals.isVintage && input.yearMade ? `${Math.floor(input.yearMade / 10) * 10}s` : "";
   // "cozy" yalnız sıcak tutan örgüler için doğru bir sözdür (yazlık bluz için değil).
   const WARM_KNITS = new Set(["sweater", "cardigan", "beanie", "scarf", "shawl", "blanket", "poncho", "vest", "mittens"]);
-  const midCentury = signals.isVintage && input.yearMade && input.yearMade >= 1945 && input.yearMade <= 1975;
+  // "Mid century" alıcı dilinde 1945-1969 dönemidir.
+  const midCentury = signals.isVintage && input.yearMade && input.yearMade >= 1945 && input.yearMade <= 1969;
   const fillers = signals.isTesbih ? [
     input.beadCount ? `${input.beadCount} bead tasbih` : "",
-    "dhikr beads", "muslim prayer beads", "turkish tasbih", "muslim gift", "eid gift", "ramadan gift", "tesbih"
+    "dhikr beads", "muslim prayer beads", "turkish tasbih", "muslim gift", "eid gift", "ramadan gift", "tesbih",
+    "tasbih", "misbaha", "islamic prayer beads", "gift for him", "handmade tasbih"
   ] : signals.isVintage ? [
     decade ? `${decade} ${lastNoun}` : "",
     signals.material ? `vintage ${signals.material.short}` : "",
     midCentury ? `mid century ${lastNoun}` : "",
-    `retro ${lastNoun}`, "vintage gift", "vintage find", "vintage collectible", "gift for collector"
+    `retro ${lastNoun}`, "vintage gift", "vintage find", "vintage collectible", "gift for collector",
+    ...(/\b(pillow|cushion)\b/.test(signals.noun) || /\b(pillow|cushion)\b/.test(primary) ? ["pillow cover", "throw pillow cover", "cushion cover", "accent pillow cover"] : []),
+    ...(/\b(tray|plate|bowl|pot|pan)\b/.test(lastNoun) ? [`decorative ${lastNoun}`, "metal decor", "kitchen decor"] : []),
+    "vintage home decor", "turkish vintage", "one of a kind"
   ] : signals.isKnitwear ? [
     input.colors[1] ? `${input.colors[1]} ${lastNoun}` : "",
     signals.attributes[1] ? `${signals.attributes[1]} ${lastNoun}` : "",
     signals.craft === "crochet" ? "crochet clothing" : "hand knit clothing",
     "handmade clothing", WARM_KNITS.has(lastNoun) ? `cozy ${lastNoun}` : "", "slow fashion", "handmade gift",
-    input.audience === "women" ? "gift for mom" : ""
+    input.audience === "women" ? "gift for mom" : "",
+    ...(/\b(beanie|hat)\b/.test(lastNoun) ? ["winter hat", "knit hat", "warm hat", "handmade hat"] : []),
+    ...(/\b(sweater|cardigan|pullover)\b/.test(lastNoun) ? ["knit sweater", "handmade knitwear"] : [])
   ] : [
     input.origin === "made_by_seller" && signals.noun !== "item" ? `handmade ${lastNoun}` : "",
     signals.noun !== "item" ? `${lastNoun} gift` : "", "turkish gift", "unique gift", "gift idea"
@@ -555,9 +564,17 @@ function buildTags(input: ProductPlanInput, signals: ProductSignals, primary: st
   return normalizeEtsyTags(withoutFalseAntique(input, [primary, ...candidates, ...ranked, ...generated, ...fillers].filter(Boolean)));
 }
 
+// Etiket ve başlıkta kullanılan baş isim: "kilim pillow cover" → "kilim" ("retro cover" değil), "pillow cover" olduğu gibi.
+function headNoun(noun: string): string {
+  const cover = /^(\w+) pillow cover$/.exec(noun);
+  if (cover) return cover[1];
+  if (/pillow cover$/.test(noun)) return "pillow cover";
+  return noun.split(" ").at(-1) || noun;
+}
+
 function buildTitle(input: ProductPlanInput, signals: ProductSignals, primary: string, candidates: string[], tags: string[]): string {
   const primaryWords = new Set(primary.split(/\s+/));
-  const lastNoun = signals.noun.split(" ").at(-1) || signals.noun;
+  const lastNoun = headNoun(signals.noun);
   // Örgüde alıcının okuduğu sıra: renk, iplik, özellik, ürün ("Cream Cotton Oversized Sweater for Women").
   const descriptors = signals.isKnitwear ? [input.colors[0], signals.material?.short, ...signals.attributes.slice(0, 2)].filter((value): value is string => Boolean(value)) : [];
   const audience = signals.isKnitwear && input.audience === "women" ? " for Women" : signals.isKnitwear && input.audience === "men" ? " for Men" : "";
@@ -588,17 +605,21 @@ function buildTitle(input: ProductPlanInput, signals: ProductSignals, primary: s
     : input.origin === "made_by_seller" ? "Handmade in Türkiye" : "";
   // Hediye ifadesi başlığa yalnız yeni bir kelime getiriyorsa eklenir ("Vintage Gift" ikinci kez "vintage" demez).
   // Vintage başlığında hediye ifadesi yer kaplar; dönem ve ölçü daha önemlidir.
-  const giftTag = signals.isVintage ? undefined : tags.find((tag) => tag.includes("gift") && tag.split(/\s+/).some((word) => word !== "gift" && !said.has(word)));
-  const segments = [
-    signals.isKnitwear && !descriptors.length ? `${titleCase(primary)}${audience}` : titleCase(primary),
+  const base = [
+    // Alıcı "kilim pillow" arar ama ürün kılıftır; başlık "Pillow Cover" der (iç yastık beklentisi oluşmaz).
+    signals.isKnitwear && !descriptors.length ? `${titleCase(primary)}${audience}` : `${titleCase(primary)}${/pillow cover$/.test(signals.noun) && /pillow$/.test(primary) ? " Cover" : ""}`,
     ...secondary.map(titleCase),
     attributeSegment,
     input.weightGrams && !signals.isKnitwear ? `${Math.round(input.weightGrams)} g` : "",
     input.size ? `Size ${input.size}` : "",
     originSegment,
-    !signals.isKnitwear && !signals.isTesbih && input.lengthCm && input.widthCm ? `${input.lengthCm} x ${input.widthCm} cm` : "",
-    giftTag ? titleCase(giftTag) : ""
+    !signals.isKnitwear && !signals.isTesbih && input.lengthCm && input.widthCm ? `${input.lengthCm} x ${input.widthCm} cm` : ""
   ].filter(Boolean);
+  // Hediye ifadesi yalnız başlıkta henüz geçmeyen bir kelime getiriyorsa ve ifadenin kendisi başlıkta yoksa eklenir
+  // ("Islamic Gift for Men" iki kez yazılmaz).
+  const titleWords = new Set(base.join(" ").toLowerCase().split(/[^a-z0-9]+/).filter(Boolean));
+  const giftTag = signals.isVintage || titleWords.has("gift") ? undefined : tags.find((tag) => tag.includes("gift") && !base.join(" ").toLowerCase().includes(tag) && tag.split(/\s+/).some((word) => word !== "gift" && !said.has(word) && !titleWords.has(word)));
+  const segments = [...base, giftTag ? titleCase(giftTag) : ""].filter(Boolean);
   let title = "";
   for (const segment of segments) {
     const next = title ? `${title}, ${segment}` : segment;
@@ -616,7 +637,7 @@ function knitMaterials(input: ProductPlanInput, signals: ProductSignals): string
   return [...new Set([...(found.length ? found : signals.material ? [signals.material.en] : []), "yarn"])];
 }
 
-function buildDescription(input: ProductPlanInput, signals: ProductSignals, eligibility: EtsyEligibility, title: string): string {
+function buildDescription(input: ProductPlanInput, signals: ProductSignals, eligibility: EtsyEligibility, title: string, primary = ""): string {
   const fiber = fiberEnglish(input.fiber);
   const details = [
     input.size ? `• Size: ${input.size}` : "",
@@ -630,11 +651,11 @@ function buildDescription(input: ProductPlanInput, signals: ProductSignals, elig
     input.colors.length ? `• Color: ${input.colors.join(", ")}` : "",
     input.weightGrams && !signals.isKnitwear ? `• Weight: ${Math.round(input.weightGrams)} g (${(input.weightGrams / 28.3495).toFixed(2)} oz)` : "",
     input.beadCount ? `• Beads: ${Math.round(input.beadCount)}` : "",
-    signals.attributes.length ? `• Design details: ${signals.attributes.join(", ")}` : ""
+    signals.attributes.length ? `• ${signals.isKnitwear ? "Fit and details" : "Design details"}: ${signals.attributes.join(", ")}` : ""
   ].filter(Boolean);
   const madeBy = input.madeByShopMember ? "by a member of our shop" : "at GXL Market Studio";
   const origin = input.origin === "vintage"
-    ? `This is a genuine vintage piece${input.yearMade ? ` from around ${Math.floor(input.yearMade / 10) * 10}s` : ""}. As a pre-owned item it may show gentle signs of age; please see every photo.`
+    ? `This is a genuine vintage piece${input.yearMade ? ` from the ${Math.floor(input.yearMade / 10) * 10}s` : ""}. As a pre-owned item it may show gentle signs of age; please see every photo.`
     : eligibility.needsProductionPartner
       ? "Designed by GXL Market Studio and made for us by our production partner, a silversmith workshop in Türkiye."
       : input.origin === "made_by_seller"
@@ -644,7 +665,7 @@ function buildDescription(input: ProductPlanInput, signals: ProductSignals, elig
         : "";
   const care = signals.isKnitwear ? CARE_TEXT[input.care || "hand_wash"] : signals.material?.short === "silver" ? "Silver naturally darkens over time. Wipe with a soft silver polishing cloth and store in a dry pouch." : "";
   return [
-    `${title}`,
+    openingSentence(input, signals, primary) || title,
     "",
     "DETAILS",
     ...details,
@@ -657,10 +678,34 @@ function buildDescription(input: ProductPlanInput, signals: ProductSignals, elig
     `• Ships from Türkiye with tracking. ${input.readyToShip ? "Ready to ship." : "Prepared to order; see the processing time on this listing."}`,
     "• Free shipping: delivery cost is already included in the price.",
     "• Import duties or taxes may apply depending on your country.",
-    ...(care ? ["", "CARE", care] : []),
-    "",
-    "© GXL Market Studio"
+    ...(care ? ["", "CARE", care] : [])
   ].join("\n");
+}
+
+// Açıklama başlığı tekrar etmez; Etsy önizlemesinde görünen ilk satır ürünü anlatan doğal bir cümledir.
+function openingSentence(input: ProductPlanInput, signals: ProductSignals, primary = ""): string {
+  if (signals.noun === "item") return "";
+  // Alıcı ifadesi ürün adını daha tam söylüyorsa ("vintage kilim pillow" ↔ "kilim") o kullanılır.
+  const noun = primary && primary.includes(signals.noun) && primary.split(" ").at(-1) !== signals.noun.split(" ").at(-1) ? primary.replace(/^vintage\s+/, "") : signals.noun;
+  const plural = /s$/.test(noun) && !/ss$/.test(noun);
+  const words = [
+    // Örgüde özellikler ürünü niteler ("an oversized cream cotton crochet sweater"); tesbihte ayrıntı olarak sonda yazılır.
+    ...(signals.isKnitwear ? signals.attributes.slice(0, 2) : []),
+    signals.isVintage && !/\bvintage\b/.test(noun) ? "vintage" : "",
+    input.colors[0] && signals.isKnitwear ? input.colors[0].toLowerCase() : "",
+    signals.material && !noun.includes(signals.material.short) ? signals.material.en : "",
+    noun
+  ].filter(Boolean);
+  const phrase = words.join(" ");
+  const lead = plural ? phrase[0].toUpperCase() + phrase.slice(1) : `${/^[aeiou]/i.test(phrase) ? "An" : "A"} ${phrase}`;
+  const extras = [
+    input.beadCount && signals.isTesbih ? `${Math.round(input.beadCount)} beads` : "",
+    ...(!signals.isKnitwear && signals.attributes.length ? [`${signals.attributes.length > 1 ? `${signals.attributes.slice(0, -1).join(", ")} and ${signals.attributes.at(-1)}` : signals.attributes[0]} details`] : [])
+  ].filter(Boolean);
+  const details = extras.length ? ` with ${extras.join(" and ")}` : "";
+  const era = signals.isVintage && input.yearMade ? ` from the ${Math.floor(input.yearMade / 10) * 10}s` : "";
+  const made = input.origin === "made_by_seller" ? ", made by hand in Türkiye" : input.origin === "designed_by_seller" ? ", designed in Türkiye" : "";
+  return `${lead}${details}${era}${made}.`;
 }
 
 export function buildProductPlan(input: ProductPlanInput, phrases: string[], scans: TrendResult[], context: { usdTryRate?: number; shopCurrency?: string; signals?: ProductSignals }): ProductPlan {
@@ -683,11 +728,18 @@ export function buildProductPlan(input: ProductPlanInput, phrases: string[], sca
     ...(!input.shippingTry ? ["ABD kargo ücreti girilmedi; önerilen fiyat kargo hariç hesaplandı."] : []),
     ...(input.priceTry && !context.usdTryRate ? ["Dolar kuru alınamadı; kuru elle girin."] : []),
     ...(signals.noun === "item" ? ["Ürünün İngilizce adı anlaşılamadı; 'İngilizce ürün adı' alanını doldurun."] : []),
-    ...(signals.isKnitwear && (!input.size || !input.chestCm || !input.lengthCm) ? ["Beden, göğüs genişliği ve boy girilmedi; giyimde alıcılar ölçüye bakıp karar verir, iade de çoğunlukla bu yüzden olur."] : []),
+    ...(signals.isKnitwear && !/\b(beanie|hat|scarf|shawl|cowl|socks?|mittens|gloves|blanket|bag|tote)\b/.test(signals.noun) && (!input.size || !input.chestCm || !input.lengthCm) ? ["Beden, göğüs genişliği ve boy girilmedi; giyimde alıcılar ölçüye bakıp karar verir, iade de çoğunlukla bu yüzden olur."] : []),
     ...(signals.isKnitwear && input.fiber && !fiberEnglish(input.fiber) ? ["İplik içeriği İngilizceye çevrilemedi; açıklamaya girmedi. Ör. '%100 pamuk' veya '%50 yün %50 akrilik' yazın."] : []),
     ...(signals.isVintage && !input.conditionLevel && !input.conditionNote ? ["Ürünün durumunu seçin (kusursuz, hafif kullanım izi, belirgin aşınma, onarım); vintage alıcılar kusurları açıkça görmek ister."] : []),
     ...(input.droppedTerms.length ? [`İngilizceye çevrilemediği için ilana girmedi: ${input.droppedTerms.join(", ")}. Listedeki bir kelimeyi kullanın ya da boş bırakın.`] : []),
-    ...(input.uncheckedTerms.length ? [`Sözlükte olmayan kelime olduğu gibi İngilizce kabul edildi: ${input.uncheckedTerms.join(", ")}. Türkçe yazdıysanız düzeltin.`] : [])
+    ...(input.uncheckedTerms.length ? [`Sözlükte olmayan kelime olduğu gibi İngilizce kabul edildi: ${input.uncheckedTerms.join(", ")}. Türkçe yazdıysanız düzeltin.`] : []),
+    // Alıcının sipariş öncesi sorduğu bilgiler eksikse satıcı uyarılır ("ürün açıklandığı gibi değil" iadesini önler).
+    ...(signals.isTesbih && !input.beadCount ? ["Tane sayısını girin (ör. 33 veya 99); tesbih alıcısının ilk baktığı bilgidir."] : []),
+    ...(signals.isTesbih && !input.weightGrams ? ["Ağırlığı gram olarak girin; tesbih alıcısı ağırlığa bakarak malzemenin kalitesini anlar."] : []),
+    ...(signals.isTesbih && !input.lengthCm ? ["Toplam uzunluğu (püskül dahil, cm) girin."] : []),
+    ...(signals.isKnitwear && /\b(beanie|hat|bere)\b/.test(signals.noun) && !input.lengthCm && !input.size ? ["Bere için kafa çevresini veya bedeni girin."] : []),
+    ...(/\b(pillow|cushion)\b/.test(signals.noun) ? ["Yastıkta iç yastığın dahil olup olmadığını durum notuna yazın (ör. \"Cover only, insert not included\")."] : []),
+    ...(signals.isVintage && /\b(copper|brass)\b/.test(`${signals.noun} ${signals.material?.en || ""}`) ? ["Bakır/pirinç kapta gıdayla kullanım bilgisini durum notuna yazın (ör. \"For decorative use only\" veya \"Tin-lined, food safe\")."] : [])
   ];
   return {
     primaryKeyword: primary,
@@ -697,7 +749,7 @@ export function buildProductPlan(input: ProductPlanInput, phrases: string[], sca
     }),
     title,
     tags,
-    description: buildDescription(input, signals, eligibility, title),
+    description: buildDescription(input, signals, eligibility, title, primary),
     materials,
     pricing,
     eligibility,

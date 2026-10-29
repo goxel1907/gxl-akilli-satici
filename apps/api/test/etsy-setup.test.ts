@@ -44,20 +44,26 @@ test("the readiness list shows what is done, what the app can do, and what only 
   assert.equal(oldScopes.items.find((item) => item.id === "payments")?.state, "manual", "payments are the seller's own step");
 
   const env = await connected("shops_r shops_w listings_w transactions_r transactions_w");
-  const fresh = await shopReadiness(env, etsy({ shop: { shop_id: 777, shop_name: "GXLMarketStudio", is_etsy_payments_onboarded: false, listing_active_count: 0 } }));
+  // Etsy "Etsy Payments'a kayıtlı" dese bile (Türkiye mağazalarında baştan açık olabilir) ve mağaza kaydı olsa bile,
+  // yayında ilan yoksa mağaza açık sayılmaz ve ödeme/banka adımı "tamam" gösterilmez.
+  const fresh = await shopReadiness(env, etsy({ shop: { shop_id: 777, shop_name: "GXLMarketStudio", is_etsy_payments_onboarded: true, listing_active_count: 0 } }));
   const ids = Object.fromEntries(fresh.items.map((item) => [item.id, item]));
+  assert.equal(fresh.shopOpen, false);
+  assert.match(ids.shop.titleTr, /Mağaza adı alındı: GXLMarketStudio/);
+  assert.match(ids.shop.detailTr, /henüz açılmadı/);
   assert.equal(ids.permissions.state, "done");
-  assert.equal(ids.payments.state, "todo");
+  assert.equal(ids.payments.state, "manual", "the app cannot know that identity and bank steps are finished");
   assert.equal(ids.shipping.action, "create_shipping_profile");
   assert.equal(ids.returns.action, "create_return_policy");
   assert.equal(ids.storefront.action, "shop_settings");
   assert.equal(ids.listings.action, "sell");
   assert.equal(ids.branding.state, "manual");
-  assert.equal(fresh.total, 8);
+  assert.equal(fresh.total, 7);
   assert.equal(fresh.done, 3);
 
   const ready = await shopReadiness(env, etsy({ shop: { shop_id: 777, shop_name: "GXLMarketStudio", title: "Handmade prayer beads", is_etsy_payments_onboarded: true, listing_active_count: 5 }, profiles: [{ shipping_profile_id: 55 }], policies: [{ return_policy_id: 66, accepts_returns: true, return_deadline: 30 }] }));
   assert.equal(ready.done, ready.total, "every checkable step is done");
+  assert.equal(ready.shopOpen, true, "the shop is open only when a listing is live");
 });
 
 test("the shipping profile is free US shipping from Türkiye and is never created twice", async () => {

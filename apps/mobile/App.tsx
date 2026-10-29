@@ -497,11 +497,15 @@ function plainText(html?: string): string {
 }
 
 // Etsy mağaza kaydı açılışın ilk adımında oluşur; ödeme kurulumu ve aktif ilan sayısı mağazanın gerçekten açılıp açılmadığını gösterir.
-function etsyOpeningText(etsy: any): string {
-  const parts: string[] = [];
-  if (etsy?.paymentsReady === false) parts.push("ödeme kurulumu bekliyor");
-  if (typeof etsy?.activeListings === "number") parts.push(`${etsy.activeListings} aktif ilan`);
-  return parts.length ? ` · ${parts.join(" · ")}` : "";
+// Etsy mağaza kaydı mağaza adı seçilince oluşur; mağaza ancak ilk ilan yayına girince açılır. "Açık" yalnız
+// yayında ilan varken söylenir. Etsy'nin ödeme sistemi bilgisi açılışın bittiğini göstermediği için kullanılmaz.
+function etsyShopOpen(etsy: any): boolean {
+  return typeof etsy?.activeListings === "number" && etsy.activeListings > 0;
+}
+
+function etsyShopLine(etsy: any): string {
+  const name = etsy?.shopName ? ` (${etsy.shopName})` : "";
+  return etsyShopOpen(etsy) ? `Mağaza açık${name} · ${etsy.activeListings} ilan yayında` : `Mağaza adı alındı${name} · henüz açılmadı`;
 }
 
 function Overview({ data, setTab, online, channels, onSimple }: any) {
@@ -513,7 +517,7 @@ function Overview({ data, setTab, online, channels, onSimple }: any) {
   const etsyAuthorized = Boolean(etsy?.authorized || etsy?.connected);
   const etsyShopReady = Boolean(etsy?.shopReady || etsy?.shopId);
   const etsyStatus = etsyShopReady
-    ? `Bağlı${etsy.shopName ? ` · ${etsy.shopName}` : ""}${etsyOpeningText(etsy)}`
+    ? etsyShopLine(etsy)
     : etsyAuthorized
       ? "Hesap yetkili · mağaza kurulumunu tamamla"
       : etsy?.message || (!etsy?.configured
@@ -793,7 +797,7 @@ function SalesPlanCard({ online, shopierProducts, etsyActiveListings }: any) {
           whatsappNumber: channel === "shopier" ? whatsapp.trim() || undefined : undefined
         })
       });
-      setPlan(result.plan);
+      setPlan({ ...result.plan, quality: result.quality });
       setOpen(result.plan?.channels?.find((item: any) => item.decision === "now" || item.decision === "always")?.id);
     } catch (error) { Alert.alert("Plan hazırlanamadı", errorText(error)); }
     finally { setBusy(false); }
@@ -822,6 +826,7 @@ function SalesPlanCard({ online, shopierProducts, etsyActiveListings }: any) {
     </Pressable>
     {!!plan && <>
       <Text style={[styles.trendVerdict, { marginTop: 14 }]}>{plan.headlineTr}</Text>
+      <QualityNote quality={plan.quality} />
       {plan.channels.map((item: any) => <View key={item.id} style={styles.card}>
         <Pressable style={styles.shopierProductTop} onPress={() => setOpen(open === item.id ? undefined : item.id)}>
           <Text style={[styles.cardTitle, { flex: 1 }]}>{item.titleTr}</Text>
@@ -1095,7 +1100,7 @@ function EtsyScreen({ online, channels, initialSection = "Trend" }: any) {
   const authorized = Boolean(etsy.authorized || etsy.connected);
   return <>
     <View style={styles.agentHero}>
-      <View style={styles.agentHeroTop}><View style={styles.shopierLogo}><Ionicons name="color-palette" size={22} color="white" /></View><View style={{ flex: 1 }}><Text style={styles.agentHeroTitle}>Etsy Merkezi</Text><Text style={styles.agentHeroText}>{shopReady ? `Mağaza bağlı${etsy.shopName ? ` · ${etsy.shopName}` : ""}${etsyOpeningText(etsy)} · otomatik keşif açık` : "Trend, otomatik keşif ve stüdyo mağaza açılmadan da çalışır. Taslak ve yayınlama mağaza açılınca etkinleşir."}</Text></View></View>
+      <View style={styles.agentHeroTop}><View style={styles.shopierLogo}><Ionicons name="color-palette" size={22} color="white" /></View><View style={{ flex: 1 }}><Text style={styles.agentHeroTitle}>Etsy Merkezi</Text><Text style={styles.agentHeroText}>{shopReady ? `${etsyShopLine(etsy)} · otomatik keşif açık` : "Trend, otomatik keşif ve stüdyo mağaza açılmadan da çalışır. Taslak ve yayınlama mağaza açılınca etkinleşir."}</Text></View></View>
     </View>
     {!shopReady && online && section !== "Kılavuz" && <Pressable style={styles.guardrail} onPress={() => setSection("Kılavuz")}><Ionicons name="storefront-outline" size={20} color="#315B4C" /><Text style={[styles.guardrailText, { flex: 1 }]}>{authorized ? "Etsy hesabı yetkili, mağaza açılışı bekleniyor. Adımlar için dokunun: Kılavuz → Mağaza açılışı." : "Etsy mağazası henüz bağlı değil. Adımlar için dokunun: Kılavuz → Mağaza açılışı."}</Text><Ionicons name="chevron-forward" size={18} color="#315B4C" /></Pressable>}
     <View style={styles.segment}>
@@ -1558,7 +1563,7 @@ function PrintableStudio({ online, seed, seeding, onReseed, onPickKind, onUpload
         <Text style={styles.warningTitle}>Özgünlük planı</Text>
         {brief.originalityPlan.map((line: string) => <Text style={styles.analysisLine} key={line}>• {line}</Text>)}
       </View>
-      <MasterPromptCard brief={brief} />
+      <MasterPromptCard brief={brief} quality={plan?.quality} />
       <PromptBox title="1) PDF promptu (Claude / ChatGPT)" text={brief.pdfPrompt} shareTitle={`${brief.name} PDF prompt`} />
       {!!brief.artPrompts?.length && <PromptBox title="2) Sayfa görselleri promptları" text={brief.artPrompts.join("\n\n")} shareTitle={`${brief.name} artwork prompts`} />}
       <AdVisualsPanel visuals={brief.adVisuals} />
@@ -1591,7 +1596,7 @@ function PrintableStudio({ online, seed, seeding, onReseed, onPickKind, onUpload
       <TurkishGloss title={listing.title} tags={listing.tags} />
       {listing.warnings.map((warning: string) => <Text style={styles.warningText} key={warning}>• {warning}</Text>)}
       <View style={styles.inlineActions}>
-        <Pressable style={styles.secondaryButton} onPress={() => Share.share({ message: `${listing.title}\n\n${listing.description}\n\nTags: ${listing.tags.join(", ")}` })}><Text style={styles.secondaryButtonText}>İlan metnini kopyala</Text></Pressable>
+        <Pressable style={styles.secondaryButton} onPress={() => shareChecked(plan?.quality, `${listing.title}\n\n${listing.description}\n\nTags: ${listing.tags.join(", ")}`)}><Text style={styles.secondaryButtonText}>İlan metnini kopyala</Text></Pressable>
         <Pressable style={styles.secondaryButton} onPress={() => onUpload({ name: brief?.name, kind, productType, listing, pins: brief?.pins, priceUsd: seed?.competition?.launchPriceUsd })}><Text style={styles.secondaryButtonText}>PDF hazırsa yükle →</Text></Pressable>
       </View>
     </View>}
@@ -1602,9 +1607,39 @@ function ChipGroup({ options, value, onChange }: any) {
   return <View style={styles.chips}>{options.map((option: any) => <Pressable key={option.id} style={[styles.chip, value === option.id && styles.chipActive]} onPress={() => onChange(option.id)}><Text style={[styles.chipText, value === option.id && styles.chipTextActive]}>{option.label}</Text></Pressable>)}</View>;
 }
 
+// Sunucu her talimatı, başlığı, etiketi ve açıklamayı telefona göndermeden önce otomatik denetler; küçük hataları
+// düzeltir. Sonuç burada görünür; düzeltilemeyen sorun kalırsa paylaşmadan önce sorulur.
+function qualityErrors(quality: any): any[] {
+  return (quality?.issues || []).filter((issue: any) => issue.severity === "error");
+}
+
+function QualityNote({ quality }: any) {
+  if (!quality) return null;
+  const errors = qualityErrors(quality);
+  return <View style={[styles.qualityNote, errors.length ? styles.qualityBad : styles.qualityGood]}>
+    <Ionicons name={errors.length ? "alert-circle-outline" : "checkmark-circle-outline"} size={18} color={errors.length ? "#9B2C2C" : "#2F6B4F"} />
+    <View style={{ flex: 1 }}>
+      <Text style={styles.qualityTitle}>{errors.length ? `Otomatik denetim: ${errors.length} sorun bulundu` : `Otomatik denetim: ${quality.checks} kontrol, sorun yok`}</Text>
+      {!!quality.fixed?.length && <Text style={styles.small}>Küçük yazım hataları gönderilmeden önce düzeltildi.</Text>}
+      {errors.slice(0, 5).map((issue: any, index: number) => <Text key={`${issue.code}-${index}`} style={styles.small}>• {issue.messageTr}</Text>)}
+      {!!errors.length && <Text style={styles.small}>Yeniden üretmek (Hazırla'ya tekrar dokunmak) genellikle düzeltir.</Text>}
+    </View>
+  </View>;
+}
+
+function shareChecked(quality: any, message: string, title?: string) {
+  const errors = qualityErrors(quality);
+  const share = () => { Share.share(title ? { message, title } : { message }); };
+  if (!errors.length) return share();
+  Alert.alert("Denetimde sorun var", `${errors.length} sorun bulundu: ${errors[0].messageTr} Yeniden üretmeniz önerilir. Yine de göndermek istiyor musunuz?`, [
+    { text: "Vazgeç", style: "cancel" },
+    { text: "Yine de gönder", onPress: share }
+  ]);
+}
+
 // Paylaşım ChatGPT/Claude'da her seferinde yeni sohbet açar; parçalar ayrı sohbetlere düşerse ad, palet ve spec kaybolur.
 // Tek paket tüm adımları sırayla içerir: bir kez gönderilir, tüm iş aynı sohbette yürür.
-function MasterPromptCard({ brief }: any) {
+function MasterPromptCard({ brief, quality }: any) {
   if (!brief?.masterPrompt) return null;
   const steps = (brief.masterPrompt.match(/^- STEP \d+/gm) || []).length;
   return <View style={[styles.analysisCard, styles.masterCard]}>
@@ -1614,7 +1649,8 @@ function MasterPromptCard({ brief }: any) {
     <Text style={styles.analysisLine}>2. Her adım bitince aynı sohbete "next" yaz; yeni sohbet açma.</Text>
     <Text style={styles.analysisLine}>3. Görseller için ChatGPT kullan; Claude fotoğraf üretmez, dosyaları ve vektör çizimleri yapar.</Text>
     <Text style={styles.small}>{Math.round(brief.masterPrompt.length / 100) / 10} bin karakter. Uygulama uzun metni almazsa paylaş ekranının üstündeki kopyala simgesine dokunup aynı sohbete yapıştır.</Text>
-    <Pressable style={[styles.primary, { marginTop: 12, marginBottom: 0 }]} onPress={() => Share.share({ message: brief.masterPrompt, title: `${brief.name} - tek paket` })}><Text style={styles.primaryText}>Tek paketi gönder</Text><Ionicons name="paper-plane-outline" size={18} color="white" /></Pressable>
+    <QualityNote quality={quality} />
+    <Pressable style={[styles.primary, { marginTop: 12, marginBottom: 0 }]} onPress={() => shareChecked(quality, brief.masterPrompt, `${brief.name} - tek paket`)}><Text style={styles.primaryText}>Tek paketi gönder</Text><Ionicons name="paper-plane-outline" size={18} color="white" /></Pressable>
     <Text style={[styles.small, { marginTop: 10 }]}>Aşağıdaki parçalar bu paketin içindekilerdir. Ayrı kullanacaksan hepsini aynı sohbete yapıştır.</Text>
   </View>;
 }
@@ -1772,7 +1808,7 @@ function StudioPanel({ online, active, seed, onUpload, etsyReady }: any) {
         <Text style={styles.warningTitle}>Modelden farklılaştırma planı</Text>
         {brief.originalityPlan.map((line: string) => <Text style={styles.analysisLine} key={line}>• {line}</Text>)}
       </View>
-      <MasterPromptCard brief={brief} />
+      <MasterPromptCard brief={brief} quality={plan?.quality} />
       <PromptBox title="1) PDF desen promptu (Claude / ChatGPT)" text={brief.patternPrompt} shareTitle={`${brief.name} pattern prompt`} />
       <PromptBox title="2) 3D render promptu" text={brief.renderPrompt} shareTitle={`${brief.name} render prompt`} />
       <AdVisualsPanel visuals={brief.adVisuals} />
@@ -1794,7 +1830,7 @@ function StudioPanel({ online, active, seed, onUpload, etsyReady }: any) {
       <TurkishGloss title={listing.title} tags={listing.tags} />
       {listing.warnings.map((warning: string) => <Text style={styles.warningText} key={warning}>• {warning}</Text>)}
       <View style={styles.inlineActions}>
-        <Pressable style={styles.secondaryButton} onPress={() => Share.share({ message: `${listing.title}\n\n${listing.description}\n\nTags: ${listing.tags.join(", ")}` })}><Text style={styles.secondaryButtonText}>İlan metnini kopyala</Text></Pressable>
+        <Pressable style={styles.secondaryButton} onPress={() => shareChecked(plan?.quality, `${listing.title}\n\n${listing.description}\n\nTags: ${listing.tags.join(", ")}`)}><Text style={styles.secondaryButtonText}>İlan metnini kopyala</Text></Pressable>
         <Pressable style={styles.secondaryButton} onPress={() => onUpload({ name: brief?.name, craft, productType, listing, priceUsd: competition?.launchPriceUsd })}><Text style={styles.secondaryButtonText}>PDF hazırsa yükle →</Text></Pressable>
       </View>
     </View>}
@@ -2201,7 +2237,7 @@ const ETSY_GUIDE: Array<{ id: string; title: string; icon: any; steps: string[] 
     "Kargo profili ve iade politikası: Mağaza hazırlığı listesinde 'Kargo profili oluştur' ve 'İade politikası oluştur' ile uygulama Etsy'de sizin yerinize oluşturur (ABD'ye ücretsiz kargo; kargo bedeli fiyata dahil). Elle yapmak isterseniz: Shop Manager (Mağaza Yöneticisi) → Settings (Ayarlar) → Shipping settings (Kargo ayarları).",
     "Üretim ortağı: ustaya yaptırdığınız ürünler için Shop Manager (Mağaza Yöneticisi) → Settings (Ayarlar) → Production partners (Üretim ortakları) bölümünden usta veya atölyeyi ekleyin.",
     "Mağaza politikaları: iade koşullarını yazın ve dijital ürünlerin iade edilmediğini belirtin.",
-    "Açılıştan sonra Başla ekranındaki Durum kartında (uzman modda Özet) Etsy 'Mağaza bağlı' görünür. Taslak ve yayınlama düğmeleri o zaman açılır."
+    "Mağaza adını seçtiğinizde Etsy bir mağaza kaydı açar; Durum kartında 'Mağaza adı alındı · henüz açılmadı' yazar. İlk ilan yayına girince mağaza açılır ve 'Mağaza açık' görünür."
   ] },
   { id: "trouble", title: "Sorun giderme", icon: "construct-outline", steps: [
     "Uygulama düzeltmeleri APK kurmadan gelir: 'Güncelleme hazır' sorusu çıkarsa 'Yeniden başlat' deyin. Hangi sürümde olduğunuz Yardım (uzman modda Özet) ekranının en altında yazar; ekran görüntüsü gönderirken o satır görünsün. Beklediğiniz güncelleme gelmediyse aynı yerdeki 'Güncellemeyi denetle' düğmesine basın; sonucu ekranda yazar.",
@@ -2325,7 +2361,7 @@ async function researchEtsyPlan(base: any, setProgress: (text: string) => void) 
   }
   setProgress("Başlık, etiket, açıklama ve fiyat hazırlanıyor…");
   const result = await apiJson("/api/products/etsy-plan", { method: "POST", headers: apiHeaders(true), body: JSON.stringify({ product: payload, keywords: suggestion.candidates }) });
-  return { plan: result.plan, payload };
+  return { plan: { ...result.plan, quality: result.quality }, payload };
 }
 
 function EtsyProductPlanner({ product, etsyReady, onClose }: any) {
@@ -2526,6 +2562,7 @@ function EtsyPlanResult({ plan, payload, etsyReady, priceSourceLabel, preparePro
         <Text style={styles.listingTitle}>Önerilen: {pricing.recommendedUsd} USD ≈ {pricing.recommendedTry} TL · elinize ≈ {pricing.netAtRecommendedTry} TL</Text>
         <Text style={styles.warningText}>{pricing.note}</Text>
       </View>}
+      <QualityNote quality={plan.quality} />
       <Field label={`Başlık (${title.length}/140)`} value={title} onChangeText={setTitle} multiline />
       <Field label="Etiketler (13 adet)" value={tags} onChangeText={setTags} multiline autoCapitalize="none" />
       <TurkishGloss title={plan.title} tags={plan.tags} />
@@ -2696,6 +2733,7 @@ function ShopReadinessCard({ online, onSell }: any) {
       <Pressable style={[styles.secondaryButton, (!online || loading) && styles.primaryDisabled]} disabled={!online || loading} onPress={load}><Text style={styles.secondaryButtonText}>{loading ? "…" : "Yenile"}</Text></Pressable>
     </View>
     {!!data && <View style={styles.stepBar}>{data.items.filter((item: any) => item.state !== "manual").map((item: any) => <View key={item.id} style={[styles.stepDot, item.state === "done" && styles.stepDotActive]} />)}</View>}
+    {!!data && data.shopOpen !== undefined && <Text style={[styles.nextAction, { marginBottom: 6 }]}>Mağaza durumu: {data.shopOpen ? "açık (yayında ilan var)" : "henüz açılmadı — alıcılar mağazayı göremez"}</Text>}
     <Text style={styles.evidence}>Etsy mağazasını açmadan önce bu listenin hepsi tamamlanmalı. El simgeli adımları yalnız siz Etsy'de yaparsınız (kimlik, banka, logo); diğerlerini uygulama gösterir ya da sizin yerinize yapar.</Text>
     {!!error && <Text style={styles.shopierBlocker}>{error}</Text>}
     {(data?.items || []).map((item: any) => <View key={item.id}>
@@ -2904,16 +2942,14 @@ function HomeScreen({ online, channels, setTab, openSell }: any) {
   const shopier = channels?.shopier || {};
   const etsyShop = Boolean(etsy.shopReady || etsy.shopId);
   const etsyLine = etsyShop
-    ? `Mağaza bağlı${typeof etsy.activeListings === "number" ? ` · ${etsy.activeListings} ilan yayında` : ""}${etsy.paymentsReady === false ? " · ödeme kurulumu bitmedi" : ""}`
-    : etsy.authorized || etsy.connected ? "Hesap bağlı · mağaza açılışı bitmedi" : "Bağlı değil";
+    ? etsyShopLine(etsy)
+    : etsy.authorized || etsy.connected ? "Hesap bağlı · mağaza adı henüz seçilmedi" : "Bağlı değil";
   const shopierLine = shopier.connected ? `Bağlı · ${shopier.productCount ?? 0} ürün` : "Bağlı değil";
   const nextStep = !online
     ? "Önce internete bağlanın; üstteki 'Yeniden bağlan' düğmesine basın."
-    : !etsyShop || etsy.paymentsReady === false
-      ? "Etsy mağazası henüz satışa açık değil. Ürünlerinizi şimdiden hazırlayabilirsiniz; mağaza açılınca Etsy'ye gönderilir. Eksik adımlar: Yardım → Mağaza hazırlığı."
-      : etsy.activeListings === 0
-        ? "Mağazada yayında ilan yok. 'Ürün sat' ile ilk ilanınızı hazırlayın."
-        : "İlanlarınızı alıcılara göstermek için 'Müşteri bul' planını hazırlayın.";
+    : !etsyShopOpen(etsy)
+      ? "Etsy mağazası henüz açılmadı. Ürünlerinizi şimdiden hazırlayabilirsiniz. Açılış için eksik adımlar: Yardım → Mağaza hazırlığı."
+      : "İlanlarınızı alıcılara göstermek için 'Müşteri bul' planını hazırlayın.";
   return <>
     <Text style={styles.homeHello}>Ne yapmak istiyorsunuz?</Text>
     <HomeTile icon="camera" title="Ürün sat" text="Ürünün fotoğrafını çekin; başlık, açıklama, etiket ve fiyat sizin için hazırlanır." onPress={() => openSell("choose")} />
@@ -3462,6 +3498,10 @@ const styles = StyleSheet.create({
   barFill: { height: 10, backgroundColor: "#315B4C", borderRadius: 5 },
   fileRow: { flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 6, paddingHorizontal: 4 },
   masterCard: { borderWidth: 2, borderColor: "#315B4C" },
+  qualityNote: { flexDirection: "row", gap: 8, borderRadius: 10, padding: 10, marginTop: 10, alignItems: "flex-start" },
+  qualityGood: { backgroundColor: "#E8F3EC" },
+  qualityBad: { backgroundColor: "#FBEAEA" },
+  qualityTitle: { fontWeight: "700", color: "#1F2A24", marginBottom: 2 },
   barValue: { width: 34, fontSize: 11, color: "#56615C", textAlign: "right" },
   miniScore: { minWidth: 30, height: 22, borderRadius: 11, alignItems: "center", justifyContent: "center", paddingHorizontal: 4 },
   miniScoreText: { fontSize: 11, fontWeight: "900", color: "#17221E" },

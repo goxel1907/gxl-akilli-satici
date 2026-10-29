@@ -82,7 +82,8 @@ test("printable brief gives a kind-specific print prompt, artwork prompts and ad
   assert.match(planner.pdfPrompt, /Never use trademarked names/);
   assert.deepEqual(planner.artPrompts, []);
   assert.equal(planner.adVisuals.length, 10);
-  assert.ok(planner.adVisuals.every((visual) => visual.useTr && visual.aspect && visual.prompt.includes("Do not render any text")));
+  assert.ok(planner.adVisuals.every((visual) => visual.useTr && visual.aspect && visual.prompt.includes("Do not add any new text")));
+  assert.ok(planner.adVisuals.every((visual) => visual.prompt.includes("Never use another seller's images")));
   assert.ok(planner.adVisuals.some((visual) => /Pinterest/.test(visual.useTr) && visual.aspect.startsWith("2:3")));
   assert.ok(planner.adVisuals.some((visual) => /Instagram/.test(visual.useTr)));
   assert.match(planner.adVisuals[0].prompt, /calculator|receipts|savings tracker|binder/);
@@ -90,33 +91,39 @@ test("printable brief gives a kind-specific print prompt, artwork prompts and ad
   assert.ok(planner.pins.every((pin) => !/disney/i.test(`${pin.title} ${pin.description}`)));
   assert.ok(planner.bundleIdea.items.includes("budget planner"));
 
+  // 30 sayfalık boyama kitabı: 8 açık konu + kalan 22 sayfa için aynı kurallı şablon (sayfa sayısı ile görsel sayısı tutar).
   const coloring = buildPrintableBrief({ kind: "coloring", productType: "adult coloring pages", trendFeatures: ["mushroom", "cottagecore"], pageCount: 30, seed: "b" });
-  assert.equal(coloring.artPrompts.length, 8);
+  assert.equal(coloring.artPrompts.length, 9);
   assert.match(coloring.artPrompts[0], /fully closed/);
+  assert.match(coloring.artPrompts[8], /^Coloring pages 9-30: /);
   assert.match(coloring.pdfPrompt, /## Artwork prompts/);
   const wallArt = buildPrintableBrief({ kind: "wall_art", productType: "wall art", trendFeatures: ["boho"], pageCount: 3, seed: "c" });
   assert.equal(wallArt.artPrompts.length, 3);
-  assert.match(wallArt.pdfPrompt, /five ratio files/);
+  assert.match(wallArt.pdfPrompt, /one file per listed ratio or size/);
+  assert.match(wallArt.pdfPrompt, /no text, footer, page number or signature/);
 });
 
 test("printable listing leads with the buyer phrase, lists formats and drops brand terms", () => {
   const input = { kind: "planner" as const, productType: "budget planner", keyword: "budget planner printable", trendFeatures: ["sinking funds tracker"], trendTags: ["sinking funds tracker", "disney budget", "savings tracker", "instant download"], formats: ["US Letter", "A4", "A5"], pageCount: 42 };
   const draft = buildPrintableListing(input, "Muthine Budget Planner");
-  assert.ok(draft.title.startsWith("Budget Planner Printable, Muthine Budget Planner, Sinking Funds Tracker"));
+  // Ürün adı başlıkta yer kaplamaz; arama ifadesi ve özellik öndedir.
+  assert.ok(draft.title.startsWith("Budget Planner Printable, Sinking Funds Tracker"));
   assert.match(draft.title, /US Letter, A4, A5/);
   assert.match(draft.title, /Instant Download/);
   assert.ok(!draft.tags.some((tag) => tag.includes("disney")));
   assert.equal(draft.tags.length, 13);
   assert.equal(draft.checks.ok, true);
   assert.match(draft.description, /NO PHYSICAL ITEM WILL BE SHIPPED/);
-  assert.match(draft.description, /About 42 pages/);
+  assert.match(draft.description, /^Muthine Budget Planner is an original budget planner, designed to be printed at home/);
+  assert.match(draft.description, /• 42 pages/);
+  assert.match(draft.description, /© \d{4} GXL Market Studio\. For personal use only\./);
 });
 
 test("pattern briefs also get placement-labelled ad visuals", () => {
   const brief = buildPatternBrief({ craft: "crochet", productType: "cardigan", seed: "x", trendFeatures: ["granny square"], colors: ["sage green"] });
   assert.equal(brief.adVisuals.length, 10);
   assert.match(brief.adVisuals[1].prompt, /cardigan/);
-  assert.match(brief.adVisuals[0].prompt, /Design spec JSON/);
+  assert.match(brief.adVisuals[0].prompt, /Follow the Design spec from step 1 of this chat/);
 });
 
 test("printable plan endpoint and kind-aware digital products", async () => {
@@ -131,7 +138,7 @@ test("printable plan endpoint and kind-aware digital products", async () => {
   const response = await handleRequest(new Request("https://gxl.example/api/printables/plan", { method: "POST", headers, body: JSON.stringify({ kind: "recipe", productType: "recipe cards", keyword: "recipe card printable", seed: "same" }) }), env);
   assert.equal(response.status, 200);
   const body = await response.json() as { brief: { name: string; pdfPrompt: string }; listing: { title: string } };
-  assert.match(body.brief.pdfPrompt, /4x6 and 5x7/);
+  assert.match(body.brief.pdfPrompt, /the 4x6 and the 5x7 cards/);
   assert.ok(body.listing.title.startsWith("Recipe Card Printable"));
   const again = await (await handleRequest(new Request("https://gxl.example/api/printables/plan", { method: "POST", headers, body: JSON.stringify({ kind: "recipe", productType: "recipe cards", keyword: "recipe card printable", seed: "same" }) }), env)).json() as { brief: { name: string } };
   assert.notEqual(again.brief.name, body.brief.name);
@@ -211,13 +218,13 @@ test("every part goes into one ordered master prompt for a single chat", () => {
   coloring.artPrompts.forEach((prompt) => assert.ok(master.includes(prompt)));
   assert.ok(!/^## Working name/m.test(master), "brief headings are nested under Brief A");
   assert.equal(master.split("## Artwork prompts").length, 1, "artwork prompts appear once, in Brief B");
-  assert.match(coloring.pins[0].description, /^.+ is an original .+\. Includes 40 pages/);
-  assert.match(coloring.pins[0].description, /Made for adults and moms\./);
+  assert.match(coloring.pins[0].description, /^.+ is an original .+\. Includes 40 coloring pages, a color test page and a color palette ideas page\. Available in US Letter and A4 sizes\./);
+  assert.match(coloring.pins[0].description, /Made for adults and moms who love to color\./);
 
   const doily = buildPatternBrief({ craft: "crochet", productType: "doily", colors: ["cream"], seed: "d" } as never);
   assert.match(doily.masterPrompt, /## Brief R - product renders/);
   assert.ok(!doily.masterPrompt.includes("<DESIGN SPEC JSON>"));
-  assert.match(doily.masterPrompt, /Design spec JSON from step 1 of this chat/);
+  assert.match(doily.masterPrompt, /Design spec JSON in step 1 of this chat/);
 });
 
 test("demand reads the leading quarter too, so big printable niches are not called weak", () => {
@@ -252,14 +259,15 @@ test("product names avoid search phrases, the package is fully English and the a
   const brief = buildPrintableBrief({ ...input, seed: "z" });
   assert.ok(!/yatay|dikey|kare|Etsy galerisi|Kapak/.test(brief.masterPrompt));
   assert.match(brief.masterPrompt, /### C1\. Cover \(main image\) - 4:3 landscape, 3000x2250 px/);
-  const lifestyle = brief.adVisuals[1].prompt.match(/Lifestyle scene: the ".+?" planner, (.+?)\. Candid/)?.[1];
+  const lifestyle = brief.adVisuals[1].prompt.match(/Lifestyle scene: the "[^"]+ Planner", (.+?)\. Candid/)?.[1];
   assert.ok(lifestyle);
   assert.ok(!brief.adVisuals[9].prompt.includes(lifestyle), "ad image must not reuse the lifestyle scene");
 });
 
 test("listing description reads as a sentence, not a keyword list", () => {
   const draft = buildPrintableListing({ kind: "planner", productType: "planner", keyword: "printable planner", trendFeatures: ["daily", "habit tracker", "weekly"], pageCount: 33 }, "Zomery Planner");
-  assert.match(draft.description, /^Zomery Planner - an original planner with daily, habit tracker and weekly pages, designed/);
+  assert.match(draft.description, /^Zomery Planner is an original planner, designed to be printed at home and used right away\./);
+  assert.match(draft.description, /HIGHLIGHTS: Daily · Habit Tracker · Weekly/);
 });
 
 test("every package carries a scripted QA protocol tuned to its product type", () => {
@@ -271,7 +279,9 @@ test("every package carries a scripted QA protocol tuned to its product type", (
   assert.match(planner.masterPrompt, /CALENDAR/);
   assert.match(planner.masterPrompt, /run the Automated QA script on the finished files/);
   const wallArt = buildPrintableBrief({ kind: "wall_art", productType: "botanical print", seed: "qa" });
-  assert.match(wallArt.masterPrompt, /7200×10800 px/);
+  assert.match(wallArt.masterPrompt, /5400×8100 px/);
+  assert.ok(!/11 AM, 12 PM/.test(wallArt.masterPrompt), "wall art does not get planner sequence checks");
+  assert.ok(!/LINKS —/.test(wallArt.masterPrompt), "print-only products get no tablet link check");
 
   const doily = buildPatternBrief({ craft: "crochet", productType: "doily", colors: ["cream"], seed: "qa" } as never);
   assert.match(doily.masterPrompt, /STITCH MATH/);
