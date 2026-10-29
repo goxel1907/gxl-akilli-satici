@@ -544,7 +544,7 @@ function buildPatternPrompt(input: PatternPlanInput, name: string, rules: string
     ...(yarn ? manuscript.product(input, sizes) : [`- Target size: ${input.sizeNote || "choose a practical standard size and state it in inches and centimeters"}`, ...manuscript.product(input, sizes)]),
     `- Colors: ${input.colors?.length ? input.colors.join(", ") : "propose a 3-color palette with names and hex codes"}`,
     // Özellik yoksa tasarım yönü boş kalmaz: yapay zekâ tek motif ve tek stil seçip spec'e yazar.
-    `- Design direction: ${direction ? `${direction}, built into one design with a single theme` : "choose one clear motif and one style that suit this item and these buyers, and write both into the Design spec"}`,
+    `- Design direction: ${direction ? `buyers favor ${direction}; build them into one coherent design` : "choose one clear motif and one style that suit this item and these buyers, and write both into the Design spec"}`,
     ...(templateCraft ? ["- Template size: the full-size template must fit inside 6.5 × 9 in so it prints at 100% on both US Letter and A4; for a larger hoop or frame, tile the template on several pages with overlap marks and an assembly map."] : []),
     `- Terminology: ${craft.terms}. Give every measurement in inches and centimeters.`,
     "",
@@ -610,6 +610,16 @@ const CRAFT_MADE: Record<PatternCraft, string> = {
   punch_needle: "punch needle"
 };
 
+const RENDER_DETAIL: Record<PatternCraft, string> = {
+  crochet: "the crochet stitches",
+  knitting: "the knit stitches",
+  cross_stitch: "the cross stitches on the Aida fabric",
+  embroidery: "the embroidery stitches",
+  sewing: "the seams and topstitching",
+  macrame: "the knots and cord texture",
+  punch_needle: "the punched loops"
+};
+
 function buildRenderPrompt(input: PatternPlanInput, name: string): string {
   const craft = CRAFTS[input.craft];
   const material = input.yarnNote || craft.defaultMaterial;
@@ -621,7 +631,7 @@ function buildRenderPrompt(input: PatternPlanInput, name: string): string {
     "This is a style render: keep the colors, proportions and overall design of the spec. The exact counts are in the charts and diagrams drawn in code, so do not try to show them.",
     `Real ${YARN_CRAFTS.has(input.craft) || input.craft === "punch_needle" ? "fiber" : input.craft === "sewing" ? "fabric" : input.craft === "macrame" ? "cord" : "thread"} texture with individually visible ${input.craft === "sewing" ? "seams and topstitching" : input.craft === "macrame" ? "knots" : `${craft.label.toLowerCase()} stitches`}, slight natural irregularity, no plastic or CGI look.`,
     "Main image: flat lay, centered, the item fills about 70% of the frame, on light natural linen, soft diffused daylight from the upper left, gentle shadow, portrait (make it at the image tool's native portrait size, then crop to 4:5 in code).",
-    "Also create, one per reply: (1) a macro close-up showing the stitch or knot structure, (2) a lifestyle image " + lifestyleScene(input.productType) + ", (3) a size reference image next to a ruler.",
+    `Also create, one per reply: (1) a macro close-up showing ${RENDER_DETAIL[input.craft]}, (2) a lifestyle image ${lifestyleScene(input.productType)}, (3) a size reference image next to a ruler.`,
     "No text, no watermark, no logo, no hands, nothing covering the item."
   ].join("\n");
 }
@@ -654,7 +664,8 @@ export function buildPatternBrief(input: PatternPlanInput): PatternBrief {
     adVisuals,
     masterPrompt: buildMasterPrompt({
       name,
-      productLabel: `${CRAFTS[input.craft].label.toLowerCase()} ${input.productType} pattern`,
+      // "tote bag sewing pattern", "crochet cardigan pattern": alıcının okuduğu sıra.
+      productLabel: CRAFTS[input.craft].order === "craft-first" ? `${CRAFTS[input.craft].label.toLowerCase()} ${input.productType} pattern` : `${input.productType} ${CRAFTS[input.craft].label.toLowerCase()} pattern`,
       specName: "Design spec",
       filesBrief: patternPrompt,
       renderPrompt,
@@ -662,7 +673,7 @@ export function buildPatternBrief(input: PatternPlanInput): PatternBrief {
       qa: qaProtocol({ type: "pattern", name, craft: input.craft, terms: CRAFTS[input.craft].terms, unit: CRAFTS[input.craft].unit, sizes: (YARN_CRAFTS.has(input.craft) && WEARABLE.test(input.productType) ? gradedSizes(input.sizeNote)?.join(", ") : undefined) || input.sizeNote }),
       checklist: [
         YARN_CRAFTS.has(input.craft) ? "Every stitch count adds up row by row; every [TEST-MAKE CHECK] item is listed for the maker to confirm." : "Every chart, template, piece or cord list matches the spec; every [TEST-MAKE CHECK] item is listed for the maker to confirm.",
-        "Renders show exactly the motif counts, repeats and colors of the Design spec.",
+        "Renders show the colors, style and overall design of the Design spec; the exact counts are in the code-drawn charts and diagrams.",
         "No text, photo, chart or name from any reference product appears in the pattern or listing, and no other seller's image was used as a reference.",
         "Every PDF page except the cover has the copyright footer, and the last page has the license text.",
         YARN_CRAFTS.has(input.craft) ? "US terms are used and a stitch abbreviation table is included." : `The terminology follows ${CRAFTS[input.craft].terms}.`,

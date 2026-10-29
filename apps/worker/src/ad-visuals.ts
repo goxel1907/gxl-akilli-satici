@@ -32,7 +32,7 @@ export interface AdVisualInput {
 const cap = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
 const withArticle = (word: string) => `${/^[aeiou]/i.test(word) ? "an" : "a"} ${word}`;
 // Görselde görünmeyen özellikler ("no-sew", "beginner", "PDF") görsel ayrıntısı olarak yazılmaz.
-const NOT_VISUAL = /\b(no-sew|low-sew|easy|beginner|quick|fast|simple|pdf|pattern|tutorial|instant|printable|digital|download|size|sizes|inclusive|plus|xs|[2-6]?xl|top down|bottom up|seamless|one piece|step by step|video|undated|dated|daily|weekly|monthly|ipad|tablet|goodnotes|notability|kids|adult|adults|toddler|preschool|classroom|homeschool)\b/i;
+const NOT_VISUAL = /\b(no-sew|low-sew|reversible|easy|beginner|quick|fast|simple|pdf|pattern|tutorial|instant|printable|digital|download|size|sizes|inclusive|plus|xs|[2-6]?xl|top down|bottom up|seamless|one piece|step by step|video|undated|dated|daily|weekly|monthly|ipad|tablet|goodnotes|notability|kids|adult|adults|toddler|preschool|classroom|homeschool)\b/i;
 
 // Desende kullanılan malzeme: kanaviçede iplik "floss", dikişte "fabric", makramede "cord".
 const MATERIAL: Record<PatternCraft, string> = {
