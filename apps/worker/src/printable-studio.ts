@@ -458,7 +458,9 @@ function subjectsAndStyle(prepared: Prepared, profile: KindProfile): { subjects:
   }
   const styleNames = styles.map((style) => style.split(" ").filter((word) => !META_WORDS.has(word)).join(" ")).filter(Boolean).map((style) => STYLE_DIRECTIONS[style] || style);
   // Tek kelimelik konu ("cottage") görsel talimatında "cottage motifs" olarak yazılır.
-  return { subjects: subjects.map((subject) => proseCase(subject.includes(" ") || /s$/.test(subject) ? subject : `${subject} motifs`)), components, styles: [...new Set(styleNames)] };
+  const uniqueStyles = [...new Set(styleNames)];
+  const keptStyles = uniqueStyles.filter((style, index) => !uniqueStyles.some((other, otherIndex) => otherIndex !== index && other.length > style.length && new RegExp(`\\b${escapeRegex(style)}\\b`).test(other)));
+  return { subjects: subjects.map((subject) => proseCase(subject.includes(" ") || /s$/.test(subject) ? subject : `${subject} motifs`)), components, styles: keptStyles };
 }
 
 function buildArtPlan(prepared: Prepared, profile: KindProfile, pages: number): ArtPlan {
@@ -597,7 +599,12 @@ function deliverables(prepared: Prepared, name: string, formats: string[]): stri
     return [`Upload set: ${fit([...pdfs.map((format) => `${file}-${fileSlug(format)}.pdf (all pages printable on ${format})`), `${file}-12x12-Papers.zip (every paper as a 3600x3600 px JPG)`, ...(paperMode(input.productType) === "kit" ? [`${file}-Ephemera.zip (transparent PNG pieces)`] : [])]).join("; ")}.`, limit];
   }
   if (input.kind === "wall_art") {
-    return [`Upload set: ${fit(formats.map((format) => `${file}-${fileSlug(format)}.zip (every print in ${format.replace(/\s*\(.*\)/, "")})`)).join("; ")}; put the PDF with the size guide, how-to-print, thank-you and license pages inside the first zip.`, limit];
+    // Zip içinde zip olmaz: 5'ten fazla ölçü grubu varsa son gruplar tek "More-Sizes" zip'inde düz dosyalar olarak durur.
+    const groups = formats.map((format) => ({ slug: fileSlug(format), label: format.replace(/\s*\(.*\)/, "") }));
+    const zips = groups.length <= 5
+      ? groups.map((group) => `${file}-${group.slug}.zip (every print in ${group.label})`)
+      : [...groups.slice(0, 4).map((group) => `${file}-${group.slug}.zip (every print in ${group.label})`), `${file}-More-Sizes.zip (every print in ${joinWords(groups.slice(4).map((group) => group.label))})`];
+    return [`Upload set: ${zips.join("; ")}; put the PDF with the size guide, how-to-print, thank-you and license pages inside the first zip.`, limit];
   }
   if (input.kind === "digital_planner") {
     const tablets = formats.filter(isTablet).flatMap((format) => ["Light", "Dark"].map((theme) => `${file}-${fileSlug(format)}-${theme}.pdf`));
@@ -617,7 +624,9 @@ function textRule(prepared: Prepared): string {
 function themeLine(prepared: Prepared): string {
   const lead = (prepared.input.trendFeatures || []).filter((feature) => themeFamilies(feature).size || feature.split(" ").every((word) => STYLE_WORDS.has(word) || THEME_ADJECTIVES.has(word) || word === "style"));
   // "Christmas ephemera and library ephemera" iki tema gibi okunur: ilk özellik temadır, diğerleri o temanın ayrıntısıdır.
-  const names = [...new Set(lead.map((feature) => proseCase(feature.replace(PAPER_NOUNS, "").trim())).filter(Boolean))];
+  const allNames = [...new Set(lead.map((feature) => proseCase(feature.replace(PAPER_NOUNS, "").trim())).filter(Boolean))];
+  // "moody botanical" varken ayrıca "botanical" yazılmaz.
+  const names = allNames.filter((name, index) => !allNames.some((other, otherIndex) => otherIndex !== index && other.length > name.length && new RegExp(`\\b${escapeRegex(name)}\\b`, "i").test(other)));
   const [main, ...details] = names;
   return main
     ? `- Theme: one theme for the whole product: ${main}${details.length ? `, with ${joinWords(details.slice(0, 2))} details that fit it` : ""}; add nothing from another season, holiday or mood`
@@ -632,7 +641,9 @@ function buildPdfPrompt(prepared: Prepared, profile: KindProfile, name: string, 
   const features = input.trendFeatures || [];
   const textKind = !profile.art;
   return [
-    `You are a senior print designer, copywriter and technical editor for Etsy ${profile.labelEn} products. Create an ORIGINAL, sellable ${productPhrase(input.productType)} and produce print-ready files.`,
+    input.kind === "digital_planner"
+      ? `You are a senior digital planner designer, copywriter and technical editor for Etsy ${profile.labelEn} products. Create an ORIGINAL, sellable ${productPhrase(input.productType)} and produce ready-to-use tablet files.`
+      : `You are a senior print designer, copywriter and technical editor for Etsy ${profile.labelEn} products. Create an ORIGINAL, sellable ${productPhrase(input.productType)} and produce print-ready files.`,
     "",
     "## Product name",
     `${name}. Use this exact name everywhere and do not change it: the Etsy listing, pins and images already use it.`,
