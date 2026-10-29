@@ -1,4 +1,5 @@
 import { generateStructuredObject, hasAiProvider, type AiRuntimeEnv } from "../../api/src/structured-ai.js";
+import { detectProductSignals, normalizeProductInput } from "./product-studio.js";
 
 // Ürün için müşteri bulma ve reklam planı: hangi kanalda ne yapılır, reklam ne zaman açılır, bütçe ve durdurma
 // kuralı. Kararlar kurallarla verilir (tahmin değil, açık eşikler); yapay zekâ yalnız paylaşılacak metinleri yazar.
@@ -12,6 +13,8 @@ export type Decision = "now" | "later" | "skip" | "always";
 
 export interface MarketingPlanInput {
   productName: string;
+  // İngilizce metinlerde kullanılan ürün adı; Türkçe adla (ör. "925 gümüş tesbih") ABD'li alıcıya gönderi yazılmaz.
+  productNameEn?: string;
   kind: MarketingProductKind;
   channel: SaleChannel;
   priceTry?: number;
@@ -88,8 +91,10 @@ export function normalizeMarketingInput(raw: Record<string, unknown>): Marketing
   const link = /^https:\/\/[^\s]+$/.test(String(raw.link || "")) ? String(raw.link).slice(0, 300) : undefined;
   const listings = Number(raw.activeEtsyListings);
   const photos = Number(raw.photoCount);
+  const givenEn = String(raw.productNameEn || "").replace(/\s+/g, " ").trim().slice(0, 80);
   return {
     productName,
+    productNameEn: givenEn && !/[çğıöşüÇĞİÖŞÜ]/.test(givenEn) ? givenEn : englishName(productName, kind),
     kind,
     channel,
     priceTry: num(raw.priceTry),
@@ -100,6 +105,40 @@ export function normalizeMarketingInput(raw: Record<string, unknown>): Marketing
     photoCount: Number.isInteger(photos) && photos >= 0 ? photos : undefined,
     whatsappNumber: cleanPhone(raw.whatsappNumber)
   };
+}
+
+const KIND_EN: Record<MarketingProductKind, string> = { pdf: "printable", pattern: "pattern", tesbih: "prayer beads", vintage: "vintage find", knitwear: "handmade knitwear", other: "handmade item" };
+
+// Türkçe ürün adı İngilizceye ürün stüdyosunun sözlüğüyle çevrilir ("925 gümüş tesbih" → "Sterling silver prayer beads").
+// PDF ve desen adları çoğunlukla İngilizcedir; Türkçe yazıldıysa sık kelimeler çevrilir ("Bütçe planlayıcı" → "Budget planner").
+const TR_EN_WORDS: Array<[RegExp, string]> = [
+  [/bütçe/, "budget"], [/planlayıcı|planlayici|ajanda/, "planner"], [/günlük|gunluk|defter/, "journal"], [/boyama/, "coloring pages"], [/tarif/, "recipe cards"],
+  [/duvar sanatı|duvar/, "wall art"], [/takvim/, "calendar"], [/oyun/, "games"], [/çocuk|cocuk/, "kids"], [/etkinlik/, "activity"], [/alışkanlık/, "habit tracker"],
+  [/yemek|menü/, "meal"], [/düğün|dugun/, "wedding"], [/hırka|hirka/, "cardigan"], [/kazak/, "sweater"], [/çanta|canta/, "bag"], [/tığ işi|tig isi/, "crochet"],
+  [/örgü|orgu/, "knitting"], [/desen|model/, "pattern"], [/noel|yılbaşı|yilbasi/, "Christmas"], [/kâğıt|kagit/, "paper"]
+];
+
+function translateDigitalName(name: string): string | undefined {
+  const lower = name.toLowerCase();
+  const found = TR_EN_WORDS.map(([pattern, word]) => ({ index: lower.search(pattern), word })).filter((item) => item.index >= 0).sort((a, b) => a.index - b.index).map((item) => item.word);
+  if (!found.length) return undefined;
+  // "planner" ve "pattern" gibi baş isimler sona gelir ("Budget planner", "Crochet cardigan pattern").
+  const heads = found.filter((word) => /^(planner|journal|pattern|games|calendar|coloring pages|recipe cards|wall art|paper)$/.test(word));
+  const words = [...found.filter((word) => !heads.includes(word)), ...heads].join(" ");
+  return words[0].toUpperCase() + words.slice(1);
+}
+
+function englishName(name: string, kind: MarketingProductKind): string {
+  if (DIGITAL.has(kind)) return /[çğıöşüÇĞİÖŞÜ]/.test(name) || TR_EN_WORDS.some(([pattern]) => pattern.test(name.toLowerCase())) ? translateDigitalName(name) || KIND_EN[kind][0].toUpperCase() + KIND_EN[kind].slice(1) : name;
+  try {
+    const product = normalizeProductInput({ titleTr: name, productKind: kind === "tesbih" || kind === "vintage" || kind === "knitwear" ? kind : undefined, origin: kind === "vintage" ? "vintage" : "made_by_seller" });
+    const signals = detectProductSignals(product);
+    if (signals.noun && signals.noun !== "item") {
+      const words = [signals.isVintage && !/vintage/.test(signals.noun) ? "vintage" : "", signals.material && !signals.noun.includes(signals.material.short) ? signals.material.en : "", signals.noun].filter(Boolean).join(" ");
+      return words[0].toUpperCase() + words.slice(1);
+    }
+  } catch { /* sözlük ürünü tanımadı */ }
+  return /[çğıöşüÇĞİÖŞÜ]/.test(name) ? KIND_EN[kind][0].toUpperCase() + KIND_EN[kind].slice(1) : name;
 }
 
 interface Copy {
@@ -123,6 +162,22 @@ const AUDIENCE: Record<MarketingProductKind, { tr: string; en: string }> = {
   other: { tr: "Ürünle ilgilenecek yaş ve ilgi alanlarını seçin", en: "Pick the age range and interests that match the product" }
 };
 
+// PDF ürününde etiketler ürünün kendisine göre seçilir (junk journal kitine planlayıcı etiketi gitmez).
+function hashtagsFor(input: MarketingPlanInput, lang: "tr" | "en", fallback: string[]): string[] {
+  if (input.kind !== "pdf") return fallback;
+  const name = `${input.productName} ${input.productNameEn || ""}`.toLowerCase();
+  const rows: Array<[RegExp, string[], string[]]> = [
+    [/junk journal|ephemera|scrapbook|digital paper|kâğıt/, ["#junkjournal", "#scrapbooking", "#ephemera", "#papercraft", "#etsyfinds"], ["#junkjournal", "#scrapbook", "#kağıtişi", "#dijitalürün"]],
+    [/colou?ring|boyama/, ["#coloringpages", "#adultcoloring", "#coloringbook", "#printables", "#etsyfinds"], ["#boyamasayfası", "#boyamakitabı", "#dijitalürün"]],
+    [/wall art|art print|poster|duvar/, ["#wallart", "#printablewallart", "#homedecor", "#gallerywall", "#etsyfinds"], ["#duvarsanatı", "#evdekorasyonu", "#dijitalürün"]],
+    [/recipe|tarif/, ["#recipecards", "#recipebinder", "#printables", "#kitchenorganization", "#etsyfinds"], ["#tarifkartı", "#mutfak", "#dijitalürün"]],
+    [/game|shower|party|oyun/, ["#partygames", "#bridalshower", "#babyshower", "#printables", "#etsyfinds"], ["#partioyunları", "#dijitalürün"]],
+    [/planner|tracker|journal|planlayıcı|ajanda|günlük/, ["#printableplanner", "#plannercommunity", "#digitaldownload", "#organization", "#etsyfinds"], ["#planlayıcı", "#ajanda", "#dijitalürün"]]
+  ];
+  const row = rows.find(([pattern]) => pattern.test(name));
+  return row ? (lang === "en" ? row[1] : row[2]) : lang === "en" ? ["#printables", "#digitaldownload", "#instantdownload", "#etsyfinds"] : ["#yazdırılabilir", "#dijitalürün"];
+}
+
 function templateCopy(input: MarketingPlanInput): Copy {
   const name = input.productName;
   const kind = KIND_TR[input.kind];
@@ -131,7 +186,7 @@ function templateCopy(input: MarketingPlanInput): Copy {
     pdf: ["#planlayıcı", "#düzenliyaşam", "#yazdırılabilir", "#ajanda", "#dijitalürün"],
     pattern: ["#örgü", "#tığişi", "#elişi", "#örgümodelleri", "#crochet"],
     tesbih: ["#tesbih", "#gümüştesbih", "#kehribar", "#tesbihkoleksiyonu", "#hediye"],
-    vintage: ["#vintage", "#antika", "#eskieşya", "#koleksiyon", "#retro"],
+    vintage: ["#vintage", "#eskieşya", "#koleksiyon", "#retro", "#vintagedekor"],
     knitwear: ["#elörgüsü", "#örgükazak", "#tığişi", "#elyapımı", "#elörgüsükazak"],
     other: ["#elyapımı", "#hediye", "#elişi"]
   };
@@ -139,19 +194,29 @@ function templateCopy(input: MarketingPlanInput): Copy {
     pdf: ["#printableplanner", "#plannercommunity", "#etsyfinds", "#digitaldownload", "#organization"],
     pattern: ["#crochetpattern", "#crochetersofinstagram", "#knittingpattern", "#etsyfinds", "#diycrafts"],
     tesbih: ["#prayerbeads", "#tasbih", "#misbaha", "#islamicgift", "#etsyfinds"],
-    vintage: ["#vintagefinds", "#vintagedecor", "#etsyvintage", "#antiques", "#collectibles"],
+    vintage: ["#vintagefinds", "#vintagedecor", "#etsyvintage", "#vintagestyle", "#collectibles"],
     knitwear: ["#handknit", "#crochetsweater", "#slowfashion", "#handmadefashion", "#etsyfinds"],
     other: ["#handmade", "#etsyfinds", "#giftideas"]
   };
+  // İngilizce gönderi ve Türkçe karşılığı aynı parçalardan kurulur: satıcıya gösterilen anlam gönderinin gerçek anlamıdır.
+  // "El emeği", "sınırlı stok", "antika" gibi iddialar yalnız doğruysa yazılır.
+  const nameEn = input.productNameEn || name;
+  const claimEn = DIGITAL.has(input.kind) ? "instant digital download" : input.kind === "vintage" ? "a one-of-a-kind vintage find from Türkiye" : input.kind === "knitwear" ? "handmade in Türkiye" : "from Türkiye";
+  const claimTr = DIGITAL.has(input.kind) ? "anında indirilebilir dijital ürün" : input.kind === "vintage" ? "Türkiye'den tek parça vintage ürün" : input.kind === "knitwear" ? "Türkiye'de el yapımı" : "Türkiye'den";
+  const etsy = input.channel === "etsy";
+  const shipEn = DIGITAL.has(input.kind) ? "" : etsy ? ", ships to the US" : "";
+  const shipTr = DIGITAL.has(input.kind) ? "" : etsy ? ", ABD'ye gönderilir" : "";
   return {
-    captionTr: `${name} ✨ El emeğiyle hazırlandı, stokta ${input.kind === "vintage" ? "tek parça" : "sınırlı sayıda"}.${price ? ` Fiyat: ${price}.` : ""} Sipariş ve sorularınız için profildeki bağlantıya dokunun ya da DM atın.`,
-    captionEn: `${name} — ${DIGITAL.has(input.kind) ? "instant download, print at home" : "handmade/curated in Türkiye, ships to the US"}. Find it in our Etsy shop (link in bio).`,
-    hashtagsTr: tagsTr[input.kind],
-    hashtagsEn: tagsEn[input.kind],
+    captionTr: etsy
+      ? `${name}: ${claimTr}${shipTr}. Etsy mağazamızda (bağlantı profilde).`
+      : `${name}: ${claimTr}.${price ? ` Fiyat: ${price}.` : ""} Sipariş ve sorularınız için profildeki bağlantıya dokunun ya da DM atın.`,
+    captionEn: `${nameEn}: ${claimEn}${shipEn}. Find it in our ${etsy ? "Etsy" : "online"} shop (link in bio).`,
+    hashtagsTr: hashtagsFor(input, "tr", tagsTr[input.kind]),
+    hashtagsEn: hashtagsFor(input, "en", tagsEn[input.kind]),
     storyTr: `Yeni ${kind}: ${name}. Bağlantıya dokunun 👆`,
     whatsappTr: `Merhaba, "${name}" hakkında bilgi almak istiyorum.`,
-    pinTitleEn: name,
-    pinDescriptionEn: `${name}. ${DIGITAL.has(input.kind) ? "Instant download PDF." : "Ships from Türkiye."} Available on Etsy.`,
+    pinTitleEn: nameEn,
+    pinDescriptionEn: `${nameEn}. ${DIGITAL.has(input.kind) ? "Instant digital download." : input.kind === "vintage" ? "A one-of-a-kind vintage find, ships from Türkiye." : "Ships from Türkiye."}${etsy ? " Available in our Etsy shop." : ""}`,
     audienceTr: AUDIENCE[input.kind].tr
   };
 }
@@ -191,8 +256,9 @@ async function writeCopy(input: MarketingPlanInput, env: AiRuntimeEnv): Promise<
       schema: COPY_SCHEMA,
       prompt: [
         "Write short social media texts for a small Turkish seller. Be warm and plain; no exaggeration, no fake scarcity, no claims that are not given (material, age, brand, discounts).",
-        `Product: ${JSON.stringify({ name: input.productName, type: KIND_TR[input.kind], sellsOn: input.channel === "etsy" ? "Etsy (US buyers)" : "Shopier (Turkish buyers)", priceTry: input.priceTry, priceUsd: input.priceUsd })}`,
-        "captionTr: Instagram caption in Turkish (max 300 chars). captionEn: Instagram caption in English for US buyers pointing to the Etsy shop link in bio (max 300 chars).",
+        `Product: ${JSON.stringify({ name: input.productName, englishName: input.productNameEn, type: KIND_TR[input.kind], digital: DIGITAL.has(input.kind), sellsOn: input.channel === "etsy" ? "Etsy (US buyers)" : "Shopier (Turkish buyers)", priceTry: input.priceTry, priceUsd: input.priceUsd })}`,
+        "Use the English name in every English text; never put Turkish words in English texts. Say handmade only for handmade items, never claim limited stock, and never call an item antique.",
+        `captionEn: Instagram caption in English for US buyers pointing to the ${input.channel === "etsy" ? "Etsy" : "online"} shop link in bio (max 300 chars). captionTr: ${input.channel === "etsy" ? "an exact Turkish translation of captionEn, so the seller understands it" : "Instagram caption in Turkish for Turkish buyers"} (max 300 chars).`,
         "hashtagsTr: 8-12 Turkish hashtags people really use. hashtagsEn: 8-12 English hashtags. storyTr: one short Turkish story line (max 80 chars).",
         "whatsappTr: the message a customer sends when they tap the WhatsApp button, in Turkish, first person, mentioning the product (max 120 chars).",
         "pinTitleEn: Pinterest pin title in English (max 90 chars). pinDescriptionEn: Pinterest description in English with natural search words (max 400 chars)."
@@ -314,7 +380,7 @@ function facebook(input: MarketingPlanInput, copy: Copy): ChannelAdvice {
         ? "ABD'li örgü ve planlayıcı grupları alıcı getirebilir ama çoğu grup satış paylaşımını yasaklar. Önce Instagram ve Pinterest; gruplarda yalnız kuralların izin verdiği günlerde paylaşın."
         : "Etsy ürünü için Facebook'ta reklamsız erişim düşüktür; Etsy'nin kendi site dışı reklamı (Offsite Ads) bu işi sizin yerinize yapar.",
       stepsTr: ["Grup kurallarını okuyun; 'promo day' (tanıtım günü) olan gruplarda paylaşın.", "Gönderide Etsy ilan bağlantısını ve 1–2 net fotoğrafı kullanın."],
-      copy: [{ labelTr: "Paylaşım metni (İngilizce)", text: copy.captionEn }]
+      copy: [{ labelTr: "Paylaşım metni (İngilizce)", text: copy.captionEn.replace(/\(link in bio\)/g, "(link in the first comment)") }]
     });
   }
   return advice("facebook", "Facebook ve Marketplace", "now", {
@@ -352,9 +418,10 @@ function whatsapp(input: MarketingPlanInput, copy: Copy): ChannelAdvice {
     ],
     copy: [
       ...(link ? [{ labelTr: "'Bana yaz' bağlantısı", text: link }] : []),
-      { labelTr: "Hızlı yanıt: /fiyat", text: `Merhaba, ${input.productName} ${price}. Stokta var. Sipariş için bağlantı: ${input.link || "[Shopier bağlantısı]"}` },
+      // Bağlantı yoksa köşeli parantezli yer tutucu bırakılmaz; satıcı bağlantıyı eklemeye yönlendirilir.
+      ...(input.priceTry ? [{ labelTr: "Hızlı yanıt: /fiyat", text: `Merhaba, ${input.productName} ${price}.${input.link ? ` Sipariş için bağlantı: ${input.link}` : " Sipariş için size bağlantı gönderebilirim."}` }] : []),
       { labelTr: "Hızlı yanıt: /kargo", text: "Siparişiniz 1–3 iş günü içinde kargoya verilir; kargo takip numarasını buradan iletirim." },
-      { labelTr: "Hızlı yanıt: /odeme", text: `Ödeme Shopier üzerinden kartla güvenle yapılır: ${input.link || "[Shopier bağlantısı]"}` }
+      { labelTr: "Hızlı yanıt: /odeme", text: `Ödeme Shopier üzerinden kartla güvenle yapılır.${input.link ? ` Bağlantı: ${input.link}` : ""}` }
     ],
     openUrl: link,
     openLabelTr: link ? "Bağlantıyı dene" : undefined

@@ -40,6 +40,7 @@ import { PRIVACY_PATHS, privacyPolicyPage } from "./legal-pages.js";
 import { applyShopSettings, shopSettingsStatus, ShopSettingsError } from "./shop-settings.js";
 import { createPatternSeed, readUsedNames, rememberName } from "./pattern-seed.js";
 import { buildPrintableBrief, createPrintableListing, normalizePrintablePlanInput } from "./printable-studio.js";
+import { guardMarketingPlan, guardPatternPlan, guardPrintablePlan, guardProductPlan } from "./output-guard.js";
 import {
   autoEnqueuePins,
   boardNameFor,
@@ -535,7 +536,8 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
       const brief = buildPatternBrief({ ...plan, avoidNames: usedNames });
       await rememberName(store, brief.name, usedNames);
       const listing = await createDigitalListing(normalizeDigitalListingInput({ ...input, name: input.name || brief.name }), env);
-      return json(200, { brief, listing });
+      // Telefona gitmeden önce otomatik denetim: küçük hatalar düzeltilir, kalan sorun "quality" ile bildirilir.
+      return json(200, guardPatternPlan(brief, listing, { craft: plan.craft }));
     }
 
     if (request.method === "POST" && url.pathname === "/api/printables/plan") {
@@ -544,7 +546,8 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
       const usedNames = await readUsedNames(store);
       const brief = buildPrintableBrief({ ...input, avoidNames: usedNames });
       await rememberName(store, brief.name, usedNames);
-      return json(200, { brief, listing: await createPrintableListing(input, brief.name, env) });
+      const listing = await createPrintableListing(input, brief.name, env);
+      return json(200, guardPrintablePlan(brief, listing, { kind: input.kind, formats: input.formats }));
     }
 
     if (request.method === "GET" && url.pathname === "/api/pinterest/status") return json(200, await getPinterestStatus(env));
@@ -626,7 +629,7 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
         const rate = await getUsdTryRate(env.ETSY_OAUTH as unknown as KeyValueStore | undefined).catch(() => undefined);
         if (rate) input.priceUsd = Math.round((input.priceTry / rate) * 100) / 100;
       }
-      return json(200, { plan: await buildMarketingPlan(input, env) });
+      return json(200, guardMarketingPlan(await buildMarketingPlan(input, env)));
     }
     if (request.method === "POST" && url.pathname === "/api/products/photo-analyze") {
       const input = await readBody(request);
@@ -654,7 +657,7 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
       const usdTryRate = await getUsdTryRate(env.ETSY_OAUTH as unknown as KeyValueStore | undefined, fetch, product.usdTryRate);
       let shopCurrency: string | undefined;
       try { shopCurrency = (await getConnectedShop(env)).currencyCode; } catch { shopCurrency = undefined; }
-      return json(200, { plan: buildProductPlan(product, keywords, scans, { usdTryRate, shopCurrency, signals: detectProductSignals(product) }), shopCurrency });
+      return json(200, { ...guardProductPlan(buildProductPlan(product, keywords, scans, { usdTryRate, shopCurrency, signals: detectProductSignals(product) })), shopCurrency });
     }
     if (request.method === "POST" && url.pathname === "/api/products/etsy-publish") {
       const input = await readBody(request);

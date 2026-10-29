@@ -797,7 +797,7 @@ function SalesPlanCard({ online, shopierProducts, etsyActiveListings }: any) {
           whatsappNumber: channel === "shopier" ? whatsapp.trim() || undefined : undefined
         })
       });
-      setPlan(result.plan);
+      setPlan({ ...result.plan, quality: result.quality });
       setOpen(result.plan?.channels?.find((item: any) => item.decision === "now" || item.decision === "always")?.id);
     } catch (error) { Alert.alert("Plan hazırlanamadı", errorText(error)); }
     finally { setBusy(false); }
@@ -826,6 +826,7 @@ function SalesPlanCard({ online, shopierProducts, etsyActiveListings }: any) {
     </Pressable>
     {!!plan && <>
       <Text style={[styles.trendVerdict, { marginTop: 14 }]}>{plan.headlineTr}</Text>
+      <QualityNote quality={plan.quality} />
       {plan.channels.map((item: any) => <View key={item.id} style={styles.card}>
         <Pressable style={styles.shopierProductTop} onPress={() => setOpen(open === item.id ? undefined : item.id)}>
           <Text style={[styles.cardTitle, { flex: 1 }]}>{item.titleTr}</Text>
@@ -1562,7 +1563,7 @@ function PrintableStudio({ online, seed, seeding, onReseed, onPickKind, onUpload
         <Text style={styles.warningTitle}>Özgünlük planı</Text>
         {brief.originalityPlan.map((line: string) => <Text style={styles.analysisLine} key={line}>• {line}</Text>)}
       </View>
-      <MasterPromptCard brief={brief} />
+      <MasterPromptCard brief={brief} quality={plan?.quality} />
       <PromptBox title="1) PDF promptu (Claude / ChatGPT)" text={brief.pdfPrompt} shareTitle={`${brief.name} PDF prompt`} />
       {!!brief.artPrompts?.length && <PromptBox title="2) Sayfa görselleri promptları" text={brief.artPrompts.join("\n\n")} shareTitle={`${brief.name} artwork prompts`} />}
       <AdVisualsPanel visuals={brief.adVisuals} />
@@ -1595,7 +1596,7 @@ function PrintableStudio({ online, seed, seeding, onReseed, onPickKind, onUpload
       <TurkishGloss title={listing.title} tags={listing.tags} />
       {listing.warnings.map((warning: string) => <Text style={styles.warningText} key={warning}>• {warning}</Text>)}
       <View style={styles.inlineActions}>
-        <Pressable style={styles.secondaryButton} onPress={() => Share.share({ message: `${listing.title}\n\n${listing.description}\n\nTags: ${listing.tags.join(", ")}` })}><Text style={styles.secondaryButtonText}>İlan metnini kopyala</Text></Pressable>
+        <Pressable style={styles.secondaryButton} onPress={() => shareChecked(plan?.quality, `${listing.title}\n\n${listing.description}\n\nTags: ${listing.tags.join(", ")}`)}><Text style={styles.secondaryButtonText}>İlan metnini kopyala</Text></Pressable>
         <Pressable style={styles.secondaryButton} onPress={() => onUpload({ name: brief?.name, kind, productType, listing, pins: brief?.pins, priceUsd: seed?.competition?.launchPriceUsd })}><Text style={styles.secondaryButtonText}>PDF hazırsa yükle →</Text></Pressable>
       </View>
     </View>}
@@ -1606,9 +1607,39 @@ function ChipGroup({ options, value, onChange }: any) {
   return <View style={styles.chips}>{options.map((option: any) => <Pressable key={option.id} style={[styles.chip, value === option.id && styles.chipActive]} onPress={() => onChange(option.id)}><Text style={[styles.chipText, value === option.id && styles.chipTextActive]}>{option.label}</Text></Pressable>)}</View>;
 }
 
+// Sunucu her talimatı, başlığı, etiketi ve açıklamayı telefona göndermeden önce otomatik denetler; küçük hataları
+// düzeltir. Sonuç burada görünür; düzeltilemeyen sorun kalırsa paylaşmadan önce sorulur.
+function qualityErrors(quality: any): any[] {
+  return (quality?.issues || []).filter((issue: any) => issue.severity === "error");
+}
+
+function QualityNote({ quality }: any) {
+  if (!quality) return null;
+  const errors = qualityErrors(quality);
+  return <View style={[styles.qualityNote, errors.length ? styles.qualityBad : styles.qualityGood]}>
+    <Ionicons name={errors.length ? "alert-circle-outline" : "checkmark-circle-outline"} size={18} color={errors.length ? "#9B2C2C" : "#2F6B4F"} />
+    <View style={{ flex: 1 }}>
+      <Text style={styles.qualityTitle}>{errors.length ? `Otomatik denetim: ${errors.length} sorun bulundu` : `Otomatik denetim: ${quality.checks} kontrol, sorun yok`}</Text>
+      {!!quality.fixed?.length && <Text style={styles.small}>Küçük yazım hataları gönderilmeden önce düzeltildi.</Text>}
+      {errors.slice(0, 5).map((issue: any, index: number) => <Text key={`${issue.code}-${index}`} style={styles.small}>• {issue.messageTr}</Text>)}
+      {!!errors.length && <Text style={styles.small}>Yeniden üretmek (Hazırla'ya tekrar dokunmak) genellikle düzeltir.</Text>}
+    </View>
+  </View>;
+}
+
+function shareChecked(quality: any, message: string, title?: string) {
+  const errors = qualityErrors(quality);
+  const share = () => { Share.share(title ? { message, title } : { message }); };
+  if (!errors.length) return share();
+  Alert.alert("Denetimde sorun var", `${errors.length} sorun bulundu: ${errors[0].messageTr} Yeniden üretmeniz önerilir. Yine de göndermek istiyor musunuz?`, [
+    { text: "Vazgeç", style: "cancel" },
+    { text: "Yine de gönder", onPress: share }
+  ]);
+}
+
 // Paylaşım ChatGPT/Claude'da her seferinde yeni sohbet açar; parçalar ayrı sohbetlere düşerse ad, palet ve spec kaybolur.
 // Tek paket tüm adımları sırayla içerir: bir kez gönderilir, tüm iş aynı sohbette yürür.
-function MasterPromptCard({ brief }: any) {
+function MasterPromptCard({ brief, quality }: any) {
   if (!brief?.masterPrompt) return null;
   const steps = (brief.masterPrompt.match(/^- STEP \d+/gm) || []).length;
   return <View style={[styles.analysisCard, styles.masterCard]}>
@@ -1618,7 +1649,8 @@ function MasterPromptCard({ brief }: any) {
     <Text style={styles.analysisLine}>2. Her adım bitince aynı sohbete "next" yaz; yeni sohbet açma.</Text>
     <Text style={styles.analysisLine}>3. Görseller için ChatGPT kullan; Claude fotoğraf üretmez, dosyaları ve vektör çizimleri yapar.</Text>
     <Text style={styles.small}>{Math.round(brief.masterPrompt.length / 100) / 10} bin karakter. Uygulama uzun metni almazsa paylaş ekranının üstündeki kopyala simgesine dokunup aynı sohbete yapıştır.</Text>
-    <Pressable style={[styles.primary, { marginTop: 12, marginBottom: 0 }]} onPress={() => Share.share({ message: brief.masterPrompt, title: `${brief.name} - tek paket` })}><Text style={styles.primaryText}>Tek paketi gönder</Text><Ionicons name="paper-plane-outline" size={18} color="white" /></Pressable>
+    <QualityNote quality={quality} />
+    <Pressable style={[styles.primary, { marginTop: 12, marginBottom: 0 }]} onPress={() => shareChecked(quality, brief.masterPrompt, `${brief.name} - tek paket`)}><Text style={styles.primaryText}>Tek paketi gönder</Text><Ionicons name="paper-plane-outline" size={18} color="white" /></Pressable>
     <Text style={[styles.small, { marginTop: 10 }]}>Aşağıdaki parçalar bu paketin içindekilerdir. Ayrı kullanacaksan hepsini aynı sohbete yapıştır.</Text>
   </View>;
 }
@@ -1776,7 +1808,7 @@ function StudioPanel({ online, active, seed, onUpload, etsyReady }: any) {
         <Text style={styles.warningTitle}>Modelden farklılaştırma planı</Text>
         {brief.originalityPlan.map((line: string) => <Text style={styles.analysisLine} key={line}>• {line}</Text>)}
       </View>
-      <MasterPromptCard brief={brief} />
+      <MasterPromptCard brief={brief} quality={plan?.quality} />
       <PromptBox title="1) PDF desen promptu (Claude / ChatGPT)" text={brief.patternPrompt} shareTitle={`${brief.name} pattern prompt`} />
       <PromptBox title="2) 3D render promptu" text={brief.renderPrompt} shareTitle={`${brief.name} render prompt`} />
       <AdVisualsPanel visuals={brief.adVisuals} />
@@ -1798,7 +1830,7 @@ function StudioPanel({ online, active, seed, onUpload, etsyReady }: any) {
       <TurkishGloss title={listing.title} tags={listing.tags} />
       {listing.warnings.map((warning: string) => <Text style={styles.warningText} key={warning}>• {warning}</Text>)}
       <View style={styles.inlineActions}>
-        <Pressable style={styles.secondaryButton} onPress={() => Share.share({ message: `${listing.title}\n\n${listing.description}\n\nTags: ${listing.tags.join(", ")}` })}><Text style={styles.secondaryButtonText}>İlan metnini kopyala</Text></Pressable>
+        <Pressable style={styles.secondaryButton} onPress={() => shareChecked(plan?.quality, `${listing.title}\n\n${listing.description}\n\nTags: ${listing.tags.join(", ")}`)}><Text style={styles.secondaryButtonText}>İlan metnini kopyala</Text></Pressable>
         <Pressable style={styles.secondaryButton} onPress={() => onUpload({ name: brief?.name, craft, productType, listing, priceUsd: competition?.launchPriceUsd })}><Text style={styles.secondaryButtonText}>PDF hazırsa yükle →</Text></Pressable>
       </View>
     </View>}
@@ -2329,7 +2361,7 @@ async function researchEtsyPlan(base: any, setProgress: (text: string) => void) 
   }
   setProgress("Başlık, etiket, açıklama ve fiyat hazırlanıyor…");
   const result = await apiJson("/api/products/etsy-plan", { method: "POST", headers: apiHeaders(true), body: JSON.stringify({ product: payload, keywords: suggestion.candidates }) });
-  return { plan: result.plan, payload };
+  return { plan: { ...result.plan, quality: result.quality }, payload };
 }
 
 function EtsyProductPlanner({ product, etsyReady, onClose }: any) {
@@ -2530,6 +2562,7 @@ function EtsyPlanResult({ plan, payload, etsyReady, priceSourceLabel, preparePro
         <Text style={styles.listingTitle}>Önerilen: {pricing.recommendedUsd} USD ≈ {pricing.recommendedTry} TL · elinize ≈ {pricing.netAtRecommendedTry} TL</Text>
         <Text style={styles.warningText}>{pricing.note}</Text>
       </View>}
+      <QualityNote quality={plan.quality} />
       <Field label={`Başlık (${title.length}/140)`} value={title} onChangeText={setTitle} multiline />
       <Field label="Etiketler (13 adet)" value={tags} onChangeText={setTags} multiline autoCapitalize="none" />
       <TurkishGloss title={plan.title} tags={plan.tags} />
@@ -3465,6 +3498,10 @@ const styles = StyleSheet.create({
   barFill: { height: 10, backgroundColor: "#315B4C", borderRadius: 5 },
   fileRow: { flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 6, paddingHorizontal: 4 },
   masterCard: { borderWidth: 2, borderColor: "#315B4C" },
+  qualityNote: { flexDirection: "row", gap: 8, borderRadius: 10, padding: 10, marginTop: 10, alignItems: "flex-start" },
+  qualityGood: { backgroundColor: "#E8F3EC" },
+  qualityBad: { backgroundColor: "#FBEAEA" },
+  qualityTitle: { fontWeight: "700", color: "#1F2A24", marginBottom: 2 },
   barValue: { width: 34, fontSize: 11, color: "#56615C", textAlign: "right" },
   miniScore: { minWidth: 30, height: 22, borderRadius: 11, alignItems: "center", justifyContent: "center", paddingHorizontal: 4 },
   miniScoreText: { fontSize: 11, fontWeight: "900", color: "#17221E" },

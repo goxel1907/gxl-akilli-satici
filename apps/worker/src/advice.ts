@@ -10,7 +10,8 @@ export interface TrendAdvice {
 export const RELEVANT_FORMATS: Record<PrintableKind | "pattern", string[]> = {
   planner: ["letter", "a4", "a5", "half_letter", "printer_friendly", "tablet"],
   digital_planner: ["tablet", "letter"],
-  coloring: ["letter", "a4", "printer_friendly"],
+  // Boyama sayfası zaten siyah-beyaz çizgi; "yazıcı dostu sürüm" boşluk olarak önerilmez.
+  coloring: ["letter", "a4"],
   wall_art: ["ratio_sizes", "letter", "a4"],
   party: ["editable", "letter", "instant"],
   recipe: ["editable", "card_sizes", "letter"],
@@ -61,10 +62,18 @@ export function buildAdvice(result: TrendResult): TrendAdvice[] {
     const standard = formats.filter((item) => item.share >= 0.5);
     const gaps = formats.filter((item) => item.share < 0.25).slice(0, 2);
     if (standard.length) {
-      advice.push({ priority: "high", titleTr: "Bu formatlar artık standart", detailTr: `${standard.map((item) => `${item.labelTr} (${percent(item.share)})`).join(", ")}: üst ilanların çoğu sunuyor. Ürününde mutlaka bulunsun ve başlıkta/görselde yazsın.` });
+      advice.push({ priority: "high", titleTr: "Bu formatlar artık standart", detailTr: `${standard.map((item) => `${item.labelTr} (${percent(item.share)})`).join(", ")}: üst ilanların çoğu sunuyor. Ürününde mutlaka bulunsun ve başlıkta/görselde yazsın.${standard.some((item) => ["commercial", "video", "editable"].includes(item.id)) ? " Ticari lisans, video ve düzenlenebilir sürüm uygulamanın paketinde yoktur; bunları ayrıca hazırlamadan ilanda yazma." : ""}` });
     }
     for (const gap of gaps) {
-      advice.push({ priority: "medium", titleTr: `Boşluk: ${gap.labelTr}`, detailTr: `Rakiplerin yalnızca ${percent(gap.share)} kadarı başlık veya etiketinde ${gap.labelTr} belirtiyor. Sen bu formatı sunup başlıkta, etikette ve kapak görselinde açıkça yazarsan bu formatla arayan alıcıda öne çıkarsın.` });
+      // Uygulamanın talimatı bu üçünü üretmez; ilanda yazılırsa alıcı yanıltılır. Satıcıya ayrı iş olarak anlatılır.
+      const manual = gap.id === "commercial"
+        ? `Rakiplerin yalnızca ${percent(gap.share)} kadarı ticari kullanım lisansı belirtiyor. Uygulamanın hazırladığı ürünler kişisel kullanım lisanslıdır; ticari lisans satmak istersen ayrı bir "Commercial License" ilanı aç, ürün ilanında yazma.`
+        : gap.id === "video"
+          ? `Rakiplerin yalnızca ${percent(gap.share)} kadarı video eğitim belirtiyor. Yapay zekâ video çekemez; ürünü yaparken telefonla kısa bir video çekersen ilana ekle ve o zaman yaz.`
+          : gap.id === "editable"
+            ? `Rakiplerin yalnızca ${percent(gap.share)} kadarı düzenlenebilir sürüm belirtiyor. Uygulamanın paketi düzenlenemez PDF üretir; düzenlenebilir sürüm (Canva şablonu) hazırlamadan ilanda "editable" yazma.`
+            : undefined;
+      advice.push({ priority: "medium", titleTr: `Boşluk: ${gap.labelTr}`, detailTr: manual || `Rakiplerin yalnızca ${percent(gap.share)} kadarı başlık veya etiketinde ${gap.labelTr} belirtiyor. Sen bu formatı sunup başlıkta, etikette ve kapak görselinde açıkça yazarsan bu formatla arayan alıcıda öne çıkarsın.` });
     }
     if (signals.bundleShare >= 0.3) {
       advice.push({ priority: "medium", titleTr: "Paketler satıyor", detailTr: `Üst ilanların ${percent(signals.bundleShare)} kadarı paket/set. Tekli ürün yerine uyumlu 3-5'li set hazırla; set fiyatı tekli fiyatın yaklaşık 2-2,5 katı olsun.` });

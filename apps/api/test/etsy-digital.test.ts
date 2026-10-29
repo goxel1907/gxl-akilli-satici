@@ -158,16 +158,19 @@ test("digital listing follows Etsy title and tag rules and discloses AI and rend
     pageCount: 24
   });
 
-  assert.ok(draft.title.startsWith("Crochet Doily Pattern PDF, Juniper Crown Doily"));
+  // Başlıkta ürün kelimesi tekrar edilmez: "Juniper Crown Doily" → "Juniper Crown".
+  assert.ok(draft.title.startsWith("Crochet Doily Pattern PDF, Juniper Crown"));
   assert.ok(draft.title.length <= 140);
   assert.equal(draft.tags.length, 13);
   assert.ok(draft.tags.every((tag) => tag.length <= 20));
   assert.equal(new Set(draft.tags).size, 13);
-  assert.ok(draft.tags.includes("vintage doily"));
+  // Desende "vintage" özelliği yok: başka ilanlardaki "vintage doily" etiketi ürünü yanlış anlatır, kullanılmaz.
+  assert.ok(!draft.tags.includes("vintage doily"));
+  assert.ok(draft.tags.includes("doily pattern"));
   assert.ok(!draft.tags.includes("shop name brand"));
   assert.equal(draft.checks.ok, true);
   assert.match(draft.description, /digital renders/);
-  assert.match(draft.description, /AI tools assisted/);
+  assert.match(draft.description, /Designed with the help of AI tools/);
   assert.match(draft.description, /24-page PDF/);
   assert.ok(draft.warnings.some((warning) => warning.includes("test edilmedi")));
   assert.deepEqual(draft.materials, ["size 10 cotton thread", "crochet hook"]);

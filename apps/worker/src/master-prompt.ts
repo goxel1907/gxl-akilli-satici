@@ -8,6 +8,8 @@ export interface MasterPromptInput {
   specName: "Product spec" | "Design spec";
   filesBrief: string;
   artPrompts?: string[];
+  // Brief B'nin başındaki ortak kurallar (çözünürlük, stil, referans yasağı).
+  artNotes?: string[];
   renderPrompt?: string;
   adVisuals: AdVisual[];
   pins?: Array<{ title: string; description: string; overlay: string }>;
@@ -23,10 +25,10 @@ export function buildMasterPrompt(input: MasterPromptInput): string {
   const steps: Array<{ title: string; body: string }> = [
     { title: `${spec} first`, body: `Read the whole package. Before any file, output the ${spec} JSON described in Brief A. It is the single source of truth: every later file and image must match it exactly (name, palette hex codes, fonts, page or motif list, counts). If I ask for a change, update the JSON first and show it again. Show the final JSON again when the product files are finished.` }
   ];
-  if (input.artPrompts?.length) steps.push({ title: "Artwork", body: "Create the artworks in Brief B one image per reply, in the spec palette and one consistent style. Name them page-01.png, page-02.png and so on; the product files will place them." });
-  steps.push({ title: "Product files", body: "Build the product files exactly as Brief A says, pass by pass. Deliver every format: none may be missing. Before you write STEP DONE, run the Automated QA script on the finished files, paste its output and fix every FAIL. Then give me ONE zip with the Etsy upload set (at most 5 files; put extra formats into a single Extras.zip inside it) so I can download everything at once. If you cannot create files, give complete print-ready HTML I can save as PDF." });
+  if (input.artPrompts?.length) steps.push({ title: "Artwork", body: "Create the artworks in Brief B one image per reply, following the rules at the top of Brief B, in the spec palette and one consistent style. Name them art-01.png, art-02.png and so on in Brief B order; the page plan from step 1 says where each one goes." });
+  steps.push({ title: "Product files", body: "Build the product files exactly as Brief A says, pass by pass. Deliver every format: none may be missing. Before you write STEP DONE, run the Automated QA script on the finished files, paste its output and fix every FAIL. Then give me ONE download zip that contains the Etsy upload set described in Brief A (at most 5 files, each under 20 MB) so I can download everything at once. If you cannot run code or create files, say so at the start of this step, give complete print-ready HTML I can save as PDF, and replace the script output with your own PASS/FAIL line for every Automated QA check." });
   if (input.renderPrompt) steps.push({ title: "Product renders", body: `Create the renders in Brief R, one image per reply. Use the ${spec} JSON from step 1 of this chat; show exactly its motif counts and colors.` });
-  steps.push({ title: "Listing images", body: "Create the listing images in Brief C one per reply, in order. The product shown must be the real pages or item from this chat. If you cannot see them as images, ask me to upload 2-3 screenshots first. Never draw text, letters or logos in the image; I add headlines later in Canva." });
+  steps.push({ title: "Listing images", body: `Create the listing images in Brief C one per reply, in order. The product shown must be ${input.renderPrompt ? "the item from the renders in Brief R" : "the real pages made in this chat"}. If you cannot see them as images, ask me to upload 2-3 screenshots of ${input.renderPrompt ? "those renders" : "those pages"}; never use images from other sellers or the internet. Never draw new text, letters or logos in the image; I add headlines later in Canva.` });
   if (input.pins?.length && pinVisual) steps.push({ title: "Pinterest images", body: `For each pin in Brief D create one 2:3 vertical image based on image C${pinVisual.slot}, changing the scene so the pins look different and match each pin's angle. Keep the top 30% clean for the headline.` });
   steps.push({ title: "Final check", body: input.qa?.length ? "Run the Automated QA script again on the final upload set and paste its output, then check the Final checklist. Everything must pass before you call the product ready." : "Check everything against the Final checklist and list what passes and what still needs fixing." });
 
@@ -50,7 +52,7 @@ export function buildMasterPrompt(input: MasterPromptInput): string {
     input.filesBrief.trim().replace(/^## /gm, "### ")
   ];
   if (input.artPrompts?.length) {
-    lines.push("", "## Brief B - artwork (one image per reply)", ...input.artPrompts.map((prompt, index) => `B${index + 1}. ${prompt}`));
+    lines.push("", "## Brief B - artwork (one image per reply)", ...(input.artNotes || []).map((note) => `- ${note}`), ...input.artPrompts.map((prompt, index) => `B${index + 1}. ${prompt}`));
   }
   if (input.renderPrompt) {
     lines.push("", "## Brief R - product renders (one image per reply)", input.renderPrompt.replace(/ \(paste the Design spec JSON from the finished pattern here\): <DESIGN SPEC JSON>/, `: the ${spec} JSON from step 1 of this chat`).trim());

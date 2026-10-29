@@ -24,7 +24,7 @@ export interface ShopPreset extends ShopSettings {
   tagline: string;
 }
 
-const DIGITAL_THANKS = "Thank you for your purchase! Your files are ready on your Etsy Purchases page (You > Purchases and reviews > Download files). Print at Actual size / 100% scale, and open the Tablet PDF in an annotation app that supports links. Need help? Message us anytime. Enjoy!";
+const DIGITAL_THANKS = "Thank you for your purchase! Your files are ready on your Etsy Purchases page (You > Purchases and reviews > Download files). Print at Actual size / 100% scale. Questions? Just reply to this message; we're happy to help.";
 
 export const SHOP_PRESETS: Record<ShopAudience, ShopPreset> = {
   planners: {
@@ -32,8 +32,8 @@ export const SHOP_PRESETS: Record<ShopAudience, ShopPreset> = {
     audienceTr: "ABD'de düzen, alışkanlık ve sakin bir gün arayan kadınlar: anneler, öğrenciler, çalışan kadınlar.",
     tagline: "Printable planners & craft patterns for calm, organized days",
     title: "Printable Planners & Craft Patterns for Calm Days",
-    announcement: "Welcome to GXL Market Studio! We design calm, practical printables for real, busy lives: undated planners, gentle habit and life trackers, and easy-to-follow craft patterns. Every file is an instant download that prints cleanly at home on US Letter or A4. Questions about printing or sizes? Send us a message, we are happy to help.",
-    saleMessage: "Thank you for your order from GXL Market Studio! If you have any question about your item, just reply to this message and we will help.",
+    announcement: "Welcome to GXL Market Studio! We design calm, practical printables for real, busy lives: undated planners, gentle habit and life trackers, and easy-to-follow craft patterns. Every file is an instant download that prints cleanly at home on US Letter or A4. Questions about printing or sizes? Send us a message; we're happy to help.",
+    saleMessage: "Thank you for your order from GXL Market Studio! If you have any questions about your item, just reply to this message and we will help.",
     digitalSaleMessage: DIGITAL_THANKS,
     sections: ["Printable Planners", "Habit & Life Trackers", "Crochet & Knit Patterns"]
   },
@@ -42,8 +42,8 @@ export const SHOP_PRESETS: Record<ShopAudience, ShopPreset> = {
     audienceTr: "Tığ ve şiş ile örgü yapan, adım adım ve sayısı doğru desen arayan ABD'li hobi severler.",
     tagline: "Original crochet & knitting patterns, easy to follow",
     title: "Easy Crochet & Knitting Patterns, PDF Downloads",
-    announcement: "Welcome to GXL Market Studio! We design original crochet and knitting patterns with clear, step-by-step instructions, a stitch count for every row and print-friendly PDFs in US terms. Every pattern is an instant download. Stuck on a row? Send us a message, we are happy to help.",
-    saleMessage: "Thank you for your order from GXL Market Studio! If you have any question about your pattern, just reply to this message and we will help.",
+    announcement: "Welcome to GXL Market Studio! We design original crochet and knitting patterns with clear, step-by-step instructions, a stitch count for every row and print-friendly PDFs in US terms. Every pattern is an instant download. Stuck on a row? Send us a message; we're happy to help.",
+    saleMessage: "Thank you for your order from GXL Market Studio! If you have any questions about your pattern, just reply to this message and we will help.",
     digitalSaleMessage: "Thank you for your purchase! Your pattern is ready on your Etsy Purchases page (You > Purchases and reviews > Download files). Print at Actual size / 100% scale. Stuck on a row? Message us anytime. Happy making!",
     sections: ["Crochet Patterns", "Knitting Patterns", "Beginner Friendly", "Printable Planners"]
   },
@@ -52,7 +52,7 @@ export const SHOP_PRESETS: Record<ShopAudience, ShopPreset> = {
     audienceTr: "Kendine veya Ramazan, Bayram ve özel günler için anlamlı hediye arayan alıcılar.",
     tagline: "Sterling silver prayer beads & thoughtful gifts",
     title: "Sterling Silver Prayer Beads & Islamic Gifts",
-    announcement: "Welcome to GXL Market Studio! We offer sterling silver tesbih (prayer beads) and thoughtful gifts for Ramadan, Eid and special days. Every listing shows the real weight and materials of the piece. Questions about a piece or a gift note? Send us a message, we are happy to help.",
+    announcement: "Welcome to GXL Market Studio! We offer sterling silver tesbih (prayer beads) and thoughtful gifts for Ramadan, Eid and special days. Every listing shows the real materials, measurements and photos of the piece. Questions about a piece or a gift note? Send us a message; we're happy to help.",
     saleMessage: "Thank you for your order from GXL Market Studio! Your prayer beads will be packed with care. If you would like a gift note, just reply to this message.",
     digitalSaleMessage: DIGITAL_THANKS,
     sections: ["Silver Prayer Beads", "Tesbih & Misbaha", "Ramadan & Eid Gifts"]
@@ -62,8 +62,8 @@ export const SHOP_PRESETS: Record<ShopAudience, ShopPreset> = {
     audienceTr: "En az 20 yıllık, hikâyesi olan gümüş, bakır ve tekstil arayan koleksiyoncular ve dekor severler.",
     tagline: "Curated vintage silver, copper & textiles from Türkiye",
     title: "Curated Vintage Silver, Copper & Turkish Finds",
-    announcement: "Welcome to GXL Market Studio! We hand-select vintage pieces from Türkiye: silver jewelry, copper and textiles that are at least 20 years old. Every listing shows the real item with honest notes on age and condition. Questions? Send us a message, we are happy to help.",
-    saleMessage: "Thank you for your order from GXL Market Studio! Your vintage piece will be packed with care. Reply to this message with any question.",
+    announcement: "Welcome to GXL Market Studio! We hand-select vintage pieces from Türkiye: silver jewelry, copper and textiles that are at least 20 years old. Every listing shows the real item with honest notes on age and condition. Questions? Send us a message; we're happy to help.",
+    saleMessage: "Thank you for your order from GXL Market Studio! Your vintage piece will be packed with care. Reply to this message with any questions.",
     digitalSaleMessage: DIGITAL_THANKS,
     sections: ["Vintage Silver", "Vintage Copper", "Rugs & Textiles"]
   }

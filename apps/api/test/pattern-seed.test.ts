@@ -119,7 +119,8 @@ test("trend-mode prompt is a market brief, not a copy of a single model", () => 
 test("listing title is led by the product and only uses filler phrases the trend data contains", () => {
   const seed = buildPatternSeed("sewing pattern pdf", sewing, { nonce: "c" });
   const listing = buildDigitalListing(normalizeDigitalListingInput({ ...seed, name: "Test Name Tote Bag" }));
-  assert.ok(listing.title.startsWith("Tote Bag Sewing Pattern PDF, Test Name Tote Bag"));
+  // Aramada ürün adı yok ("sewing pattern pdf"); alıcının yazdığı tam ürün ifadesi öne çıkar, ad ürün kelimesi olmadan yazılır.
+  assert.ok(listing.title.startsWith("Reversible Tote Bag Sewing Pattern PDF, Test Name"));
   assert.match(listing.title, /Reversible Tote Bag/);
   assert.match(listing.title, /Instant Download/);
   assert.doesNotMatch(listing.title, /US Terms/);
