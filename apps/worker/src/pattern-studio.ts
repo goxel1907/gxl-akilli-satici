@@ -155,7 +155,7 @@ const MANUSCRIPTS: Record<PatternCraft, CraftManuscript> = {
       "6. Full chart in black-and-white symbols, split into pages with 10×10 grid lines, overlap rows and a page map",
       "7. The same chart in color",
       "8. Backstitch and special stitches guide with diagrams",
-      "9. Finishing and framing",
+      "9. Finishing for this item: framing, hoop display or ornament backing with a hanging loop",
       "10. Troubleshooting table: symptom - likely cause - fix"
     ],
     publicDomain: "Standard stitches (full and half cross stitch, backstitch, French knots) are allowed, but the design, layout and every written sentence must be your own.",
