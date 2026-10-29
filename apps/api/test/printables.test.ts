@@ -138,7 +138,7 @@ test("printable plan endpoint and kind-aware digital products", async () => {
   const response = await handleRequest(new Request("https://gxl.example/api/printables/plan", { method: "POST", headers, body: JSON.stringify({ kind: "recipe", productType: "recipe cards", keyword: "recipe card printable", seed: "same" }) }), env);
   assert.equal(response.status, 200);
   const body = await response.json() as { brief: { name: string; pdfPrompt: string }; listing: { title: string } };
-  assert.match(body.brief.pdfPrompt, /4x6 and 5x7/);
+  assert.match(body.brief.pdfPrompt, /the 4x6 and the 5x7 cards/);
   assert.ok(body.listing.title.startsWith("Recipe Card Printable"));
   const again = await (await handleRequest(new Request("https://gxl.example/api/printables/plan", { method: "POST", headers, body: JSON.stringify({ kind: "recipe", productType: "recipe cards", keyword: "recipe card printable", seed: "same" }) }), env)).json() as { brief: { name: string } };
   assert.notEqual(again.brief.name, body.brief.name);
@@ -218,8 +218,8 @@ test("every part goes into one ordered master prompt for a single chat", () => {
   coloring.artPrompts.forEach((prompt) => assert.ok(master.includes(prompt)));
   assert.ok(!/^## Working name/m.test(master), "brief headings are nested under Brief A");
   assert.equal(master.split("## Artwork prompts").length, 1, "artwork prompts appear once, in Brief B");
-  assert.match(coloring.pins[0].description, /^.+ is an original .+\. Includes 40 single-sided coloring pages and comes in US Letter and A4 sizes\./);
-  assert.match(coloring.pins[0].description, /Made for adults and moms\./);
+  assert.match(coloring.pins[0].description, /^.+ is an original .+\. Includes 40 coloring pages, a color test page and a color palette ideas page\. Available in US Letter and A4 sizes\./);
+  assert.match(coloring.pins[0].description, /Made for adults and moms who love to color\./);
 
   const doily = buildPatternBrief({ craft: "crochet", productType: "doily", colors: ["cream"], seed: "d" } as never);
   assert.match(doily.masterPrompt, /## Brief R - product renders/);
@@ -279,7 +279,7 @@ test("every package carries a scripted QA protocol tuned to its product type", (
   assert.match(planner.masterPrompt, /CALENDAR/);
   assert.match(planner.masterPrompt, /run the Automated QA script on the finished files/);
   const wallArt = buildPrintableBrief({ kind: "wall_art", productType: "botanical print", seed: "qa" });
-  assert.match(wallArt.masterPrompt, /4800×7200 px/);
+  assert.match(wallArt.masterPrompt, /5400×8100 px/);
   assert.ok(!/11 AM, 12 PM/.test(wallArt.masterPrompt), "wall art does not get planner sequence checks");
   assert.ok(!/LINKS —/.test(wallArt.masterPrompt), "print-only products get no tablet link check");
 

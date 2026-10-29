@@ -5,7 +5,7 @@ import { inferPrintableKind, inferTrendGroup, isTrendGroup, normalizeKeyword, re
 import { isIpRisky } from "./ip-guard.js";
 import { craftDefaultMaterial, type SkillLevel } from "./pattern-studio.js";
 import { defaultPrintableFormats, defaultPrintablePages, PRINTABLE_KINDS } from "./printable-studio.js";
-import { familiesConflict, fitsTheme, holidayOutOfWindow, META_WORDS, MISLEADING_FEATURE, proseCase, themeFamilies, type ThemeFamily } from "./theme.js";
+import { familiesConflict, fitsTheme, holidayAllowed, holidayOutOfWindow, META_WORDS, MISLEADING_FEATURE, proseCase, themeFamilies, type ThemeFamily } from "./theme.js";
 
 type Fetcher = typeof fetch;
 
@@ -444,7 +444,8 @@ function pickFeatures(pool: Array<[string, number]>, rising: Array<[string, numb
   if (!pool.length) return { features: [], fresh: true };
   const anchor = pool[0][0];
   const anchorFamilies = new Set([...base, ...themeFamilies(anchor)]);
-  const compatible = (phrase: string, families: Set<ThemeFamily>) => !familiesConflict(themeFamilies(phrase), families);
+  // Bayram yalnız ana temaysa girer: "farmhouse" tarif kartına üçüncü özellik olarak "christmas" eklenmez.
+  const compatible = (phrase: string, families: Set<ThemeFamily>) => !familiesConflict(themeFamilies(phrase), families) && holidayAllowed(phrase, anchorFamilies);
   const risingOnly = rising.map(([phrase]) => phrase).filter((phrase) => phrase !== anchor && compatible(phrase, anchorFamilies));
   const others = pool.slice(1, 8).map(([phrase]) => phrase);
   let last: string[] = [anchor];
@@ -514,7 +515,8 @@ function buildCompetition(result: TrendResult | undefined, kind: PrintableKind |
   const standardFiles = standard.filter(deliverable);
   if (gapFiles.length) {
     planTr.push(`Rakiplerin azının başlık/etiketinde belirttiği, bizim sunup ilanda açıkça yazacağımız: ${gapFiles.map((item) => `${FORMAT_OFFERS[item.id].tr} (rakiplerin ${percent(item.share)}'i)`).join(", ")}.`);
-    planEn.push(`include ${joinEn(gapFiles.map((item) => FORMAT_OFFERS[item.id].en))} and name ${gapFiles.length > 1 ? "them" : "it"} on the cover, because few competitors offer ${gapFiles.length > 1 ? "them" : "it"}`);
+    const plural = gapFiles.length > 1 || /\b(sizes|versions|files|sheets)\b/.test(FORMAT_OFFERS[gapFiles[0].id].en);
+    planEn.push(`include ${joinEn(gapFiles.map((item) => FORMAT_OFFERS[item.id].en))} and name ${plural ? "them" : "it"} on the cover, because few competitors offer ${plural ? "them" : "it"}`);
   }
   if (standardFiles.length) {
     planTr.push(`Mutlaka olacak (rakiplerin çoğunda var): ${standardFiles.map((item) => `${FORMAT_OFFERS[item.id].tr} (${percent(item.share)})`).join(", ")}.`);

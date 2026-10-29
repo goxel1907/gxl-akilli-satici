@@ -332,7 +332,7 @@ export function titleCase(value: string): string {
     if (/^\d?x+[sl]$/.test(lower) || /^\d+xl$/.test(lower)) return word.toUpperCase();
     if (index > 0 && TITLE_SMALL.has(lower)) return lower;
     return word[0].toUpperCase() + word.slice(1).toLowerCase();
-  }).join(" ");
+  }).join(" ").replace(/\bSelf Care\b/g, "Self-Care").replace(/\b3d\b/g, "3D");
 }
 
 function cleanText(value: unknown, max = 300): string {

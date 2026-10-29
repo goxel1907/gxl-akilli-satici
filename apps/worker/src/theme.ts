@@ -9,7 +9,8 @@ export type ThemeFamily =
   | "christmas" | "halloween" | "thanksgiving" | "easter" | "valentine" | "st_patricks" | "patriotic" | "hanukkah" | "ramadan" | "mothers_day" | "fathers_day"
   | "winter" | "spring" | "summer" | "fall"
   | "witchy" | "dark" | "cozy" | "botanical" | "vintage" | "boho" | "minimalist" | "coastal" | "western" | "playful"
-  | "bridal" | "bachelorette" | "baby_shower" | "birthday" | "graduation";
+  | "bridal" | "bachelorette" | "baby_shower" | "birthday" | "graduation"
+  | "woodland" | "citrus" | "safari";
 
 const TERMS: Array<[ThemeFamily, RegExp]> = [
   ["christmas", /\b(christmas|xmas|noel|santa|holly|mistletoe|reindeer|gingerbread|nutcracker|holidays?)\b/],
@@ -41,7 +42,11 @@ const TERMS: Array<[ThemeFamily, RegExp]> = [
   ["bachelorette", /\b(bachelorette|hen party|hen do)\b/],
   ["baby_shower", /\b(baby shower|gender reveal|baby sprinkle)\b/],
   ["birthday", /\b(birthday|bday)\b/],
-  ["graduation", /\b(graduation|grad party)\b/]
+  ["graduation", /\b(graduation|grad party)\b/],
+  // Parti temaları: bir bebek/bridal setinde tek tema olur (orman hayvanları ile "little cutie" mandalina teması karışmaz).
+  ["woodland", /\b(woodland|forest animals?|fox|foxes|deer)\b/],
+  ["citrus", /\b(little cutie|cutie|clementine|citrus|lemons?)\b/],
+  ["safari", /\b(safari|jungle)\b/]
 ];
 
 // Ürünün kendisini değil satış biçimini anlatan kelimeler: tek başına özellik, motif veya stil olamaz.
@@ -87,6 +92,9 @@ for (const mood of ["witchy", "dark"] as ThemeFamily[]) {
   for (const other of ["christmas", "easter", "valentine", "st_patricks", "patriotic", "hanukkah", "ramadan", "mothers_day", "fathers_day", "spring", "summer", "playful", "coastal"] as ThemeFamily[]) clash(mood, other);
 }
 for (const other of ["winter", "fall", "christmas", "halloween", "thanksgiving", "hanukkah"] as ThemeFamily[]) clash("coastal", other);
+const MOTIFS: ThemeFamily[] = ["woodland", "citrus", "safari", "coastal"];
+for (const a of MOTIFS) for (const b of MOTIFS) if (a !== b) clash(a, b);
+for (const other of ["christmas", "winter", "halloween", "fall"] as ThemeFamily[]) clash("citrus", other);
 
 export function themeFamilies(text: string): Set<ThemeFamily> {
   const value = ` ${text.toLowerCase().replace(/[^a-z0-9'\s.]/g, " ")} `;
@@ -111,14 +119,28 @@ export function fitsTheme(text: string, chosen: Set<ThemeFamily>): boolean {
   return [...families].every((family) => allowed.has(family) || !SPECIFIC.has(family));
 }
 
+export function isHolidayFamily(family: ThemeFamily): boolean {
+  return HOLIDAYS.includes(family);
+}
+
+// Bayram yalnız ürünün ana temasıysa (ilk özellik veya aramanın kendisi) üründe yer alır; üçüncü özellik olarak
+// araya giren bayram ("farmhouse" tarif kartına "christmas") ürünü iki temalı yapar.
+export function holidayAllowed(phrase: string, anchorFamilies: Set<ThemeFamily>): boolean {
+  return [...themeFamilies(phrase)].every((family) => !HOLIDAYS.includes(family) || anchorFamilies.has(family));
+}
+
+// Tema veya stil bildiren sıfatlar: tek başına çizilecek konu değildir ("cozy christmas" bir stildir, "christmas ephemera" konudur).
+export const THEME_ADJECTIVES = new Set(["christmas", "xmas", "holiday", "holidays", "halloween", "spooky", "easter", "valentine", "valentines", "thanksgiving", "winter", "spring", "summer", "fall", "autumn", "witchy", "gothic", "goth", "dark", "academia", "cozy", "cosy", "cottagecore", "farmhouse", "botanical", "floral", "vintage", "retro", "antique", "victorian", "nostalgic", "boho", "bohemian", "minimalist", "minimal", "neutral", "coastal", "nautical", "western", "kawaii", "cute", "patriotic", "festive", "seasonal", "scandi", "rustic", "moody", "whimsical", "peculiar", "quirky", "modern", "aesthetic", "bold", "easy", "simple", "pastel", "watercolor", "folk"]);
+
 // Sıralı listeden (en güçlü önce) birbiriyle çatışmayan ifadeleri tutar; ilk ifade temayı belirler.
 export function harmonizeThemes<T extends string>(items: T[], seed: Set<ThemeFamily> = new Set()): { kept: T[]; dropped: T[]; families: Set<ThemeFamily> } {
   const families = new Set(seed);
   const kept: T[] = [];
   const dropped: T[] = [];
+  const anchor = new Set([...seed, ...(items[0] ? themeFamilies(items[0]) : [])]);
   for (const item of items) {
     const own = themeFamilies(item);
-    if (familiesConflict(own, families)) {
+    if (familiesConflict(own, families) || !holidayAllowed(item, anchor)) {
       dropped.push(item);
       continue;
     }
@@ -173,7 +195,7 @@ const PROPER_SOURCE: Array<[string, string, string?]> = [
   ["etsy", "Etsy"], ["pinterest", "Pinterest"], ["instagram", "Instagram"], ["facebook", "Facebook"], ["canva", "Canva"],
   ["us letter", "US Letter", "i"], ["half letter", "Half Letter"], ["a([3-6])", "A$1"], ["adhd", "ADHD"], ["diy", "DIY"], ["pdf", "PDF"],
   ["us terms", "US terms", "i"], ["english", "English"], ["american", "American"], ["turkish", "Turkish"], ["islamic", "Islamic"],
-  ["art deco", "Art Deco"], ["art nouveau", "Art Nouveau"]
+  ["art deco", "Art Deco"], ["art nouveau", "Art Nouveau"], ["self care", "self-care"]
 ];
 // Dosya adı, adres ve kod parçalarına (planner.pdf, etsy.com, page-01) dokunmaz.
 const PROPER: Array<[RegExp, string]> = PROPER_SOURCE.map(([core, replacement, flags]) => [new RegExp(`(?<![\\w./@-])${core}(?![\\w/@-]|\\.\\w)`, `g${flags || ""}`), replacement]);

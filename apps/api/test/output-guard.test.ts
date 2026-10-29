@@ -25,7 +25,7 @@ test("the Christmas junk journal package that went to ChatGPT is now one coheren
   const master = item.brief.masterPrompt;
   // Tema: Noel ürününe cadı, dark academia veya Cadılar Bayramı girmez.
   assert.doesNotMatch(master, /witch|dark academia|halloween|occult/i);
-  assert.match(master, /Theme: one theme for the whole product, led by Christmas/);
+  assert.match(master, /Theme: one theme for the whole product: .*Christmas/);
   // Görsel konuları satış kelimesi değil, çizilebilir konular.
   assert.ok(item.brief.artSubjects.length >= 8);
   for (const subject of item.brief.artSubjects) assert.doesNotMatch(subject.toLowerCase(), /\b(download|junk journal|journal|commercial|seamless|kit|pdf)\b/, subject);
@@ -157,7 +157,7 @@ test("listings only claim what the product really has", () => {
   assert.ok(!`${recipe.title} ${recipe.tags.join(" ")}`.includes("editable"));
   const planner = buildPrintableListing({ kind: "digital_planner", productType: "digital planner", keyword: "digital planner", formats: ["Landscape tablet PDF (iPad / Android tablets)"] }, "Nunnora Digital Planner");
   assert.match(planner.description, /ready to use in a note-taking app on your tablet/);
-  assert.match(planner.description, /import the PDF into a note-taking app/);
+  assert.match(planner.description, /Import the PDF into a note-taking app/);
   assert.ok(!planner.tags.includes("printable planner"));
   const kids = buildPrintableBrief({ kind: "kids", productType: "kids activity pages", seed: "k" });
   assert.match(kids.pdfPrompt, /For personal and single-classroom use/);

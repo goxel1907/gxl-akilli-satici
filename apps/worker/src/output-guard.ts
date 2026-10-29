@@ -76,7 +76,7 @@ const STYLE_ONLY = /^(cozy|bold|easy|bold and easy|simple|boho|vintage|modern|cu
 function productFamilies(prompt: string): ThemeFamily[] {
   // Ürünü tanımlayan bölümler: özellikler, tema satırı ve Brief B konuları (kurallardaki "başka bayram yok" cümleleri hariç).
   const lines = prompt.split("\n").filter((line) => /^- Buyer-favored features:|^- Theme:|^B\d+\./.test(line));
-  return [...new Set(lines.flatMap((line) => [...themeFamilies(line.replace(/nothing from other seasons, holidays or moods/g, ""))]))];
+  return [...new Set(lines.flatMap((line) => [...themeFamilies(line.replace(/nothing from other seasons, holidays or moods/g, "").replace(/;\s*add (nothing|no)\b[^;]*$/, ""))]))];
 }
 
 export interface PromptContext {
@@ -163,7 +163,7 @@ function lintListing(c: Collector, field: string, listing: ListingLike, digital:
   const stuffed = [...counts.entries()].filter(([, count]) => count > 2).map(([word]) => word);
   if (stuffed.length) c.issues.push({ code: "title_stuffing", field: `${field}.title`, severity: "error", messageTr: `Başlıkta aynı kelime ikiden fazla geçiyor: ${stuffed.join(", ")}.` });
   const segments = listing.title.toLowerCase().split(/,\s*/);
-  const repeated = segments.find((segment, index) => segment.split(" ").length >= 2 && segments.indexOf(segment) !== index);
+  const repeated = segments.find((segment, index) => segment.split(" ").length >= 2 && segments.some((other, otherIndex) => otherIndex !== index && (other === segment || new RegExp(`\\b${segment.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`).test(other))));
   if (repeated) c.issues.push({ code: "title_repeat", field: `${field}.title`, severity: "error", messageTr: `Başlıkta aynı ifade iki kez geçiyor: "${repeated}".` });
   // Etiketler aynı ürünü anlatmalı: çatışan temalar, yanıltıcı ifadeler ve marka adları olmaz.
   c.checks += 1;
