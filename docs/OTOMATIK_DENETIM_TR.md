@@ -46,7 +46,17 @@ Sorun yoksa yeşil kutuda "Otomatik denetim: N kontrol, sorun yok" yazar.
 
 1. `apps/api/test/fixtures/output-matrix.ts` gerçek Etsy aramalarına benzeyen 25'ten fazla senaryoyu her biri 3 farklı tohumla üretir. Senaryolar PDF ürünleri, desenler, tesbih/vintage/örgü ürünleri ve reklam planlarıdır.
 2. `apps/api/test/output-guard.test.ts` bu üretimlerin hiçbirinde hata kalmamasını şart koşar.
-3. Kullanıcının ChatGPT'ye gönderdiği gerçek paketteki altı hata da testte yer alır; denetleyicinin bunları yakaladığı ayrıca test edilir.
-4. Bağımsız bir ajan aynı çıktıları satır satır okuyup inceledi. Bulduğu 52 hata kaynağında düzeltildi; ikinci tur incelemesi sonucu doğrulamak içindir.
+3. Aynı test, denetleyicinin bu üretimlerde düzeltecek bir şey bulmamasını da şart koşar. Yani metinler kaynağında temiz üretilir; denetleyici yalnız beklenmedik durumlar için güvenlik ağıdır.
+4. Kullanıcının ChatGPT'ye gönderdiği gerçek paketteki altı hata da testte yer alır; denetleyicinin bunları yakaladığı ayrıca test edilir.
+5. Bağımsız bir ajan aynı çıktıları satır satır okuyup inceledi:
+   - 1. tur: 52 hata bulundu, hepsi kaynağında düzeltildi.
+   - 2. tur: 19 yeni hata ve 25 eksik düzeltme bulundu, hepsi kaynağında düzeltildi. Örnekler: siyah-beyaz dosyası olmayan ürüne "renkli + siyah-beyaz" görseli, 3 baskılık duvar sanatından 5-7 sayfa istenmesi, dikiş deseninde dosya planı çelişkisi, nakış şablonunun kâğıda sığmaması.
+   - 3. tur: sonucu doğrulamak içindir.
+
+## Yeni ürün türlerinde ne kontrol edilir?
+
+- **Dosya planı.** Her ürünün yükleme seti en fazla 5 dosya, her dosya en fazla 20 MB. Duvar sanatında oranlar zip'lerde toplanır. Dijital planlayıcıda açık ve koyu tema ayrı dosyadır. Dikiş deseninde talimat, Letter, A4 ve A0 kalıp dosyaları ayrıdır.
+- **Görseller gerçeği gösterir.** İlan görseli yalnız dosyada olanı gösterir. Örneğin siyah-beyaz dosyası yoksa "renkli + siyah-beyaz" görseli yapılmaz.
+- **Desen görselleri.** Görsel yalnız stil ve rengi gösterir. Tam sayılar kodla çizilen şemalardadır, çünkü görsel modelleri sayıları tutturamaz.
 
 Çıktıları okumak için: `node --import tsx apps/api/test/fixtures/dump-outputs.ts <klasör> --first`

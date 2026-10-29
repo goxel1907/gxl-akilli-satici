@@ -5,7 +5,7 @@ import { isIpRisky } from "./ip-guard.js";
 import { buildMasterPrompt } from "./master-prompt.js";
 import { qaProtocol } from "./qa-protocol.js";
 import { coinProductName, normalizeEtsyTags, normalizeEtsyTitle, titleCase, validateEtsyListingText } from "./pattern-studio.js";
-import { cleanBriefNotes, fitsTheme, harmonizeThemes, META_WORDS, MISLEADING_FEATURE, proseCase, THEME_ADJECTIVES, themeFamilies, type ThemeFamily } from "./theme.js";
+import { cleanBriefNotes, fitsTheme, harmonizeThemes, isHolidayFamily, META_WORDS, MISLEADING_FEATURE, proseCase, THEME_ADJECTIVES, themeFamilies, type ThemeFamily } from "./theme.js";
 
 // Kadınlara yönelik yazdırılabilir / dijital PDF ürünleri için stüdyo:
 // türüne özel içerik kuralları, Claude/ChatGPT promptu, gerekirse sayfa sayfa görsel promptları,
@@ -404,6 +404,34 @@ const TEXT_LIKE = /\b(letters?|tickets?|labels?|stamps?|newspapers?|words?|scrip
 const COMPOSITIONS = ["as one large central subject", "in a detailed scene", "with a simple background", "as a playful group", "framed by small motifs", "in a cozy setting", "close-up with large, easy shapes", "in a busy landscape"];
 const STYLE_DIRECTIONS: Record<string, string> = { peculiar: "whimsical vintage collage", quirky: "whimsical vintage collage", "bold easy": "bold and easy", "bold and easy": "bold and easy" };
 
+// "Christmas ephemera", "library ephemera" çizilecek bir konu değil, ürün türüdür: çekirdek kelime ("library")
+// çizilebilir bir konuya çevrilir; çekirdek yalnız tema ise ("christmas") konu temanın kendi listesinden gelir.
+const PAPER_NOUNS = /(^|\s+)(ephemera|papers?|pages?|sheets?|collage sheets|cut-?outs|clipart|designs?|prints?|patterns?|motifs?|backgrounds?)$/;
+const CORE_SUBJECTS: Record<string, string> = {
+  library: "stacks of old library books with a reading lamp",
+  botanical: "pressed botanical leaves and stems",
+  floral: "loose garden flowers",
+  mushroom: "woodland mushrooms and moss",
+  butterfly: "vintage butterflies and moths",
+  bird: "songbirds on branches",
+  ocean: "seashells, coral and waves",
+  sea: "seashells, coral and waves",
+  travel: "a vintage globe, compass and suitcase",
+  garden: "a cottage garden with a watering can",
+  kitchen: "vintage kitchen jars and teacups",
+  tea: "teacups, teapots and sugar cubes",
+  cottage: "a stone cottage with climbing roses",
+  forest: "pine trees, ferns and pinecones",
+  bee: "honeybees and honeycomb"
+};
+
+function featureSubject(feature: string, concrete: (phrase: string) => boolean): string | undefined {
+  if (!PAPER_NOUNS.test(feature)) return concrete(feature) ? feature : undefined;
+  const core = feature.replace(PAPER_NOUNS, "").trim();
+  if (!core || !concrete(core)) return undefined;
+  return CORE_SUBJECTS[core] || CORE_SUBJECTS[singular(core)] || `${core} motifs`;
+}
+
 function subjectsAndStyle(prepared: Prepared, profile: KindProfile): { subjects: string[]; components: string[]; styles: string[] } {
   const { input, themes } = prepared;
   const productWords = new Set(input.productType.split(/\s+/).flatMap((word) => [word, singular(word)]));
@@ -411,10 +439,12 @@ function subjectsAndStyle(prepared: Prepared, profile: KindProfile): { subjects:
   const concrete = (phrase: string) => phrase.split(" ").some((word) => !THEME_ADJECTIVES.has(word) && !STYLE_WORDS.has(word) && !META_WORDS.has(word) && !productWords.has(word) && word !== "style" && word !== "and");
   const components = features.filter((feature) => COMPONENT.test(feature));
   const styles = features.filter((feature) => !COMPONENT.test(feature) && !concrete(feature));
-  const fromFeatures = features.filter((feature) => !components.includes(feature) && concrete(feature));
+  const fromFeatures = features.filter((feature) => !components.includes(feature) && concrete(feature))
+    .map((feature) => featureSubject(feature, concrete)).filter((subject): subject is string => Boolean(subject));
   // Trend etiketinden gelen konu yalnız ürünün temasındansa kullanılır (dinozor kitabına unicorn sayfası girmez).
   const onTheme = (motif: string) => themes.size > 0 && fitsTheme(motif, themes) && [...themeFamilies(motif)].some((family) => themes.has(family));
-  const fromTags = profile.art ? (input.trendTags || []).map((tag) => motifFromTag(tag, productWords)).filter((motif) => motif.length >= 3 && concrete(motif) && !COMPONENT.test(motif) && onTheme(motif)) : [];
+  const fromTags = profile.art ? (input.trendTags || []).map((tag) => motifFromTag(tag, productWords)).filter((motif) => motif.length >= 3 && concrete(motif) && !COMPONENT.test(motif) && onTheme(motif))
+    .map((motif) => featureSubject(motif, concrete)).filter((subject): subject is string => Boolean(subject)) : [];
   const fromThemes = [...themes].flatMap((family) => THEME_SUBJECTS[family] || []);
   const own = [...fromFeatures, ...fromTags, ...fromThemes];
   // Türün genel konuları yalnız üründe hiçbir konu yoksa kullanılır.
@@ -437,6 +467,9 @@ function buildArtPlan(prepared: Prepared, profile: KindProfile, pages: number): 
   const { subjects, components, styles } = subjectsAndStyle(prepared, profile);
   const style = styles.length ? `${joinWords(styles.map(proseCase))} style` : "one consistent original illustration style";
   const subjectAt = (index: number) => subjects[index % Math.max(1, subjects.length)] || `an original ${input.productType} theme`;
+  // Kapak ürünün ana temasını gösterir (Noel kitinin kapağı kütüphane değil, Noel konusudur).
+  const anchored = (subject: string, holidayOnly: boolean) => [...themeFamilies(subject)].some((family) => prepared.themes.has(family) && (!holidayOnly || isHolidayFamily(family)));
+  const coverSubject = subjects.find((subject) => anchored(subject, true)) || subjects.find((subject) => anchored(subject, false)) || subjectAt(0);
   // Konu sayısı sayfa sayısından azsa her sayfa farklı bir kompozisyon alır; aynı görsel iki kez üretilmez.
   const compositions = COMPOSITIONS.filter((composition) => !styles.some((styleWord) => composition.includes(styleWord)));
   const variedAt = (index: number, count: number) => subjects.length >= count ? subjectAt(index) : `${subjectAt(index)}, ${compositions[index % compositions.length]}`;
@@ -497,7 +530,7 @@ function buildArtPlan(prepared: Prepared, profile: KindProfile, pages: number): 
   const prompts = [
     ...Array.from({ length: papers }, (_, index) => `Paper ${index + 1}: seamless repeating pattern, ${PAPER_LAYOUTS[index % PAPER_LAYOUTS.length]} of ${subjectAt(index)}, ${palette}, ${style}, original design, a square tile that repeats with no visible seams, no text, no letters.`),
     ...Array.from({ length: ephemera }, (_, index) => `Ephemera sheet ${index + 1}: 8-12 separate cut-out pieces (${EPHEMERA_PIECES[index % EPHEMERA_PIECES.length]}) featuring ${subjectAt(papers + index)}, ${palette}, ${style}, each piece with a thin white cutting border and generous space between pieces, on a flat light gray (#DDDDDD) background, no text or letters (label areas left blank for writing).`),
-    `Cover artwork: one hero illustration of ${subjectAt(0)}, ${palette}, ${style}, square composition with the top third kept plain for the title, which is added later in code; no text or letters.`
+    `Cover artwork: one hero illustration of ${coverSubject}, ${palette}, ${style}, square composition with the top third kept plain for the title, which is added later in code; no text or letters.`
   ];
   return {
     prompts,
@@ -583,8 +616,11 @@ function textRule(prepared: Prepared): string {
 
 function themeLine(prepared: Prepared): string {
   const lead = (prepared.input.trendFeatures || []).filter((feature) => themeFamilies(feature).size || feature.split(" ").every((word) => STYLE_WORDS.has(word) || THEME_ADJECTIVES.has(word) || word === "style"));
-  return lead.length
-    ? `- Theme: one theme for the whole product: ${joinWords(lead.slice(0, 3).map(proseCase))}; add nothing from another season, holiday or mood`
+  // "Christmas ephemera and library ephemera" iki tema gibi okunur: ilk özellik temadır, diğerleri o temanın ayrıntısıdır.
+  const names = [...new Set(lead.map((feature) => proseCase(feature.replace(PAPER_NOUNS, "").trim())).filter(Boolean))];
+  const [main, ...details] = names;
+  return main
+    ? `- Theme: one theme for the whole product: ${main}${details.length ? `, with ${joinWords(details.slice(0, 2))} details that fit it` : ""}; add nothing from another season, holiday or mood`
     : "- Theme: one consistent visual style for the whole product; add no season, holiday or mood that is not listed above";
 }
 
@@ -765,6 +801,20 @@ function contentsSummary(items: string[]): string {
   return joinWords(parts);
 }
 
+// Uzun açıklama ortadan kesilmez ("... GXL Market Studio" noktasız kalmaz): sığana kadar ikincil cümleler çıkarılır.
+function fitSentences(sentences: string[], max: number): string {
+  const kept = sentences.filter(Boolean);
+  const optional = [1, 4, 3];
+  let text = kept.join(" ");
+  for (const index of optional) {
+    if (text.length <= max) break;
+    const sentence = sentences[index];
+    if (sentence && kept.includes(sentence)) kept.splice(kept.indexOf(sentence), 1);
+    text = kept.join(" ");
+  }
+  return text;
+}
+
 // Pin başlıkları alıcı ifadelerinden; açıklama her zaman ürünün kendi adıyla kurulan düzgün cümlelerdir.
 function buildPins(prepared: Prepared, name: string, art: ArtPlan): PrintableBrief["pins"] {
   const { input } = prepared;
@@ -817,7 +867,7 @@ function buildPins(prepared: Prepared, name: string, art: ArtPlan): PrintableBri
     return {
       title: proseCase(`${titleCase(base)}${feature && !base.includes(feature) ? ` | ${titleCase(feature)}` : ""}`).slice(0, 100),
       overlay,
-      description: sentences.filter(Boolean).join(" ").slice(0, 480)
+      description: fitSentences(sentences, 480)
     };
   });
 }

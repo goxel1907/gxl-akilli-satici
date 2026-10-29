@@ -226,7 +226,12 @@ export function guardPrintablePlan<B extends { masterPrompt: string; pdfPrompt: 
   });
   const safeListing = repairListing(listing, fixed, "listing");
   lintPrompt(c, "masterPrompt", masterPrompt, { studio: "printable", kind: context.kind, formats: context.formats, subjects: brief.artSubjects });
-  pins.forEach((pin, index) => lintText(c, `pin${index + 1}`, `${pin.title}\n${pin.description}`, { english: true, prose: true }));
+  pins.forEach((pin, index) => {
+    lintText(c, `pin${index + 1}`, `${pin.title}\n${pin.description}`, { english: true, prose: true });
+    // Kesilmiş açıklama yarım cümleyle biter.
+    c.checks += 1;
+    if (!/[.!?)]$/.test(pin.description.trim())) c.issues.push({ code: "cut_text", field: `pin${index + 1}`, severity: "error", messageTr: "Pin açıklaması yarım cümleyle bitiyor (metin kesilmiş)." });
+  });
   lintListing(c, "listing", safeListing, true);
   return { brief: { ...brief, masterPrompt, pdfPrompt, pins }, listing: safeListing, quality: report(c, fixed) };
 }
