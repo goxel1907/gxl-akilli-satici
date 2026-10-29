@@ -626,7 +626,10 @@ function themeLine(prepared: Prepared): string {
   // "Christmas ephemera and library ephemera" iki tema gibi okunur: ilk özellik temadır, diğerleri o temanın ayrıntısıdır.
   const allNames = [...new Set(lead.map((feature) => proseCase(feature.replace(PAPER_NOUNS, "").trim())).filter(Boolean))];
   // "moody botanical" varken ayrıca "botanical" yazılmaz.
-  const names = allNames.filter((name, index) => !allNames.some((other, otherIndex) => otherIndex !== index && other.length > name.length && new RegExp(`\\b${escapeRegex(name)}\\b`, "i").test(other)));
+  // "Christmas busy book" varken tema "Christmas"tır (busy book içeriktir); "moody botanical" varken "botanical" ayrıca yazılmaz.
+  const contains = (longer: string, shorter: string) => longer.length > shorter.length && new RegExp(`\\b${escapeRegex(shorter)}\\b`, "i").test(longer);
+  const styleExtra = (longer: string, shorter: string) => longer.toLowerCase().replace(new RegExp(`\\b${escapeRegex(shorter.toLowerCase())}\\b`), "").trim().split(/\s+/).every((word) => STYLE_WORDS.has(word) || THEME_ADJECTIVES.has(word));
+  const names = allNames.filter((name) => !allNames.some((other) => (contains(other, name) && styleExtra(other, name)) || (contains(name, other) && !styleExtra(name, other))));
   const [main, ...details] = names;
   return main
     ? `- Theme: one theme for the whole product: ${main}${details.length ? `, with ${joinWords(details.slice(0, 2))} details that fit it` : ""}; add nothing from another season, holiday or mood`
@@ -812,6 +815,11 @@ function contentsSummary(items: string[]): string {
   return joinWords(parts);
 }
 
+function withPalette(clause: string, palette: string): string {
+  if (!palette) return clause;
+  return clause.startsWith(" in ") ? `${clause} and ${palette}` : `${clause} in ${palette}`;
+}
+
 // Uzun açıklama ortadan kesilmez ("... GXL Market Studio" noktasız kalmaz): sığana kadar ikincil cümleler çıkarılır.
 function fitSentences(sentences: string[], max: number): string {
   const kept = sentences.filter(Boolean);
@@ -839,7 +847,7 @@ function buildPins(prepared: Prepared, name: string, art: ArtPlan): PrintableBri
     { phrase: phrases[2] || phrases[0], feature: features[2] || features[1] }
   ];
   const formats = formatsProse(input.formats?.length ? input.formats : profile.defaultFormats, input.kind);
-  const palette = input.colors?.length ? ` in ${article(input.colors[0])} ${joinWords(input.colors.slice(0, 3))} palette` : "";
+  const palette = input.colors?.length ? `${article(input.colors[0])} ${joinWords(input.colors.slice(0, 3))} palette` : "";
   const pages = input.pageCount || profile.defaultPages;
   const included = art.includedEn.length && profile.art ? contentsSummary(art.includedEn) : `${pages} pages`;
   const tablet = (input.formats || []).some((format) => /tablet|hyperlink/i.test(format)) || input.kind === "digital_planner";
@@ -868,7 +876,8 @@ function buildPins(prepared: Prepared, name: string, art: ArtPlan): PrintableBri
     const overlay = [feature, phrase, input.productType].map((item) => (item || "").toUpperCase()).find((item) => item && !usedOverlays.has(item)) || input.productType.toUpperCase();
     usedOverlays.add(overlay);
     const sentences = [
-      `${name} is ${proseCase(product)}${featureClause(feature && !phrase.includes(feature) ? feature : undefined, profile, input.kind)}${palette}.`,
+      // "in a boho style in a rust ... palette" olmaz: stil cümlesinden sonra palet "and a ... palette" ile bağlanır.
+      `${name} is ${proseCase(product)}${withPalette(featureClause(feature && !phrase.includes(feature) ? feature : undefined, profile, input.kind), palette)}.`,
       looking ? lookingLines[angle % lookingLines.length](proseCase(looking)) : "",
       `${includeLines[angle % includeLines.length]} ${included}.${formats ? ` Available in ${formats}.` : ""}`,
       input.kind === "digital_planner" ? "Instant digital download for your tablet." : `Instant digital download: ${input.kind === "wall_art" || input.kind === "paper_craft" ? "print at home or at a print shop" : "print at home"}${tablet ? " or use it on your tablet" : ""}.`,
