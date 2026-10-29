@@ -36,7 +36,11 @@ export async function returnPolicies(env: EtsyRuntimeEnv, shopId: number, fetche
   return rows(await etsyRequest(env, `/application/shops/${shopId}/policies/return`, {}, fetcher)).filter((row) => row.return_policy_id);
 }
 
-export async function shopReadiness(env: EtsyRuntimeEnv, fetcher: Fetcher = fetch): Promise<{ items: ReadinessItem[]; done: number; total: number }> {
+// Etsy mağaza kaydı, açılışın ilk adımında (mağaza adı seçilince) oluşur; mağaza ancak ilk ilan yayına girince
+// alıcılara açılır. Bu yüzden "açık" yalnız yayında ilan varken söylenir. Etsy'nin "Etsy Payments'a kayıtlı"
+// bilgisi (is_etsy_payments_onboarded) Türkiye mağazalarında baştan açık olabilir; kimlik/banka adımlarının
+// bittiğini göstermez, o adım her zaman satıcının kendi adımı olarak gösterilir.
+export async function shopReadiness(env: EtsyRuntimeEnv, fetcher: Fetcher = fetch): Promise<{ items: ReadinessItem[]; done: number; total: number; shopOpen?: boolean }> {
   const items: ReadinessItem[] = [];
   const connection = await etsyConnection(env).catch(() => ({ connected: false, scopes: [] as string[], scopesKnown: false }));
   const scopes = connection.scopes;
@@ -64,13 +68,12 @@ export async function shopReadiness(env: EtsyRuntimeEnv, fetcher: Fetcher = fetc
       if (!(error instanceof EtsyIntegrationError && (error.code === "NOT_CONNECTED" || error.code === "NOT_FOUND"))) throw error;
     }
   }
+  const shopOpen = shop ? (shop.activeListings ?? 0) > 0 : undefined;
   items.push(shop
-    ? { id: "shop", titleTr: "Mağaza oluşturuldu", state: "done", detailTr: `Mağaza adı: ${shop.shopName || "—"}.` }
+    ? { id: "shop", titleTr: `Mağaza adı alındı: ${shop.shopName || "—"}`, state: "done", detailTr: shopOpen ? `Mağaza açık: ${shop.activeListings} ilan yayında.` : "Etsy'de mağaza kaydı var ama mağaza henüz açılmadı; alıcılar göremez. İlk ilan yayına girince açılır." }
     : { id: "shop", titleTr: "Etsy'de mağaza adını seç", state: "todo", detailTr: "Etsy → Sell on Etsy: mağaza dili, ülke, para birimi (USD önerilir) ve mağaza adı. Bu adımı Etsy'de siz yaparsınız.", action: "open_url", url: "https://www.etsy.com/sell" });
 
-  items.push(shop?.paymentsReady
-    ? { id: "payments", titleTr: "Ödeme ve banka kurulumu tamam", state: "done", detailTr: "Etsy Payments açık; satış parası banka hesabınıza gelir." }
-    : { id: "payments", titleTr: "Ödeme, kimlik ve banka bilgileri", state: shop ? "todo" : "manual", detailTr: "Etsy'de kimlik doğrulama, banka hesabı (TL), fatura kartı ve iki adımlı doğrulama. Kişisel bilgiler olduğu için bu adımı yalnız siz Etsy'de yaparsınız.", action: "open_url", url: "https://www.etsy.com/your/shops/me/dashboard" });
+  items.push({ id: "payments", titleTr: "Ödeme, kimlik ve banka bilgileri (sizin adımınız)", state: "manual", detailTr: "Etsy'de kimlik doğrulama, banka hesabı (TL), fatura kartı ve iki adımlı doğrulama. Kişisel bilgiler olduğu için bu adımı yalnız siz Etsy'de yaparsınız; uygulama bunun bittiğini Etsy'den kesin okuyamaz. Etsy açılış ekranında bu adımlar tamamlandı görünmeli.", action: "open_url", url: "https://www.etsy.com/your/shops/me/dashboard" });
 
   if (shop) {
     const [profiles, policies] = await Promise.all([shippingProfiles(env, shop.shopId, fetcher), returnPolicies(env, shop.shopId, fetcher)]);
@@ -91,7 +94,7 @@ export async function shopReadiness(env: EtsyRuntimeEnv, fetcher: Fetcher = fetc
   items.push({ id: "branding", titleTr: "Logo, kapak görseli ve 'Hakkında'", state: "manual", detailTr: "Etsy bunları programlara açmaz. Shop Manager → Settings → Info & Appearance bölümünden yükleyin.", action: "open_url", url: "https://www.etsy.com/your/shops/me/dashboard" });
 
   const counted = items.filter((item) => item.state !== "manual");
-  return { items, done: counted.filter((item) => item.state === "done").length, total: counted.length };
+  return { items, done: counted.filter((item) => item.state === "done").length, total: counted.length, shopOpen };
 }
 
 export function normalizeShippingProfileInput(raw: Record<string, unknown>) {

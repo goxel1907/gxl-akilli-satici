@@ -107,4 +107,6 @@ test("phone-side review fixes stay in place", () => {
   assert.match(app, /<View style=\{route === "photo" \? undefined : styles\.hidden\}>\{route === "photo" && back\}<PhotoListingStudio/, "the sell wizard stays mounted, so leaving it never loses a listing");
   assert.match(app, /const fresh = await rescore\(\);\n    if \(fresh && fresh\.score < 50\)/, "the low-score warning uses a fresh score");
   assert.match(app, /if \(!updateCheckRunning\) updateCheckRunning = runUpdateCheck\(\)/, "one update download at a time");
+  assert.doesNotMatch(app, /paymentsReady/, "Etsy's payments flag is never shown as 'payments done' or 'shop open'");
+  assert.match(app, /Mağaza adı alındı\$\{name\} · henüz açılmadı/);
 });
