@@ -176,7 +176,7 @@ export function buildAdVisuals(input: AdVisualInput): AdVisual[] {
   const highlight = visible.length ? ` with ${visible.slice(0, 2).map(proseCase).join(" and ")} details visible` : "";
   const isPattern = Boolean(input.craft);
   // Ad zaten ürün adını içeriyorsa tekrar yazılmaz ("the "X Junk Journal Kit" junk journal kit" olmaz).
-  const nameHasProduct = input.name.toLowerCase().endsWith(input.productType.toLowerCase());
+  const nameHasProduct = input.name.toLowerCase().replace(/-/g, " ").endsWith(input.productType.toLowerCase().replace(/-/g, " "));
   const subject = isPattern ? `the finished handmade ${input.productType} from the "${input.name}" pattern` : nameHasProduct ? `the "${input.name}"` : `the "${input.name}" ${input.productType}`;
   const reference = isPattern
     ? "Follow the Design spec from step 1 of this chat: write its colors and style into the image prompt and show the same finished design as the renders. Never use another seller's images as a reference."

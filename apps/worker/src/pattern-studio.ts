@@ -232,7 +232,7 @@ const MANUSCRIPTS: Record<PatternCraft, CraftManuscript> = {
       "3. Materials: fabric types and yardage for both widths, notions, tools",
       "4. Pattern pieces list and cutting chart",
       "5. Cutting layouts for 44/45 in and 58/60 in fabric",
-      "6. Printing the pattern: tiled US Letter and A4 pages with overlap marks, a page-assembly map and a 1 in / 2.5 cm test square, plus an A0 copy-shop file (simple rectangles may be given as dimensions instead)",
+      "6. Printing the pattern: every pattern piece full size (no piece is given as dimensions only), on tiled US Letter and A4 pages with overlap marks, a page-assembly map and a 1 in / 2.5 cm test square, plus an A0 copy-shop file",
       "7. Step-by-step sewing instructions with a diagram for every step",
       "8. Finishing and care",
       "9. Troubleshooting table: symptom - likely cause - fix"
@@ -395,9 +395,27 @@ const REAL_WORDS = new Set(["salon", "lemon", "melon", "seven", "women", "linen"
 // Ada yalnız renk ve stil girer; hastalık, durum ve etkinlik adları ("ADHD Fona Planner", "Bachelorette ...") ürün adına girmez.
 const NAME_BANNED_ACCENTS = new Set(["ipad", "iphone", "android", "tablet", "goodnotes", "notability", "digital", "printable", "hyperlinked", "adhd", "ocd", "autism", "autistic", "anxiety", "depression", "mental", "health", "therapy", "grief", "trauma", "bachelorette", "funeral", "memorial", "sympathy", "cancer", "sobriety", "recovery", "divorce", "pregnancy", "ivf", "fertility", "shadow", "self", "care", "black", "charcoal"]);
 
+// Gerçek kelimeye bir harf uzaklıktaki adlar da yazım hatası gibi okunur ("Nusery" → nursery, "Masery" → misery).
+const NEAR_WORDS = ["nursery", "misery", "mystery", "mastery", "mercy", "messy", "nosy", "nosey", "lousy", "pussy", "hussy", "sorry", "worry", "hurry", "curry", "fury", "jury", "query", "dreary", "weary", "savory", "salary", "celery", "gallery", "eatery", "battery", "lottery", "pottery", "flattery", "slavery", "bravery", "nunnery", "cutlery", "surgery", "forgery", "misty", "musty", "rusty", "dusty", "nasty", "tasty", "pasty", "hasty", "sissy", "bossy", "glossy", "mossy", "fussy", "dizzy", "busy", "lazy", "crazy", "hazy", "silly", "sully", "bully", "jolly", "holly", "dolly", "lolly", "polly", "sally", "susie", "suzie", "rosie", "josie", "lucy", "lily", "daisy", "maisie", "lacy", "racy", "pacy", "juicy", "spicy", "dicey", "icy", "venus", "minus", "sinus", "virus", "fungus", "mucus", "pus", "lupus", "anus", "onus", "bonus", "genus", "lotus", "cactus", "census", "nexus", "ulcer", "fever", "leper", "loser", "liar", "lunacy", "fallacy", "piracy", "privacy", "legacy", "agony", "felony", "colony", "ebony", "irony", "pony", "tiny", "shiny", "whiny", "slimy", "grimy", "bony", "puny", "runny", "sunny", "funny", "bunny", "honey", "money", "penny", "jenny", "nanny", "granny", "fanny", "canny", "uncanny", "tummy", "mummy", "dummy", "rummy", "yummy", "gummy", "scummy", "mommy", "tommy", "sammy", "jimmy", "kimmy", "lemony", "harmony", "ceremony", "simony", "alimony", "matrimony", "testimony"];
+function editDistanceAtMostOne(a: string, b: string): boolean {
+  if (Math.abs(a.length - b.length) > 1) return false;
+  let i = 0;
+  let j = 0;
+  let edits = 0;
+  while (i < a.length && j < b.length) {
+    if (a[i] === b[j]) { i += 1; j += 1; continue; }
+    edits += 1;
+    if (edits > 1) return false;
+    if (a.length > b.length) i += 1;
+    else if (b.length > a.length) j += 1;
+    else { i += 1; j += 1; }
+  }
+  return edits + (a.length - i) + (b.length - j) <= 1;
+}
+
 function acceptableCoinedWord(word: string): boolean {
   const lower = word.toLowerCase();
-  return !BAD_NAME_PARTS.test(lower) && !REAL_WORDS.has(lower);
+  return !BAD_NAME_PARTS.test(lower) && !REAL_WORDS.has(lower) && ![...REAL_WORDS, ...NEAR_WORDS].some((real) => real.length >= 4 && editDistanceAtMostOne(lower, real));
 }
 
 export function coinProductName(input: { productType: string; salt: string; accents?: string[]; avoidNames?: string[] }): string {
@@ -453,8 +471,9 @@ function trendOriginalityRules(input: PatternPlanInput): { tr: string[]; en: str
     en.push("Choose the radial repeat count that best suits the design and recalculate every round for it.");
   }
   if (WEARABLE.test(product)) {
-    tr.push("En az 3 beden kendi ölçü tablosuna göre hesaplanacak.");
-    en.push("Grade at least 3 sizes from your own size chart.");
+    const sizes = YARN_CRAFTS.has(input.craft) ? gradedSizes(input.sizeNote) : undefined;
+    tr.push(sizes ? `Listelenen her beden (${sizes[0]}-${sizes[sizes.length - 1]}) kendi ölçü tablosuna göre hesaplanacak.` : "En az 3 beden kendi ölçü tablosuna göre hesaplanacak.");
+    en.push(sizes ? `Grade every listed size (${sizes[0]} to ${sizes[sizes.length - 1]}) from your own size chart.` : "Grade at least 3 sizes from your own size chart.");
   }
   tr.push("Hiçbir yayımlanmış desenin yazısı, şeması, fotoğrafı, sayfa düzeni veya adı kullanılmayacak; başka satıcının görseli referans olarak bile kullanılmayacak.");
   en.push("Do not reproduce any text, chart, photo, diagram, page layout, or name from any published pattern or listing, and never use another seller's listing photos or any copyrighted image as a reference.");
@@ -499,6 +518,20 @@ function buildPatternPrompt(input: PatternPlanInput, name: string, rules: string
   const circular = yarn && CIRCULAR.test(input.productType);
   const sizes = wearable ? gradedSizes(input.sizeNote) : undefined;
   const toy = TOY.test(input.productType);
+  const kept = patternThemes({ features: input.trendFeatures, keyword: input.keyword, productType: input.productType }).kept.map(proseCase);
+  const direction = kept.length <= 1 ? kept.join("") : `${kept.slice(0, -1).join(", ")} and ${kept[kept.length - 1]}`;
+  const templateCraft = input.craft === "embroidery" || input.craft === "punch_needle";
+  const fileBase = name.replace(/[^A-Za-z0-9]+/g, "-").replace(/^-|-$/g, "");
+  const output = input.craft === "sewing"
+    ? [
+      "- Deliver the instructions as one print-ready HTML document (US Letter with 0.75 in margins so it also prints cleanly on A4, 11 pt body text, high contrast, clear headings) with inline SVG diagrams, ready to save as PDF without edits.",
+      "- Draw every pattern piece in code as vector shapes at full size, then build three piece files from the same shapes: tiled US Letter pages and tiled A4 pages (each with overlap marks, a page-assembly map and the test square on page 1) and one A0 copy-shop page.",
+      `- Upload set (4 files, each under 20 MB): ${fileBase}-Instructions.pdf, ${fileBase}-Pieces-US-Letter.pdf, ${fileBase}-Pieces-A4.pdf, ${fileBase}-Pieces-A0.pdf. If you can create files, export all four; otherwise give the HTML for each.`
+    ]
+    : [
+      "- Deliver the final manuscript as one print-ready HTML document (US Letter with 0.75 in margins so it also prints cleanly on A4, 11 pt body text, high contrast, clear headings) with inline SVG diagrams, ready to save as PDF without edits. If you can create files, also export it as a PDF.",
+      `- Upload set: ${fileBase}.pdf (one file under 20 MB).`
+    ];
   const lines = [
     `You are a senior ${craft.label.toLowerCase()} pattern designer and a meticulous technical editor. Design an ORIGINAL, sellable digital ${craft.label.toLowerCase()} pattern and produce a print-ready PDF manuscript.`,
     "",
@@ -510,6 +543,9 @@ function buildPatternPrompt(input: PatternPlanInput, name: string, rules: string
     `- Skill level: ${skill}`,
     ...(yarn ? manuscript.product(input, sizes) : [`- Target size: ${input.sizeNote || "choose a practical standard size and state it in inches and centimeters"}`, ...manuscript.product(input, sizes)]),
     `- Colors: ${input.colors?.length ? input.colors.join(", ") : "propose a 3-color palette with names and hex codes"}`,
+    // Özellik yoksa tasarım yönü boş kalmaz: yapay zekâ tek motif ve tek stil seçip spec'e yazar.
+    `- Design direction: ${direction ? `${direction}, built into one design with a single theme` : "choose one clear motif and one style that suit this item and these buyers, and write both into the Design spec"}`,
+    ...(templateCraft ? ["- Template size: the full-size template must fit inside 6.5 × 9 in so it prints at 100% on both US Letter and A4; for a larger hoop or frame, tile the template on several pages with overlap marks and an assembly map."] : []),
     `- Terminology: ${craft.terms}. Give every measurement in inches and centimeters.`,
     "",
     ...(input.referenceSource === "trend" ? [
@@ -541,7 +577,7 @@ function buildPatternPrompt(input: PatternPlanInput, name: string, rules: string
     `Footer on every page except the cover: "${name} · © GXL Market Studio · page N"`,
     "",
     "## Output format",
-    "- Deliver the final manuscript as one print-ready HTML document (US Letter with 0.75 in margins so it also prints cleanly on A4, 11 pt body text, high contrast, clear headings) with inline SVG diagrams, ready to save as PDF without edits. If you can create files, also export it as a PDF.",
+    ...output,
     `- The "Design spec" JSON (${manuscript.spec}) comes first, in step 1 of the package, and again, updated, after the manuscript. The product renders are made from it, so it must match the pattern exactly.`,
     "- Finally list every [TEST-MAKE CHECK] item.",
     "",
@@ -563,13 +599,26 @@ function lifestyleScene(product: string): string {
   return "styled in a calm, bright home setting with natural materials";
 }
 
+// Görsel modelleri sayıları tutturamaz: render yalnız stil, renk ve genel biçimi gösterir; tam sayılar kodla çizilen şemalardadır.
+const CRAFT_MADE: Record<PatternCraft, string> = {
+  crochet: "crocheted",
+  knitting: "knitted",
+  cross_stitch: "cross-stitched",
+  embroidery: "hand-embroidered",
+  sewing: "sewn",
+  macrame: "macrame",
+  punch_needle: "punch needle"
+};
+
 function buildRenderPrompt(input: PatternPlanInput, name: string): string {
   const craft = CRAFTS[input.craft];
   const material = input.yarnNote || craft.defaultMaterial;
+  const craftWords = new Set([...craft.label.toLowerCase().split(" "), ...craft.short.split(" "), "sewing"]);
+  const item = input.productType.split(/\s+/).filter((word) => !craftWords.has(word.toLowerCase())).join(" ") || input.productType;
   return [
-    `Photorealistic product photo of a handmade ${craft.label.toLowerCase()} ${input.productType} called "${name}", made from ${material}.`,
-    "It must match this design spec exactly (paste the Design spec JSON from the finished pattern here): <DESIGN SPEC JSON>.",
-    "Show exactly the colors, proportions, motif counts and details in the spec; do not add or remove motifs, petals, leaves, rounds or pieces.",
+    `Photorealistic product photo of a handmade ${CRAFT_MADE[input.craft]} ${item} from the "${name}" pattern, made from ${material}.`,
+    "Use the name, colors (name + hex), style and finished size from the Design spec in step 1 of this chat.",
+    "This is a style render: keep the colors, proportions and overall design of the spec. The exact counts are in the charts and diagrams drawn in code, so do not try to show them.",
     `Real ${YARN_CRAFTS.has(input.craft) || input.craft === "punch_needle" ? "fiber" : input.craft === "sewing" ? "fabric" : input.craft === "macrame" ? "cord" : "thread"} texture with individually visible ${input.craft === "sewing" ? "seams and topstitching" : input.craft === "macrame" ? "knots" : `${craft.label.toLowerCase()} stitches`}, slight natural irregularity, no plastic or CGI look.`,
     "Main image: flat lay, centered, the item fills about 70% of the frame, on light natural linen, soft diffused daylight from the upper left, gentle shadow, portrait (make it at the image tool's native portrait size, then crop to 4:5 in code).",
     "Also create, one per reply: (1) a macro close-up showing the stitch or knot structure, (2) a lifestyle image " + lifestyleScene(input.productType) + ", (3) a size reference image next to a ruler.",
@@ -714,13 +763,13 @@ function shortName(input: DigitalListingInput): string {
 
 // Her tekniğin alıcı ifadeleri: trend ve ürün etiketleri 13'ü doldurmazsa bunlarla tamamlanır (hepsi ürüne uyar).
 const CRAFT_TAG_STEMS: Record<PatternCraft, string[]> = {
-  crochet: ["crochet tutorial", "crochet design", "diy crochet", "crochet pdf"],
-  knitting: ["knitting tutorial", "knit design", "diy knitting", "knitting pdf"],
+  crochet: ["crochet design", "diy crochet", "crochet pdf", "crochet project"],
+  knitting: ["knit design", "diy knitting", "knitting pdf", "knitting project"],
   cross_stitch: ["cross stitch chart", "counted cross stitch", "cross stitch design", "modern cross stitch", "cross stitch pdf", "dmc cross stitch"],
   embroidery: ["hand embroidery", "embroidery design", "embroidery template", "hoop art pattern", "stitch guide", "embroidery pdf", "diy embroidery"],
   punch_needle: ["punch needle design", "punch needle pdf", "punch needle art", "diy punch needle"],
-  sewing: ["sewing pdf", "sewing project", "diy sewing", "sewing tutorial"],
-  macrame: ["macrame tutorial", "macrame decor", "diy macrame", "macrame knots"]
+  sewing: ["sewing pdf", "sewing project", "diy sewing", "sewing pattern pdf"],
+  macrame: ["macrame decor", "diy macrame", "macrame knots", "macrame project"]
 };
 const COMPOUND_HEADS = new Set(["art", "rug", "hanging", "hanger", "square", "runner", "board", "ring", "ball", "cozy"]);
 const GENERIC_TAGS = new Set(["instant download", "digital download", "printable pattern", "digital pattern", "pdf pattern", "pattern pdf"]);
@@ -732,7 +781,8 @@ const singularWord = (word: string) => word.length > 3 && word.endsWith("s") && 
 // Desende tek tema: özellikler birbiriyle çatışmaz, trend etiketi temaya uyar ve yalnız desenin gerçekten
 // içerdiği kelimelerden (ürün, teknik, özellik, malzeme, ölçü, seviye, renk) kurulur.
 function patternThemes(input: Pick<DigitalListingInput, "features" | "keyword" | "productType">) {
-  const usable = [...new Set((input.features || []).map((feature) => feature.toLowerCase()))].filter((feature) => !MISLEADING_FEATURE.test(feature) && !isIpRisky(feature));
+  const usable = [...new Set((input.features || []).map((feature) => feature.toLowerCase().replace(/^vintage$/, "vintage style")))]
+    .filter((feature) => !MISLEADING_FEATURE.test(feature) && !isIpRisky(feature) && !/\bvintage\b(?!\s+(style|inspired))/.test(feature));
   return harmonizeThemes(usable, themeFamilies(`${input.keyword || ""} ${input.productType}`));
 }
 
@@ -747,7 +797,7 @@ function relevantTrendTags(input: DigitalListingInput): string[] {
     ...(input.yarnNote || craft.defaultMaterial).toLowerCase().split(/[^a-z]+/),
     ...(input.sizeNote || "").toLowerCase().split(/[^a-z0-9-]+/),
     ...(input.colors || []).flatMap((color) => color.toLowerCase().split(/\s+/)),
-    ...SKILL_WORDS, "pattern", "patterns", "pdf", "diy", "tutorial", "instant", "download", "digital", "printable", "us", "terms", "plus", "size"
+    ...SKILL_WORDS, "pattern", "patterns", "pdf", "diy", "instant", "download", "digital", "printable", "us", "terms", "plus", "size"
   ].filter(Boolean).flatMap((word) => [word, singularWord(word)]));
   const productWords = input.productType.toLowerCase().split(/\s+/);
   const lastWord = productWords.at(-1) || input.productType;
@@ -755,7 +805,8 @@ function relevantTrendTags(input: DigitalListingInput): string[] {
   const topical = new Set([...productWords, singularWord(lastWord), ...features.flatMap((feature) => feature.split(/\s+/))].filter((word) => !craftWords.has(word)));
   const relevant = (input.trendTags || []).filter((tag) => {
     const words = tag.toLowerCase().split(/\s+/);
-    return !GENERIC_TAGS.has(tag) && !isIpRisky(tag) && !MISLEADING_FEATURE.test(tag) && fitsTheme(tag, families)
+    // "vintage doily" yeni bir deseni eski ürün gibi gösterir; yalnız "vintage style/inspired" kullanılır.
+    return !GENERIC_TAGS.has(tag) && !isIpRisky(tag) && !MISLEADING_FEATURE.test(tag) && fitsTheme(tag, families) && !/\bvintage\b(?!\s+(style|inspired))/.test(tag)
       && words.some((word) => topical.has(word) || topical.has(singularWord(word)))
       && words.every((word) => TAG_FILLERS.has(word) || vocabulary.has(word) || vocabulary.has(singularWord(word)));
   });
@@ -816,7 +867,6 @@ function buildTags(input: DigitalListingInput): string[] {
   const lastWord = productWords.length > 1 && COMPOUND_HEADS.has(productWords.at(-1)!) ? product : productWords.at(-1) || product;
   const skillWord = SKILL_LABELS[input.skillLevel || "easy"].tag;
   const skillTags = input.skillLevel === "easy" || !input.skillLevel ? [`easy ${craft.short} pattern`] : [`${skillWord} ${craft.tag}`, `${skillWord} ${craft.short}`];
-  const colorTags = (input.colors || []).slice(0, 2).map((color) => `${color.toLowerCase()} ${lastWord}`);
   const { kept: features, families } = patternThemes(input);
   const featureTags = features.map((feature) => `${feature} ${lastWord}`);
   return normalizeEtsyTags([
@@ -825,8 +875,8 @@ function buildTags(input: DigitalListingInput): string[] {
     ...featureTags,
     ...(productWords.length > 1 ? [product] : []),
     `${product} pattern`,
-    `${craft.short} ${product}`,
-    `${craft.tag} ${product}`,
+    // "sewing tote bag" dikiş malzemesi çantası gibi okunur; dikişte teknik + ürün etiketi kullanılmaz.
+    ...(input.craft !== "sewing" ? [`${craft.short} ${product}`, `${craft.tag} ${product}`] : []),
     `${lastWord} pattern`,
     // "sewing bag" dikiş malzemesi çantası gibi okunur; dikişte teknik + ürün etiketi kullanılmaz.
     ...(input.craft !== "sewing" ? [`${craft.short} ${lastWord}`] : []),
@@ -837,8 +887,6 @@ function buildTags(input: DigitalListingInput): string[] {
     `${craft.tag} pattern pdf`,
     `${craft.short} ${lastWord} pdf`,
     `diy ${product}`,
-    `${lastWord} tutorial`,
-    ...colorTags,
     ...(CIRCULAR.test(product) ? [`${craft.short} home decor`] : WEARABLE.test(product) ? [`${craft.short} gift pattern`] : []),
     "printable pattern",
     `gift for ${craft.fan}`,

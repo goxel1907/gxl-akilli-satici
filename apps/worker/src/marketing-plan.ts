@@ -178,6 +178,36 @@ function hashtagsFor(input: MarketingPlanInput, lang: "tr" | "en", fallback: str
   return row ? (lang === "en" ? row[1] : row[2]) : lang === "en" ? ["#printables", "#digitaldownload", "#instantdownload", "#etsyfinds"] : ["#yazdırılabilir", "#dijitalürün"];
 }
 
+// İngilizce adlı ürünün Türkçe karşılığı: satıcı gönderinin ne dediğini anlasın diye sık kelimeler çevrilir.
+const EN_TR_WORDS: Array<[RegExp, string]> = [
+  [/\bjunk journal\b/, "kolaj defteri"], [/\bcoloring pages?\b|\bcoloring book\b/, "boyama sayfaları"], [/\bwall art\b/, "duvar sanatı"], [/\brecipe cards?\b/, "tarif kartları"],
+  [/\bprayer beads\b/, "tesbih"], [/\bsterling silver\b/, "gümüş"], [/\bdigital paper\b/, "dijital kâğıt"], [/\bhabit tracker\b/, "alışkanlık takibi"],
+  [/\bbridal shower\b/, "gelin hamamı"], [/\bbaby shower\b/, "baby shower"], [/\bchristmas\b/, "Noel"], [/\bhalloween\b/, "Cadılar Bayramı"], [/\bcozy\b/, "sıcacık"],
+  [/\bvintage\b/, "vintage"], [/\bbudget\b/, "bütçe"], [/\bweekly\b/, "haftalık"], [/\bdaily\b/, "günlük"], [/\bmeal\b/, "yemek"], [/\bwedding\b/, "düğün"],
+  [/\bkids\b/, "çocuk"], [/\bplanner\b/, "planlayıcı"], [/\bjournal\b/, "günlük defteri"], [/\bcalendar\b/, "takvim"], [/\bgames?\b/, "oyunları"],
+  [/\bcardigan\b/, "hırka"], [/\bsweater\b/, "kazak"], [/\bbag\b/, "çanta"], [/\bcrochet\b/, "tığ işi"], [/\bknit(ting)?\b/, "örgü"], [/\bpattern\b/, "deseni"],
+  [/\bornament\b/, "süs"], [/\bpapers?\b/, "kâğıt"], [/\bprintables?\b/, "yazdırılabilir"], [/\bkit\b/, "seti"], [/\bpack\b/, "paketi"], [/\bset\b/, "seti"]
+];
+
+function turkishGloss(name: string): string | undefined {
+  if (/[çğıöşüÇĞİÖŞÜ]/.test(name)) return undefined;
+  let rest = name.toLowerCase();
+  const found: Array<{ index: number; word: string }> = [];
+  for (const [pattern, word] of EN_TR_WORDS) {
+    const match = pattern.exec(rest);
+    if (!match) continue;
+    found.push({ index: match.index, word });
+    rest = `${rest.slice(0, match.index)}${" ".repeat(match[0].length)}${rest.slice(match.index + match[0].length)}`;
+  }
+  return found.length ? found.sort((a, b) => a.index - b.index).map((item) => item.word).join(" ") : undefined;
+}
+
+// "prayer beads" çoğuldur: "ship to the US", "Find them".
+function isPluralName(name: string): boolean {
+  const last = name.trim().split(/\s+/).at(-1)!.toLowerCase();
+  return /[^su]s$/.test(last) && !/(canvas|atlas|iris|lens|series|species|kilims?)$/.test(last);
+}
+
 function templateCopy(input: MarketingPlanInput): Copy {
   const name = input.productName;
   const kind = KIND_TR[input.kind];
@@ -204,19 +234,21 @@ function templateCopy(input: MarketingPlanInput): Copy {
   const claimEn = DIGITAL.has(input.kind) ? "instant digital download" : input.kind === "vintage" ? "a one-of-a-kind vintage find from Türkiye" : input.kind === "knitwear" ? "handmade in Türkiye" : "from Türkiye";
   const claimTr = DIGITAL.has(input.kind) ? "anında indirilebilir dijital ürün" : input.kind === "vintage" ? "Türkiye'den tek parça vintage ürün" : input.kind === "knitwear" ? "Türkiye'de el yapımı" : "Türkiye'den";
   const etsy = input.channel === "etsy";
-  const shipEn = DIGITAL.has(input.kind) ? "" : etsy ? ", ships to the US" : "";
+  const plural = isPluralName(nameEn);
+  const shipEn = DIGITAL.has(input.kind) ? "" : etsy ? `, ${plural ? "ship" : "ships"} to the US` : "";
+  const gloss = etsy ? turkishGloss(name) : undefined;
   const shipTr = DIGITAL.has(input.kind) ? "" : etsy ? ", ABD'ye gönderilir" : "";
   return {
     captionTr: etsy
-      ? `${name}: ${claimTr}${shipTr}. Etsy mağazamızda (bağlantı profilde).`
+      ? `${name}${gloss && gloss.toLowerCase() !== name.toLowerCase() ? ` (${gloss})` : ""}: ${claimTr}${shipTr}. Etsy mağazamızda (bağlantı profilde).`
       : `${name}: ${claimTr}.${price ? ` Fiyat: ${price}.` : ""} Sipariş ve sorularınız için profildeki bağlantıya dokunun ya da DM atın.`,
-    captionEn: `${nameEn}: ${claimEn}${shipEn}. Find it in our ${etsy ? "Etsy" : "online"} shop (link in bio).`,
+    captionEn: `${nameEn}: ${claimEn}${shipEn}. Find ${plural ? "them" : "it"} in our ${etsy ? "Etsy" : "online"} shop (link in bio).`,
     hashtagsTr: hashtagsFor(input, "tr", tagsTr[input.kind]),
     hashtagsEn: hashtagsFor(input, "en", tagsEn[input.kind]),
     storyTr: `Yeni ${kind}: ${name}. Bağlantıya dokunun 👆`,
     whatsappTr: `Merhaba, "${name}" hakkında bilgi almak istiyorum.`,
     pinTitleEn: nameEn,
-    pinDescriptionEn: `${nameEn}. ${DIGITAL.has(input.kind) ? "Instant digital download." : input.kind === "vintage" ? "A one-of-a-kind vintage find, ships from Türkiye." : "Ships from Türkiye."}${etsy ? " Available in our Etsy shop." : ""}`,
+    pinDescriptionEn: `${nameEn}. ${DIGITAL.has(input.kind) ? "Instant digital download." : input.kind === "vintage" ? "A one-of-a-kind vintage find, ships from Türkiye." : plural ? "They ship from Türkiye." : "Ships from Türkiye."}${etsy ? " Available in our Etsy shop." : ""}`,
     audienceTr: AUDIENCE[input.kind].tr
   };
 }
@@ -435,7 +467,8 @@ function pinterest(input: MarketingPlanInput, copy: Copy): ChannelAdvice {
       ? "ABD'li alıcı planlayıcı, desen, ev dekoru ve moda fikrini Pinterest'te arar; bir pin aylarca trafik getirir. Uygulamadaki Pinterest bölümü pinleri sizin yerinize sırayla paylaşır."
       : "Pinterest ABD ağırlıklıdır; Türk alıcı için etkisi düşüktür. Etsy'ye açılınca ilk kanal olur.",
     stepsTr: ["Etsy → Pinterest bölümünden hesabı bağlayın.", "Her ürün için 3–5 farklı dikey (2:3) görsel pinleyin; hepsi ilan bağlantısına gitsin."],
-    copy: [{ labelTr: "Pin başlığı ve açıklaması (İngilizce)", text: `${copy.pinTitleEn}\n\n${copy.pinDescriptionEn}` }]
+    // Shopier ürününün İngilizce pini ABD'li alıcıyı satın alamayacağı bir yere götürür; pin metni Etsy'de verilir.
+    copy: input.channel === "etsy" ? [{ labelTr: "Pin başlığı ve açıklaması (İngilizce)", text: `${copy.pinTitleEn}\n\n${copy.pinDescriptionEn}` }] : []
   });
 }
 

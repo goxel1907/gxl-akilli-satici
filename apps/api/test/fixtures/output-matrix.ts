@@ -276,21 +276,28 @@ export async function marketingOutputs() {
 }
 
 // Tüm üretilmiş metinler tek düz listede: denetleyici ve ajan incelemesi için.
+// Örnekler telefona giden hâliyle (denetimden geçmiş) alınır.
 export async function allOutputSamples(): Promise<OutputSample[]> {
   const samples: OutputSample[] = [];
-  for (const item of printableOutputs()) {
+  for (const raw of printableOutputs()) {
+    const guarded = guardPrintablePlan(raw.brief, raw.listing, { kind: raw.kind, formats: raw.input.formats });
+    const item = { ...raw, brief: guarded.brief, listing: guarded.listing };
     samples.push({ id: item.id, studio: "printable", kind: item.kind, field: "masterPrompt", text: item.brief.masterPrompt });
     samples.push({ id: item.id, studio: "printable", kind: item.kind, field: "listing", text: [item.listing.title, item.listing.tags.join(", "), item.listing.description].join("\n\n"), listing: { ...item.listing, digital: true } });
     item.brief.pins.forEach((pin, index) => samples.push({ id: item.id, studio: "printable", kind: item.kind, field: `pin${index + 1}`, text: `${pin.title}\n${pin.description}` }));
   }
-  for (const item of patternOutputs()) {
+  for (const raw of patternOutputs()) {
+    const guarded = guardPatternPlan(raw.brief, raw.listing, { craft: raw.craft });
+    const item = { ...raw, brief: guarded.brief, listing: guarded.listing };
     samples.push({ id: item.id, studio: "pattern", craft: item.craft, field: "masterPrompt", text: item.brief.masterPrompt });
     samples.push({ id: item.id, studio: "pattern", craft: item.craft, field: "listing", text: [item.listing.title, item.listing.tags.join(", "), item.listing.description].join("\n\n"), listing: { ...item.listing, digital: true } });
   }
-  for (const item of productOutputs()) {
+  for (const raw of productOutputs()) {
+    const item = { ...raw, plan: guardProductPlan(raw.plan).plan };
     samples.push({ id: item.id, studio: "product", field: "listing", text: [item.plan.title, item.plan.tags.join(", "), item.plan.description].join("\n\n"), listing: { title: item.plan.title, tags: item.plan.tags, description: item.plan.description, materials: item.plan.materials, digital: false } });
   }
-  for (const item of await marketingOutputs()) {
+  for (const raw of await marketingOutputs()) {
+    const item = { ...raw, plan: guardMarketingPlan(raw.plan).plan };
     for (const channel of item.plan.channels) for (const block of channel.copy) samples.push({ id: `${item.id}/${channel.id}`, studio: "marketing", field: block.labelTr, text: block.text });
   }
   for (const [id, preset] of Object.entries(SHOP_PRESETS)) {

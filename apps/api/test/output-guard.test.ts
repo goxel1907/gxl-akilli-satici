@@ -1,13 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { guardMarketingPlan, guardPrintablePlan, repairText } from "../../worker/src/output-guard.js";
+import { guardMarketingPlan, guardPatternPlan, guardPrintablePlan, guardProductPlan, repairText } from "../../worker/src/output-guard.js";
 import { buildMarketingPlan, normalizeMarketingInput } from "../../worker/src/marketing-plan.js";
 import { buildPatternSeed } from "../../worker/src/pattern-seed.js";
 import { buildDigitalListing, buildPatternBrief, coinProductName, gradedSizes, normalizeDigitalListingInput, normalizePatternPlanInput } from "../../worker/src/pattern-studio.js";
 import { buildPrintableBrief, buildPrintableListing } from "../../worker/src/printable-studio.js";
 import { buildProductPlan, normalizeProductInput } from "../../worker/src/product-studio.js";
 import { fitsTheme, harmonizeThemes, holidayOutOfWindow, proseCase, themeFamilies } from "../../worker/src/theme.js";
-import { guardReports, MATRIX_NOW, PATTERN_SCENARIOS, PRINTABLE_SCENARIOS, printableOutputs } from "./fixtures/output-matrix.js";
+import { guardReports, marketingOutputs, MATRIX_NOW, PATTERN_SCENARIOS, patternOutputs, PRINTABLE_SCENARIOS, printableOutputs, productOutputs } from "./fixtures/output-matrix.js";
 
 // Uygulamanın ürettiği her metin telefona gitmeden önce otomatik denetimden geçer. Bu testler, gerçek Etsy aramalarına
 // benzeyen 25+ senaryonun her birini 3 farklı tohumla üretir ve denetleyicinin hiçbir hata bulmamasını şart koşar.
@@ -18,6 +18,16 @@ test("every generated package, listing, pin and post passes the automatic check 
   const failing = rows.filter((row) => !row.report.ok).map((row) => `${row.id}: ${row.report.issues.filter((issue) => issue.severity === "error").map((issue) => `${issue.code} (${issue.excerpt || issue.messageTr})`).join("; ")}`);
   assert.deepEqual(failing, []);
   assert.ok(rows.reduce((sum, row) => sum + row.report.checks, 0) > 5000);
+});
+
+test("generators write clean text at the source, so the checker has nothing left to repair", async () => {
+  const repaired = [
+    ...printableOutputs().filter((item) => guardPrintablePlan(item.brief, item.listing, { kind: item.kind, formats: item.input.formats }).quality.fixed.length).map((item) => item.id),
+    ...patternOutputs().filter((item) => guardPatternPlan(item.brief, item.listing, { craft: item.craft }).quality.fixed.length).map((item) => item.id),
+    ...productOutputs().filter((item) => guardProductPlan(item.plan).quality.fixed.length).map((item) => item.id),
+    ...(await marketingOutputs()).filter((item) => guardMarketingPlan(item.plan).quality.fixed.length).map((item) => item.id)
+  ];
+  assert.deepEqual(repaired, []);
 });
 
 test("the Christmas junk journal package that went to ChatGPT is now one coherent theme with a full kit", () => {

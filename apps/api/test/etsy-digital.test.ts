@@ -141,7 +141,8 @@ test("pattern brief forces an original design and ties renders to the pattern sp
   assert.match(brief.patternPrompt, /Design spec/);
   assert.match(brief.patternPrompt, /GXL Market Studio\. For personal use/);
   assert.match(brief.patternPrompt, /lie flat/);
-  assert.match(brief.renderPrompt, /<DESIGN SPEC JSON>/);
+  assert.match(brief.renderPrompt, /from the Design spec in step 1 of this chat/);
+  assert.match(brief.renderPrompt, /This is a style render/);
   assert.equal(brief.photoPlan.length, 10);
 });
 

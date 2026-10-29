@@ -141,7 +141,7 @@ export const PRINTABLE_KINDS: Record<PrintableKind, KindProfile> = {
       "A size guide page listing which file prints which frame size"
     ],
     designEn: ["One 2:3 master per print at 5400x8100 px (18x27 in at 300 dpi); every other ratio is cropped from it in code at 300 dpi for its largest size", "Important elements kept away from edges so mats and frames do not cover them", "sRGB JPG files plus a PDF size guide"],
-    textRuleEn: "US English spelling, no typos. The art prints carry no text, footer, page number or signature; only the size guide, how-to-print and license pages carry text.",
+    textRuleEn: "US English spelling, no typos. The art prints carry no text, footer, page number or signature; only the size guide, how-to-print, thank-you and license pages carry text.",
     signatureEn: "a distinct artistic detail (texture, composition or palette move) that sets the set apart from the top-ranking prints",
     includedEn: ["One file per frame ratio", "Prints up to 18x24 in", "Size guide"],
     tagStems: ["art print", "digital print", "gallery wall art", "printable poster", "home decor print", "wall decor", "printable art", "set of prints"],
@@ -438,7 +438,8 @@ function buildArtPlan(prepared: Prepared, profile: KindProfile, pages: number): 
   const style = styles.length ? `${joinWords(styles.map(proseCase))} style` : "one consistent original illustration style";
   const subjectAt = (index: number) => subjects[index % Math.max(1, subjects.length)] || `an original ${input.productType} theme`;
   // Konu sayısı sayfa sayısından azsa her sayfa farklı bir kompozisyon alır; aynı görsel iki kez üretilmez.
-  const variedAt = (index: number, count: number) => subjects.length >= count ? subjectAt(index) : `${subjectAt(index)}, ${COMPOSITIONS[index % COMPOSITIONS.length]}`;
+  const compositions = COMPOSITIONS.filter((composition) => !styles.some((styleWord) => composition.includes(styleWord)));
+  const variedAt = (index: number, count: number) => subjects.length >= count ? subjectAt(index) : `${subjectAt(index)}, ${compositions[index % compositions.length]}`;
   const used = (count: number) => subjects.slice(0, Math.min(subjects.length, count));
   const sharedNotes = [
     "Keep one consistent style and the spec palette across every image, and replace any image that breaks a rule.",
@@ -573,6 +574,13 @@ function deliverables(prepared: Prepared, name: string, formats: string[]): stri
   return [`Upload set: ${fit(formats.map((format) => `${file}-${fileSlug(format)}.pdf`)).join("; ")}.`, limit];
 }
 
+// Yazı kuralı tek yerden: kâğıt paketinde süs sayfası olmadığı için kural yalnız kâğıtları sayar.
+function textRule(prepared: Prepared): string {
+  const { input } = prepared;
+  const rule = PRINTABLE_KINDS[input.kind].textRuleEn;
+  return input.kind === "paper_craft" && paperMode(input.productType) === "papers" ? rule.replace("Patterned papers, solid papers and ephemera sheets are", "Patterned and solid papers are") : rule;
+}
+
 function themeLine(prepared: Prepared): string {
   const lead = (prepared.input.trendFeatures || []).filter((feature) => themeFamilies(feature).size || feature.split(" ").every((word) => STYLE_WORDS.has(word) || THEME_ADJECTIVES.has(word) || word === "style"));
   return lead.length
@@ -618,7 +626,7 @@ function buildPdfPrompt(prepared: Prepared, profile: KindProfile, name: string, 
     "",
     "## Design rules",
     ...(input.kind === "paper_craft" && paperMode(input.productType) === "papers" ? ["300 dpi files (3600x3600 px for 12x12 in sheets)", "JPG for the 12x12 papers, plus printable PDF editions"] : profile.designEn).map((line) => `- ${line}`),
-    `- ${input.kind === "paper_craft" && paperMode(input.productType) === "papers" ? profile.textRuleEn.replace("Patterned papers, solid papers and ephemera sheets are", "Patterned and solid papers are") : profile.textRuleEn}`,
+    `- ${textRule(prepared)}`,
     "",
     "## Work in three passes",
     `PASS 1 - Page plan: a table with one line per page (number, title, purpose, elements, format notes)${art.budget.length ? " that follows the page budget exactly" : ""}.`,
@@ -822,7 +830,7 @@ function checklistFor(prepared: Prepared): string[] {
     input.kind === "digital_planner"
       ? "Every page reads well at 100% zoom on a tablet, and every tab and index link jumps to the right page."
       : `Every page sits inside the safe margins and prints at 100% (Actual size) in every included size (${printSizes.join(", ")}) without clipping.`,
-    PRINTABLE_KINDS[input.kind].textRuleEn,
+    textRule(prepared),
     "The whole product follows one theme; nothing from another season, holiday or mood appears.",
     "All fonts are licensed for commercial use; list them.",
     "No brand, character or celebrity names; all artwork is original and no other seller's image was used as a reference.",
@@ -1026,7 +1034,7 @@ function buildDescription(prepared: Prepared, name: string, art: ArtPlan, hook?:
   // "Christmas · Christmas Busy Book" olmaz: başka bir özelliğin içinde geçen özellik tekrar yazılmaz.
   const highlights = features.filter((feature, index) => !features.some((other, otherIndex) => otherIndex !== index && other.length > feature.length && new RegExp(`\\b${escapeRegex(feature)}\\b`, "i").test(other)));
   return [
-    hook ? `${name}: ${hook}` : `${name} is ${article("original")} original ${productPhrase(input.productType)}${lead}, ${useSentence(input.kind)}.`,
+    hook ? `${name}: ${hook}` : `${name} is ${article("original")} original ${proseCase(productPhrase(input.productType))}${lead}, ${useSentence(input.kind)}.`,
     "",
     "THIS IS A DIGITAL PRODUCT. NO PHYSICAL ITEM WILL BE SHIPPED.",
     "",

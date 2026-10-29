@@ -24,6 +24,8 @@ export interface ShopPreset extends ShopSettings {
   tagline: string;
 }
 
+// Fiziksel ürün satan mağazada dijital teşekkür mesajı yalnız sipariş dijital dosya içeriyorsa geçerlidir.
+const DIGITAL_THANKS_IF = "Thank you for your purchase! If your order includes a digital file, it is ready on your Etsy Purchases page (You > Purchases and reviews > Download files). Questions? Just reply to this message; we're happy to help.";
 const DIGITAL_THANKS = "Thank you for your purchase! Your files are ready on your Etsy Purchases page (You > Purchases and reviews > Download files). Print at Actual size / 100% scale. Questions? Just reply to this message; we're happy to help.";
 
 export const SHOP_PRESETS: Record<ShopAudience, ShopPreset> = {
@@ -52,9 +54,9 @@ export const SHOP_PRESETS: Record<ShopAudience, ShopPreset> = {
     audienceTr: "Kendine veya Ramazan, Bayram ve özel günler için anlamlı hediye arayan alıcılar.",
     tagline: "Sterling silver prayer beads & thoughtful gifts",
     title: "Sterling Silver Prayer Beads & Islamic Gifts",
-    announcement: "Welcome to GXL Market Studio! We offer sterling silver tesbih (prayer beads) and thoughtful gifts for Ramadan, Eid and special days. Every listing shows the real materials, measurements and photos of the piece. Questions about a piece or a gift note? Send us a message; we're happy to help.",
+    announcement: "Welcome to GXL Market Studio! We offer sterling silver tesbih (prayer beads) and thoughtful gifts for Ramadan, Eid and special days. Our listings show real photos of each piece and describe its materials honestly. Questions about a piece or a gift note? Send us a message; we're happy to help.",
     saleMessage: "Thank you for your order from GXL Market Studio! Your prayer beads will be packed with care. If you would like a gift note, just reply to this message.",
-    digitalSaleMessage: DIGITAL_THANKS,
+    digitalSaleMessage: DIGITAL_THANKS_IF,
     sections: ["Silver Prayer Beads", "Tesbih & Misbaha", "Ramadan & Eid Gifts"]
   },
   vintage: {
@@ -64,7 +66,7 @@ export const SHOP_PRESETS: Record<ShopAudience, ShopPreset> = {
     title: "Curated Vintage Silver, Copper & Turkish Finds",
     announcement: "Welcome to GXL Market Studio! We hand-select vintage pieces from Türkiye: silver jewelry, copper and textiles that are at least 20 years old. Every listing shows the real item with honest notes on age and condition. Questions? Send us a message; we're happy to help.",
     saleMessage: "Thank you for your order from GXL Market Studio! Your vintage piece will be packed with care. Reply to this message with any questions.",
-    digitalSaleMessage: DIGITAL_THANKS,
+    digitalSaleMessage: DIGITAL_THANKS_IF,
     sections: ["Vintage Silver", "Vintage Copper", "Rugs & Textiles"]
   }
 };

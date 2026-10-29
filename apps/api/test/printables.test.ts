@@ -224,7 +224,7 @@ test("every part goes into one ordered master prompt for a single chat", () => {
   const doily = buildPatternBrief({ craft: "crochet", productType: "doily", colors: ["cream"], seed: "d" } as never);
   assert.match(doily.masterPrompt, /## Brief R - product renders/);
   assert.ok(!doily.masterPrompt.includes("<DESIGN SPEC JSON>"));
-  assert.match(doily.masterPrompt, /Design spec JSON from step 1 of this chat/);
+  assert.match(doily.masterPrompt, /Design spec JSON in step 1 of this chat/);
 });
 
 test("demand reads the leading quarter too, so big printable niches are not called weak", () => {
