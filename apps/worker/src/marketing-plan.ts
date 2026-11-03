@@ -113,7 +113,7 @@ const KIND_EN: Record<MarketingProductKind, string> = { pdf: "printable", patter
 // PDF ve desen adları çoğunlukla İngilizcedir; Türkçe yazıldıysa sık kelimeler çevrilir ("Bütçe planlayıcı" → "Budget planner").
 const TR_EN_WORDS: Array<[RegExp, string]> = [
   [/bütçe/, "budget"], [/planlayıcı|planlayici|ajanda/, "planner"], [/günlük|gunluk|defter/, "journal"], [/boyama/, "coloring pages"], [/tarif/, "recipe cards"],
-  [/duvar sanatı|duvar/, "wall art"], [/takvim/, "calendar"], [/oyun/, "games"], [/çocuk|cocuk/, "kids"], [/etkinlik/, "activity"], [/alışkanlık/, "habit tracker"],
+  [/duvar k[âa]ğıdı|duvar kagidi/, "phone wallpaper"], [/duvar sanatı|duvar(?! k[âa]ğıdı| kagidi)/, "wall art"], [/çıkartma|cikartma/, "stickers"], [/bulmaca|kelime avı/, "puzzle book"], [/etiket/, "labels"], [/takvim/, "calendar"], [/oyun/, "games"], [/çocuk|cocuk/, "kids"], [/etkinlik/, "activity"], [/alışkanlık/, "habit tracker"],
   [/yemek|menü/, "meal"], [/düğün|dugun/, "wedding"], [/hırka|hirka/, "cardigan"], [/kazak/, "sweater"], [/çanta|canta/, "bag"], [/tığ işi|tig isi/, "crochet"],
   [/örgü|orgu/, "knitting"], [/desen|model/, "pattern"], [/noel|yılbaşı|yilbasi/, "Christmas"], [/kâğıt|kagit/, "paper"]
 ];
@@ -123,7 +123,7 @@ function translateDigitalName(name: string): string | undefined {
   const found = TR_EN_WORDS.map(([pattern, word]) => ({ index: lower.search(pattern), word })).filter((item) => item.index >= 0).sort((a, b) => a.index - b.index).map((item) => item.word);
   if (!found.length) return undefined;
   // "planner" ve "pattern" gibi baş isimler sona gelir ("Budget planner", "Crochet cardigan pattern").
-  const heads = found.filter((word) => /^(planner|journal|pattern|games|calendar|coloring pages|recipe cards|wall art|paper)$/.test(word));
+  const heads = found.filter((word) => /^(planner|journal|pattern|games|calendar|coloring pages|recipe cards|wall art|paper|phone wallpaper|stickers|puzzle book|labels)$/.test(word));
   const words = [...found.filter((word) => !heads.includes(word)), ...heads].join(" ");
   return words[0].toUpperCase() + words.slice(1);
 }
@@ -167,10 +167,16 @@ function hashtagsFor(input: MarketingPlanInput, lang: "tr" | "en", fallback: str
   if (input.kind !== "pdf") return fallback;
   const name = `${input.productName} ${input.productNameEn || ""}`.toLowerCase();
   const rows: Array<[RegExp, string[], string[]]> = [
+    [/wallpaper|lock ?screen|duvar k[âa]ğıdı/, ["#phonewallpaper", "#lockscreen", "#aestheticwallpaper", "#digitaldownload", "#etsyfinds"], ["#telefonduvarkağıdı", "#dijitalürün"]],
+    [/calendar|takvim/, ["#printablecalendar", "#wallcalendar", "#calendar", "#printables", "#etsyfinds"], ["#takvim", "#dijitalürün"]],
+    [/sticker|çıkartma/, ["#plannerstickers", "#printablestickers", "#stickers", "#journaling", "#etsyfinds"], ["#sticker", "#dijitalürün"]],
+    [/word search|puzzle|sudoku|bulmaca|kelime avı/, ["#wordsearch", "#puzzles", "#braingames", "#printables", "#etsyfinds"], ["#bulmaca", "#dijitalürün"]],
+    [/labels|etiket/, ["#pantrylabels", "#homeorganization", "#organization", "#printables", "#etsyfinds"], ["#düzen", "#etiket", "#dijitalürün"]],
     [/junk journal|ephemera|scrapbook|digital paper|kâğıt/, ["#junkjournal", "#scrapbooking", "#ephemera", "#papercraft", "#etsyfinds"], ["#junkjournal", "#scrapbook", "#kağıtişi", "#dijitalürün"]],
     [/colou?ring|boyama/, ["#coloringpages", "#adultcoloring", "#coloringbook", "#printables", "#etsyfinds"], ["#boyamasayfası", "#boyamakitabı", "#dijitalürün"]],
     [/wall art|art print|poster|duvar/, ["#wallart", "#printablewallart", "#homedecor", "#gallerywall", "#etsyfinds"], ["#duvarsanatı", "#evdekorasyonu", "#dijitalürün"]],
     [/recipe|tarif/, ["#recipecards", "#recipebinder", "#printables", "#kitchenorganization", "#etsyfinds"], ["#tarifkartı", "#mutfak", "#dijitalürün"]],
+    [/greeting card|gift tag|\bcards?\b|tebrik/, ["#greetingcards", "#printablecards", "#giftideas", "#printables", "#etsyfinds"], ["#tebrikkartı", "#dijitalürün"]],
     [/game|shower|party|oyun/, ["#partygames", "#bridalshower", "#babyshower", "#printables", "#etsyfinds"], ["#partioyunları", "#dijitalürün"]],
     [/planner|tracker|journal|planlayıcı|ajanda|günlük/, ["#printableplanner", "#plannercommunity", "#digitaldownload", "#organization", "#etsyfinds"], ["#planlayıcı", "#ajanda", "#dijitalürün"]]
   ];

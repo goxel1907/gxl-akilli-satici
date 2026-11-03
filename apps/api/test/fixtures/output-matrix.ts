@@ -38,6 +38,49 @@ export interface PrintableScenario { id: string; keyword: string; kind: Printabl
 export interface PatternScenario { id: string; keyword: string; craft: PatternCraft; result: TrendResult }
 
 export const PRINTABLE_SCENARIOS: PrintableScenario[] = [
+  // Yapay zekâ destekli, Etsy'de serbest yeni türler.
+  { id: "calendar", keyword: "2027 calendar printable", kind: "calendar", result: trend("2027 calendar printable", "printables", {
+    kind: "calendar",
+    topTags: tags([["2027 calendar", 30], ["printable calendar", 18], ["wall calendar", 12], ["watercolor calendar", 9], ["botanical calendar", 8], ["monthly calendar", 8], ["desk calendar", 6]]),
+    risingTags: rising([["cottagecore calendar", 12]]),
+    examples: [example("2027 Printable Calendar, Watercolor Botanical Wall Calendar, Monthly Calendar PDF", 900, 60)],
+    signals: { formats: formats([["letter", 0.6], ["a4", 0.3]]), bundleShare: 0.1, pageCountMedian: 13, ipRisks: [] }
+  }) },
+  { id: "planner-stickers", keyword: "printable planner stickers", kind: "stickers", result: trend("printable planner stickers", "printables", {
+    kind: "stickers",
+    topTags: tags([["planner stickers", 30], ["printable stickers", 20], ["digital stickers", 14], ["cute stickers", 10], ["kawaii stickers", 8], ["goodnotes stickers", 8], ["journal stickers", 7]]),
+    risingTags: rising([["christmas planner stickers", 15]]),
+    examples: [example("Printable Planner Stickers, Cute Kawaii Sticker Sheets, Digital Stickers PNG", 1300, 120)],
+    signals: { formats: formats([["letter", 0.5], ["png", 0.4]]), bundleShare: 0.3, pageCountMedian: 6, ipRisks: [] }
+  }) },
+  { id: "christmas-cards", keyword: "printable christmas cards", kind: "cards", result: trend("printable christmas cards", "printables", {
+    kind: "cards",
+    topTags: tags([["christmas card", 30], ["printable card", 18], ["holiday card", 14], ["christmas gift tags", 10], ["watercolor christmas", 8], ["folded card", 6], ["xmas card", 6]]),
+    risingTags: rising([["vintage christmas card", 12]]),
+    examples: [example("Printable Christmas Cards Set of 6, Watercolor Holiday Cards, Gift Tags", 700, 40)],
+    signals: { formats: formats([["letter", 0.6], ["5x7", 0.5]]), bundleShare: 0.4, pageCountMedian: 6, ipRisks: [] }
+  }) },
+  { id: "word-search", keyword: "large print word search", kind: "puzzles", result: trend("large print word search", "printables", {
+    kind: "puzzles",
+    topTags: tags([["word search", 30], ["large print puzzles", 16], ["puzzles for seniors", 12], ["christmas word search", 10], ["brain games", 9], ["word find", 8], ["activity book", 6]]),
+    risingTags: rising([["sudoku printable", 12]]),
+    examples: [example("Large Print Word Search for Seniors, 50 Printable Puzzles with Answers", 600, 50)],
+    signals: { formats: formats([["letter", 0.7]]), bundleShare: 0.2, pageCountMedian: 40, ipRisks: [] }
+  }) },
+  { id: "phone-wallpaper", keyword: "phone wallpaper", kind: "wallpaper", result: trend("phone wallpaper", "printables", {
+    kind: "wallpaper",
+    topTags: tags([["phone wallpaper", 30], ["iphone wallpaper", 20], ["aesthetic wallpaper", 16], ["lock screen", 12], ["christmas wallpaper", 10], ["boho wallpaper", 8], ["wallpaper bundle", 7]]),
+    risingTags: rising([["cozy christmas wallpaper", 14]]),
+    examples: [example("Christmas Phone Wallpaper Bundle, Aesthetic Lock Screen, Digital Download", 500, 30)],
+    signals: { formats: formats([["letter", 0.05]]), bundleShare: 0.6, pageCountMedian: 8, ipRisks: [] }
+  }) },
+  { id: "pantry-labels", keyword: "pantry labels printable", kind: "labels", result: trend("pantry labels printable", "printables", {
+    kind: "labels",
+    topTags: tags([["pantry labels", 30], ["printable labels", 18], ["kitchen labels", 14], ["jar labels", 12], ["organization labels", 10], ["minimalist labels", 8], ["spice labels", 7]]),
+    risingTags: rising([["farmhouse pantry labels", 12]]),
+    examples: [example("Printable Pantry Labels, Minimalist Kitchen Jar Labels, Organization", 800, 70)],
+    signals: { formats: formats([["letter", 0.6], ["a4", 0.3]]), bundleShare: 0.2, pageCountMedian: 8, ipRisks: [] }
+  }) },
   // Kullanıcının ChatGPT'ye gönderdiği gerçek paketin trend verisi: Noel + cadı + dark academia karışımı burada doğdu.
   { id: "junk-journal-christmas", keyword: "junk journal kit", kind: "paper_craft", result: trend("junk journal kit", "printables", {
     kind: "paper_craft",

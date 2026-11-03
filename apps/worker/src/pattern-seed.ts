@@ -363,6 +363,10 @@ const PRINT_FORMAT_SIGNALS: Array<[string, RegExp]> = [
 ];
 
 // PDF ürünlerinde format: türün standart formatları + rakiplerde geçen ek formatlar.
+const FIXED_FORMAT_KINDS = new Set<PrintableKind>(["calendar", "stickers", "cards", "puzzles", "wallpaper", "labels"]);
+// Sayfa/tasarım sayısı rakipten türetilir ama türün mantıklı aralığında kalır (takvim her zaman 12 ay).
+const PAGE_RANGE: Partial<Record<PrintableKind, [number, number]>> = { calendar: [12, 12], stickers: [4, 12], cards: [4, 9], wallpaper: [3, 12], labels: [6, 20], puzzles: [20, 60] };
+
 function printableFormats(kind: PrintableKind, texts: Array<{ text: string; weight: number }>): { formats: string[]; mined: string[] } {
   const counts = new Map<string, number>();
   for (const { text, weight } of texts) {
@@ -371,6 +375,8 @@ function printableFormats(kind: PrintableKind, texts: Array<{ text: string; weig
   }
   const mined = ranked(counts).map(([label]) => label);
   const defaults = defaultPrintableFormats(kind);
+  // Takvim, çıkartma, kart, bulmaca, duvar kâğıdı ve etiketin dosya biçimi sabittir (yatay takvime A5, duvar kâğıdına US Letter eklenmez).
+  if (FIXED_FORMAT_KINDS.has(kind)) return { formats: defaults, mined };
   const extra = mined.filter((label) => !defaults.some((item) => item.toLowerCase().startsWith(label.toLowerCase().split(" ")[0])));
   return { formats: [...defaults, ...extra].slice(0, 6), mined };
 }
@@ -505,7 +511,9 @@ function buildCompetition(result: TrendResult | undefined, kind: PrintableKind |
   }
   if (competitorPages && ourPages) {
     planTr.push(`İçerik: rakipler ortanca ${competitorPages} sayfa → bizde ${ourPages} sayfa.`);
-    planEn.push(`include about ${ourPages} pages (the top listings' median is ${competitorPages})`);
+    // Birim türe göre: duvar kâğıdında "wallpapers", çıkartmada "sticker sheets", takvimde "month pages".
+    const unit = kind === "wallpaper" ? "wallpapers" : kind === "stickers" ? "sticker sheets" : kind === "calendar" ? "month pages" : "pages";
+    planEn.push(`include about ${ourPages} ${unit} (the top listings' median is ${competitorPages})`);
   }
   // Yapay zekânın tek sohbette üretebileceği ve ilanda dürüstçe yazılabilecek formatlar talimata girer.
   // Ticari lisans (ürün kişisel kullanım lisanslı), video (yapay zekâ çekemez) ve düzenlenebilir şablon (PDF düzenlenemez)
@@ -575,7 +583,10 @@ export function buildPatternSeed(keywordInput: string, result: TrendResult | und
   const mined0 = mineProduct(keyword, rows, studio === "pattern" ? CRAFT_FALLBACK_PRODUCT[craft] : undefined);
   // Tablet planlayıcıda ürün adı "digital planner" olmalı; "digital" kelimesi genel kelime olarak ayıklanıyor.
   // Nakış ve kanaviçede tek kelimelik motif ("mushroom") bitmiş ürün değildir: "mushroom hoop art".
-  const product = kind === "digital_planner" && !/\bdigital\b/.test(mined0.product) ? { ...mined0, product: `digital ${mined0.product}` }
+  // Bulmaca kitabının ürünü aranan bulmaca türüdür ("large print word search" → "word search", "large" değil).
+  const puzzle = kind === "puzzles" ? (/sudoku/.test(keyword) ? "sudoku" : /crossword/.test(keyword) ? "crossword" : "word search") : undefined;
+  const product = puzzle ? { ...mined0, product: puzzle, head: puzzle.split(" ").at(-1)! }
+    : kind === "digital_planner" && !/\bdigital\b/.test(mined0.product) ? { ...mined0, product: `digital ${mined0.product}` }
     : (craft === "embroidery" || craft === "cross_stitch") && studio === "pattern" && !mined0.product.includes(" ") && !PRODUCT_NOUNS.has(singular(mined0.product)) && mined0.product !== "sampler" ? { ...mined0, product: `${mined0.product} hoop art`, head: "art" } : mined0;
   const productWords = new Set(product.product.split(" ").flatMap((word) => [word, singular(word)]));
   const random = seededRandom(hash(`${keyword}|${options.nonce || ""}|${(options.history?.combos || []).length}`));
@@ -627,14 +638,16 @@ export function buildPatternSeed(keywordInput: string, result: TrendResult | und
   const trendTags = [...new Set([...(result?.risingTags || []).map((item) => item.tag), ...(result?.topTags || []).map((item) => item.tag)].map((tag) => clean(tag)).filter((tag) => tag && !isIpRisky(tag) && !MISLEADING_FEATURE.test(tag) && fitsTheme(tag, themeSet)))].slice(0, 20);
   const printable = kind ? printableFormats(kind, [...texts, ...titleTexts]) : undefined;
   const competitorPages = result?.signals?.pageCountMedian;
-  const pageCount = kind ? (competitorPages ? Math.ceil(competitorPages * 1.2) : defaultPrintablePages(kind)) : undefined;
+  const rawPages = kind ? (competitorPages ? Math.ceil(competitorPages * 1.2) : defaultPrintablePages(kind)) : undefined;
+  const range = kind ? PAGE_RANGE[kind] : undefined;
+  const pageCount = rawPages && range ? Math.min(range[1], Math.max(range[0], rawPages)) : rawPages;
   const competition = buildCompetition(result, kind, pageCount, risingFeatures);
   const audience = kind ? mineAudience([...texts, ...titleTexts]) : undefined;
   if (printable) {
     // "4x6 and 5x7 in cards" zaten "4x6 in cards" ve "5x7 in cards" varken ikinci kez eklenmez.
     const sizeTokens = (format: string) => format.toLowerCase().match(/\d+x\d+|half letter|us letter|\ba[0-9]\b|tablet|ratio|black-and-white/g) || [format.toLowerCase()];
     const covered = () => new Set(printable.formats.flatMap(sizeTokens));
-    for (const gap of competition.gapFormats) if (!sizeTokens(gap).every((token) => covered().has(token)) && printable.formats.length < 7) printable.formats.push(gap);
+    if (!FIXED_FORMAT_KINDS.has(kind!)) for (const gap of competition.gapFormats) if (!sizeTokens(gap).every((token) => covered().has(token)) && printable.formats.length < 7) printable.formats.push(gap);
   }
   const notes = [
     `Etsy market brief for "${keyword}"${metrics ? ` (${metrics.activeListings.toLocaleString("en-US")} live listings${metrics.medianPriceUsd ? `, median price ${metrics.medianPriceUsd} USD` : ""})` : ""}`,

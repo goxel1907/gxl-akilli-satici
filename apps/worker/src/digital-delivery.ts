@@ -100,7 +100,13 @@ const KIND_TAXONOMY_WORDS: Record<PrintableKind, string[]> = {
   recipe: ["recipe", "stationery"],
   journal: ["journals", "notebooks", "journal"],
   kids: ["educational", "learning", "flash cards"],
-  paper_craft: ["scrapbooking", "digital paper", "paper"]
+  paper_craft: ["scrapbooking", "digital paper", "paper"],
+  calendar: ["calendars & planners", "calendars", "calendar"],
+  stickers: ["stickers", "labels & tags", "stationery"],
+  cards: ["greeting cards", "cards", "stationery"],
+  puzzles: ["puzzles", "games & puzzles", "games"],
+  wallpaper: ["digital prints", "prints"],
+  labels: ["labels & tags", "labels", "stickers"]
 };
 
 function randomId(bytes = 24): string {

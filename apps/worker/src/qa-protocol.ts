@@ -1,3 +1,4 @@
+import { calendarYear } from "./etsy-trends.js";
 import type { PatternCraft, PrintableKind } from "./etsy-trends.js";
 
 // Yapay zekâ "kontrol ettim" dediğinde bile saat (AM/PM), kopya sayfa, eksik format gibi hatalar kaçıyor.
@@ -9,11 +10,13 @@ export type QaInput =
 
 // Sayfa ölçüsü tablosu yalnız ürünün gerçek formatlarından kurulur.
 const POINT_SIZES: Array<[RegExp, string]> = [
+  [/us letter \(landscape\)/i, "US Letter landscape 792×612 pt"], [/a4 \(landscape\)/i, "A4 landscape 842×595 pt"],
   [/us letter|^letter/i, "US Letter 612×792 pt"], [/^a4/i, "A4 595×842 pt"], [/^a5/i, "A5 420×595 pt"], [/half letter/i, "Half Letter 396×612 pt"],
   [/4x6/i, "4×6 in 288×432 pt"], [/5x7/i, "5×7 in 360×504 pt"], [/8x10/i, "8×10 in 576×720 pt"], [/11x14/i, "11×14 in 792×1008 pt"], [/12x12/i, "12×12 in 864×864 pt"]
 ];
-const pageSizes = (formats: string[]) => [...new Set(formats.flatMap((format) => POINT_SIZES.filter(([pattern]) => pattern.test(format)).map(([, size]) => size)))].join(", ") || "the size of each format";
-const TEXT_KINDS = new Set<PrintableKind>(["planner", "digital_planner", "journal", "recipe", "party", "kids"]);
+// Her format için ilk eşleşen ölçü alınır ("US Letter (landscape)" dikey Letter sayılmaz).
+const pageSizes = (formats: string[]) => [...new Set(formats.flatMap((format) => { const found = POINT_SIZES.find(([pattern]) => pattern.test(format)); return found ? [found[1]] : []; }))].join(", ") || "the size of each format";
+const TEXT_KINDS = new Set<PrintableKind>(["planner", "digital_planner", "journal", "recipe", "party", "kids", "puzzles", "labels"]);
 
 const KIND_CHECKS: Partial<Record<PrintableKind, string[]>> = {
   planner: ["CALENDAR — monthly grids have 6 rows × 7 columns; Monday-start and Sunday-start versions differ only in weekday order."],
@@ -23,7 +26,22 @@ const KIND_CHECKS: Partial<Record<PrintableKind, string[]>> = {
   recipe: ["CUT LINES — 4×6 and 5×7 cards have crop marks, and the card content stays 3 mm inside them (cards have no binding margin)."],
   journal: ["PROMPTS — no prompt is repeated; count the prompts and confirm there are at least 40, as the content requires."],
   kids: ["ANSWER KEYS — every activity with a correct answer has a matching key entry; the age range is stated on the cover."],
+  calendar: [`DATES — for every month of ${calendarYear()}, compare the printed grid with Python's calendar module: day 1 falls on the right weekday, the month has the right number of days, weeks start on Sunday, and the month name and year are right; print one PASS/FAIL line per month.`],
+  stickers: ["STICKERS — every sticker PNG has a transparent background and keeps its white border; on the sheets, every sticker is at least 0.6 in wide, 0.25 in from its neighbors and 0.5 in from the page edge; the number of PNG files equals the number of stickers on the illustrated sheets."],
+  cards: ["CARDS — every card sheet has a fold line and crop marks, the inside text is upright when the card is folded, every greeting is spelled correctly, and the gift tags have hole marks."],
+  puzzles: ["PUZZLES — a script re-solves every puzzle: each listed word appears exactly once in its grid, every sudoku has exactly one solution, and each answer key matches its puzzle number."],
+  wallpaper: ["WALLPAPER SIZES — every file has the exact pixel size of its listed screen, the main subject stays inside the central 70%, and no image is stretched (sizes are cropped, never squeezed)."],
+  labels: ["LABELS — every label word is in an English dictionary with US spelling, no word repeats within a set, and the cut lines line up with the label boxes."],
   paper_craft: ["PATTERN TILES — for every tile, the left and right edge columns and the top and bottom edge rows match (mean difference under 3%), the 2×2 preview shows no seam, and every 12×12 paper is a 3600×3600 px JPG."]
+};
+
+// Görselde yazı olmamalı: her türün kendi ifadesi (yazının nerede serbest olduğu dahil).
+const OCR = "run OCR (for example pytesseract) on every art image before it is placed; if OCR is not available, list every image where letters or pseudo-letters are visible on the contact sheet.";
+const ART_TEXT_CHECKS: Partial<Record<PrintableKind, string>> = {
+  calendar: `TEXT-FREE ART — the month artworks contain no text, numbers or letters: ${OCR} Text appears only in the code-made date grids, month names and the bottom © line.`,
+  stickers: `TEXT-FREE ART — the illustrated stickers contain no text or letters: ${OCR} Words appear only on the functional stickers made in code.`,
+  cards: `TEXT-FREE ART — the card front artworks contain no drawn text or letters: ${OCR} Greetings are set in code.`,
+  wallpaper: `TEXT-FREE ART — the wallpapers contain no text, letters or watermark: ${OCR}`
 };
 
 // Sayfa sayısı, talimattaki sayfa bütçesiyle aynı cümleden gelir; tablet ve baskı sürümleri ayrı ölçülür.
@@ -37,6 +55,9 @@ function filesCheck(input: Extract<QaInput, { type: "printable" }>): string {
     const pdfs = print.filter((format) => !/12x12/.test(format));
     return `FILES — ${pdfs.length ? `the ${pdfs.join(" and ")} PDF editions exist, open and have the same page order and count (${count}); each page size matches its format within 1 pt (${pageSizes(pdfs)}); ` : ""}the 12×12 papers exist as JPG files; ${limit}.`;
   }
+  if (input.kind === "wallpaper") return `FILES — every wallpaper exists in every listed size (${input.formats.join(", ")}) as a PNG with that exact pixel size, and the PDF holds the setup guide, thank-you and license pages; ${limit}.`;
+  if (input.kind === "stickers") return `FILES — the ${print.filter((format) => !/png/i.test(format)).map((format) => format.replace(/\s*\(.*\)/, "")).join(" and ")} sticker-sheet PDFs exist and open, have the same pages (${count}) and match ${pageSizes(print.filter((format) => !/png/i.test(format)))}; the PNG zip holds every sticker as a transparent PNG; ${limit}.`;
+  if (input.kind === "cards") return `FILES — the US Letter and A4 card PDFs exist and open, pages match ${pageSizes(print)}, every edition holds the same cards and the gift tag sheet, and each folded card front measures 5×7 in (360×504 pt) within 1 pt; ${limit}.`;
   if (input.kind === "recipe") return `FILES — the 4×6 and 5×7 card PDFs are US Letter sheets (612×792 pt) holding the cards with crop marks, and each card's trim box measures 288×432 pt (4×6) or 360×504 pt (5×7) within 1 pt; the binder-page PDFs match ${pageSizes(print.filter((format) => !/cards/i.test(format)))}; every edition holds the same recipe templates; ${limit}.`;
   if (input.kind === "wall_art") return `FILES — every print exists in every ratio or size file (${input.formats.join(", ")}), each opens and has the stated pixel size, and the PDF holds the size guide, how-to-print, thank-you and license pages; ${limit}.`;
   if (input.kind === "digital_planner") return `FILES — every edition in the upload set exists and opens; every edition has the same pages (${count})${tabletSize}${print.length ? `; the ${print.join(" and ")} edition matches ${pageSizes(print)}` : ""}; ${limit}.`;
@@ -92,7 +113,7 @@ export function qaProtocol(input: QaInput): string[] {
   ];
   // Cilt payı yalnız deliği/cildi olan sayfalarda: planlayıcı, günlük, tarif dosyası sayfaları ve desen PDF'i (kartlarda yok).
   const binding = input.type === "printable" && ["planner", "journal"].includes(input.kind);
-  const nameWhere = input.type === "printable" && input.kind === "wall_art" ? "on the size guide and the license page" : "on the cover and on the thank-you or final page";
+  const nameWhere = input.type === "printable" && input.kind === "wall_art" ? "on the size guide and the license page" : input.type === "printable" && input.kind === "wallpaper" ? "on the setup guide and the license page" : "on the cover and on the thank-you or final page";
   const common = (name: string) => [
     `NAME — the product name "${name}" appears ${nameWhere}, spelled exactly like this, and no other product name or old working name appears anywhere.`,
     "PLACEHOLDERS — no \"Lorem\", \"TODO\", \"TBD\", \"XXX\", \"undefined\", \"NaN\", stray brackets or empty headings.",
@@ -107,18 +128,22 @@ export function qaProtocol(input: QaInput): string[] {
     const checks = [
       filesCheck(input),
       ...(["planner", "digital_planner", "journal"].includes(input.kind) ? ["SEQUENCES — extract the text of every page and test every numbered sequence: hour labels run in order with the right AM/PM (… 11 AM, 12 PM, 1 PM …), day numbers 1–31 have no gaps or repeats, weekday lists follow the page's Monday-start or Sunday-start order, and footer page numbers match the real page index."] : []),
-      ...(textKind && !["planner", "digital_planner", "journal"].includes(input.kind) ? ["PAGE NUMBERS — footer page numbers match the real page index and have no gaps or repeats."] : []),
-      input.kind === "wall_art"
-        ? "DUPLICATES — no two prints share the same artwork or composition (the ratio files of one print are the same art on purpose)."
+      ...(textKind && !["planner", "digital_planner", "journal", "labels"].includes(input.kind) ? ["PAGE NUMBERS — footer page numbers match the real page index and have no gaps or repeats."] : []),
+      input.kind === "wall_art" || input.kind === "wallpaper"
+        ? `DUPLICATES — no two ${input.kind === "wallpaper" ? "wallpapers" : "prints"} share the same artwork or composition (the size files of one ${input.kind === "wallpaper" ? "wallpaper" : "print"} are the same art on purpose).`
         : `DUPLICATES — no two pages share the same or nearly the same ${textKind ? "text (90% or more), except declared Monday/Sunday variants and declared repeated template pages (for example the daily page of an undated planner, or free-writing pages)" : "artwork or composition"}. Every page must earn its place.`,
-      ...(input.kind !== "wall_art" ? ["COVER — page 1 is a real cover: no page number, running header or navigation label."] : []),
+      ...(input.kind !== "wall_art" && input.kind !== "wallpaper" ? ["COVER — page 1 is a real cover: no page number, running header or navigation label."] : []),
       ...(tablet ? ["LINKS — the tablet edition has working internal links (count them) and every page links back to the index; print editions have no tab bars or buttons that only work on a tablet."] : []),
-      ...(!textKind ? [input.kind === "coloring"
+      ...(!textKind ? [ART_TEXT_CHECKS[input.kind] || (input.kind === "coloring"
         ? "TEXT-FREE ART — the line art itself contains no text or letters: run OCR (for example pytesseract) on every art image before it is placed; on the pages, text is allowed only in the bottom margin (the small page number and © line); if OCR is not available, list every image where letters or pseudo-letters are visible on the contact sheet."
-        : `TEXT-FREE ART — ${input.kind === "paper_craft" ? input.papersOnly ? "the patterned and solid papers contain" : "the patterned papers, solid papers and ephemera sheets contain" : "the art prints contain"} no text, letters, page number or footer: extract the PDF text of those pages and run OCR (for example pytesseract) on every art image; if OCR is not available, list every image where letters or pseudo-letters are visible on the contact sheet.`] : []),
+        : `TEXT-FREE ART — ${input.kind === "paper_craft" ? input.papersOnly ? "the patterned and solid papers contain" : "the patterned papers, solid papers and ephemera sheets contain" : "the art prints contain"} no text, letters, page number or footer: extract the PDF text of those pages and run OCR (for example pytesseract) on every art image; if OCR is not available, list every image where letters or pseudo-letters are visible on the contact sheet.`)] : []),
       ...(input.kind === "paper_craft" && !input.papersOnly ? ["EPHEMERA — every ephemera PNG has a transparent background and keeps its white cutting border."] : []),
-      "THEME — list every page title; none names a different holiday, season or mood than the theme in the Product spec.",
-      ...(textKind ? ["LEGIBILITY — body text at least 9 pt, labels at least 7 pt, label color contrast at least 4.5:1 on white."] : []),
+      input.kind === "calendar"
+        ? "THEME — every month's artwork fits its own month, and all 12 months share one style and palette."
+        : input.kind === "wallpaper"
+        ? "THEME — every wallpaper fits the theme in the Product spec; none adds a different holiday, season or mood."
+        : "THEME — list every page title; none names a different holiday, season or mood than the theme in the Product spec.",
+      ...(textKind || input.kind === "calendar" || input.kind === "cards" ? ["LEGIBILITY — body text at least 9 pt, labels at least 7 pt, label color contrast at least 4.5:1 on white."] : []),
       ...(KIND_CHECKS[input.kind] || []),
       ...common(input.name)
     ];

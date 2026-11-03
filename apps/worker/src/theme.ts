@@ -66,7 +66,7 @@ export function cleanBriefNotes(notes: string | undefined, phrases: string[] = [
     .replace(/\(\s*,\s*/g, "(").replace(/,\s*\)/g, ")").replace(/\(\s*\)/g, "")
     .replace(/\b(?:offer|include)\s+and (?:state|name) (?:them|it) (?:clearly )?on the cover[^;.]*[;.]?/gi, "")
     .replace(/\b(?:offer|include)\s*[;.]/gi, "")
-    .replace(/\s+,/g, ",").replace(/,\s*,/g, ",").replace(/;\s*;/g, ";").replace(/;\s*\./g, ".").replace(/:\s*;/g, ":").replace(/\s{2,}/g, " ").trim();
+    .replace(/\s+,/g, ",").replace(/,\s*,/g, ",").replace(/;\s*;/g, ";").replace(/;\s*\./g, ".").replace(/:\s*;/g, ":").replace(/\s{2,}/g, " ").replace(/\s+([.;])/g, "$1").trim();
 }
 
 const HOLIDAYS: ThemeFamily[] = ["christmas", "halloween", "thanksgiving", "easter", "valentine", "st_patricks", "patriotic", "hanukkah", "ramadan", "mothers_day", "fathers_day"];

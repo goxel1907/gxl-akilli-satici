@@ -7,7 +7,14 @@ type Fetcher = typeof fetch;
 export type PatternCraft = "crochet" | "knitting" | "embroidery" | "cross_stitch" | "sewing" | "macrame" | "punch_needle";
 
 // Kadınlara yönelik yazdırılabilir / dijital PDF ürün türleri.
-export type PrintableKind = "planner" | "digital_planner" | "coloring" | "wall_art" | "party" | "recipe" | "journal" | "kids" | "paper_craft";
+export type PrintableKind = "planner" | "digital_planner" | "coloring" | "wall_art" | "party" | "recipe" | "journal" | "kids" | "paper_craft"
+  | "calendar" | "stickers" | "cards" | "puzzles" | "wallpaper" | "labels";
+
+// Takvim yılı: ağustostan itibaren alıcı bir sonraki yılın takvimini arar (Kasım 2026 → 2027 takvimi).
+export function calendarYear(now = Date.now()): number {
+  const date = new Date(now);
+  return date.getUTCMonth() >= 7 ? date.getUTCFullYear() + 1 : date.getUTCFullYear();
+}
 
 export type TrendGroup = "printables" | "patterns" | "tesbih" | "vintage" | "other";
 
@@ -54,6 +61,12 @@ export const TREND_NICHES: TrendNiche[] = [
   { id: "digital-paper", keyword: "digital paper pack", labelTr: "Dijital kâğıt paketi", group: "printables", kind: "paper_craft" },
   { id: "kids-activity", keyword: "kids activity pages", labelTr: "Çocuk etkinlik sayfaları", group: "printables", kind: "kids" },
   { id: "homeschool", keyword: "homeschool printables", labelTr: "Evde eğitim çalışma kâğıtları", group: "printables", kind: "kids" },
+  { id: "calendar", keyword: `${calendarYear()} calendar printable`, labelTr: `${calendarYear()} yıllık takvim`, group: "printables", kind: "calendar" },
+  { id: "planner-stickers", keyword: "printable planner stickers", labelTr: "Planlayıcı çıkartmaları (sticker)", group: "printables", kind: "stickers" },
+  { id: "greeting-cards", keyword: "printable greeting cards", labelTr: "Yazdırılabilir tebrik kartları", group: "printables", kind: "cards" },
+  { id: "word-search", keyword: "large print word search", labelTr: "Büyük puntolu kelime avı", group: "printables", kind: "puzzles" },
+  { id: "phone-wallpaper", keyword: "phone wallpaper", labelTr: "Telefon duvar kâğıdı", group: "printables", kind: "wallpaper" },
+  { id: "pantry-labels", keyword: "pantry labels printable", labelTr: "Kiler ve düzen etiketleri", group: "printables", kind: "labels" },
   { id: "quilt-pattern", keyword: "quilt pattern pdf", labelTr: "Kapitone / yorgan deseni", group: "patterns", craft: "sewing" },
   { id: "crochet-doily", keyword: "crochet doily pattern", labelTr: "Tığ işi dantel / sehpa örtüsü", group: "patterns", craft: "crochet" },
   { id: "crochet-bag", keyword: "crochet bag pattern", labelTr: "Tığ işi çanta", group: "patterns", craft: "crochet" },
@@ -90,19 +103,25 @@ export function isTrendGroup(value: unknown): value is TrendGroup {
 }
 
 const CRAFT_IN_KEYWORD = /\b(crochet|knit|knitting|sewing|sew|embroidery|cross stitch|macrame|punch needle|amigurumi|quilt|quilting|needlepoint)\b/i;
-const PRINTABLE_IN_KEYWORD = /\b(printables?|planners?|journal|journaling|coloring|colouring|wall art|worksheets?|tracker|checklist|recipe cards?|invitations?|games|digital paper|clipart|stickers|templates?|calendar|workbook|flash ?cards)\b/i;
+const PRINTABLE_IN_KEYWORD = /\b(printables?|planners?|journal|journaling|coloring|colouring|wall art|worksheets?|tracker|checklist|recipe cards?|invitations?|games|digital paper|clipart|stickers?|templates?|calendars?|workbook|flash ?cards|greeting cards?|gift tags?|word search|sudoku|crosswords?|puzzles?|wallpapers?|lock ?screen|labels?)\b/i;
 
 export function inferPrintableKind(keyword: string): PrintableKind | undefined {
   const value = keyword.toLowerCase();
   if (/\bdigital planner|goodnotes|notability|hyperlinked\b/.test(value)) return "digital_planner";
+  if (/\bwallpapers?\b|\block ?screen\b|\bhome ?screen\b|\bphone backgrounds?\b/.test(value)) return "wallpaper";
   if (/\bcolou?ring\b/.test(value)) return "coloring";
   if (/\bwall art|poster|art print|digital print\b/.test(value)) return "wall_art";
   if (/\brecipe\b/.test(value)) return "recipe";
+  if (/\bword search|word find|sudoku|crosswords?|puzzle book|large print puzzles?|brain games\b/.test(value)) return "puzzles";
   if (/\bgames?|invitation|shower|party|bingo|scavenger hunt\b/.test(value)) return "party";
   if (/\bkids?|toddler|preschool|homeschool|worksheets?|activity|flash ?cards?|classroom\b/.test(value)) return "kids";
-  if (/\bjunk journal|digital paper|scrapbook|ephemera|paper flower|clipart|stickers\b/.test(value)) return "paper_craft";
+  if (/\bstickers?\b/.test(value)) return "stickers";
+  if (/\b(greeting|birthday|christmas|holiday|thank you|valentines?|sympathy|anniversary|printable) cards?\b|\bgift tags?\b|\bfolded cards?\b/.test(value)) return "cards";
+  if (/\blabels?\b/.test(value)) return "labels";
+  if (/\bjunk journal|digital paper|scrapbook|ephemera|paper flower|clipart\b/.test(value)) return "paper_craft";
   if (/\bjournal|workbook|gratitude|prompts\b/.test(value)) return "journal";
-  if (/\bplanner|tracker|checklist|schedule|calendar|organizer|budget\b/.test(value)) return "planner";
+  if (/\bcalendars?\b/.test(value)) return "calendar";
+  if (/\bplanner|tracker|checklist|schedule|organizer|budget\b/.test(value)) return "planner";
   return undefined;
 }
 

@@ -18,6 +18,12 @@ export const RELEVANT_FORMATS: Record<PrintableKind | "pattern", string[]> = {
   journal: ["letter", "a5", "tablet", "printer_friendly"],
   kids: ["letter", "a4", "printer_friendly"],
   paper_craft: ["commercial", "scrapbook_size", "letter"],
+  calendar: ["letter", "a4"],
+  stickers: ["letter", "a4"],
+  cards: ["letter", "a4"],
+  puzzles: ["letter", "a4"],
+  wallpaper: [],
+  labels: ["letter", "a4"],
   // Desen PDF'leri zaten Letter ve A4'e uygun hazırlanır; desende anlamlı boşluk video eğitimdir.
   pattern: ["video"]
 };
