@@ -56,7 +56,7 @@ test("the Christmas junk journal package that went to ChatGPT is now one coheren
   assert.match(master, /Upload set: .*12x12-Papers\.zip .*Ephemera\.zip/);
   // Kontrol listesi bu ürüne uyar: saat sırası ve tablet bağlantısı kontrolü yok.
   assert.doesNotMatch(master, /AM\/PM|LINKS —/);
-  assert.match(master, /TEXT-FREE ART — patterned papers, solid papers and ephemera sheets/);
+  assert.match(master, /TEXT-FREE ART — the patterned papers, solid papers and ephemera sheets contain no text/);
   // İlan: tek tema, yanıltıcı ifade yok, başlıkta tekrar yok.
   assert.ok(!item.listing.tags.some((tag) => /witch|academia|halloween|commercial/.test(tag)), item.listing.tags.join(", "));
   assert.equal(item.listing.tags.length, 13);

@@ -638,7 +638,8 @@ export function buildPatternSeed(keywordInput: string, result: TrendResult | und
   }
   const notes = [
     `Etsy market brief for "${keyword}"${metrics ? ` (${metrics.activeListings.toLocaleString("en-US")} live listings${metrics.medianPriceUsd ? `, median price ${metrics.medianPriceUsd} USD` : ""})` : ""}`,
-    chosen.features.length ? `: buyers favor ${joinEn(chosen.features.map(proseCase))}` : "",
+    // "moody botanical and botanical" tekrar etmez: başka bir özelliğin içinde geçen özellik ayrıca yazılmaz.
+    chosen.features.length ? `: buyers favor ${joinEn(chosen.features.filter((feature, index) => !chosen.features.some((other, otherIndex) => otherIndex !== index && other.length > feature.length && ` ${other} `.includes(` ${feature} `))).map(proseCase))}` : "",
     risingFeatures.length ? `; the newest fast-selling listings add ${joinEn(risingFeatures.map(proseCase))}` : "",
     trendColors.length || descriptors.length ? `; colors seen in top listings: ${joinEn([...trendColors, ...descriptors].slice(0, 5))}` : "",
     audience ? `; main buyers: ${audience}` : "",

@@ -205,7 +205,7 @@ export const PRINTABLE_KINDS: Record<PrintableKind, KindProfile> = {
     defaultFormats: ["US Letter", "A4"], defaultPages: 40, art: false,
     contentEn: [
       "Age-appropriate activities for a clearly stated age range, increasing gently in difficulty",
-      "Clear instructions for adults, large fonts and simple line art suitable for coloring",
+      "Clear instructions for adults, large fonts and simple shapes drawn in code (vector) that children can color",
       "Answer keys, a progress chart and a certificate of completion"
     ],
     designEn: [PRINT_SAFE, INK, "Primary-school friendly fonts at 14 pt or larger; tracing lines with dashed guides"],
@@ -360,7 +360,7 @@ const THEME_SUBJECTS: Partial<Record<ThemeFamily, string[]>> = {
   coastal: ["seashells and starfish", "lighthouses and sailboats", "ocean waves and gulls", "coral and sea glass"],
   witchy: ["moon phases and stars", "herb bundles and apothecary jars", "crystals and candles", "a witch's cottage garden"],
   dark: ["old books and candlelight", "antique keys and inkwells", "a gothic library", "pressed flowers and letters"],
-  cozy: ["a cottage interior with tea and books", "a reading nook by the window", "a cottage garden gate", "knitting baskets and quilts", "a warm kitchen with bread"],
+  cozy: ["a cottage interior with tea and books", "a reading nook by the window", "a cottage garden gate", "knitting baskets and quilts", "a warm kitchen with bread", "a sleeping cat by the fireplace", "a teapot with mugs and cookies", "a porch with rocking chairs and lanterns", "a bakery window with pies"],
   botanical: ["wildflowers and ferns", "mushrooms and moss", "herbs and leaves", "garden roses and peonies", "botanical sprigs and seed pods"],
   vintage: ["vintage postage stamps and tickets", "antique botanical plates", "old letters and wax seals", "vintage clocks and keys"],
   boho: ["sun and rainbow arches", "pampas grass and dried flowers", "desert plants and terracotta pots", "abstract boho shapes"],
@@ -411,7 +411,7 @@ const STYLE_DIRECTIONS: Record<string, string> = { peculiar: "whimsical vintage 
 
 // "Christmas ephemera", "library ephemera" çizilecek bir konu değil, ürün türüdür: çekirdek kelime ("library")
 // çizilebilir bir konuya çevrilir; çekirdek yalnız tema ise ("christmas") konu temanın kendi listesinden gelir.
-const PAPER_NOUNS = /(^|\s+)(ephemera|papers?|pages?|sheets?|collage sheets|cut-?outs|clipart|designs?|prints?|patterns?|motifs?|backgrounds?)$/;
+const PAPER_NOUNS = /(^|\s+)(ephemera|papers?|pages?|sheets?|collage sheets|cut-?outs|clipart|designs?|prints?|patterns?|motifs?|backgrounds?|packs?|kits?|bundles?|sets?)$/;
 const CORE_SUBJECTS: Record<string, string> = {
   library: "stacks of old library books with a reading lamp",
   botanical: "pressed botanical leaves and stems",
@@ -430,11 +430,43 @@ const CORE_SUBJECTS: Record<string, string> = {
   bee: "honeybees and honeycomb"
 };
 
+// Tek kelimelik konu ("dinosaur") 8 sayfada aynı resme dönüşür; her biri ayrı bir sahneye açılır.
+const SUBJECT_VARIANTS: Record<string, string[]> = {
+  dinosaur: ["a T. rex in a fern forest", "a stegosaurus family", "a triceratops by a volcano", "baby dinosaurs hatching from eggs", "a long-neck dinosaur by a lake"],
+  space: ["a rocket launch", "an astronaut on the moon", "planets and stars", "a friendly alien in a spaceship", "a space station orbiting Earth"],
+  ocean: ["a sea turtle and coral", "a whale family", "an octopus in a shipwreck", "fish in a kelp forest"],
+  farm: ["a red barn with animals", "a cow and calf in a meadow", "chickens and chicks", "a tractor in a field"],
+  cat: ["a cat curled up on a rug", "kittens in a basket", "a cat in a window with plants", "a cat with yarn balls"],
+  dog: ["a puppy with a ball", "a dog on a picnic blanket", "puppies in a wagon", "a dog by a doghouse"],
+  mushroom: ["a mushroom house in the woods", "mushrooms and snails", "a fairy ring of mushrooms", "mushrooms under ferns"],
+  butterfly: ["butterflies on wildflowers", "a butterfly garden", "a large detailed butterfly", "butterflies and bees"],
+  flower: ["a vase of garden flowers", "a sunflower field", "roses on a trellis", "a wildflower meadow"],
+  bird: ["songbirds on a branch", "an owl in a tree", "a bird bath in a garden", "hummingbirds and flowers"],
+  forest: ["a deer in the forest", "a fox in the woods", "a bear by a stream", "an owl in a hollow tree"]
+};
+
+function stripPaperNouns(text: string): string {
+  let core = text.trim();
+  while (core && PAPER_NOUNS.test(core)) core = core.replace(PAPER_NOUNS, "").trim();
+  return core;
+}
+
 function featureSubject(feature: string, concrete: (phrase: string) => boolean): string | undefined {
   if (!PAPER_NOUNS.test(feature)) return concrete(feature) ? feature : undefined;
-  const core = feature.replace(PAPER_NOUNS, "").trim();
+  // "ephemera pack" → "ephemera" → "": kâğıt adları tekrar tekrar atılır, geriye çizilecek bir şey kalmazsa konu olmaz.
+  const core = stripPaperNouns(feature);
+  if (/^collage$/.test(core)) return undefined;
   if (!core || !concrete(core)) return undefined;
   return CORE_SUBJECTS[core] || CORE_SUBJECTS[singular(core)] || `${core} motifs`;
+}
+
+// Açılan konular sırayla karışır: "dinozor, uzay, dinozor, uzay" (önce hep dinozor değil).
+function interleave(expanded: string[], original: string[]): string[] {
+  const groups = original.map((subject) => SUBJECT_VARIANTS[subject] || SUBJECT_VARIANTS[singular(subject)] || [subject]);
+  if (groups.every((group) => group.length === 1)) return expanded;
+  const result: string[] = [];
+  for (let round = 0; round < Math.max(...groups.map((group) => group.length)); round += 1) for (const group of groups) if (group[round]) result.push(group[round]);
+  return result;
 }
 
 function subjectsAndStyle(prepared: Prepared, profile: KindProfile): { subjects: string[]; components: string[]; styles: string[] } {
@@ -463,6 +495,9 @@ function subjectsAndStyle(prepared: Prepared, profile: KindProfile): { subjects:
   }
   const styleNames = styles.map((style) => style.split(" ").filter((word) => !META_WORDS.has(word)).join(" ")).filter(Boolean).map((style) => STYLE_DIRECTIONS[style] || style);
   // Tek kelimelik konu ("cottage") görsel talimatında "cottage motifs" olarak yazılır.
+  // "dinosaur motifs" gibi tek kelimelik konular ayrı sahnelere açılır (sayfalar birbirinin kopyası olmaz).
+  const expanded = subjects.flatMap((subject) => SUBJECT_VARIANTS[subject] || SUBJECT_VARIANTS[singular(subject)] || [subject]);
+  subjects.splice(0, subjects.length, ...interleave(expanded, subjects));
   const uniqueStyles = [...new Set(styleNames)];
   const keptStyles = uniqueStyles.filter((style, index) => !uniqueStyles.some((other, otherIndex) => otherIndex !== index && other.length > style.length && new RegExp(`\\b${escapeRegex(style)}\\b`).test(other)));
   return { subjects: subjects.map((subject) => proseCase(subject.includes(" ") || /s$/.test(subject) ? subject : `${subject} motifs`)), components, styles: keptStyles };
@@ -476,10 +511,26 @@ function buildArtPlan(prepared: Prepared, profile: KindProfile, pages: number): 
   const subjectAt = (index: number) => subjects[index % Math.max(1, subjects.length)] || `an original ${input.productType} theme`;
   // Kapak ürünün ana temasını gösterir (Noel kitinin kapağı kütüphane değil, Noel konusudur).
   const anchored = (subject: string, holidayOnly: boolean) => [...themeFamilies(subject)].some((family) => prepared.themes.has(family) && (!holidayOnly || isHolidayFamily(family)));
-  const coverSubject = subjects.find((subject) => anchored(subject, true)) || subjects.find((subject) => anchored(subject, false)) || subjectAt(0);
+  const themed = [...subjects.filter((subject) => anchored(subject, true)), ...subjects.filter((subject) => !anchored(subject, true) && anchored(subject, false))];
+  // Kapak tek bir kâğıdın konusunu tekrar etmez: ana temanın üç konusunu bir arada gösterir.
+  const coverParts = (themed.length ? themed : subjects).slice(0, 3);
+  const coverSubject = coverParts.length > 1 ? `these elements: ${coverParts.join("; ")}` : coverParts[0] || subjectAt(0);
+  // Süs sayfaları ana temadan konu alır (Noel kitine "antika botanik levha" girmez); temanın konuları farklı parçalarla yeniden kullanılır.
+  const ephemeraSubject = (index: number, papersCount: number) => {
+    // Kâğıtların konuları temanın kendisidir; süs sayfaları bunları farklı parçalarla ve farklı sırayla kullanır.
+    const pool = subjects.slice(0, Math.max(1, Math.min(papersCount, subjects.length)));
+    return pool[(index * 2 + 1) % pool.length];
+  };
+  // "a ledger-grid repeat with small motifs of wildflower motifs" olmaz.
+  const paperLine = (index: number) => {
+    const layout = PAPER_LAYOUTS[index % PAPER_LAYOUTS.length];
+    const subject = subjectAt(index);
+    return `${layout} of ${/small motifs$/.test(layout) ? subject.replace(/\s+motifs$/, "") : subject}`;
+  };
   // Konu sayısı sayfa sayısından azsa her sayfa farklı bir kompozisyon alır; aynı görsel iki kez üretilmez.
   const compositions = COMPOSITIONS.filter((composition) => !styles.some((styleWord) => composition.includes(styleWord)));
-  const variedAt = (index: number, count: number) => subjects.length >= count ? subjectAt(index) : `${subjectAt(index)}, ${compositions[index % compositions.length]}`;
+  // Konu sayısı sayfadan azsa her (konu, kompozisyon) çifti bir kez kullanılır: aynı resim iki kez istenmez.
+  const variedAt = (index: number, count: number) => subjects.length >= count ? subjectAt(index) : `${subjectAt(index)}, ${compositions[Math.floor(index / Math.max(1, subjects.length)) % compositions.length]}`;
   const used = (count: number) => subjects.slice(0, Math.min(subjects.length, count));
   const sharedNotes = [
     "Keep one consistent style and the spec palette across every image, and replace any image that breaks a rule.",
@@ -521,7 +572,7 @@ function buildArtPlan(prepared: Prepared, profile: KindProfile, pages: number): 
     const patterned = Math.min(pages, 12);
     const solids = Math.max(0, pages - patterned);
     return {
-      prompts: Array.from({ length: patterned }, (_, index) => `Paper ${index + 1}: seamless repeating pattern, ${PAPER_LAYOUTS[index % PAPER_LAYOUTS.length]} of ${subjectAt(index)}, ${palette}, ${style}, original design, a square tile that repeats with no visible seams, no text, no letters.`),
+      prompts: Array.from({ length: patterned }, (_, index) => `Paper ${index + 1}: seamless repeating pattern, ${paperLine(index)}, ${palette}, ${style}, original design, a square tile that repeats with no visible seams, no text, no letters.`),
       notes: [...sharedNotes, tileNote],
       budget: [`${patterned} patterned papers (Brief B)`, ...(solids ? [`${solids} solid or subtly textured coordinate papers made in code from the palette hex codes`] : []), `Plus a cover collage made in code from the papers and ${textPages}`],
       includedEn: [`${patterned} seamless patterned papers`, ...(solids ? [`${solids} coordinating solid papers`] : []), "12x12 in sheets at 300 dpi"],
@@ -535,9 +586,9 @@ function buildArtPlan(prepared: Prepared, profile: KindProfile, pages: number): 
   const extras = Math.max(0, pages - papers - solids - ephemera);
   const componentList = components.length ? joinWords(components.map((item) => proseCase(item))) : "pocket and folio templates";
   const prompts = [
-    ...Array.from({ length: papers }, (_, index) => `Paper ${index + 1}: seamless repeating pattern, ${PAPER_LAYOUTS[index % PAPER_LAYOUTS.length]} of ${subjectAt(index)}, ${palette}, ${style}, original design, a square tile that repeats with no visible seams, no text, no letters.`),
-    ...Array.from({ length: ephemera }, (_, index) => `Ephemera sheet ${index + 1}: 8-12 separate cut-out pieces (${EPHEMERA_PIECES[index % EPHEMERA_PIECES.length]}) featuring ${subjectAt(papers + index)}, ${palette}, ${style}, each piece with a thin white cutting border and generous space between pieces, on a flat light gray (#DDDDDD) background, no text or letters (label areas left blank for writing).`),
-    `Cover artwork: one hero illustration of ${coverSubject}, ${palette}, ${style}, square composition with the top third kept plain for the title, which is added later in code; no text or letters.`
+    ...Array.from({ length: papers }, (_, index) => `Paper ${index + 1}: seamless repeating pattern, ${paperLine(index)}, ${palette}, ${style}, original design, a square tile that repeats with no visible seams, no text, no letters.`),
+    ...Array.from({ length: ephemera }, (_, index) => `Ephemera sheet ${index + 1}: 8-12 separate cut-out pieces (${EPHEMERA_PIECES[index % EPHEMERA_PIECES.length]}) featuring ${ephemeraSubject(index, papers)}, ${palette}, ${style}, each piece with a thin white cutting border and generous space between pieces, on a flat light gray (#DDDDDD) background, no text or letters (label areas left blank for writing).`),
+    `Cover artwork: one hero illustration that combines ${coverSubject}; ${palette}, ${style}, square composition with the top third kept plain for the title, which is added later in code; no text or letters.`
   ];
   return {
     prompts,
@@ -560,9 +611,14 @@ function buildArtPlan(prepared: Prepared, profile: KindProfile, pages: number): 
   };
 }
 
+// Listede "moody botanical and botanical" yazılmaz: başka bir özelliğin içinde geçen özellik tekrar edilmez.
+function distinctFeatures(features: string[]): string[] {
+  return features.filter((feature, index) => !features.some((other, otherIndex) => otherIndex !== index && other.length > feature.length && new RegExp(`\\b${escapeRegex(feature)}\\b`).test(other)));
+}
+
 function originalityPlan(prepared: Prepared, profile: KindProfile): { tr: string[]; en: string[] } {
   const { input } = prepared;
-  const features = input.trendFeatures?.length ? joinWords(input.trendFeatures.map(proseCase)) : "";
+  const features = input.trendFeatures?.length ? joinWords(distinctFeatures(input.trendFeatures).map(proseCase)) : "";
   return {
     tr: [
       `Tek bir ürün kopyalanmadı; trend özellikleri${features ? ` (${features})` : ""} tek temada, özgün bir tasarımda birleştirilecek.`,
@@ -583,6 +639,11 @@ function originalityPlan(prepared: Prepared, profile: KindProfile): { tr: string
 }
 
 function contentLines(prepared: Prepared, profile: KindProfile): string[] {
+  // Dijital planlayıcıdaki baskı dosyası sekmesiz ve bağlantısızdır; yapay zekâ tahmin etmek zorunda kalmaz.
+  if (prepared.input.kind === "digital_planner") {
+    const print = (prepared.input.formats || []).filter((format) => !isTablet(format));
+    return print.length ? [...profile.contentEn, `${print.join(" and ")}: a printable version of the same pages without tabs, links or buttons`] : profile.contentEn;
+  }
   if (prepared.input.kind !== "paper_craft") return profile.contentEn;
   const mode = paperMode(prepared.input.productType);
   return mode === "papers"
@@ -597,7 +658,9 @@ const fileSlug = (format: string) => format.replace(/\s*\(.*\)/, "").replace(/:/
 function deliverables(prepared: Prepared, name: string, formats: string[]): string[] {
   const { input } = prepared;
   const file = name.replace(/[^A-Za-z0-9]+/g, "-").replace(/^-|-$/g, "");
-  const limit = "Etsy accepts at most 5 files of at most 20 MB each. Keep JPG quality between 80 and 90; if a file is still too big, lower the quality or split that group into Part-1 and Part-2 zips while the whole set stays at 5 files.";
+  const limit = input.kind === "wall_art"
+    ? "Etsy accepts at most 5 files of at most 20 MB each. Keep JPG quality between 80 and 90; if a zip is still over 20 MB, save that ratio's files at quality 75 (still sharp in print) and print each zip's size in the QA output."
+    : "Etsy accepts at most 5 files of at most 20 MB each. Keep JPG quality between 80 and 90; if a file is still too big, lower the quality or split that group into Part-1 and Part-2 zips while the whole set stays at 5 files.";
   const fit = (files: string[]) => files.length <= 5 ? files : [...files.slice(0, 4), `${file}-More-Sizes.zip (${files.slice(4).map((item) => item.replace(/ \(.*\)$/, "")).join(" + ")})`];
   if (input.kind === "paper_craft") {
     const pdfs = formats.filter((format) => !/12x12/.test(format));
@@ -629,7 +692,7 @@ function textRule(prepared: Prepared): string {
 function themeLine(prepared: Prepared): string {
   const lead = (prepared.input.trendFeatures || []).filter((feature) => themeFamilies(feature).size || feature.split(" ").every((word) => STYLE_WORDS.has(word) || THEME_ADJECTIVES.has(word) || word === "style"));
   // "Christmas ephemera and library ephemera" iki tema gibi okunur: ilk özellik temadır, diğerleri o temanın ayrıntısıdır.
-  const allNames = [...new Set(lead.map((feature) => proseCase(feature.replace(PAPER_NOUNS, "").trim())).filter(Boolean))];
+  const allNames = [...new Set(lead.map((feature) => proseCase(stripPaperNouns(feature))).filter(Boolean))];
   // "moody botanical" varken ayrıca "botanical" yazılmaz.
   // "Christmas busy book" varken tema "Christmas"tır (busy book içeriktir); "moody botanical" varken "botanical" ayrıca yazılmaz.
   const contains = (longer: string, shorter: string) => longer.length > shorter.length && new RegExp(`\\b${escapeRegex(shorter)}\\b`, "i").test(longer);
@@ -664,7 +727,8 @@ function buildPdfPrompt(prepared: Prepared, profile: KindProfile, name: string, 
       : `- Size: ${pages} core pages; the cover, ${input.kind === "digital_planner" ? "import guide" : "how-to-print"}, thank-you and license pages come on top`,
     `- Formats (deliver each as its own file): ${formats.join(", ")}`,
     `- Palette: ${input.colors?.length ? input.colors.join(", ") : "propose one with hex codes"}`,
-    ...(features.length ? [`- Buyer-favored features: ${joinWords(features.map(proseCase))}`] : []),
+    // "moody botanical and botanical" yazılmaz: başka bir özelliğin içinde geçen özellik listede tekrar edilmez.
+    ...(features.length ? [`- Buyer-favored features: ${joinWords(distinctFeatures(features).map(proseCase))}`] : []),
     // Tema satırı yalnız gerçek bir tema/stil varsa onu adlandırır ("led by daily" gibi anlamsız tema yazılmaz).
     themeLine(prepared),
     "",
@@ -786,7 +850,7 @@ function nounPhrase(phrase: string): string | undefined {
 // Düz yazıda formatlar: "US Letter, A4 and A5 sizes", duvar sanatında "five frame ratios up to 24x36 in".
 function formatsProse(formats: string[], kind: PrintableKind): string | undefined {
   if (kind === "wall_art") return "frame sizes up to 18x24 in";
-  if (kind === "digital_planner") return "a hyperlinked tablet PDF";
+  if (kind === "digital_planner") return formats.some((format) => !/tablet|hyperlink/i.test(format)) ? "landscape and portrait tablet PDFs in light and dark themes, plus a printable US Letter version" : "landscape and portrait tablet PDFs in light and dark themes";
   const short = [...new Set(formats.map((format) => format.replace(/\s*\(.*\)/, "").replace(/\s+in\s+(sheets|cards)$/i, "").replace(/\s+binder pages$/i, "").replace(/^4x6 and 5x7$/, "4x6, 5x7").trim()).flatMap((format) => format.split(/,\s*/)).filter((format) => /^(us letter|half letter|a4|a5|4x6|5x7|12x12|8x10|11x14)$/i.test(format)))];
   return short.length ? `${joinWords(short.slice(0, 4))} ${short.length > 1 ? "sizes" : "size"}` : undefined;
 }
@@ -1096,7 +1160,7 @@ function buildDescription(prepared: Prepared, name: string, art: ArtPlan, hook?:
   const features = input.trendFeatures || [];
   // Açılış cümlesi pinlerle aynı dili kullanır: tema "with a Christmas theme", stil "in a boho style"; kâğıt isimleri atılır.
   const leadFeature = features.find((feature) => themeFamilies(feature).size || feature.split(" ").every((word) => STYLE_WORDS.has(word)));
-  const lead = leadFeature ? featureClause(leadFeature.replace(PAPER_NOUNS, "").trim() || leadFeature, profile, input.kind) : "";
+  const lead = leadFeature ? featureClause(stripPaperNouns(leadFeature) || leadFeature, profile, input.kind) : "";
   const included = input.kind === "wall_art" || input.kind === "paper_craft" || input.kind === "coloring" ? art.includedEn : [`${pages} pages`, ...profile.includedEn];
   const note = healthNote(input);
   const tablet = formats.some((format) => isTablet(format));
@@ -1112,7 +1176,7 @@ function buildDescription(prepared: Prepared, name: string, art: ArtPlan, hook?:
     paper_craft: "Cut, fold and create."
   };
   const steps = input.kind === "digital_planner"
-    ? ["1. Purchase and download the files from your Etsy Purchases page.", "2. Import the PDF into a note-taking app that supports PDF links.", `3. ${lastStep.digital_planner}`]
+    ? ["1. Purchase and download the files from your Etsy Purchases page.", "2. Import the PDF into a note-taking app that supports PDF links.", `3. ${lastStep.digital_planner}`, ...(formats.some((format) => !isTablet(format)) ? ["4. To print, use the US Letter file at Actual size / 100% scale."] : [])]
     : [
       "1. Purchase and download the files from your Etsy Purchases page.",
       `2. ${input.kind === "wall_art" ? "Unzip the size you need and print it at home or at a print shop" : input.kind === "paper_craft" ? "Unzip the files and print at home or at a print shop" : "Print at home or at a print shop"} at Actual size / 100% scale.`,

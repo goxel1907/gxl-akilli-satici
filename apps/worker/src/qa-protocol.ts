@@ -18,7 +18,7 @@ const TEXT_KINDS = new Set<PrintableKind>(["planner", "digital_planner", "journa
 const KIND_CHECKS: Partial<Record<PrintableKind, string[]>> = {
   planner: ["CALENDAR — monthly grids have 6 rows × 7 columns; Monday-start and Sunday-start versions differ only in weekday order."],
   wall_art: ["PRINT SIZE — every 2:3 master is 5400×8100 px, every ratio file has the stated pixel size at 300 dpi (for example 3:4 = 5400×7200 px for 18×24 in), and important elements stay inside the safe area in every ratio."],
-  coloring: ["LINE ART — after thresholding, the line art is pure black on white with no gray fills, lines are closed and at least 1 pt thick, and no two pages share the same subject; the PDF has no blank pages."],
+  coloring: ["LINE ART — after thresholding, the line art is pure black on white with no gray fills, lines are closed and at least 1 pt thick, and no two pages repeat the same subject in the same composition; the PDF has no blank pages."],
   party: ["ANSWER KEYS — every game with right answers (quizzes, matching, word games) has an answer key with one answer per question; games without right answers (advice cards, predictions) are marked \"no key needed\"."],
   recipe: ["CUT LINES — 4×6 and 5×7 cards have crop marks, and the card content stays 3 mm inside them (cards have no binding margin)."],
   journal: ["PROMPTS — no prompt is repeated; count the prompts and confirm there are at least 40, as the content requires."],
@@ -37,9 +37,11 @@ function filesCheck(input: Extract<QaInput, { type: "printable" }>): string {
     const pdfs = print.filter((format) => !/12x12/.test(format));
     return `FILES — ${pdfs.length ? `the ${pdfs.join(" and ")} PDF editions exist, open and have the same page order and count (${count}); each page size matches its format within 1 pt (${pageSizes(pdfs)}); ` : ""}the 12×12 papers exist as JPG files; ${limit}.`;
   }
+  if (input.kind === "recipe") return `FILES — the 4×6 and 5×7 card PDFs are US Letter sheets (612×792 pt) holding the cards with crop marks, and each card's trim box measures 288×432 pt (4×6) or 360×504 pt (5×7) within 1 pt; the binder-page PDFs match ${pageSizes(print.filter((format) => !/cards/i.test(format)))}; every edition holds the same recipe templates; ${limit}.`;
   if (input.kind === "wall_art") return `FILES — every print exists in every ratio or size file (${input.formats.join(", ")}), each opens and has the stated pixel size, and the PDF holds the size guide, how-to-print, thank-you and license pages; ${limit}.`;
   if (input.kind === "digital_planner") return `FILES — every edition in the upload set exists and opens; every edition has the same pages (${count})${tabletSize}${print.length ? `; the ${print.join(" and ")} edition matches ${pageSizes(print)}` : ""}; ${limit}.`;
-  return `FILES — every promised format exists as its own file: ${input.formats.join(", ")}. Each file opens; every edition has the same pages (${count}); each print page matches its format within 1 pt (${pageSizes(print)})${tabletSize}; ${limit}.`;
+  const blackWhite = input.formats.some((format) => /black-and-white/i.test(format)) ? "; the black-and-white edition is US Letter (612×792 pt)" : "";
+  return `FILES — every promised format exists as its own file: ${input.formats.join(", ")}. Each file opens; every edition has the same pages (${count}); each print page matches its format within 1 pt (${pageSizes(print)})${blackWhite}${tabletSize}; ${limit}.`;
 }
 
 type PatternQa = Extract<QaInput, { type: "pattern" }>;
@@ -61,12 +63,12 @@ const PATTERN_CHECKS: Record<PatternCraft, (input: PatternQa) => string[]> = {
     "MATERIALS — fabric, DMC numbers and skein amounts are identical on the cover, the materials page, the key and the Design spec."
   ],
   embroidery: () => [
-    "TEMPLATE — the test square measures exactly 1 in / 2.5 cm at 100% print; the template fits the stated hoop and its bounding box fits the printable area (7 × 9.5 in) of both US Letter and A4, or it is tiled with overlap marks.",
+    "TEMPLATE — the test square measures exactly 1 in / 2.5 cm at 100% print; the template fits the stated hoop and its bounding box fits inside 6.5 × 9 in so it prints at 100% on both US Letter and A4, or it is tiled with overlap marks.",
     "CALLOUTS — every numbered area has a stitch and a color, every callout is in the legend, and the stitch guide covers every stitch used.",
     "MATERIALS — fabric, hoop, DMC numbers, strands and skeins are identical on the materials page, the map and the Design spec."
   ],
   punch_needle: () => [
-    "TEMPLATE — the template is mirrored and labeled \"back side\", the test square measures exactly 1 in / 2.5 cm at 100% print, and the template fits the printable area (7 × 9.5 in) of US Letter and A4 or is tiled with overlap marks.",
+    "TEMPLATE — the template is mirrored and labeled \"back side\", the test square measures exactly 1 in / 2.5 cm at 100% print, and the template fits inside 6.5 × 9 in (prints at 100% on US Letter and A4) or is tiled with overlap marks.",
     "CALLOUTS — every color area has a yarn color and a loop height that are in the legend.",
     "MATERIALS — foundation, needle size and yarn amounts are identical on the materials page, the map and the Design spec."
   ],
@@ -89,7 +91,7 @@ export function qaProtocol(input: QaInput): string[] {
     "Saying \"checked\" without the script output does not count. Only if you cannot run code at all: give one PASS/FAIL line per check with the evidence you looked at."
   ];
   // Cilt payı yalnız deliği/cildi olan sayfalarda: planlayıcı, günlük, tarif dosyası sayfaları ve desen PDF'i (kartlarda yok).
-  const binding = input.type === "pattern" || ["planner", "journal"].includes(input.kind);
+  const binding = input.type === "printable" && ["planner", "journal"].includes(input.kind);
   const nameWhere = input.type === "printable" && input.kind === "wall_art" ? "on the size guide and the license page" : "on the cover and on the thank-you or final page";
   const common = (name: string) => [
     `NAME — the product name "${name}" appears ${nameWhere}, spelled exactly like this, and no other product name or old working name appears anywhere.`,
@@ -111,7 +113,9 @@ export function qaProtocol(input: QaInput): string[] {
         : `DUPLICATES — no two pages share the same or nearly the same ${textKind ? "text (90% or more), except declared Monday/Sunday variants and declared repeated template pages (for example the daily page of an undated planner, or free-writing pages)" : "artwork or composition"}. Every page must earn its place.`,
       ...(input.kind !== "wall_art" ? ["COVER — page 1 is a real cover: no page number, running header or navigation label."] : []),
       ...(tablet ? ["LINKS — the tablet edition has working internal links (count them) and every page links back to the index; print editions have no tab bars or buttons that only work on a tablet."] : []),
-      ...(!textKind ? [`TEXT-FREE ART — ${input.kind === "paper_craft" ? input.papersOnly ? "patterned and solid papers" : "patterned papers, solid papers and ephemera sheets" : input.kind === "wall_art" ? "the art prints" : "the coloring artwork"} contain no text, letters, page number or footer: extract the PDF text of those pages and run OCR (for example pytesseract) on every art image; if OCR is not available, list every image where letters or pseudo-letters are visible on the contact sheet.`] : []),
+      ...(!textKind ? [input.kind === "coloring"
+        ? "TEXT-FREE ART — the line art itself contains no text or letters: run OCR (for example pytesseract) on every art image before it is placed; on the pages, text is allowed only in the bottom margin (the small page number and © line); if OCR is not available, list every image where letters or pseudo-letters are visible on the contact sheet."
+        : `TEXT-FREE ART — ${input.kind === "paper_craft" ? input.papersOnly ? "the patterned and solid papers contain" : "the patterned papers, solid papers and ephemera sheets contain" : "the art prints contain"} no text, letters, page number or footer: extract the PDF text of those pages and run OCR (for example pytesseract) on every art image; if OCR is not available, list every image where letters or pseudo-letters are visible on the contact sheet.`] : []),
       ...(input.kind === "paper_craft" && !input.papersOnly ? ["EPHEMERA — every ephemera PNG has a transparent background and keeps its white cutting border."] : []),
       "THEME — list every page title; none names a different holiday, season or mood than the theme in the Product spec.",
       ...(textKind ? ["LEGIBILITY — body text at least 9 pt, labels at least 7 pt, label color contrast at least 4.5:1 on white."] : []),

@@ -1,3 +1,4 @@
+import { hasBrandName } from "./ip-guard.js";
 import type { PatternCraft, PrintableKind } from "./etsy-trends.js";
 import { isIpRisky } from "./ip-guard.js";
 import { validateEtsyListingText } from "./pattern-studio.js";
@@ -95,6 +96,15 @@ function lintPrompt(c: Collector, field: string, prompt: string, context: Prompt
   find(c, field, ruleFree, /\bvideo tutorial\b|\bshort video\b/i, "impossible_video", "Talimat yapay zekânın yapamayacağı bir video istiyor.");
   find(c, field, ruleFree, /\beditable template version\b/i, "impossible_editable", "Talimat ürünün içermediği düzenlenebilir sürümü vaat ediyor.");
   find(c, field, prompt, /you may refine it/i, "name_drift", "Yapay zekâya ürün adını değiştirme izni verilmiş; ilan ve görseller eski adla kalır.");
+  // Görsel listesinde aynı resmin iki kez istenmesi (QA DUPLICATES baştan FAIL olur).
+  c.checks += 1;
+  const artLines = prompt.split("\n").filter((line) => /^B\d+\. /.test(line)).map((line) => line.replace(/^B\d+\. [^:]+:\s*/, "").trim());
+  const repeatedArt = artLines.find((line, index) => artLines.indexOf(line) !== index);
+  if (repeatedArt) c.issues.push({ code: "repeated_art", field, severity: "error", messageTr: "Aynı görsel iki kez isteniyor; kontrol listesi bu sayfaları kopya sayar.", excerpt: repeatedArt.slice(0, 80) });
+  // "Christmas and Christmas busy book", "small motifs of wildflower motifs" gibi kendini tekrar eden ifadeler.
+  find(c, field, prompt, /\b(\w+) and \1\b|motifs of [^,\n]*\bmotifs\b/i, "doubled_phrase", "Kendini tekrar eden ifade var.");
+  // Kâğıt/ürün adı çizilecek konu olarak yazılmış ("a repeat of ephemera pack").
+  find(c, field, prompt, /\b(repeat|illustration|featuring) of (an? )?(ephemera|[a-z ]*\b(pack|kit|bundle|sheets|pages))\b|\bfeaturing (ephemera|[a-z ]*\b(pack|kit|bundle))\b/i, "meta_subject", "Çizilecek konu yerine ürün/kâğıt adı yazılmış.");
   c.checks += 1;
   if (!/another seller's/i.test(prompt)) c.issues.push({ code: "reference_rule", field, severity: "error", messageTr: "Başka satıcının ilan görselini veya telifli görseli referans almayı yasaklayan kural yok." });
   if (context.kind && ["paper_craft", "wall_art", "coloring"].includes(context.kind)) {
@@ -172,6 +182,10 @@ function lintListing(c: Collector, field: string, listing: ListingLike, digital:
   if (conflict) c.issues.push({ code: "tag_theme", field: `${field}.tags`, severity: "error", messageTr: `Etiketler birbiriyle çatışan temalar içeriyor (ör. "${conflict}").` });
   for (const value of [listing.title, ...listing.tags]) {
     c.checks += 1;
+    // Uyumluluk markası (iPad, GoodNotes, DMC) başlıkta ve etikette fikrî mülkiyet şikâyeti riskidir.
+    if (hasBrandName(value)) c.issues.push({ code: "brand_tag", field: `${field}.tags`, severity: "error", messageTr: `Başlıkta veya etikette marka adı var: "${value}". Uyumluluk yalnız açıklamada yazılır.` });
+    // Yeni dijital üründe "vintage" Etsy'de 20 yaş üstü ürün demektir; yalnız "vintage style" yazılır.
+    if (digital && /\bvintage\b(?![\s-]+(style|inspired))/i.test(value)) c.issues.push({ code: "vintage_new", field: `${field}.tags`, severity: "error", messageTr: `Yeni ürüne "vintage" denmiş: "${value}". "vintage style" yazılmalı.` });
     if (MISLEADING_FEATURE.test(value)) c.issues.push({ code: "misleading", field: `${field}.tags`, severity: "error", messageTr: `Ürünün içermediği bir şeyi vaat ediyor: "${value}".` });
     if (isIpRisky(value)) c.issues.push({ code: "ip_risk", field: `${field}.tags`, severity: "error", messageTr: `Marka/telif riski olan kelime var: "${value}".` });
   }
