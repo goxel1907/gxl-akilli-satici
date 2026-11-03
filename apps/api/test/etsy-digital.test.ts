@@ -146,7 +146,7 @@ test("pattern brief forces an original design and ties renders to the pattern sp
   assert.equal(brief.photoPlan.length, 10);
 });
 
-test("digital listing follows Etsy title and tag rules and discloses AI and renders", () => {
+test("digital pattern listing follows Etsy title and tag rules and only describes the seller's own, test-made pattern", () => {
   const draft = buildDigitalListing({
     name: "Juniper Crown Doily",
     craft: "crochet",
@@ -170,16 +170,19 @@ test("digital listing follows Etsy title and tag rules and discloses AI and rend
   assert.ok(draft.tags.includes("doily pattern"));
   assert.ok(!draft.tags.includes("shop name brand"));
   assert.equal(draft.checks.ok, true);
-  assert.match(draft.description, /digital renders/);
-  assert.match(draft.description, /Designed with the help of AI tools/);
+  // Etsy 22 Ekim 2026: yapay zekâ deseni yasak. Onaylar yoksa ilan "yüklenemez" uyarısı taşır, AI/render notu yazılmaz.
+  assert.doesNotMatch(draft.description, /digital renders|Designed with the help of AI tools/);
   assert.match(draft.description, /24-page PDF/);
-  assert.ok(draft.warnings.some((warning) => warning.includes("test edilmedi")));
+  assert.ok(draft.warnings.some((warning) => warning.startsWith("Bu desen Etsy'ye yüklenemez")));
+  const own = buildDigitalListing({ name: "Juniper Crown Doily", craft: "crochet", productType: "doily", ownPattern: true, testMade: true, photosAreRenders: false, aiAssisted: false });
+  assert.match(own.description, /written and test-made by our own maker, and the photos show the real finished piece/);
+  assert.ok(!own.warnings.some((warning) => warning.startsWith("Bu desen")));
   assert.deepEqual(draft.materials, ["size 10 cotton thread", "crochet hook"]);
 
-  const tested = buildDigitalListing({ name: "Juniper Crown Doily", craft: "crochet", productType: "doily", aiAssisted: false, photosAreRenders: false, testMade: true });
+  const tested = buildDigitalListing({ name: "Juniper Crown Doily", craft: "crochet", productType: "doily", ownPattern: true, aiAssisted: false, photosAreRenders: false, testMade: true });
   assert.doesNotMatch(tested.description, /AI tools/);
   assert.doesNotMatch(tested.description, /digital renders/);
-  assert.deepEqual(tested.warnings, []);
+  assert.deepEqual(tested.warnings, ["İlk görsel, bu desenle yapılmış bitmiş ürünün gerçek ve düzenlenmemiş fotoğrafı olsun (Etsy kuralı)."]);
 });
 
 test("Etsy title normalizer removes invalid characters and repeated special symbols", () => {
@@ -190,24 +193,30 @@ test("Etsy title normalizer removes invalid characters and repeated special symb
   assert.equal(check.issues.length, 4);
 });
 
-test("pattern plan endpoint returns prompts and a listing draft", async () => {
-  const response = await handleRequest(new Request("https://gxl.example/api/patterns/plan", {
+test("pattern plan endpoint refuses AI-written patterns and lists only the seller's own, test-made pattern", async () => {
+  const post = (body: Record<string, unknown>) => handleRequest(new Request("https://gxl.example/api/patterns/plan", {
     method: "POST",
     headers: { authorization: "Bearer app-token", "content-type": "application/json" },
-    body: JSON.stringify({ craft: "knitting", productType: "ballet slippers", skillLevel: "beginner", sizeNote: "EU 36-41", keyword: "knit slippers pattern" })
+    body: JSON.stringify(body)
   }), { APP_ACCESS_TOKEN: "app-token" });
+  // Etsy 22 Ekim 2026: yapay zekâya desen yazdıran paket artık üretilmez.
+  const refused = await post({ craft: "knitting", productType: "ballet slippers", keyword: "knit slippers pattern" });
+  assert.equal(refused.status, 422);
+  const refusal = await refused.json() as { code: string; error: string; issues: string[] };
+  assert.equal(refusal.code, "ETSY_AI_PATTERN_BAN");
+  assert.match(refusal.error, /Etsy'ye yüklenemez/);
+  assert.equal(refusal.issues.length, 3);
+
+  const response = await post({ craft: "knitting", productType: "ballet slippers", skillLevel: "beginner", sizeNote: "EU 36-41", keyword: "knit slippers pattern", ownPattern: true, testMade: true, photosAreRenders: false });
   assert.equal(response.status, 200);
-  const body = await response.json() as { brief: { name: string; patternPrompt: string }; listing: { title: string; tags: string[] } };
-  assert.match(body.brief.name, /Ballet Slippers$/);
-  assert.match(body.brief.patternPrompt, /grade at least 3 sizes/i);
+  const body = await response.json() as { brief?: unknown; listing: { title: string; tags: string[]; description: string }; quality: { ok: boolean } };
+  assert.equal(body.brief, undefined);
   assert.ok(body.listing.title.startsWith("Knit Slippers Pattern PDF"));
   assert.equal(body.listing.tags.length, 13);
+  assert.match(body.listing.description, /written and test-made by our own maker/);
+  assert.equal(body.quality.ok, true);
 
-  const invalid = await handleRequest(new Request("https://gxl.example/api/patterns/plan", {
-    method: "POST",
-    headers: { authorization: "Bearer app-token", "content-type": "application/json" },
-    body: JSON.stringify({ craft: "painting", productType: "doily" })
-  }), { APP_ACCESS_TOKEN: "app-token" });
+  const invalid = await post({ craft: "painting", productType: "doily", ownPattern: true, testMade: true, photosAreRenders: false });
   assert.equal(invalid.status, 400);
 });
 
@@ -244,11 +253,12 @@ function uploadForm(confirm = true, pdf: File = pdfFile()) {
     craft: "crochet",
     productType: "doily",
     prices: { usd: "6.50", try: "249" },
-    flags: { aiAssisted: true, photosAreRenders: true, testMade: false },
+    // Etsy yalnız kendi yazılmış, denenmiş ve gerçek fotoğraflı deseni kabul eder.
+    flags: { ownPattern: true, aiAssisted: false, photosAreRenders: false, testMade: true },
     listing: { title: "Crochet Doily Pattern PDF, Juniper Crown Doily", description: "Digital PDF pattern.", tags: ["doily pattern", "crochet doily"], materials: ["cotton thread"] }
   }));
   form.set("pdf", pdf);
-  form.append("images", new File([Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47]), Buffer.alloc(2_000, 1)])], "render.png", { type: "image/png" }));
+  form.append("images", new File([Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47]), Buffer.alloc(2_000, 1)])], "photo.png", { type: "image/png" }));
   return form;
 }
 

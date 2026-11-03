@@ -146,12 +146,14 @@ test("seed and plan endpoints fill the studio and remember used names", async ()
   assert.equal(seed.productType, "cardigan");
   assert.equal(seed.referenceSource, "trend");
 
-  const body = JSON.stringify({ ...seed, seed: "same" });
-  const first = await (await handleRequest(new Request("https://gxl.example/api/patterns/plan", { method: "POST", headers, body }), env)).json() as { brief: { name: string; patternPrompt: string } };
-  const second = await (await handleRequest(new Request("https://gxl.example/api/patterns/plan", { method: "POST", headers, body }), env)).json() as { brief: { name: string } };
-  assert.notEqual(first.brief.name, second.brief.name);
-  assert.match(first.brief.patternPrompt, /Market brief/);
-  assert.deepEqual((await readUsedNames(kv.store)).slice(0, 2), [second.brief.name, first.brief.name]);
+  // Etsy 22 Ekim 2026: trend verisi yalnız fikir verir; yapay zekâya desen yazdıran paket üretilmez.
+  const refused = await handleRequest(new Request("https://gxl.example/api/patterns/plan", { method: "POST", headers, body: JSON.stringify({ ...seed, seed: "same" }) }), env);
+  assert.equal(refused.status, 422);
+  const own = await handleRequest(new Request("https://gxl.example/api/patterns/plan", { method: "POST", headers, body: JSON.stringify({ ...seed, seed: "same", name: "Sunday Market Cardigan", ownPattern: true, testMade: true, photosAreRenders: false }) }), env);
+  assert.equal(own.status, 200);
+  const ownBody = await own.json() as { listing: { title: string; tags: string[] } };
+  assert.match(ownBody.listing.title, /Cardigan/);
+  assert.equal(ownBody.listing.tags.length, 13);
 
   const missing = await handleRequest(new Request("https://gxl.example/api/patterns/seed", { method: "POST", headers, body: JSON.stringify({}) }), env);
   assert.equal(missing.status, 400);

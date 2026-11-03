@@ -1,4 +1,5 @@
 import { approvals, leads, messages, products } from "../../api/src/data.js";
+import { patternPolicyIssues, patternPolicyMessage } from "./etsy-policy.js";
 import { generateListingPack } from "../../api/src/listing-agent.js";
 import { evaluateMarketplacePolicies, type ProductOrigin, type RiskFlag } from "../../api/src/marketplace-policy.js";
 import { buildOpportunityCenter, replyToAgent, type OpportunityContext } from "../../api/src/opportunity-agent.js";
@@ -35,12 +36,12 @@ import { normalizeScorecardInput, scoreListing, scoreShopListings } from "./list
 import { assistBuyerMessage, MessageAssistError, normalizeMessageInput } from "./message-assist.js";
 import { explainListingTr } from "./tr-glossary.js";
 import { turkishFor, turkishForPhrases } from "./phrase-tr.js";
-import { buildPatternBrief, createDigitalListing, normalizeDigitalListingInput, normalizePatternPlanInput } from "./pattern-studio.js";
+import { createDigitalListing, normalizeDigitalListingInput } from "./pattern-studio.js";
 import { PRIVACY_PATHS, privacyPolicyPage } from "./legal-pages.js";
 import { applyShopSettings, shopSettingsStatus, ShopSettingsError } from "./shop-settings.js";
 import { createPatternSeed, readUsedNames, rememberName } from "./pattern-seed.js";
 import { buildPrintableBrief, createPrintableListing, normalizePrintablePlanInput } from "./printable-studio.js";
-import { guardMarketingPlan, guardPatternPlan, guardPrintablePlan, guardProductPlan } from "./output-guard.js";
+import { guardDigitalListing, guardMarketingPlan, guardPrintablePlan, guardProductPlan } from "./output-guard.js";
 import {
   autoEnqueuePins,
   boardNameFor,
@@ -528,16 +529,19 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
       const text = (value: unknown) => value ? String(value) : undefined;
       return json(200, await createPatternSeed(env, env.ETSY_OAUTH as unknown as TrendStore | undefined, { keyword: text(input.keyword), craft: text(input.craft), group: text(input.group), kind: text(input.kind), studio: text(input.studio) }));
     }
+    // Etsy 22 Ekim 2026: yapay zekâ deseni yasak. Yapay zekâya desen yazdıran talimat paketi artık üretilmez;
+    // yalnız satıcının kendi yazdığı ve denediği desen için ilan metni (başlık, etiket, açıklama) hazırlanır.
     if (request.method === "POST" && url.pathname === "/api/patterns/plan") {
       const input = await readBody(request);
+      // Gerçek fotoğraf açıkça onaylanmalı (photosAreRenders: false); sessiz kalan istek render sayılır.
+      const flags = { ownPattern: input.ownPattern === true, testMade: input.testMade === true, photosAreRenders: input.photosAreRenders !== false, aiAssisted: input.aiAssisted === true };
+      const blocked = patternPolicyMessage(flags);
+      if (blocked) return json(422, { error: blocked, code: "ETSY_AI_PATTERN_BAN", issues: patternPolicyIssues(flags) });
       const store = env.ETSY_OAUTH as unknown as TrendStore | undefined;
-      const plan = normalizePatternPlanInput(input);
       const usedNames = await readUsedNames(store);
-      const brief = buildPatternBrief({ ...plan, avoidNames: usedNames });
-      await rememberName(store, brief.name, usedNames);
-      const listing = await createDigitalListing(normalizeDigitalListingInput({ ...input, name: input.name || brief.name }), env);
+      const listing = await createDigitalListing(normalizeDigitalListingInput({ ...input, ...flags, avoidNames: usedNames }), env);
       // Telefona gitmeden önce otomatik denetim: küçük hatalar düzeltilir, kalan sorun "quality" ile bildirilir.
-      return json(200, guardPatternPlan(brief, listing, { craft: plan.craft }));
+      return json(200, guardDigitalListing(listing));
     }
 
     if (request.method === "POST" && url.pathname === "/api/printables/plan") {

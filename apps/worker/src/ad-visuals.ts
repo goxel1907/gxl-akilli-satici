@@ -1,5 +1,5 @@
 import type { PatternCraft, PrintableKind } from "./etsy-trends.js";
-import { proseCase } from "./theme.js";
+import { proseCase, vintageStyle } from "./theme.js";
 
 // Reklam tadında ürün görselleri: her görsel nerede kullanılacağı, oranı ve üstüne yazılacak kısa reklam metniyle gelir.
 // Görsel modelleri yazıyı bozduğu için promptlar yazı alanını boş bırakır; metin Canva gibi bir araçla eklenir.
@@ -172,7 +172,9 @@ export function buildAdVisuals(input: AdVisualInput): AdVisual[] {
   const pickScene = (offset: number) => scenes[(random + offset) % scenes.length];
   const palette = input.colors?.length ? input.colors.join(", ") : "soft neutral tones";
   // Özellik görsel bir ayrıntı olarak yazılır ("highlighting cozy" değil, "with Cozy and Granny Square details").
-  const visible = (input.features || []).filter((feature) => !NOT_VISUAL.test(feature));
+  // "Christmas and Christmas busy book" olmaz: başka bir özelliğin içinde geçen özellik ayrıca yazılmaz; "vintage" yeni üründe "vintage-style"dır.
+  const allVisible = (input.features || []).map(vintageStyle).filter((feature) => !NOT_VISUAL.test(feature));
+  const visible = allVisible.filter((feature, index) => !allVisible.some((other, otherIndex) => otherIndex !== index && other.length > feature.length && other.includes(feature)));
   const highlight = visible.length ? ` with ${visible.slice(0, 2).map(proseCase).join(" and ")} details visible` : "";
   const isPattern = Boolean(input.craft);
   // Ad zaten ürün adını içeriyorsa tekrar yazılmaz ("the "X Junk Journal Kit" junk journal kit" olmaz).
@@ -192,7 +194,7 @@ export function buildAdVisuals(input: AdVisualInput): AdVisual[] {
       ? [...new Set(input.formats.filter((format) => !/black-and-white|printer-friendly/i.test(format)).map((format) => format.replace(/\s*\(.*\)/, "").replace(/\s+in\s+(sheets|cards)$/i, "").replace(/\s+ratio$/i, "").replace(/\s+binder pages$/i, "").trim().toUpperCase()))].slice(0, 4).join(" + ")
       : "";
   const pages = input.pageCount ? input.kind === "wall_art" ? `${input.pageCount} ${input.pageCount > 1 ? "PRINTS" : "PRINT"}` : `${input.pageCount} PAGES` : "";
-  const shortName = input.productType.toUpperCase();
+  const shortName = proseCase(input.productType).toUpperCase();
   const closeUp = isPattern
     ? CRAFT_DETAIL[input.craft!]
     : input.kind === "wall_art"
@@ -205,6 +207,10 @@ export function buildAdVisuals(input: AdVisualInput): AdVisual[] {
             ? "a tablet screen showing crisp lines and tabs, a stylus tip in view"
             : "one page corner showing crisp lines and layout";
   const included = Math.max(2, Math.min(9, input.pageCount || 9));
+  // Etsy dijital üründe alıcının alacağı sayfaların gerçek önizlemesini ister: bu görsel görsel aracıyla değil,
+  // bitmiş PDF'in sayfalarından kodla yapılır ve sayfalar hiç değiştirilmez.
+  const previewCount = included >= 6 ? `6-${included}` : `${included}`;
+  const previewPrompt = `Make this image in code, not with an image tool: render ${input.kind === "wall_art" ? `all ${input.pageCount || 3} prints` : `${previewCount} different real pages`} from the final files at full quality and place them in a neat grid on a plain light background in one palette color, even spacing, a soft drop shadow, no props, and no changes to the pages themselves. Do not add any new text, letters, logos or watermarks; use only the pages made in this chat. Never use another seller's images. This is the unedited preview of what the buyer receives, which Etsy requires for digital items; upload it as the second listing image. Leave the top band clean for the headline.`;
   const includedRange = included >= 6 ? `6-${included}` : `${included}`;
   // Sahne listesi 5'ten kısaysa reklam görseli kullanım sahnesini tekrar etmesin diye ayrı bir kompozisyon alır.
   const adScene = scenes.length >= 5 ? pickScene(4) : isPattern
@@ -212,11 +218,11 @@ export function buildAdVisuals(input: AdVisualInput): AdVisual[] {
     : "a top-down flat lay of the pages on a solid backdrop in one palette color";
 
   const visuals: Array<Omit<AdVisual, "slot">> = [
-    { titleTr: "Kapak (ana görsel)", useTr: "Etsy arama sonuçlarındaki küçük görsel; tıklanma oranını belirler", titleEn: "Cover (main image)", useEn: "Etsy search thumbnail; it decides the click-through rate", aspect: "4:3 yatay · 3000x2250 px", overlay: [shortName, pages].filter(Boolean).join(" · "), prompt: `${base} Hero shot: ${subject}${highlight}, ${pickScene(0)}. The product fills about 60% of the frame and is instantly recognizable at thumbnail size. ${space}` },
+    { titleTr: "Kapak (ana görsel)", useTr: "Etsy arama sonuçlarındaki küçük görsel; tıklanma oranını belirler", titleEn: "Cover (main image)", useEn: "Etsy search thumbnail; it decides the click-through rate", aspect: "4:3 yatay · 3000x2250 px", overlay: /PAGES$/.test(shortName) && input.pageCount ? `${input.pageCount} ${shortName}` : [shortName, pages].filter(Boolean).join(" · "), prompt: `${base} Hero shot: ${subject}${highlight}, ${pickScene(0)}. The product fills about 60% of the frame and is instantly recognizable at thumbnail size. ${space}` },
     { titleTr: "Kullanım sahnesi", useTr: "Etsy galerisi 2. görsel; alıcının ürünü kendi hayatında hayal etmesi için", titleEn: "Lifestyle scene", useEn: "Etsy gallery image 2; helps buyers picture the product in their own life", aspect: "4:3 yatay · 3000x2250 px", prompt: `${base} Lifestyle scene: ${subject}, ${pickScene(1)}. Candid, aspirational, uncluttered.` },
     { titleTr: "Yakın çekim kalite detayı", useTr: "Etsy galerisi; baskı/ilmek kalitesini gösterir", titleEn: "Close-up quality detail", useEn: isPattern ? "Etsy gallery; shows the finished detail" : input.kind === "digital_planner" ? "Etsy gallery; shows the crisp detail on screen" : "Etsy gallery; shows print quality", aspect: "4:3 yatay · 3000x2250 px", prompt: `${base} Macro close-up of ${closeUp}, ${subject}, razor-sharp focus, gentle side light.` },
-    { titleTr: isPattern ? "PDF içeriği" : "Neler var? (içerik kolajı)", useTr: "Etsy galerisi; alıcının ne aldığını tek bakışta görmesi için", titleEn: isPattern ? "What is in the PDF" : "What's included (content collage)", useEn: "Etsy gallery; shows at a glance what the buyer gets", aspect: "4:3 yatay · 3000x2250 px", overlay: isPattern ? PATTERN_INCLUDED[input.craft!] : `WHAT'S INCLUDED${pages ? ` · ${pages}` : ""}`, prompt: `${base} Flat lay grid of ${isPattern ? "printed pattern pages and a tablet showing the PDF (the pattern pages may show their own printed text), next to the finished piece and materials" : input.kind === "wall_art" ? `all ${input.pageCount || 3} prints of the set side by side` : input.kind === "digital_planner" ? `${includedRange} different planner pages shown on tablet screens` : `${includedRange} different printed pages from the product arranged neatly`} on a light linen surface, top-down, even spacing. ${space}` },
-    { titleTr: "Ölçü / format kartı", useTr: "Etsy galerisi; yanlış ölçü iadelerini önler", titleEn: isPattern ? "Size card" : "Size / format card", useEn: "Etsy gallery; prevents wrong-size returns", aspect: "4:3 yatay · 3000x2250 px", overlay: formats || (isPattern ? "FINISHED SIZE" : "PRINT SIZES"), prompt: `${base} ${isPattern ? `${cap(subject)} next to a measuring tape and a ruler for scale` : input.kind === "wall_art" ? "Empty frames in several standard sizes leaning against a wall, the prints placed inside them, showing relative size" : input.kind === "digital_planner" ? "The planner shown on a large and a small tablet side by side, landscape and portrait" : "Stacked printed sheets in each included size (largest at back) on a desk, edges aligned, showing relative size"}, clean minimal composition. ${space}` },
+    { titleTr: isPattern ? "PDF içeriği" : "Neler var? (içerik kolajı)", useTr: "Etsy galerisi; alıcının ne aldığını tek bakışta görmesi için", titleEn: isPattern ? "What is in the PDF" : "What's included (content collage)", useEn: "Etsy gallery; shows at a glance what the buyer gets", aspect: "4:3 yatay · 3000x2250 px", overlay: isPattern ? PATTERN_INCLUDED[input.craft!] : `WHAT'S INCLUDED${pages ? ` · ${pages}` : ""}`, prompt: !isPattern ? previewPrompt : `${base} Flat lay grid of ${isPattern ? "printed pattern pages and a tablet showing the PDF (the pattern pages may show their own printed text), next to the finished piece and materials" : input.kind === "wall_art" ? `all ${input.pageCount || 3} prints of the set side by side` : input.kind === "digital_planner" ? `${includedRange} different planner pages shown on tablet screens` : `${includedRange} different printed pages from the product arranged neatly`} on a light linen surface, top-down, even spacing. ${space}` },
+    { titleTr: "Ölçü / format kartı", useTr: "Etsy galerisi; yanlış ölçü iadelerini önler", titleEn: isPattern ? "Size card" : "Size / format card", useEn: "Etsy gallery; prevents wrong-size returns", aspect: "4:3 yatay · 3000x2250 px", overlay: formats || (isPattern ? "FINISHED SIZE" : "PRINT SIZES"), prompt: `${base} ${isPattern ? `${cap(subject)} next to a measuring tape and a ruler for scale` : input.kind === "wall_art" ? "Frames in several standard sizes leaning against a wall, each holding one of the real prints, showing relative size" : input.kind === "digital_planner" ? "The planner shown on a large and a small tablet side by side, landscape and portrait" : "Stacked printed sheets in each included size (largest at back) on a desk, edges aligned, showing relative size"}, clean minimal composition. ${space}` },
     { titleTr: "İkinci kullanım sahnesi", useTr: "Etsy galerisi; farklı bir ortamda kullanım", titleEn: "Second lifestyle scene", useEn: "Etsy gallery; the product in a different setting", aspect: "4:3 yatay · 3000x2250 px", prompt: `${base} Second lifestyle scene: ${subject}, ${pickScene(2)}. A different setting and angle from the first lifestyle image.` },
     // Görseller yalnız ürünün gerçekten içerdiği sürümleri gösterir: PDF'te olmayan renk seçeneği alıcıyı yanıltır.
     variationVisual(input, base, subject, palette, space),

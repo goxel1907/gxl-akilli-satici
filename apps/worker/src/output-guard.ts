@@ -248,6 +248,15 @@ export function guardPatternPlan<B extends { masterPrompt: string; patternPrompt
   return { brief: { ...brief, masterPrompt, patternPrompt }, listing: safeListing, quality: report(c, fixed) };
 }
 
+// Kendi deseninin ilanı: yalnız başlık, etiket ve açıklama denetlenir (talimat paketi yok).
+export function guardDigitalListing<L extends ListingLike>(listing: L) {
+  const c: Collector = { issues: [], checks: 0 };
+  const fixed: string[] = [];
+  const safe = repairListing(listing, fixed, "listing");
+  lintListing(c, "listing", safe, true);
+  return { listing: safe, quality: report(c, fixed) };
+}
+
 export function guardProductPlan<P extends ListingLike>(plan: P) {
   const c: Collector = { issues: [], checks: 0 };
   const fixed: string[] = [];

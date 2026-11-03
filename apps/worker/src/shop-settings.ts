@@ -32,19 +32,19 @@ export const SHOP_PRESETS: Record<ShopAudience, ShopPreset> = {
   planners: {
     labelTr: "Planlayıcı ve PDF alıcıları (önerilen)",
     audienceTr: "ABD'de düzen, alışkanlık ve sakin bir gün arayan kadınlar: anneler, öğrenciler, çalışan kadınlar.",
-    tagline: "Printable planners & craft patterns for calm, organized days",
-    title: "Printable Planners & Craft Patterns for Calm Days",
-    announcement: "Welcome to GXL Market Studio! We design calm, practical printables for real, busy lives: undated planners, gentle habit and life trackers, and easy-to-follow craft patterns. Every file is an instant download that prints cleanly at home on US Letter or A4. Questions about printing or sizes? Send us a message; we're happy to help.",
+    tagline: "Printable planners & trackers for calm, organized days",
+    title: "Printable Planners, Trackers & Junk Journal Kits",
+    announcement: "Welcome to GXL Market Studio! We design calm, practical printables for real, busy lives: undated planners, gentle habit and life trackers, and printable kits for paper crafts. Every file is an instant download that prints cleanly at home on US Letter or A4. Questions about printing or sizes? Send us a message; we're happy to help.",
     saleMessage: "Thank you for your order from GXL Market Studio! If you have any questions about your item, just reply to this message and we will help.",
     digitalSaleMessage: DIGITAL_THANKS,
-    sections: ["Printable Planners", "Habit & Life Trackers", "Crochet & Knit Patterns"]
+    sections: ["Printable Planners", "Habit & Life Trackers", "Junk Journal Kits"]
   },
   crafts: {
     labelTr: "Örgü ve el işi yapanlar",
     audienceTr: "Tığ ve şiş ile örgü yapan, adım adım ve sayısı doğru desen arayan ABD'li hobi severler.",
     tagline: "Original crochet & knitting patterns, easy to follow",
     title: "Easy Crochet & Knitting Patterns, PDF Downloads",
-    announcement: "Welcome to GXL Market Studio! We design original crochet and knitting patterns with clear, step-by-step instructions, a stitch count for every row and print-friendly PDFs in US terms. Every pattern is an instant download. Stuck on a row? Send us a message; we're happy to help.",
+    announcement: "Welcome to GXL Market Studio! Every crochet and knitting pattern here is written and test-made by our own maker, with clear step-by-step instructions, a stitch count for every row and print-friendly PDFs in US terms. Every pattern is an instant download. Stuck on a row? Send us a message; we're happy to help.",
     saleMessage: "Thank you for your order from GXL Market Studio! If you have any questions about your pattern, just reply to this message and we will help.",
     digitalSaleMessage: "Thank you for your purchase! Your pattern is ready on your Etsy Purchases page (You > Purchases and reviews > Download files). Print at Actual size / 100% scale. Stuck on a row? Message us anytime. Happy making!",
     sections: ["Crochet Patterns", "Knitting Patterns", "Beginner Friendly", "Printable Planners"]

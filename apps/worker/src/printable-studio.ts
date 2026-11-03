@@ -1,11 +1,12 @@
+import { AI_DISCLOSURE_WARNING_TR } from "./etsy-policy.js";
 import { generateStructuredObject, hasAiProvider, type AiRuntimeEnv } from "../../api/src/structured-ai.js";
 import { buildAdVisuals, type AdVisual } from "./ad-visuals.js";
 import type { PrintableKind } from "./etsy-trends.js";
-import { isIpRisky } from "./ip-guard.js";
+import { hasBrandName, isIpRisky } from "./ip-guard.js";
 import { buildMasterPrompt } from "./master-prompt.js";
 import { qaProtocol } from "./qa-protocol.js";
 import { coinProductName, normalizeEtsyTags, normalizeEtsyTitle, titleCase, validateEtsyListingText } from "./pattern-studio.js";
-import { cleanBriefNotes, fitsTheme, harmonizeThemes, isHolidayFamily, META_WORDS, MISLEADING_FEATURE, proseCase, THEME_ADJECTIVES, themeFamilies, type ThemeFamily } from "./theme.js";
+import { cleanBriefNotes, fitsTheme, harmonizeThemes, isHolidayFamily, META_WORDS, MISLEADING_FEATURE, proseCase, THEME_ADJECTIVES, themeFamilies, type ThemeFamily, vintageStyle } from "./theme.js";
 
 // Kadınlara yönelik yazdırılabilir / dijital PDF ürünleri için stüdyo:
 // türüne özel içerik kuralları, Claude/ChatGPT promptu, gerekirse sayfa sayfa görsel promptları,
@@ -91,7 +92,7 @@ export const PRINTABLE_KINDS: Record<PrintableKind, KindProfile> = {
     designEn: [PRINT_SAFE, INK, "A 0.75 in binding-safe inner margin for ring binders and disc planners", "Consistent grid, 10-12 pt body text, legible sans or serif pairing"],
     textRuleEn: TEXT_PAGES,
     signatureEn: "a smart page or tracker that the top-ranking planners do not include (for example a quick-start page, a reflection prompt or a progress visual)",
-    includedEn: ["Undated Monday + Sunday start", "Ink-friendly design", "How to print guide"],
+    includedEn: ["Undated Monday + Sunday start", "Ink-friendly design", "How-to-print guide"],
     tagStems: ["planner insert", "planner pages", "undated planner", "printable insert", "life planner", "planner refill", "weekly planner", "monthly planner", "daily planner"],
     vocabulary: ["planner", "planners", "insert", "inserts", "pages", "undated", "daily", "weekly", "monthly", "goal", "goals", "notes", "checklist", "organizer", "life", "refill", "tracker", "trackers"],
     pageWord: "pages"
@@ -110,7 +111,8 @@ export const PRINTABLE_KINDS: Record<PrintableKind, KindProfile> = {
     textRuleEn: TEXT_PAGES,
     signatureEn: "a navigation or layout idea that makes daily use faster than the top-ranking planners",
     includedEn: ["Hyperlinked tabs", "Light + dark theme", "Import guide for note-taking apps"],
-    tagStems: ["ipad planner", "tablet planner", "hyperlinked planner", "undated planner", "android planner", "pdf planner", "planner for tablet", "goal planner"],
+    // Marka adı (ipad, android, goodnotes) etikete girmez; uyumluluk açıklamada düz metin olarak yazılır.
+    tagStems: ["tablet planner", "hyperlinked planner", "undated planner", "pdf planner", "planner for tablet", "goal planner", "digital agenda", "planner with tabs", "digital organizer", "landscape planner", "portrait planner", "digital journal"],
     vocabulary: ["planner", "planners", "digital", "tablet", "ipad", "android", "hyperlinked", "undated", "daily", "weekly", "monthly", "dark", "mode", "journal", "notes"],
     pageWord: "pages"
   },
@@ -171,11 +173,12 @@ export const PRINTABLE_KINDS: Record<PrintableKind, KindProfile> = {
     contentEn: [
       "Fill-in recipe cards: the 4x6 and the 5x7 cards are each their own PDF, with the cards laid out on US Letter sheets with crop marks so they print at home",
       "Full-page recipe binder pages with sections for ingredients, steps, servings, time and notes",
-      "Section dividers, an index page, a measurement conversion chart and a weekly meal plan page"
+      "Section dividers, an index page, a measurement conversion chart and a weekly meal plan page",
+      "Every card and page is a blank fill-in template: write no recipes, cooking steps or food-safety advice (Etsy does not allow AI-written recipes); the conversion chart uses standard US and metric kitchen measures only, each number checked"
     ],
     designEn: [PRINT_SAFE, INK, "Writing lines at least 7 mm apart; space for a photo on the full-page version"],
     textRuleEn: TEXT_PAGES,
-    signatureEn: "a useful extra (for example a family-recipe story box or a substitution chart) missing from top listings",
+    signatureEn: "a useful extra (for example a family-recipe story box or a 'recipe from' line) missing from top listings",
     includedEn: ["4x6 + 5x7 cards", "Binder pages", "Conversion chart"],
     tagStems: ["recipe cards", "recipe binder", "recipe template", "recipe book", "kitchen printable", "recipe organizer", "family recipe book", "recipe pages", "meal plan printable"],
     vocabulary: ["recipe", "recipes", "card", "cards", "binder", "book", "template", "kitchen", "pages", "meal", "plan"],
@@ -192,7 +195,7 @@ export const PRINTABLE_KINDS: Record<PrintableKind, KindProfile> = {
     designEn: [PRINT_SAFE, INK, "Calm, airy layouts with writing lines at least 7 mm apart"],
     textRuleEn: TEXT_PAGES,
     signatureEn: "a guided structure or progression that competing journals do not use",
-    includedEn: ["40+ original prompts", "Ink-friendly design", "How to print guide"],
+    includedEn: ["40+ original prompts", "Ink-friendly design", "How-to-print guide"],
     tagStems: ["guided journal", "journal pages", "journal prompts", "printable journal", "journal insert", "journal workbook", "writing prompts", "reflection journal"],
     vocabulary: ["journal", "journals", "pages", "prompts", "tracker", "log", "insert", "guided", "workbook", "gratitude", "reflection"],
     pageWord: "pages"
@@ -208,7 +211,7 @@ export const PRINTABLE_KINDS: Record<PrintableKind, KindProfile> = {
     designEn: [PRINT_SAFE, INK, "Primary-school friendly fonts at 14 pt or larger; tracing lines with dashed guides"],
     textRuleEn: TEXT_PAGES,
     signatureEn: "a motivating element (story characters, rewards or a theme) that top listings lack",
-    includedEn: ["Answer keys", "Certificate of completion", "How to print guide"],
+    includedEn: ["Answer keys", "Certificate of completion", "How-to-print guide"],
     tagStems: ["kids worksheets", "learning printable", "kids activities", "learning activities", "kids printable", "homeschool printable", "kids activity book", "fun learning pages"],
     vocabulary: ["kids", "worksheets", "worksheet", "activities", "activity", "learning", "pages", "kid"],
     pageWord: "pages"
@@ -277,6 +280,8 @@ const UNCOUNTABLE = /\b(art|ephemera|paper|decor|stationery|clipart|wall art)$/;
 // "an original adult coloring pages" yerine "an original set of adult coloring pages".
 function productPhrase(productType: string): string {
   if (UNCOUNTABLE.test(productType)) return `${productType} set`;
+  // "an original recipe card" tek kart gibi okunur; ürün bir settir.
+  if (/\bcard$/.test(productType)) return `set of ${productType}s`;
   const last = productType.split(" ").at(-1)!;
   return last.endsWith("s") && !last.endsWith("ss") ? `set of ${productType}` : productType;
 }
@@ -325,7 +330,7 @@ function prepare(raw: PrintablePlanInput): Prepared {
   // "vintage" yeni bir dijital ürün için "vintage style" demektir (Etsy'de "vintage" 20 yaş üstü ürünlerdir);
   // "daily weekly" iki ayrı özelliktir.
   const TIME_WORDS = /^(daily|weekly|monthly|yearly|undated)$/;
-  const unique = [...new Set((raw.trendFeatures || []).flatMap((feature) => feature.split(" ").every((word) => TIME_WORDS.test(word)) ? feature.split(" ") : [feature]).map((feature) => feature === "vintage" ? "vintage style" : feature))];
+  const unique = [...new Set((raw.trendFeatures || []).flatMap((feature) => feature.split(" ").every((word) => TIME_WORDS.test(word)) ? feature.split(" ") : [feature]).map((feature) => feature === "vintage" ? "vintage style" : vintageStyle(feature)))];
   const usable = unique.filter((feature) => !MISLEADING_FEATURE.test(feature) && !feature.split(" ").every((word) => META_WORDS.has(word) || productWords.has(word)));
   const harmony = harmonizeThemes(usable, themeFamilies(`${raw.keyword || ""} ${raw.productType}`));
   const dropped = [...unique.filter((feature) => !usable.includes(feature)), ...harmony.dropped];
@@ -746,7 +751,7 @@ function relevantTrendTags(prepared: Prepared, art?: ArtPlan): string[] {
   const features = input.trendFeatures || [];
   const rank = (tag: string) => { const index = features.findIndex((feature) => tag.includes(feature)); return index === -1 ? features.length : index; };
   return (input.trendTags || [])
-    .filter((tag) => !isIpRisky(tag) && !MISLEADING_FEATURE.test(tag) && fitsTheme(tag, themes) && !["instant download", "digital download", "printable", "pdf"].includes(tag)
+    .filter((tag) => !isIpRisky(tag) && !hasBrandName(tag) && !MISLEADING_FEATURE.test(tag) && fitsTheme(tag, themes) && !["instant download", "digital download", "printable", "pdf"].includes(tag)
       && tag.split(/\s+/).every((word) => TAG_FILLERS.has(word) || vocabulary.has(word) || vocabulary.has(singular(word))))
     .map((tag, index) => ({ tag, index }))
     .sort((a, b) => rank(a.tag) - rank(b.tag) || a.index - b.index)
@@ -802,7 +807,7 @@ function featureClause(feature: string | undefined, profile: KindProfile, kind: 
   }
   if (themeFamilies(lower).size && !PLURAL_CONTENT.test(lower)) return ` with ${article(lower)} ${proseCase(lower)} theme`;
   if (PLURAL_CONTENT.test(lower)) return ` with ${proseCase(lower)}`;
-  if (kind === "party") return ` with ${article(lower)} ${proseCase(lower)} game`;
+  if (kind === "party") return ` with a "${titleCase(lower)}" game`;
   return ` with ${proseCase(lower)} ${profile.pageWord}`;
 }
 
@@ -885,7 +890,7 @@ function buildPins(prepared: Prepared, name: string, art: ArtPlan): PrintableBri
       "Designed by GXL Market Studio."
     ];
     return {
-      title: proseCase(`${titleCase(base)}${feature && !base.includes(feature) ? ` | ${titleCase(feature)}` : ""}`).slice(0, 100),
+      title: proseCase(`${titleCase(base)}${feature && !base.includes(feature) && !NO_CLAUSE.test(feature) && !hasBrandName(feature) ? ` | ${titleCase(feature)}` : ""}`).slice(0, 100),
       overlay,
       description: fitSentences(sentences, 480)
     };
@@ -995,9 +1000,12 @@ function buildTitle(prepared: Prepared, art: ArtPlan, primary = primaryPhrase(pr
   const tagHead = words.length > 1 && GENERIC_HEADS.test(words.at(-1)!) ? words.slice(-2).join(" ") : words.at(-1)!;
   // Yalnız yeni kelime getiren, hiçbir kelimeyi ikiden fazla tekrarlatmayan ve başlıktaki bir ifadeyi
   // ("Junk Journal Kit, Cottage Junk Journal Kit") yeniden içermeyen ifade eklenir.
+  const head = singular(words.at(-1)!.toLowerCase());
   const fits = (phrase: string) => {
     const phraseWords = wordsOf(phrase);
     if (phraseWords.every((word) => counts.has(word)) || phraseWords.some((word) => word.length >= 3 && (counts.get(word) || 0) >= 2)) return false;
+    // Ürün adının eş anlamlısı ("Junk Journal Kit, … Printable Journal Kit") başlıkta yer kaplar: aynı baş isimle biten ikinci ifade girmez.
+    if (singular(phraseWords.at(-1) || "") === head && phrases.slice(1).some((used) => singular(wordsOf(used).at(-1) || "") === head)) return false;
     return !phrases.some((used) => used.split(" ").length >= 2 && new RegExp(`\\b${escapeRegex(used)}\\b`).test(phrase.toLowerCase()));
   };
   const add = (phrase: string) => { count(phrase); phrases.push(phrase.toLowerCase()); };
@@ -1015,7 +1023,7 @@ function buildTitle(prepared: Prepared, art: ArtPlan, primary = primaryPhrase(pr
     if (chosen) { add(chosen); break; }
   }
   for (const tag of trendTags) {
-    if (phrases.length === 4) break;
+    if (phrases.length === 3) break;
     if (fits(tag)) add(tag);
   }
   const format = formatPhrase(input.formats?.length ? input.formats : profile.defaultFormats, input.kind);
@@ -1046,12 +1054,17 @@ function buildTags(prepared: Prepared, art: ArtPlan): string[] {
   // Ölçü etiketi yalnız ölçüyle aranan türlerde ve en fazla 2 tane; renk etiketi yalnız duvar sanatında aranır.
   const sizeTags = ["planner", "journal", "recipe", "wall_art"].includes(input.kind) ? sizes.slice(0, 2) : [];
   const vocabulary = new Set([...profile.vocabulary, ...words].map((word) => singular(word)));
-  const featureTags = (input.trendFeatures || []).flatMap((feature) => {
+  const featureTags = (input.trendFeatures || []).filter((feature) => !hasBrandName(feature)).flatMap((feature) => {
     const last = singular(feature.split(" ").at(-1)!);
+    // Tek kelimelik etiket ("daily", "gratitude") alıcı araması değildir; ürün adıyla birlikte yazılır.
+    if (!feature.includes(" ")) return [`${feature} ${tagHead}`];
     // "preschool worksheets activity pages" olmaz: özellik zaten bir ürün adıyla bitiyorsa olduğu gibi kullanılır.
     if (vocabulary.has(last) || PLURAL_CONTENT.test(feature)) return [feature];
     return feature.includes(" ") ? [`${feature} ${tagHead}`, feature] : [`${feature} ${tagHead}`];
   });
+  // Ölçü etiketi ("a5 planner", "us letter planner") en fazla iki tane: 13 etiket hakkı alıcı ifadelerine kalır.
+  let sizeTagsLeft = ["planner", "journal", "recipe", "wall_art"].includes(input.kind) ? 2 : 0;
+  const sizeTagBudget = { take: () => sizeTagsLeft-- > 0 };
   return normalizeEtsyTags([
     ...(input.keyword ? [input.keyword] : []),
     ...relevantTrendTags(prepared, art),
@@ -1069,7 +1082,10 @@ function buildTags(prepared: Prepared, art: ArtPlan): string[] {
     ...profile.tagStems,
     ...(input.kind === "digital_planner" || input.kind === "paper_craft" ? [`digital ${tagHead}`] : []),
     "instant download"
-  ].filter((tag) => !isIpRisky(tag) && !MISLEADING_FEATURE.test(tag) && fitsTheme(tag, prepared.themes)));
+  ].filter((tag) => !isIpRisky(tag) && !MISLEADING_FEATURE.test(tag) && fitsTheme(tag, prepared.themes)
+    && !(input.kind === "digital_planner" && /\bprintables?\b/.test(tag))
+    && !(/\bkids?\b|toddler|preschool/.test(product) && /\b(relaxing|stress relief|mindful|adult)\b/.test(tag))
+    && (!SEARCHED_SIZES.some(([pattern]) => pattern.test(tag)) || sizeTagBudget.take())));
 }
 
 function buildDescription(prepared: Prepared, name: string, art: ArtPlan, hook?: string): string {
@@ -1078,7 +1094,9 @@ function buildDescription(prepared: Prepared, name: string, art: ArtPlan, hook?:
   const formats = input.formats?.length ? input.formats : profile.defaultFormats;
   const pages = input.pageCount || profile.defaultPages;
   const features = input.trendFeatures || [];
-  const lead = features[0] && themeFamilies(features[0]).size ? ` with ${article(features[0])} ${proseCase(features[0])} theme` : "";
+  // Açılış cümlesi pinlerle aynı dili kullanır: tema "with a Christmas theme", stil "in a boho style"; kâğıt isimleri atılır.
+  const leadFeature = features.find((feature) => themeFamilies(feature).size || feature.split(" ").every((word) => STYLE_WORDS.has(word)));
+  const lead = leadFeature ? featureClause(leadFeature.replace(PAPER_NOUNS, "").trim() || leadFeature, profile, input.kind) : "";
   const included = input.kind === "wall_art" || input.kind === "paper_craft" || input.kind === "coloring" ? art.includedEn : [`${pages} pages`, ...profile.includedEn];
   const note = healthNote(input);
   const tablet = formats.some((format) => isTablet(format));
@@ -1102,7 +1120,8 @@ function buildDescription(prepared: Prepared, name: string, art: ArtPlan, hook?:
       ...(tablet ? ["4. On a tablet: import the hyperlinked PDF into a note-taking app that supports PDF links."] : [])
     ];
   // "Christmas · Christmas Busy Book" olmaz: başka bir özelliğin içinde geçen özellik tekrar yazılmaz.
-  const highlights = features.filter((feature, index) => !features.some((other, otherIndex) => otherIndex !== index && other.length > feature.length && new RegExp(`\\b${escapeRegex(feature)}\\b`, "i").test(other)));
+  // "Daily · Weekly" planlayıcıda gerçek özelliktir; "Book", "iPad" ise bir şey söylemez ve yazılmaz.
+  const highlights = features.filter((feature, index) => !/^(book|books|tablet|printable|digital|kids|adults?|instant download)$/.test(feature) && !hasBrandName(feature) && !features.some((other, otherIndex) => otherIndex !== index && other.length > feature.length && new RegExp(`\\b${escapeRegex(feature)}\\b`, "i").test(other)));
   return [
     hook ? `${name}: ${hook}` : `${name} is ${article("original")} original ${proseCase(productPhrase(input.productType))}${lead}, ${useSentence(input.kind)}.`,
     "",
@@ -1119,7 +1138,7 @@ function buildDescription(prepared: Prepared, name: string, art: ArtPlan, hook?:
     "PLEASE NOTE",
     ...(note ? [`• ${note}`] : []),
     `• Colors may look slightly different depending on your ${input.kind === "digital_planner" ? "screen" : "screen and printer"}.`,
-    "• All listing images are mockups made from the actual files.",
+    "• The listing images show the real pages: one is an unedited preview of the files, and the others are mockups made from them.",
     ...(input.aiAssisted !== false ? ["• Designed with the help of AI tools and checked with automated file tests."] : []),
     "• Because this is a digital file, all sales are final, but message us with any question and we will help.",
     "",
@@ -1147,7 +1166,8 @@ export function buildPrintableListing(raw: PrintablePlanInput, name: string): Pr
     materials,
     checks: validateEtsyListingText({ title, tags, materials }),
     warnings: [
-      ...(raw.aiAssisted !== false ? ["Etsy ilan formunda yapay zekâ kullanımı kutusunu işaretle; açıklamaya bildirim eklendi."] : []),
+      ...(raw.aiAssisted !== false ? [AI_DISCLOSURE_WARNING_TR] : []),
+      "Görsellerden biri, PDF sayfalarının kodla hazırlanmış düzenlenmemiş önizlemesi olsun (C4 'Neler var?'); Etsy dijital üründe gerçek sayfa önizlemesi istiyor.",
       ...(prepared.dropped.length ? [`Temayla çatışan veya yanıltıcı ifadeler ilana alınmadı: ${prepared.dropped.join(", ")}.`] : []),
       "Mockup görsellerinde gerçek PDF sayfalarını kullan; ürünle uyuşmayan görsel kötü yorum getirir."
     ],

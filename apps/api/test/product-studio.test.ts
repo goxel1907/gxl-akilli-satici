@@ -61,7 +61,9 @@ test("detects buyer language for a Turkish silver tesbih title", () => {
   assert.deepEqual(ruleKeywordCandidates(product).slice(0, 3), ["sterling silver prayer beads", "silver tasbih", "silver misbaha"]);
 
   const oltu = normalizeProductInput({ titleTr: "Erzurum'un Oltu taşı ile Turuncu Galalit Malzeme", categoryHint: "tesbih", origin: "made_by_seller" });
-  assert.equal(detectProductSignals(oltu).material?.en, "oltu stone");
+  assert.equal(detectProductSignals(oltu).material?.en, "Oltu stone");
+  // İkinci malzeme saklanmaz: alıcı ürünü tamamen Oltu taşı sanmamalı.
+  assert.deepEqual(detectProductSignals(oltu).extraMaterials?.map((item) => item.en), ["galalith"]);
   assert.ok(ruleKeywordCandidates(oltu).includes("oltu stone prayer beads"));
 });
 

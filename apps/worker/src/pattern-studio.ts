@@ -1,9 +1,12 @@
+import { vintageStyle } from "./theme.js";
+import { hasBrandName } from "./ip-guard.js";
 import { generateStructuredObject, hasAiProvider, type AiRuntimeEnv } from "../../api/src/structured-ai.js";
 import { buildMasterPrompt } from "./master-prompt.js";
 import { qaProtocol } from "./qa-protocol.js";
 import { buildAdVisuals, type AdVisual } from "./ad-visuals.js";
 import type { PatternCraft } from "./etsy-trends.js";
 import { isIpRisky } from "./ip-guard.js";
+import { patternPolicyMessage } from "./etsy-policy.js";
 import { cleanBriefNotes, fitsTheme, harmonizeThemes, MISLEADING_FEATURE, proseCase, themeFamilies } from "./theme.js";
 
 export type SkillLevel = "beginner" | "easy" | "intermediate" | "experienced";
@@ -50,6 +53,7 @@ export interface DigitalListingInput {
   keyword?: string;
   trendTags?: string[];
   features?: string[];
+  ownPattern?: boolean;
   aiAssisted?: boolean;
   photosAreRenders?: boolean;
   testMade?: boolean;
@@ -654,7 +658,7 @@ export function buildPatternBrief(input: PatternPlanInput): PatternBrief {
   const rules = originalityRules(input);
   const patternPrompt = buildPatternPrompt(input, name, rules.en);
   const renderPrompt = buildRenderPrompt(input, name);
-  const adVisuals = buildAdVisuals({ craft: input.craft, productType: input.productType, name, colors: input.colors, features: input.trendFeatures, formats: input.sizeNote ? [input.sizeNote] : undefined, seed: input.seed });
+  const adVisuals = buildAdVisuals({ craft: input.craft, productType: input.productType, name, colors: input.colors, features: (input.trendFeatures || []).map(vintageStyle), formats: input.sizeNote ? [input.sizeNote] : undefined, seed: input.seed });
   return {
     name,
     originalityPlan: rules.tr,
@@ -720,6 +724,8 @@ export function normalizeEtsyTags(values: string[], limit = 13): string[] {
   const tags: string[] = [];
   for (const raw of values) {
     const tag = raw.replace(TAG_DISALLOWED, " ").replace(/\s+/g, " ").trim().toLowerCase();
+    // Uyumluluk markası (ipad, dmc, goodnotes…) etikette marka sahibinin adıyla trafik almak demektir: girmez.
+    if (hasBrandName(tag)) continue;
     // Etsy kelime sırasına ve tekil/çoğula bakmaz: "planner printable" ile "printable planner", "recipe card" ile
     // "recipe cards" aynı aramayı karşılar; ikincisi etiket hakkını boşa harcar.
     const key = tag.split(" ").map((word) => word.length > 3 && word.endsWith("s") && !/(ss|us|is|mas)$/.test(word) ? word.slice(0, -1) : word).sort().join(" ");
@@ -757,7 +763,11 @@ export function validateEtsyListingText(listing: { title: string; tags: string[]
 function primaryPhrase(input: DigitalListingInput): string {
   const craft = CRAFTS[input.craft];
   const productHead = input.productType.toLowerCase().split(/\s+/).at(-1)!.replace(/s$/, "");
-  if (input.keyword && /pattern/i.test(input.keyword) && input.keyword.toLowerCase().includes(productHead)) return titleCase(input.keyword.replace(/\bpdf\b/gi, "").replace(/\s+/g, " ").trim());
+  if (input.keyword && /pattern/i.test(input.keyword) && input.keyword.toLowerCase().includes(productHead)) {
+    // "knitting sweater pattern" doğal okunmaz: "Sweater Knitting Pattern".
+    const keyword = input.keyword.replace(/\bpdf\b/gi, "").replace(/\s+/g, " ").trim().replace(/^(knitting|sewing|embroidery) (.+) pattern$/i, "$2 $1 pattern");
+    return titleCase(keyword);
+  }
   // Aramada ürün adı yoksa ("cross stitch pattern") alıcının yazdığı tam ürün ifadesi öne çıkar: "Christmas Ornament".
   const craftWords = new Set([...craft.tag.split(" "), ...craft.short.split(" "), craft.label.toLowerCase()]);
   const fuller = relevantTrendTags(input).find((tag) => tag.endsWith(input.productType.toLowerCase()) && tag !== input.productType.toLowerCase() && tag.split(" ").length <= input.productType.split(" ").length + 2 && !tag.split(" ").some((word) => craftWords.has(word)));
@@ -817,7 +827,7 @@ function relevantTrendTags(input: DigitalListingInput): string[] {
   const relevant = (input.trendTags || []).filter((tag) => {
     const words = tag.toLowerCase().split(/\s+/);
     // "vintage doily" yeni bir deseni eski ürün gibi gösterir; yalnız "vintage style/inspired" kullanılır.
-    return !GENERIC_TAGS.has(tag) && !isIpRisky(tag) && !MISLEADING_FEATURE.test(tag) && fitsTheme(tag, families) && !/\bvintage\b(?!\s+(style|inspired))/.test(tag)
+    return !GENERIC_TAGS.has(tag) && !isIpRisky(tag) && !hasBrandName(tag) && !MISLEADING_FEATURE.test(tag) && fitsTheme(tag, families) && !/\bvintage\b(?!\s+(style|inspired))/.test(tag)
       && words.some((word) => topical.has(word) || topical.has(singularWord(word)))
       && words.every((word) => TAG_FILLERS.has(word) || vocabulary.has(word) || vocabulary.has(singularWord(word)));
   });
@@ -886,8 +896,8 @@ function buildTags(input: DigitalListingInput): string[] {
     ...featureTags,
     ...(productWords.length > 1 ? [product] : []),
     `${product} pattern`,
-    // "sewing tote bag" dikiş malzemesi çantası gibi okunur; dikişte teknik + ürün etiketi kullanılmaz.
-    ...(input.craft !== "sewing" ? [`${craft.short} ${product}`, `${craft.tag} ${product}`] : []),
+    // "sewing tote bag" dikiş malzemesi çantası gibi okunur; "knitting sweater" yerine "knit sweater" denir.
+    ...(input.craft !== "sewing" ? [`${craft.short} ${product}`, ...(craft.tag === craft.short ? [] : craft.tag === "knitting" ? [] : [`${craft.tag} ${product}`])] : []),
     `${lastWord} pattern`,
     // "sewing bag" dikiş malzemesi çantası gibi okunur; dikişte teknik + ürün etiketi kullanılmaz.
     ...(input.craft !== "sewing" ? [`${craft.short} ${lastWord}`] : []),
@@ -921,9 +931,10 @@ function buildDescription(input: DigitalListingInput, hook?: string): string {
   const product = input.productType.toLowerCase();
   const pages = input.pageCount && input.pageCount > 0 ? `${input.pageCount}-page ` : "";
   const manuscript = MANUSCRIPTS[input.craft];
+  // Yalnız kendi yazılmış ve denenmiş desen Etsy'ye gidebildiği için not bunu doğrular; fotoğraflar gerçek bitmiş üründür.
   const notes = [
-    ...(input.photosAreRenders !== false ? [`The listing photos are digital renders of the design, not photos of a finished piece. Your finished piece will vary with your ${manuscript.varies}.`] : []),
-    ...(input.aiAssisted !== false ? [`Designed with the help of AI tools; the counts and measurements were checked with an automated script${input.testMade ? " and the pattern was test-made before release" : ""}.`] : []),
+    ...(input.ownPattern && input.testMade && input.photosAreRenders === false ? [`This pattern was written and test-made by our own maker, and the photos show the real finished piece. Your piece will vary with your ${manuscript.varies}.`] : []),
+    ...(input.photosAreRenders === true ? [`Some listing images are digital renders of the design. Your finished piece will vary with your ${manuscript.varies}.`] : []),
     ...(TOY.test(input.productType) ? ["For babies and children under 3, use embroidered eyes instead of safety eyes and secure every part."] : []),
     "This is a digital file. Because files cannot be returned, all sales are final, but please message us with any question about the pattern and we will help."
   ];
@@ -931,7 +942,7 @@ function buildDescription(input: DigitalListingInput, hook?: string): string {
   return [
     hook ? `${input.name}: ${hook}` : `${input.name} is an original ${craft.order === "craft-first" ? `${craft.label.toLowerCase()} ${product}` : `${product} ${craft.label.toLowerCase()}`} pattern with clear, step-by-step instructions.`,
     "",
-    `THIS IS A DIGITAL PDF PATTERN, NOT A FINISHED ${product.toUpperCase()}.`,
+    "THIS IS A DIGITAL PDF PATTERN, NOT A FINISHED PRODUCT. NO PHYSICAL ITEM WILL BE SHIPPED.",
     "",
     ...(features.length ? [`HIGHLIGHTS: ${features.slice(0, 4).map((feature) => titleCase(proseCase(feature))).join(" · ")}`, ""] : []),
     "WHAT YOU GET",
@@ -970,17 +981,19 @@ export function normalizeDigitalListingInput(raw: Record<string, unknown>): Digi
     trendTags: base.trendTags,
     pageCount: Number.isInteger(pageCount) && pageCount > 0 && pageCount < 500 ? pageCount : undefined,
     features: cleanList(raw.features ?? raw.trendFeatures, 6, 80),
-    aiAssisted: raw.aiAssisted !== false,
-    photosAreRenders: raw.photosAreRenders !== false,
+    // Etsy 22 Ekim 2026: yapay zekâ deseni yasak; desen ilanı yalnız kendi yazılmış, denenmiş ve gerçek fotoğraflı desen içindir.
+    ownPattern: raw.ownPattern === true,
+    aiAssisted: raw.aiAssisted === true,
+    photosAreRenders: raw.photosAreRenders === true,
     testMade: raw.testMade === true
   };
 }
 
 function listingWarnings(input: DigitalListingInput): string[] {
+  const policy = patternPolicyMessage(input);
   return [
-    ...(!input.testMade ? ["Desen henüz test edilmedi. Etsy'de en sık kötü yorum, çalışmayan veya fotoğrafla uyuşmayan desenler için geliyor; satıştan önce bir kez ör veya test ördür."] : []),
-    ...(input.photosAreRenders !== false ? ["Görseller render. Kapak görseline 'Digital render' yaz; mümkünse gerçek ürün fotoğrafıyla değiştir."] : []),
-    ...(input.aiAssisted !== false ? ["Etsy ilan formunda yapay zekâ kullanımı kutusunu işaretle; açıklamaya bildirim eklendi."] : [])
+    ...(policy ? [policy] : []),
+    "İlk görsel, bu desenle yapılmış bitmiş ürünün gerçek ve düzenlenmemiş fotoğrafı olsun (Etsy kuralı)."
   ];
 }
 

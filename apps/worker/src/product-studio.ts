@@ -74,6 +74,8 @@ export interface ProductSignals {
   isKnitwear: boolean;
   craft?: "crochet" | "knit";
   material?: MaterialInfo;
+  // İkinci malzeme ("Oltu taşı ile galalit") ilanda saklanmaz: alıcı ürünü tamamen Oltu taşı sanmamalı.
+  extraMaterials?: MaterialInfo[];
   noun: string;
   attributes: string[];
 }
@@ -132,7 +134,7 @@ const MATERIALS: Array<{ stems: string[]; info: MaterialInfo }> = [
   { stems: ["925", "gümüş", "gumus", "silver"], info: { en: "sterling silver", short: "silver", precious: true } },
   { stems: ["altın", "altin", "gold"], info: { en: "gold", short: "gold", precious: true } },
   { stems: ["kehribar", "amber"], info: { en: "amber", short: "amber", precious: false } },
-  { stems: ["oltu"], info: { en: "oltu stone", short: "oltu stone", precious: false } },
+  { stems: ["oltu"], info: { en: "Oltu stone", short: "oltu stone", precious: false } },
   { stems: ["galalit", "galalith"], info: { en: "galalith", short: "galalith", precious: false } },
   { stems: ["kuka"], info: { en: "kuka wood", short: "kuka wood", precious: false } },
   { stems: ["sedef"], info: { en: "mother of pearl", short: "mother of pearl", precious: false } },
@@ -320,7 +322,9 @@ export function detectProductSignals(input: ProductPlanInput): ProductSignals {
   const craft = input.craft || (hasStem(words, CROCHET_STEMS) ? "crochet" : hasStem(words, KNIT_STEMS) ? "knit" : undefined);
   const isKnitwear = input.productKind === "knitwear" || Boolean(nounMatch && (nounMatch.knit || (craft && KNIT_CAPABLE.has(nounMatch.en))));
   // Örgüde "altın sarısı", "gümüş gri" renktir; değerli maden iddiası sayılmaz.
-  const material = MATERIALS.find((item) => hasStem(words, item.stems) && !(isKnitwear && item.info.precious))?.info;
+  const found = MATERIALS.filter((item) => hasStem(words, item.stems) && !(isKnitwear && item.info.precious)).map((item) => item.info);
+  const material = found[0];
+  const extraMaterials = isKnitwear ? [] : found.slice(1).filter((item) => item.short !== material?.short && !item.precious);
   const isTesbih = input.productKind === "tesbih" || nounMatch?.en === "prayer beads" || input.productNounEn === "prayer beads";
   const isVintage = input.origin === "vintage" || input.productKind === "vintage" || hasStem(words, ["vintage", "antika", "antique"]);
   let noun = input.productNounEn || (isTesbih ? "prayer beads" : nounMatch?.en) || "item";
@@ -332,7 +336,7 @@ export function detectProductSignals(input: ProductPlanInput): ProductSignals {
     ...ATTRIBUTES.filter((item) => hasStem(words, item.stems) && (!item.knitOnly || isKnitwear)).map((item) => item.en),
     ...input.attributesEn
   ])].filter((value) => !noun.includes(value)).slice(0, 4);
-  return { isTesbih, isVintage, isKnitwear, craft: isKnitwear ? craft : undefined, material, noun, attributes };
+  return { isTesbih, isVintage, isKnitwear, craft: isKnitwear ? craft : undefined, material, ...(extraMaterials.length ? { extraMaterials } : {}), noun, attributes };
 }
 
 export function ruleKeywordCandidates(input: ProductPlanInput, signals = detectProductSignals(input)): string[] {
@@ -340,7 +344,7 @@ export function ruleKeywordCandidates(input: ProductPlanInput, signals = detectP
   const noun = signals.noun;
   const list: string[] = [...input.keywords];
   if (signals.isTesbih) {
-    if (material) list.push(`${material.en} prayer beads`, `${material.short} tasbih`, `${material.short} misbaha`);
+    if (material) list.push(`${material.en.toLowerCase()} prayer beads`, `${material.short} tasbih`, `${material.short} misbaha`);
     list.push("prayer beads", "tasbih", "misbaha");
     if (material && ["amber", "galalith"].includes(material.short)) list.push("worry beads");
   } else if (signals.isVintage) {
@@ -495,7 +499,7 @@ export async function getUsdTryRate(store: KeyValueStore | undefined, fetcher: F
 function relevantVocabulary(signals: ProductSignals, keywords: string[], colors: string[] = []): Set<string> {
   const words = new Set<string>(["gift", "islamic", "muslim", "men", "him", "dad", "father", "vintage", "antique", "turkish", "ottoman", "handmade"]);
   if (signals.isKnitwear) for (const word of ["women", "her", "mom", "cozy", "winter", "boho", "crochet", "knit", "knitted"]) words.add(word);
-  for (const value of [...keywords, signals.noun, signals.material?.en || "", ...signals.attributes, ...colors]) {
+  for (const value of [...keywords, signals.noun, (signals.material?.en || "").toLowerCase(), ...signals.attributes, ...colors]) {
     for (const word of value.toLowerCase().split(/\s+/)) if (word.length > 2) words.add(word.replace(/s$/, ""));
   }
   return words;
@@ -564,6 +568,12 @@ function buildTags(input: ProductPlanInput, signals: ProductSignals, primary: st
   return normalizeEtsyTags(withoutFalseAntique(input, [primary, ...candidates, ...ranked, ...generated, ...fillers].filter(Boolean)));
 }
 
+// "Oltu Stone Prayer Beads with Galalith": başlıkta geçmeyen ikinci malzeme başlığın ilk bölümüne eklenir.
+function extraMaterialTitle(signals: ProductSignals, primary: string): string {
+  const missing = (signals.extraMaterials || []).filter((item) => !primary.toLowerCase().includes(item.short.toLowerCase()));
+  return missing.length ? ` with ${missing.map((item) => titleCase(item.en)).join(" and ")}` : "";
+}
+
 // Etiket ve başlıkta kullanılan baş isim: "kilim pillow cover" → "kilim" ("retro cover" değil), "pillow cover" olduğu gibi.
 function headNoun(noun: string): string {
   const cover = /^(\w+) pillow cover$/.exec(noun);
@@ -607,7 +617,7 @@ function buildTitle(input: ProductPlanInput, signals: ProductSignals, primary: s
   // Vintage başlığında hediye ifadesi yer kaplar; dönem ve ölçü daha önemlidir.
   const base = [
     // Alıcı "kilim pillow" arar ama ürün kılıftır; başlık "Pillow Cover" der (iç yastık beklentisi oluşmaz).
-    signals.isKnitwear && !descriptors.length ? `${titleCase(primary)}${audience}` : `${titleCase(primary)}${/pillow cover$/.test(signals.noun) && /pillow$/.test(primary) ? " Cover" : ""}`,
+    signals.isKnitwear && !descriptors.length ? `${titleCase(primary)}${audience}` : `${titleCase(primary)}${/pillow cover$/.test(signals.noun) && /pillow$/.test(primary) ? " Cover" : ""}${extraMaterialTitle(signals, primary)}`,
     ...secondary.map(titleCase),
     attributeSegment,
     input.weightGrams && !signals.isKnitwear ? `${Math.round(input.weightGrams)} g` : "",
@@ -647,7 +657,7 @@ function buildDescription(input: ProductPlanInput, signals: ProductSignals, elig
       : input.lengthCm ? `• Length: ${input.lengthCm} cm (${inches(input.lengthCm)} in)` : "",
     signals.isKnitwear
       ? (fiber || signals.material ? `• Yarn: ${fiber || signals.material!.en}` : "")
-      : signals.material ? `• Material: ${signals.material.en}${signals.material.precious && input.materialVerified ? " (hallmarked)" : ""}` : "",
+      : signals.material ? `• Material: ${[signals.material.en, ...(signals.extraMaterials || []).map((item) => item.en)].join(" and ")}${signals.material.precious && input.materialVerified ? " (hallmarked)" : ""}` : "",
     input.colors.length ? `• Color: ${input.colors.join(", ")}` : "",
     input.weightGrams && !signals.isKnitwear ? `• Weight: ${Math.round(input.weightGrams)} g (${(input.weightGrams / 28.3495).toFixed(2)} oz)` : "",
     input.beadCount ? `• Beads: ${Math.round(input.beadCount)}` : "",
@@ -676,7 +686,8 @@ function buildDescription(input: ProductPlanInput, signals: ProductSignals, elig
     "",
     "SHIPPING",
     `• Ships from Türkiye with tracking. ${input.readyToShip ? "Ready to ship." : "Prepared to order; see the processing time on this listing."}`,
-    "• Free shipping: delivery cost is already included in the price.",
+    // Ücretsiz kargo yalnız kargo bedeli fiyata eklendiyse yazılır; aksi hâlde Etsy kargo ücretini kendisi gösterir.
+    ...(input.shippingTry ? ["• Free shipping: the delivery cost is included in the price."] : []),
     "• Import duties or taxes may apply depending on your country.",
     ...(care ? ["", "CARE", care] : [])
   ].join("\n");
@@ -693,13 +704,14 @@ function openingSentence(input: ProductPlanInput, signals: ProductSignals, prima
     ...(signals.isKnitwear ? signals.attributes.slice(0, 2) : []),
     signals.isVintage && !/\bvintage\b/.test(noun) ? "vintage" : "",
     input.colors[0] && signals.isKnitwear ? input.colors[0].toLowerCase() : "",
-    signals.material && !noun.includes(signals.material.short) ? signals.material.en : "",
+    signals.material && !noun.includes(signals.material.short) ? [signals.material.en, ...(signals.extraMaterials || []).map((item) => item.en)].join(" and ") : "",
     noun
   ].filter(Boolean);
   const phrase = words.join(" ");
-  const lead = plural ? phrase[0].toUpperCase() + phrase.slice(1) : `${/^[aeiou]/i.test(phrase) ? "An" : "A"} ${phrase}`;
+  // Tane sayısı ürünün adının yanında parantezle yazılır: "Amber prayer beads (33 beads), made by hand in Türkiye."
+  const count = input.beadCount && signals.isTesbih ? ` (${Math.round(input.beadCount)} beads)` : "";
+  const lead = `${plural ? phrase[0].toUpperCase() + phrase.slice(1) : `${/^[aeiou]/i.test(phrase) ? "An" : "A"} ${phrase}`}${count}`;
   const extras = [
-    input.beadCount && signals.isTesbih ? `${Math.round(input.beadCount)} beads` : "",
     ...(!signals.isKnitwear && signals.attributes.length ? [`${signals.attributes.length > 1 ? `${signals.attributes.slice(0, -1).join(", ")} and ${signals.attributes.at(-1)}` : signals.attributes[0]} details`] : [])
   ].filter(Boolean);
   const details = extras.length ? ` with ${extras.join(" and ")}` : "";
@@ -718,7 +730,7 @@ export function buildProductPlan(input: ProductPlanInput, phrases: string[], sca
   const tags = buildTags(input, signals, primary, scans, candidates);
   const title = buildTitle(input, signals, primary, candidates, tags);
   const eligibility = etsyEligibility(input, signals);
-  const materials = (signals.isKnitwear ? knitMaterials(input, signals) : [signals.material?.en, signals.noun === "prayer beads" ? "beads" : undefined])
+  const materials = (signals.isKnitwear ? knitMaterials(input, signals) : [signals.material?.en, ...(signals.extraMaterials || []).map((item) => item.en), signals.noun === "prayer beads" ? "beads" : undefined])
     .filter((value): value is string => Boolean(value))
     .map((value) => value.replace(/[^\p{L}\p{Nd}\p{Zs}]/gu, " ").trim());
   const pricing = computePricing({ priceTry: input.priceTry, shippingTry: input.shippingTry, usdTryRate: context.usdTryRate, shopCurrency: context.shopCurrency, medianUsd: best?.metrics.medianPriceUsd });
@@ -731,6 +743,7 @@ export function buildProductPlan(input: ProductPlanInput, phrases: string[], sca
     ...(signals.isKnitwear && !/\b(beanie|hat|scarf|shawl|cowl|socks?|mittens|gloves|blanket|bag|tote)\b/.test(signals.noun) && (!input.size || !input.chestCm || !input.lengthCm) ? ["Beden, göğüs genişliği ve boy girilmedi; giyimde alıcılar ölçüye bakıp karar verir, iade de çoğunlukla bu yüzden olur."] : []),
     ...(signals.isKnitwear && input.fiber && !fiberEnglish(input.fiber) ? ["İplik içeriği İngilizceye çevrilemedi; açıklamaya girmedi. Ör. '%100 pamuk' veya '%50 yün %50 akrilik' yazın."] : []),
     ...(signals.isVintage && !input.conditionLevel && !input.conditionNote ? ["Ürünün durumunu seçin (kusursuz, hafif kullanım izi, belirgin aşınma, onarım); vintage alıcılar kusurları açıkça görmek ister."] : []),
+    ...(signals.extraMaterials?.length ? [`Birden çok malzeme bulundu (${[signals.material?.en, ...signals.extraMaterials.map((item) => item.en)].join(", ")}); hepsi ilana yazıldı. Yanlışsa ürün adını düzeltin.`] : []),
     ...(input.droppedTerms.length ? [`İngilizceye çevrilemediği için ilana girmedi: ${input.droppedTerms.join(", ")}. Listedeki bir kelimeyi kullanın ya da boş bırakın.`] : []),
     ...(input.uncheckedTerms.length ? [`Sözlükte olmayan kelime olduğu gibi İngilizce kabul edildi: ${input.uncheckedTerms.join(", ")}. Türkçe yazdıysanız düzeltin.`] : []),
     // Alıcının sipariş öncesi sorduğu bilgiler eksikse satıcı uyarılır ("ürün açıklandığı gibi değil" iadesini önler).

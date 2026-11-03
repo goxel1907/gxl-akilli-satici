@@ -195,11 +195,16 @@ const PROPER_SOURCE: Array<[string, string, string?]> = [
   ["etsy", "Etsy"], ["pinterest", "Pinterest"], ["instagram", "Instagram"], ["facebook", "Facebook"], ["canva", "Canva"],
   ["us letter", "US Letter", "i"], ["half letter", "Half Letter"], ["a([3-6])", "A$1"], ["adhd", "ADHD"], ["diy", "DIY"], ["pdf", "PDF"],
   ["us terms", "US terms", "i"], ["english", "English"], ["american", "American"], ["turkish", "Turkish"], ["islamic", "Islamic"],
-  ["art deco", "Art Deco"], ["art nouveau", "Art Nouveau"], ["self care", "self-care"]
+  ["art deco", "Art Deco"], ["art nouveau", "Art Nouveau"], ["self care", "self-care"], ["oltu", "Oltu"]
 ];
 // Dosya adı, adres ve kod parçalarına (planner.pdf, etsy.com, page-01) dokunmaz.
 const PROPER: Array<[RegExp, string]> = PROPER_SOURCE.map(([core, replacement, flags]) => [new RegExp(`(?<![\\w./@-])${core}(?![\\w/@-]|\\.\\w)`, `g${flags || ""}`), replacement]);
 
 export function proseCase(text: string): string {
   return text.split("\"").map((part, index) => index % 2 === 1 ? part : PROPER.reduce((value, [pattern, replacement]) => value.replace(pattern, replacement), part)).join("\"");
+}
+
+// Etsy'de "vintage" en az 20 yıllık ürün demektir; yeni dijital ürün ve desende yalnız "vintage-style" yazılır.
+export function vintageStyle(text: string): string {
+  return text.replace(/\b(V|v)intage\b(?![\s-]+(style|inspired))/g, (_match, letter: string) => letter === "V" ? "Vintage-Style" : "vintage-style");
 }

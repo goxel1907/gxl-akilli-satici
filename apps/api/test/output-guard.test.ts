@@ -191,7 +191,7 @@ test("English posts never carry Turkish names, and the Turkish meaning matches t
 test("physical listings open with a sentence, not a copy of the title, and never repeat a title phrase", () => {
   const plan = buildProductPlan(normalizeProductInput({ titleTr: "925 Ayar Gümüş Özel Tasarım Kafesli Tespih - Kral Zincir Püsküllü", origin: "designed_by_seller", materialVerified: true, weightGrams: 45, beadCount: 33 }), ["sterling silver prayer beads", "islamic gift for men"], [], {});
   assert.notEqual(plan.description.split("\n")[0], plan.title);
-  assert.match(plan.description.split("\n")[0], /sterling silver prayer beads with 33 beads/i);
+  assert.match(plan.description.split("\n")[0], /sterling silver prayer beads \(33 beads\) with cage/i);
   const segments = plan.title.toLowerCase().split(/,\s*/);
   assert.equal(new Set(segments).size, segments.length, plan.title);
   assert.ok((plan.title.match(/gift/gi) || []).length <= 1, plan.title);
