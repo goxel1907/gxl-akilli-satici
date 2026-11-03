@@ -1,4 +1,4 @@
-import { normalizeKeyword, readCached, type TrendResult, type TrendStore } from "./etsy-trends.js";
+import { calendarYear, normalizeKeyword, readCached, type TrendResult, type TrendStore } from "./etsy-trends.js";
 
 type KeywordGroup = "printables" | "patterns" | "tesbih" | "vintage";
 
@@ -66,7 +66,7 @@ export const US_SEASONS: SeasonDefinition[] = [
   {
     id: "christmas", nameTr: "Noel / Yılbaşı", nameEn: "Christmas", leadDays: 75,
     tipTr: "Yılın en büyük alışveriş dönemi. Süs, ağaç süsü, çorap ve hediye ürünleri Ekim'den itibaren aranır; ABD'ye kargo süresini hesaba katın.",
-    keywords: { printables: ["christmas printables", "christmas coloring pages", "christmas games printable"], patterns: ["christmas crochet pattern", "crochet ornament pattern", "christmas cross stitch pattern", "christmas knitting pattern"], tesbih: ["christmas gift for him"], vintage: ["vintage christmas ornaments", "vintage christmas decor"] },
+    keywords: { printables: ["christmas printables", "christmas coloring pages", "christmas games printable", "printable christmas cards", "christmas gift tags printable", "christmas phone wallpaper"], patterns: ["christmas crochet pattern", "crochet ornament pattern", "christmas cross stitch pattern", "christmas knitting pattern"], tesbih: ["christmas gift for him"], vintage: ["vintage christmas ornaments", "vintage christmas decor"] },
     date: (year) => utc(year, 11, 25)
   },
   {
@@ -132,7 +132,7 @@ export const US_SEASONS: SeasonDefinition[] = [
   {
     id: "new-year", nameTr: "Yeni yıl planlama sezonu", nameEn: "New Year planning", leadDays: 60,
     tipTr: "Planlayıcı, takip sayfası ve hedef günlükleri Ekim-Ocak arasında zirve yapar. Dijital ve yazdırılabilir planlayıcıları Kasım başına kadar listele.",
-    keywords: { printables: ["new year planner printable", "digital planner", "goal planner printable", "habit tracker printable"] },
+    keywords: { printables: ["new year planner printable", `${calendarYear()} calendar printable`, "digital planner", "goal planner printable", "habit tracker printable"] },
     date: (year) => utc(year, 0, 1)
   },
   {

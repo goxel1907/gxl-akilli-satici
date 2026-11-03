@@ -16,7 +16,22 @@ export interface MasterPromptInput {
   checklist: string[];
   // Kodla çalıştırılacak kalite protokolü (qa-protocol.ts); çıktısı yapıştırılmadan adım bitmez.
   qa?: string[];
+  // Satıcının seçtiği yapay zekâ: paket o aracın yapabildiğine göre yazılır (Claude fotoğraf üretmez, vektör çizer).
+  assistant?: "chatgpt" | "claude";
 }
+
+const TOOL_NOTES: Record<"chatgpt" | "claude" | "any", string[]> = {
+  chatgpt: ["- ChatGPT: make images with the built-in image generator and build the files with Python (for example reportlab or HTML to PDF), then give download links."],
+  claude: [
+    "- Claude: you cannot generate photos or raster images. Draw every artwork in Brief B as clean vector SVG in code, in the spec palette, and render it to PNG at the stated size. Build the files with your code and file tools and give download links.",
+    "- If a style cannot be drawn well as vector art (for example watercolor or photo-like textures), say so at the artwork step and give me the Brief B prompts with the spec values filled in, so I can make the images in an image tool and upload them here.",
+    "- Listing images: build the previews, flat lays and size cards yourself in code from the real pages. For photo-style scenes, return each prompt with the spec values filled in so I can run it in an image tool."
+  ],
+  any: [
+    "- ChatGPT: make images with the built-in image generator and build the files with Python (for example reportlab or HTML to PDF), then give download links.",
+    "- Claude: you cannot make photos. Build the files with your file tools (HTML, SVG or PDF) and make artwork as clean vector SVG. For photo steps, return the prompts unchanged with the spec values filled in, so I can run them in an image tool."
+  ]
+};
 
 export function buildMasterPrompt(input: MasterPromptInput): string {
   const spec = input.specName;
@@ -25,11 +40,16 @@ export function buildMasterPrompt(input: MasterPromptInput): string {
   const steps: Array<{ title: string; body: string }> = [
     { title: `${spec} first`, body: `Read the whole package. Before any file, output the ${spec} JSON described in Brief A. It is the single source of truth: every later file and image must match it exactly (name, palette hex codes, fonts, page or motif list, counts). If I ask for a change, update the JSON first and show it again. Show the final JSON again when the product files are finished.` }
   ];
-  if (input.artPrompts?.length) steps.push({ title: "Artwork", body: "Create the artworks in Brief B one image per reply, following the rules at the top of Brief B, in the spec palette and one consistent style. Name them art-01.png, art-02.png and so on in Brief B order; the page plan from step 1 says where each one goes." });
+  const claude = input.assistant === "claude";
+  if (input.artPrompts?.length) steps.push({ title: "Artwork", body: claude
+    ? "Draw the artworks in Brief B as clean vector SVG in code, one per reply, following the rules at the top of Brief B, in the spec palette and one consistent style, and render each to PNG. Name them art-01.png, art-02.png and so on in Brief B order; the page plan from step 1 says where each one goes."
+    : "Create the artworks in Brief B one image per reply, following the rules at the top of Brief B, in the spec palette and one consistent style. Name them art-01.png, art-02.png and so on in Brief B order; the page plan from step 1 says where each one goes." });
   steps.push({ title: "Product files", body: "Build the product files exactly as Brief A says, pass by pass. Deliver every format: none may be missing. Before you write STEP DONE, run the Automated QA script on the finished files, paste its output and fix every FAIL. Then give me ONE download zip that contains the Etsy upload set described in Brief A (at most 5 files, each under 20 MB) so I can download everything at once. If you cannot run code or create files, say so at the start of this step, give complete print-ready HTML I can save as PDF, and replace the script output with your own PASS/FAIL line for every Automated QA check." });
   if (input.renderPrompt) steps.push({ title: "Product renders", body: `Create the renders in Brief R, one image per reply. Use the colors, style and finished size from the ${spec} JSON in step 1 of this chat; the exact counts stay in the charts and diagrams.` });
-  steps.push({ title: "Listing images", body: `Create the listing images in Brief C one per reply, in order. The product shown must be ${input.renderPrompt ? "the item from the renders in Brief R" : "the real pages made in this chat"}. If you cannot see them as images, ask me to upload 2-3 screenshots of ${input.renderPrompt ? "those renders" : "those pages"}; never use images from other sellers or the internet. Never draw new text, letters or logos in the image; I add headlines later in Canva.` });
-  if (input.pins?.length && pinVisual) steps.push({ title: "Pinterest images", body: `For each pin in Brief D create one 2:3 vertical image based on image C${pinVisual.slot}, changing the scene so the pins look different and match each pin's angle. Keep the top 30% clean for the headline.` });
+  steps.push({ title: "Listing images", body: claude ? `Make the listing images in Brief C in order: build the preview, flat-lay and size images in code from ${input.renderPrompt ? "the renders" : "the real pages made in this chat"}; for each photo-style scene, give me the prompt with the spec values filled in so I can run it in an image tool. Never use images from other sellers or the internet, and never draw new text, letters or logos; I add headlines later in Canva.` : `Create the listing images in Brief C one per reply, in order. The product shown must be ${input.renderPrompt ? "the item from the renders in Brief R" : "the real pages made in this chat"}. If you cannot see them as images, ask me to upload 2-3 screenshots of ${input.renderPrompt ? "those renders" : "those pages"}; never use images from other sellers or the internet. Never draw new text, letters or logos in the image; I add headlines later in Canva.` });
+  if (input.pins?.length && pinVisual) steps.push({ title: "Pinterest images", body: claude
+    ? `For each pin in Brief D give me one 2:3 vertical image prompt based on image C${pinVisual.slot} with the spec values filled in, changing the scene so the pins look different and match each pin's angle; keep the top 30% clean for the headline.`
+    : `For each pin in Brief D create one 2:3 vertical image based on image C${pinVisual.slot}, changing the scene so the pins look different and match each pin's angle. Keep the top 30% clean for the headline.` });
   steps.push({ title: "Final check", body: input.qa?.length ? "Run the Automated QA script again on the final upload set and paste its output, then check the Final checklist. Everything must pass before you call the product ready." : "Check everything against the Final checklist and list what passes and what still needs fixing." });
 
   const lines = [
@@ -43,8 +63,7 @@ export function buildMasterPrompt(input: MasterPromptInput): string {
     ...steps.map((step, index) => `- STEP ${index + 1} - ${step.title}: ${step.body}`),
     "",
     "## Tool notes",
-    "- ChatGPT: make images with the built-in image generator and build the files with Python (for example reportlab or HTML to PDF), then give download links.",
-    "- Claude: you cannot make photos. Build the files with your file tools (HTML, SVG or PDF) and make artwork as clean vector SVG. For photo steps, return the prompts unchanged with the spec values filled in, so I can run them in an image tool.",
+    ...TOOL_NOTES[input.assistant || "any"],
     "",
     "---",
     "## Brief A - product files",

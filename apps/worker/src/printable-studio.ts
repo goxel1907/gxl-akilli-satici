@@ -1,7 +1,7 @@
 import { AI_DISCLOSURE_WARNING_TR } from "./etsy-policy.js";
 import { generateStructuredObject, hasAiProvider, type AiRuntimeEnv } from "../../api/src/structured-ai.js";
 import { buildAdVisuals, type AdVisual } from "./ad-visuals.js";
-import type { PrintableKind } from "./etsy-trends.js";
+import { calendarYear, type PrintableKind } from "./etsy-trends.js";
 import { hasBrandName, isIpRisky } from "./ip-guard.js";
 import { buildMasterPrompt } from "./master-prompt.js";
 import { qaProtocol } from "./qa-protocol.js";
@@ -28,6 +28,8 @@ export interface PrintablePlanInput {
   seed?: string;
   avoidNames?: string[];
   aiAssisted?: boolean;
+  // Satıcının kullandığı yapay zekâ (ChatGPT veya Claude); paket ona göre yazılır.
+  assistant?: "chatgpt" | "claude";
 }
 
 export interface PrintableBrief {
@@ -74,6 +76,7 @@ interface KindProfile {
   pageWord: string;
 }
 
+const CAL_YEAR = calendarYear();
 const PRINT_SAFE = "Print-safe margins: at least 0.25 in (6 mm) on every side and nothing important within 0.5 in of the edge, so home printers never cut content.";
 const INK = "Ink-friendly: light tints, thin lines and no full-page dark backgrounds, so every page prints well in color or in black and white on a home printer.";
 const TEXT_PAGES = "US English spelling, no typos, page numbers and a small footer on every page except the cover.";
@@ -129,7 +132,7 @@ export const PRINTABLE_KINDS: Record<PrintableKind, KindProfile> = {
     textRuleEn: "US English spelling, no typos; each coloring page carries only a small page number and © line in the bottom margin, outside the art, and the cover carries none.",
     signatureEn: "a theme twist or interactive element (hidden objects, a story thread across pages, or a matching colored reference) that top listings lack",
     includedEn: ["Single-sided pages", "US Letter + A4", "Color test page"],
-    tagStems: ["coloring book", "coloring sheets", "printable coloring", "coloring pdf", "relaxing coloring", "coloring pages", "coloring gift", "line art coloring"],
+    tagStems: ["coloring book", "coloring sheets", "printable coloring", "coloring pdf", "relaxing coloring", "coloring pages", "coloring gift", "line art coloring", "coloring bundle", "coloring activity", "coloring for adults", "simple coloring"],
     vocabulary: ["coloring", "colouring", "book", "pages", "sheets", "relaxing", "adult", "adults"],
     pageWord: "designs"
   },
@@ -146,7 +149,7 @@ export const PRINTABLE_KINDS: Record<PrintableKind, KindProfile> = {
     textRuleEn: "US English spelling, no typos. The art prints carry no text, footer, page number or signature; only the size guide, how-to-print, thank-you and license pages carry text.",
     signatureEn: "a distinct artistic detail (texture, composition or palette move) that sets the set apart from the top-ranking prints",
     includedEn: ["One file per frame ratio", "Prints up to 18x24 in", "Size guide"],
-    tagStems: ["art print", "digital print", "gallery wall art", "printable poster", "home decor print", "wall decor", "printable art", "set of prints"],
+    tagStems: ["art print", "digital print", "gallery wall art", "printable poster", "home decor print", "wall decor", "printable art", "set of prints", "wall art print", "printable decor", "art print set", "living room art", "bedroom wall art"],
     vocabulary: ["wall", "art", "print", "prints", "poster", "posters", "decor", "gallery", "home"],
     pageWord: "designs"
   },
@@ -163,7 +166,7 @@ export const PRINTABLE_KINDS: Record<PrintableKind, KindProfile> = {
     textRuleEn: TEXT_PAGES,
     signatureEn: "one original game or twist that most competing bundles do not offer",
     includedEn: ["Answer keys", "Cut lines", "Matching sign + tags"],
-    tagStems: ["party games", "printable games", "party printable", "shower games", "game cards", "party activities", "game bundle", "fun party games"],
+    tagStems: ["party games", "printable games", "party printable", "shower games", "game cards", "party activities", "game bundle", "fun party games", "party game cards", "shower activities", "game printable", "party bundle", "group games"],
     vocabulary: ["games", "game", "party", "cards", "activities", "signs", "sign", "invitation"],
     pageWord: "pages"
   },
@@ -212,7 +215,7 @@ export const PRINTABLE_KINDS: Record<PrintableKind, KindProfile> = {
     textRuleEn: TEXT_PAGES,
     signatureEn: "a motivating element (story characters, rewards or a theme) that top listings lack",
     includedEn: ["Answer keys", "Certificate of completion", "How-to-print guide"],
-    tagStems: ["kids worksheets", "learning printable", "kids activities", "learning activities", "kids printable", "homeschool printable", "kids activity book", "fun learning pages"],
+    tagStems: ["kids worksheets", "learning printable", "kids activities", "learning activities", "kids printable", "homeschool printable", "kids activity book", "fun learning pages", "busy book printable", "preschool printable", "kids learning pages", "activity sheets", "kids printables"],
     vocabulary: ["kids", "worksheets", "worksheet", "activities", "activity", "learning", "pages", "kid"],
     pageWord: "pages"
   },
@@ -227,6 +230,104 @@ export const PRINTABLE_KINDS: Record<PrintableKind, KindProfile> = {
     tagStems: ["scrapbook paper", "digital paper", "printable paper", "craft printable", "paper craft", "background paper", "pattern paper", "card making paper"],
     vocabulary: ["scrapbook", "paper", "papers", "digital", "seamless", "pattern", "patterns", "sheets", "craft", "background", "backgrounds"],
     pageWord: "designs"
+  },
+  // ---------- Yapay zekâ destekli, Etsy'de serbest yeni dijital ürünler ----------
+  calendar: {
+    labelTr: "Yıllık takvim", labelEn: "printable calendar",
+    defaultFormats: ["US Letter (landscape)", "A4 (landscape)"], defaultPages: 12, art: true,
+    contentEn: [
+      `A ${CAL_YEAR} calendar: 12 month pages, January to December ${CAL_YEAR}, plus a year-at-a-glance page`,
+      "Every date grid is generated in code from the real calendar (for example Python's calendar module), never typed by hand; weeks start on Sunday",
+      "Each month page has that month's artwork on the top half and the date grid on the bottom half, with room to write in each day",
+      "No holidays are printed, so buyers can add their own"
+    ],
+    designEn: [PRINT_SAFE, "Landscape pages; month and weekday names spelled out in full", "Date numbers at least 14 pt and weekday labels at least 9 pt"],
+    textRuleEn: "US English spelling, no typos; each month page carries only a small © line in the bottom margin and no page number, and the month artwork itself carries no text or numbers.",
+    signatureEn: "one detail that runs through all 12 months (for example a matching border or a small recurring character) that top-ranking calendars lack",
+    includedEn: [],
+    tagStems: [`${CAL_YEAR} calendar`, "printable calendar", "monthly calendar", "wall calendar", "desk calendar", "calendar pdf", "year calendar", "illustrated calendar", "family calendar", "kitchen calendar", "art calendar", "calendar gift"],
+    vocabulary: ["calendar", "calendars", "monthly", "yearly", "year", "wall", "desk", String(CAL_YEAR), "printable"],
+    pageWord: "pages"
+  },
+  stickers: {
+    labelTr: "Çıkartma (sticker) seti", labelEn: "printable stickers",
+    defaultFormats: ["US Letter (sticker sheets)", "A4 (sticker sheets)", "Transparent PNG stickers"], defaultPages: 8, art: true,
+    contentEn: [
+      "Illustrated sticker sheets in one theme, plus functional sticker sheets (weekdays, months, checkboxes and short words like 'To do', 'Due' and 'Today')",
+      "Every sticker has a thin white cutting border; on the sheets, stickers are at least 0.6 in wide, 0.25 in apart and at least 0.5 in from the page edge, so they cut cleanly by hand or with a cutting machine",
+      "Every sticker is also delivered as a transparent PNG for digital planners"
+    ],
+    designEn: [PRINT_SAFE, "300 dpi artwork; prints on sticker paper or cardstock", "Words on functional stickers are set in code with a licensed font in the palette, never drawn by the image tool"],
+    textRuleEn: "US English spelling, no typos. Sticker sheets carry no footer or page number; only the cover, how-to-print, thank-you and license pages carry text, and functional stickers carry only their short words.",
+    signatureEn: "a sticker type or theme detail (for example a mini character that appears across the sheets) that top-ranking sticker sets lack",
+    includedEn: [],
+    tagStems: ["planner stickers", "printable stickers", "sticker sheet", "digital stickers", "journal stickers", "sticker bundle", "cute stickers", "sticker pdf", "png stickers", "sticker set", "bujo stickers", "scrapbook stickers", "print and cut"],
+    vocabulary: ["sticker", "stickers", "sheet", "sheets", "planner", "journal", "digital", "png", "cut", "printable", "cute"],
+    pageWord: "designs"
+  },
+  cards: {
+    labelTr: "Tebrik kartı ve hediye etiketi", labelEn: "printable greeting cards",
+    defaultFormats: ["US Letter (folds to 5x7 in)", "A4 (folds to 5x7 in)"], defaultPages: 7, art: true,
+    contentEn: [
+      "Folded greeting cards: each card prints on one sheet with the front and the inside panel, a fold line and crop marks, and folds to 5x7 in to fit an A7 envelope",
+      "Each card has a short, warm greeting inside, set in code and without names so any buyer can use it",
+      "A matching gift tag sheet (8 tags per page) with hole marks"
+    ],
+    designEn: [PRINT_SAFE, "Front art at 300 dpi filling the 5x7 in front panel", "Greetings set in code with a licensed font, at least 14 pt; the inside text is upright when the card is folded"],
+    textRuleEn: "US English spelling, no typos. Card sheets carry no footer or page number; the front artwork carries no text drawn by the image tool (any front greeting is set in code); only the cover, how-to-print, thank-you and license pages carry other text.",
+    signatureEn: "a design detail (for example a matching back-of-card motif) that top-ranking printable cards lack",
+    includedEn: [],
+    tagStems: ["greeting card", "printable card", "folded card", "card printable", "gift tags", "printable gift tags", "holiday card", "card pdf", "folded greeting card", "card set", "card bundle", "gift tag printable", "printable stationery"],
+    vocabulary: ["card", "cards", "greeting", "folded", "gift", "tags", "tag", "printable", "holiday", "envelope"],
+    pageWord: "designs"
+  },
+  puzzles: {
+    labelTr: "Bulmaca kitabı (kelime avı, sudoku)", labelEn: "printable puzzle book",
+    defaultFormats: ["US Letter", "A4"], defaultPages: 30, art: false,
+    contentEn: [
+      "Large-print puzzles generated in code: themed word searches (15-20 words each, hidden across, down and diagonally) and sudoku puzzles that each have exactly one solution",
+      "Word lists use common, family-friendly US English words checked against a dictionary; no brand, character or celebrity names",
+      "A one-line rule at the top of each puzzle page, and every answer key at the back, labeled with its puzzle number"
+    ],
+    designEn: [PRINT_SAFE, INK, "Large print: grid letters at least 18 pt, word lists at least 14 pt, high-contrast black on white"],
+    textRuleEn: TEXT_PAGES,
+    signatureEn: "a themed twist (for example a hidden message spelled by the leftover letters) that top-ranking puzzle books lack",
+    includedEn: ["Large-print puzzles", "Answer keys", "US Letter + A4"],
+    tagStems: ["word search", "large print puzzles", "puzzle book", "printable puzzles", "sudoku printable", "word find", "brain games", "puzzle pages", "puzzles for adults", "activity pages", "word puzzles", "puzzles with answers", "large print games"],
+    vocabulary: ["puzzle", "puzzles", "word", "words", "search", "sudoku", "large", "print", "book", "games", "brain", "find", "seniors", "adults", "activity"],
+    pageWord: "pages"
+  },
+  wallpaper: {
+    labelTr: "Telefon duvar kâğıdı", labelEn: "phone wallpaper",
+    defaultFormats: ["Phone 1290x2796 px", "Phone 1179x2556 px", "Phone 1080x2400 px"], defaultPages: 6, art: true,
+    contentEn: [
+      "A set of original phone wallpapers in one theme and one style",
+      "Every wallpaper in every listed screen size, with the main subject inside the central 70% so the lock-screen clock and the app icons do not cover it",
+      "A one-page PDF with plain-language setup steps (no brand names or logos), a thank-you note and the license"
+    ],
+    designEn: ["Each wallpaper is made at the image tool's native portrait size, upscaled once to 1290x2796 px, and every other size is cropped from it in code", "sRGB PNG files at the exact pixel size of each screen", "Calm areas at the top (clock) and at the bottom (dock)"],
+    textRuleEn: "US English spelling, no typos. Wallpapers carry no text, watermark or signature; only the setup guide, thank-you and license pages carry text.",
+    signatureEn: "a detail that ties the set together (for example a matching lock screen and home screen pair) that top-ranking wallpaper sets lack",
+    includedEn: [],
+    tagStems: ["phone wallpaper", "lock screen", "aesthetic wallpaper", "phone background", "digital wallpaper", "wallpaper bundle", "home screen", "mobile wallpaper", "wallpaper set", "cell phone wallpaper", "lockscreen wallpaper", "screen background", "background bundle"],
+    vocabulary: ["wallpaper", "wallpapers", "phone", "lock", "screen", "background", "backgrounds", "digital", "mobile", "home", "aesthetic", "bundle"],
+    pageWord: "designs"
+  },
+  labels: {
+    labelTr: "Düzen etiketleri (kiler, ev)", labelEn: "printable labels",
+    defaultFormats: ["US Letter", "A4"], defaultPages: 10, art: false,
+    contentEn: [
+      "Ready-made labels for the theme (for example pantry: flour, sugar, rice, pasta, oats), 60-120 labels in all, each word checked for US spelling",
+      "Every label in 3 sizes (small, medium, large) on the sheets, with cut lines and 0.125 in spacing; works on sticker paper or cardstock",
+      "Blank labels in the same style so buyers can hand-write their own"
+    ],
+    designEn: [PRINT_SAFE, "Label words at least 12 pt and readable from 3 ft (1 m)", "Simple icons drawn in code (vector) in the palette; no clip art from other sources"],
+    textRuleEn: "US English spelling, no typos; label sheets carry only a small © line in the bottom margin, and the cover carries no page number.",
+    signatureEn: "a useful extra (for example a matching category set or a date line on each label) that top-ranking label sets lack",
+    includedEn: ["Pre-written labels", "Blank labels", "3 label sizes"],
+    tagStems: ["pantry labels", "printable labels", "organization labels", "kitchen labels", "storage labels", "jar labels", "label stickers", "home organization", "pantry organization", "label set", "container labels", "bin labels", "minimalist labels"],
+    vocabulary: ["label", "labels", "pantry", "kitchen", "organization", "organizing", "jar", "jars", "storage", "printable", "stickers", "home", "bin", "bins"],
+    pageWord: "labels"
   }
 };
 
@@ -257,7 +358,8 @@ export function normalizePrintablePlanInput(raw: Record<string, unknown>): Print
     pageCount: Number.isInteger(pages) && pages > 0 && pages <= 1000 ? pages : undefined,
     audience: cleanText(raw.audience, 60) || undefined,
     seed: cleanText(raw.seed, 60) || undefined,
-    aiAssisted: raw.aiAssisted !== false
+    aiAssisted: raw.aiAssisted !== false,
+    ...(raw.assistant === "chatgpt" || raw.assistant === "claude" ? { assistant: raw.assistant } : {})
   };
 }
 
@@ -282,6 +384,7 @@ function productPhrase(productType: string): string {
   if (UNCOUNTABLE.test(productType)) return `${productType} set`;
   // "an original recipe card" tek kart gibi okunur; ürün bir settir.
   if (/\bcard$/.test(productType)) return `set of ${productType}s`;
+  if (/\b(word search|sudoku|crossword)$/.test(productType)) return `${productType} puzzle book`;
   const last = productType.split(" ").at(-1)!;
   return last.endsWith("s") && !last.endsWith("ss") ? `set of ${productType}` : productType;
 }
@@ -300,6 +403,11 @@ function printGuide(kind: PrintableKind): string {
     case "wall_art": return "A one-page 'How to print' guide: which file fits which frame, Actual size / 100% scale, matte photo paper or a print shop for larger sizes.";
     case "paper_craft": return "A one-page 'How to print' guide: US Letter and A4 pages at home at Actual size / 100% scale on matte paper or cardstock; 12x12 in sheets at a print shop or on a wide-format printer.";
     case "party": return "A one-page 'How to print' guide: print single-sided at Actual size / 100% scale on cardstock, then cut along the crop marks.";
+    case "calendar": return "A one-page 'How to print' guide: print the landscape pages at Actual size / 100% scale on cardstock or matte paper; bind with a clip, ring or ribbon.";
+    case "stickers": return "A one-page 'How to print' guide: print on matte or glossy sticker paper at Actual size / 100% scale, cut along the white borders by hand or with a cutting machine (named as plain text only), and use the PNG files in digital planners.";
+    case "cards": return "A one-page 'How to print' guide: print single-sided on 80-110 lb cardstock at Actual size / 100% scale, cut along the crop marks, fold on the fold line; fits a standard A7 envelope.";
+    case "labels": return "A one-page 'How to print' guide: print on sticker paper or cardstock at Actual size / 100% scale, cut along the cut lines, and laminate or use clear tape for jars that get wet.";
+    case "wallpaper": return "A one-page 'How to set your wallpaper' guide in plain words: unzip the size that fits your phone, save the image to your photos, then choose it in your phone's wallpaper settings (no brand names or logos).";
     default: return "A one-page 'How to print' guide: print at Actual size / 100% scale, paper weight suggestions, double-sided and print-shop tips.";
   }
 }
@@ -308,6 +416,7 @@ function useSentence(kind: PrintableKind): string {
   if (kind === "digital_planner") return "ready to use in a note-taking app on your tablet";
   if (kind === "wall_art") return "ready to print at home or at a print shop and frame";
   if (kind === "paper_craft") return "ready to print at home or at a print shop";
+  if (kind === "wallpaper") return "ready to download and set as your phone's lock screen or home screen";
   return "designed to be printed at home and used right away";
 }
 
@@ -325,13 +434,18 @@ interface Prepared {
   dropped: string[];
 }
 
+// Yapay zekâ destekli yeni türler: özellik yalnız ürünün kendi kelimelerinden oluşuyorsa ("wall" takvim) özellik sayılmaz.
+const NEW_KINDS = new Set<PrintableKind>(["calendar", "stickers", "cards", "puzzles", "wallpaper", "labels"]);
+
 function prepare(raw: PrintablePlanInput): Prepared {
   const productWords = new Set(raw.productType.split(/\s+/).flatMap((word) => [word, singular(word)]));
   // "vintage" yeni bir dijital ürün için "vintage style" demektir (Etsy'de "vintage" 20 yaş üstü ürünlerdir);
   // "daily weekly" iki ayrı özelliktir.
   const TIME_WORDS = /^(daily|weekly|monthly|yearly|undated)$/;
   const unique = [...new Set((raw.trendFeatures || []).flatMap((feature) => feature.split(" ").every((word) => TIME_WORDS.test(word)) ? feature.split(" ") : [feature]).map((feature) => feature === "vintage" ? "vintage style" : vintageStyle(feature)))];
-  const usable = unique.filter((feature) => !MISLEADING_FEATURE.test(feature) && !feature.split(" ").every((word) => META_WORDS.has(word) || productWords.has(word)));
+  const vocabulary = new Set(PRINTABLE_KINDS[raw.kind]?.vocabulary || []);
+  const ownWordsOnly = (feature: string) => NEW_KINDS.has(raw.kind) && feature.split(" ").every((word) => vocabulary.has(word) || productWords.has(word));
+  const usable = unique.filter((feature) => !MISLEADING_FEATURE.test(feature) && !hasBrandName(feature) && !ownWordsOnly(feature) && !feature.split(" ").every((word) => META_WORDS.has(word) || productWords.has(word)));
   const harmony = harmonizeThemes(usable, themeFamilies(`${raw.keyword || ""} ${raw.productType}`));
   const dropped = [...unique.filter((feature) => !usable.includes(feature)), ...harmony.dropped];
   const tags = (raw.trendTags || []).filter((tag) => !isIpRisky(tag) && !MISLEADING_FEATURE.test(tag) && fitsTheme(tag, harmony.families) && (!/\bvintage\b/.test(tag) || /\bvintage (style|inspired)\b/.test(tag)));
@@ -375,8 +489,19 @@ const THEME_SUBJECTS: Partial<Record<ThemeFamily, string[]>> = {
 const KIND_SUBJECTS: Partial<Record<PrintableKind, string[]>> = {
   coloring: ["a cozy cottage scene", "a flower garden", "forest animals", "a kitchen still life", "a seaside village", "a reading nook", "a mushroom forest", "a vintage tea party"],
   wall_art: ["a botanical study", "an abstract landscape", "a still life with fruit", "a coastal horizon"],
-  paper_craft: ["botanical sprigs", "garden flowers", "small stars and dots", "soft geometric shapes"]
+  paper_craft: ["botanical sprigs", "garden flowers", "small stars and dots", "soft geometric shapes"],
+  stickers: ["cute coffee cups and pastries", "potted plants and flowers", "stars, hearts and clouds", "books and reading glasses", "small animals with happy faces", "fruit and picnic treats"],
+  cards: ["a bouquet of garden flowers", "a cozy mug with a heart-shaped steam swirl", "a little bird on a flowering branch", "balloons and confetti", "a wreath of leaves and berries", "a sunny landscape with soft hills"],
+  wallpaper: ["a calm mountain landscape at sunrise", "soft abstract waves", "a field of wildflowers", "a starry night sky", "a quiet beach at sunset", "pressed botanical leaves"]
 };
+
+// Takvim: her ay kendi mevsimini çizer (tek stil ve palet); tema kuralı burada aylara göre işler.
+const MONTH_NAMES = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+const MONTH_SUBJECTS = [
+  "snowy pine branches and a red cardinal", "snowdrops and early crocuses", "daffodils and spring rain", "cherry blossoms and a robin's nest",
+  "peonies in a garden with bees", "strawberries, daisies and a picnic basket", "sunflowers under a summer sky", "seashells on a calm beach",
+  "apples and the first autumn leaves", "pumpkins and colorful maple leaves", "acorns, wheat and a warm cup of tea", "an evergreen wreath and soft snowfall"
+];
 
 const PAPER_LAYOUTS = ["an all-over ditsy repeat", "a large-scale toile-style repeat", "a striped repeat", "a soft plaid repeat", "a scattered sprig repeat", "a damask-style repeat", "a ledger-grid repeat with small motifs", "a polka-dot repeat with small motifs", "a patchwork repeat", "a medallion wallpaper repeat", "a border-stripe repeat", "a tiny all-over texture repeat"];
 const EPHEMERA_PIECES = ["tags, labels and tickets", "stamps, postcards and frames", "journaling cards, bookmarks and photo corners", "envelopes, belly bands and pocket fronts"];
@@ -507,14 +632,15 @@ function buildArtPlan(prepared: Prepared, profile: KindProfile, pages: number): 
   const { input } = prepared;
   const palette = input.colors?.length ? `${joinWords(input.colors)} palette` : "the spec palette";
   const { subjects, components, styles } = subjectsAndStyle(prepared, profile);
-  const style = styles.length ? `${joinWords(styles.map(proseCase))} style` : "one consistent original illustration style";
+  // "vintage style style" olmaz: stil adlarının sonundaki "style" atılıp bir kez yazılır.
+  const style = styles.length ? `${joinWords(styles.map((name) => proseCase(name.replace(/[\s-]+style$/i, ""))))} style` : "one consistent original illustration style";
   const subjectAt = (index: number) => subjects[index % Math.max(1, subjects.length)] || `an original ${input.productType} theme`;
   // Kapak ürünün ana temasını gösterir (Noel kitinin kapağı kütüphane değil, Noel konusudur).
   const anchored = (subject: string, holidayOnly: boolean) => [...themeFamilies(subject)].some((family) => prepared.themes.has(family) && (!holidayOnly || isHolidayFamily(family)));
   const themed = [...subjects.filter((subject) => anchored(subject, true)), ...subjects.filter((subject) => !anchored(subject, true) && anchored(subject, false))];
   // Kapak tek bir kâğıdın konusunu tekrar etmez: ana temanın üç konusunu bir arada gösterir.
   const coverParts = (themed.length ? themed : subjects).slice(0, 3);
-  const coverSubject = coverParts.length > 1 ? `these elements: ${coverParts.join("; ")}` : coverParts[0] || subjectAt(0);
+  const coverSubject = coverParts.length > 1 ? `that combines these elements: ${coverParts.join("; ")}` : `of ${coverParts[0] || subjectAt(0)}`;
   // Süs sayfaları ana temadan konu alır (Noel kitine "antika botanik levha" girmez); temanın konuları farklı parçalarla yeniden kullanılır.
   const ephemeraSubject = (index: number, papersCount: number) => {
     // Kâğıtların konuları temanın kendisidir; süs sayfaları bunları farklı parçalarla ve farklı sırayla kullanır.
@@ -532,6 +658,10 @@ function buildArtPlan(prepared: Prepared, profile: KindProfile, pages: number): 
   // Konu sayısı sayfadan azsa her (konu, kompozisyon) çifti bir kez kullanılır: aynı resim iki kez istenmez.
   const variedAt = (index: number, count: number) => subjects.length >= count ? subjectAt(index) : `${subjectAt(index)}, ${compositions[Math.floor(index / Math.max(1, subjects.length)) % compositions.length]}`;
   const used = (count: number) => subjects.slice(0, Math.min(subjects.length, count));
+  // Çıkartma sayfası, kart ve duvar kâğıdında "as one large central subject" gibi kompozisyon eki anlamsızdır:
+  // konu listesi türün yedek konularıyla tamamlanır, her görsel ayrı bir konu alır.
+  const fillers = (KIND_SUBJECTS[input.kind] || []).filter((subject) => !subjects.includes(subject));
+  const distinctAt = (index: number) => [...subjects, ...fillers][index % Math.max(1, subjects.length + fillers.length)] || subjectAt(index);
   const sharedNotes = [
     "Keep one consistent style and the spec palette across every image, and replace any image that breaks a rule.",
     "Never copy or imitate another seller's listing images, Pinterest pins or any copyrighted artwork, and never upload them as references; describe the style in words only."
@@ -565,6 +695,62 @@ function buildArtPlan(prepared: Prepared, profile: KindProfile, pages: number): 
     };
   }
 
+  if (input.kind === "calendar") {
+    // Ürün adındaki tek kelimelik konu ("cat calendar") her aya eklenir; stil kelimeleri ("botanical") stil olarak kalır.
+    const core = input.productType.toLowerCase().replace(/\b(\d{4}|calendars?|printable|wall|desk|monthly|yearly|year|planner)\b/g, " ").replace(/\s+/g, " ").trim();
+    const featured = core && !core.includes(" ") && !STYLE_WORDS.has(core) && !THEME_ADJECTIVES.has(core) ? ` featuring ${/s$/.test(core) ? core : `${core}s`}` : "";
+    return {
+      prompts: [
+        ...MONTH_NAMES.map((month, index) => `${month} artwork: ${MONTH_SUBJECTS[index]}${featured}, ${palette}, ${style}, original artwork, wide 2:1 landscape composition for the top half of a landscape page, no text, no numbers, no letters.`),
+        `Cover artwork: one hero illustration that combines a few of the month subjects${featured}; ${palette}, ${style}, landscape composition with the top third kept plain for the title and the year, which are added later in code; no text or letters.`
+      ],
+      notes: [...sharedNotes, "Image tools give about 1024-1536 px. Upscale each month artwork to 3300x1650 px (11x5.5 in at 300 dpi) with the best method available and check it at 100% zoom. Generate every date grid in code from the calendar module; never type or draw dates by hand.", "Each month's artwork follows its own season, in one shared style and palette across all 12 months."],
+      budget: [`12 month pages for ${CAL_YEAR}: the Brief B month artwork on top and the date grid generated in code below`, `Plus the cover (cover artwork from Brief B with the title and ${CAL_YEAR} added in code), a year-at-a-glance page generated in code, and ${textPages}`],
+      includedEn: [`12 month pages for ${CAL_YEAR}`, "Year-at-a-glance page", "Sunday-start weeks"],
+      components, subjects: [], style,
+      pagesNote: `12 month pages plus the cover, year-at-a-glance, how-to-print, thank-you and license pages`
+    };
+  }
+
+  if (input.kind === "stickers") {
+    const illustrated = Math.max(2, pages - 2);
+    return {
+      prompts: [
+        ...Array.from({ length: illustrated }, (_, index) => `Sticker sheet ${index + 1}: 12-20 separate stickers featuring ${distinctAt(index)}, ${palette}, ${style}, each sticker with a thin white border and generous space between stickers, on a flat light gray (#DDDDDD) background, no text, no letters, no numbers.`),
+        `Cover artwork: one hero illustration ${coverSubject}; ${palette}, ${style}, square composition with the top third kept plain for the title, which is added later in code; no text or letters.`
+      ],
+      notes: [...sharedNotes, "Image tools give about 1024-1536 px. Upscale every sticker sheet 2-3x (Lanczos), remove only the flat gray background in code, keep each sticker's white border, and save every sticker as its own transparent PNG.", "Lay out the printable sheets in code: every sticker at least 0.6 in wide, 0.25 in from its neighbors and 0.5 in from the page edge. Make the functional stickers (weekdays, months, checkboxes and short words) in code with a licensed font in the palette."],
+      budget: [`${illustrated} illustrated sticker sheets (Brief B)`, "2 functional sticker sheets made in code (weekdays, months, checkboxes and short words like 'To do', 'Due' and 'Today')", `Plus the cover (cover artwork from Brief B with the title added in code) and ${textPages}`],
+      includedEn: [`${illustrated} illustrated sticker sheets`, "2 functional sticker sheets", "Every sticker as a transparent PNG"],
+      components, subjects: Array.from({ length: illustrated }, (_, index) => distinctAt(index)), style,
+      pagesNote: `${pages} sticker sheets plus the cover, how-to-print, thank-you and license pages`
+    };
+  }
+
+  if (input.kind === "cards") {
+    const designs = Math.max(2, pages - 1);
+    return {
+      prompts: Array.from({ length: designs }, (_, index) => `Card ${index + 1} front: ${distinctAt(index)}, ${palette}, ${style}, original artwork, portrait 5:7 composition with a calm area where a short greeting is added later in code, no text, no letters.`),
+      notes: [...sharedNotes, "Image tools give about 1024-1536 px. Upscale every card front to 1500x2100 px (5x7 in at 300 dpi) with the best method available.", "Build every card in code on one US Letter or A4 sheet: the front panel, the inside panel with the greeting set in a licensed font, a fold line and crop marks, with the inside text upright when folded. Make the gift tag sheet in code from details of the card art."],
+      budget: [`${designs} folded card designs (front art from Brief B, inside greeting set in code)`, "1 gift tag sheet made in code from the card art (8 tags with hole marks)", `Plus a cover made in code from the card fronts and ${textPages}`],
+      includedEn: [`${designs} folded card designs (5x7 in, fit an A7 envelope)`, "Matching gift tag sheet"],
+      components, subjects: Array.from({ length: designs }, (_, index) => distinctAt(index)), style,
+      pagesNote: `${pages} core pages plus the cover, how-to-print, thank-you and license pages`
+    };
+  }
+
+  if (input.kind === "wallpaper") {
+    const count = Math.min(Math.max(pages, 1), 12);
+    return {
+      prompts: Array.from({ length: count }, (_, index) => `Wallpaper ${index + 1}: ${distinctAt(index)}, ${palette}, ${style}, original artwork, tall 9:19.5 portrait composition with the main subject inside the central 70% and calm space at the top for the clock, no text, no letters, no watermark.`),
+      notes: [...sharedNotes, "Image tools give about 1024-1536 px. Upscale every wallpaper once to 1290x2796 px with the best method available (an AI upscaler if you have one, otherwise Lanczos plus light sharpening), then crop every other size from it in code without stretching."],
+      budget: [`${count} ${count > 1 ? "wallpapers" : "wallpaper"}, each in every listed screen size`, "Plus one PDF with the setup guide, thank-you and license pages"],
+      includedEn: [`${count} phone ${count > 1 ? "wallpapers" : "wallpaper"}`, `${(input.formats?.length ? input.formats : profile.defaultFormats).length} screen sizes each`, "Setup guide"],
+      components, subjects: Array.from({ length: count }, (_, index) => distinctAt(index)), style,
+      pagesNote: `${count} ${count > 1 ? "wallpapers" : "wallpaper"}, each in every listed size, plus one PDF with the setup guide, thank-you and license pages`
+    };
+  }
+
   // Kâğıt işi: kit (kâğıt + süs parçaları + kapak) veya yalnız kâğıt paketi.
   const mode = paperMode(input.productType);
   const tileNote = "Image tools give about 1024-1536 px. Make every patterned paper as one seamless tile and repeat it in code (for example 3x3) to fill 3600x3600 px; never stretch a small image. Before repeating, check each tile in code: offset it by half its width and height, blend or retouch the cross-shaped seam, then show a 2x2 preview. The left and right edges, and the top and bottom edges, must match.";
@@ -588,7 +774,7 @@ function buildArtPlan(prepared: Prepared, profile: KindProfile, pages: number): 
   const prompts = [
     ...Array.from({ length: papers }, (_, index) => `Paper ${index + 1}: seamless repeating pattern, ${paperLine(index)}, ${palette}, ${style}, original design, a square tile that repeats with no visible seams, no text, no letters.`),
     ...Array.from({ length: ephemera }, (_, index) => `Ephemera sheet ${index + 1}: 8-12 separate cut-out pieces (${EPHEMERA_PIECES[index % EPHEMERA_PIECES.length]}) featuring ${ephemeraSubject(index, papers)}, ${palette}, ${style}, each piece with a thin white cutting border and generous space between pieces, on a flat light gray (#DDDDDD) background, no text or letters (label areas left blank for writing).`),
-    `Cover artwork: one hero illustration that combines ${coverSubject}; ${palette}, ${style}, square composition with the top third kept plain for the title, which is added later in code; no text or letters.`
+    `Cover artwork: one hero illustration ${coverSubject}; ${palette}, ${style}, square composition with the top third kept plain for the title, which is added later in code; no text or letters.`
   ];
   return {
     prompts,
@@ -674,6 +860,14 @@ function deliverables(prepared: Prepared, name: string, formats: string[]): stri
       : [...groups.slice(0, 4).map((group) => `${file}-${group.slug}.zip (every print in ${group.label})`), `${file}-More-Sizes.zip (every print in ${joinWords(groups.slice(4).map((group) => group.label))})`];
     return [`Upload set: ${zips.join("; ")}; put the PDF with the size guide, how-to-print, thank-you and license pages inside the first zip.`, limit];
   }
+  if (input.kind === "wallpaper") {
+    const zips = formats.map((format) => `${file}-${fileSlug(format)}.zip (every wallpaper at ${format.replace(/^phone\s*/i, "")})`);
+    return [`Upload set: ${fit(zips).join("; ")}; put the PDF with the setup guide, thank-you and license pages inside the first zip.`, limit];
+  }
+  if (input.kind === "stickers") {
+    const pdfs = formats.filter((format) => !/png/i.test(format)).map((format) => `${file}-${fileSlug(format)}.pdf (printable sticker sheets)`);
+    return [`Upload set: ${fit([...pdfs, `${file}${/Stickers$/.test(file) ? "" : "-Stickers"}-PNG.zip (every sticker as a transparent PNG)`]).join("; ")}.`, limit];
+  }
   if (input.kind === "digital_planner") {
     const tablets = formats.filter(isTablet).flatMap((format) => ["Light", "Dark"].map((theme) => `${file}-${fileSlug(format)}-${theme}.pdf`));
     const prints = formats.filter((format) => !isTablet(format)).map((format) => `${file}-${fileSlug(format)}.pdf`);
@@ -690,6 +884,7 @@ function textRule(prepared: Prepared): string {
 }
 
 function themeLine(prepared: Prepared): string {
+  if (prepared.input.kind === "calendar") return "- Theme: one consistent style and palette across all 12 months; each month's artwork follows its own season";
   const lead = (prepared.input.trendFeatures || []).filter((feature) => themeFamilies(feature).size || feature.split(" ").every((word) => STYLE_WORDS.has(word) || THEME_ADJECTIVES.has(word) || word === "style"));
   // "Christmas ephemera and library ephemera" iki tema gibi okunur: ilk özellik temadır, diğerleri o temanın ayrıntısıdır.
   const allNames = [...new Set(lead.map((feature) => proseCase(stripPaperNouns(feature))).filter(Boolean))];
@@ -714,6 +909,8 @@ function buildPdfPrompt(prepared: Prepared, profile: KindProfile, name: string, 
   return [
     input.kind === "digital_planner"
       ? `You are a senior digital planner designer, copywriter and technical editor for Etsy ${profile.labelEn} products. Create an ORIGINAL, sellable ${productPhrase(input.productType)} and produce ready-to-use tablet files.`
+      : input.kind === "wallpaper"
+      ? `You are a senior digital artist, copywriter and technical editor for Etsy ${profile.labelEn} products. Create an ORIGINAL, sellable ${productPhrase(input.productType)} set and produce ready-to-use image files.`
       : `You are a senior print designer, copywriter and technical editor for Etsy ${profile.labelEn} products. Create an ORIGINAL, sellable ${productPhrase(input.productType)} and produce print-ready files.`,
     "",
     "## Product name",
@@ -724,6 +921,10 @@ function buildPdfPrompt(prepared: Prepared, profile: KindProfile, name: string, 
     `- Buyers: US Etsy shoppers searching "${input.keyword || input.productType}"${input.audience ? `; audience: ${input.audience}` : ""}`,
     input.kind === "wall_art"
       ? `- Size: ${Math.min(Math.max(pages, 1), 6)} artworks, each delivered in every ratio file`
+      : input.kind === "wallpaper"
+      ? `- Size: ${Math.min(Math.max(pages, 1), 12)} wallpapers, each delivered in every listed screen size`
+      : input.kind === "calendar"
+      ? `- Size: 12 month pages for ${CAL_YEAR}; the cover, year-at-a-glance, how-to-print, thank-you and license pages come on top`
       : `- Size: ${pages} core pages; the cover, ${input.kind === "digital_planner" ? "import guide" : "how-to-print"}, thank-you and license pages come on top`,
     `- Formats (deliver each as its own file): ${formats.join(", ")}`,
     `- Palette: ${input.colors?.length ? input.colors.join(", ") : "propose one with hex codes"}`,
@@ -749,11 +950,13 @@ function buildPdfPrompt(prepared: Prepared, profile: KindProfile, name: string, 
     "",
     "## Work in three passes",
     `PASS 1 - Page plan: a table with one line per page (number, title, purpose, elements, format notes)${art.budget.length ? " that follows the page budget exactly" : ""}.`,
-    `PASS 2 - Check and report: ${profile.art ? "all text and cut lines inside the safe margins (full-bleed art may reach the edge)" : "every page inside the safe margins"}, text readable at 100% ${input.kind === "digital_planner" ? "zoom on a tablet" : "print size"}, no spelling errors${textKind || input.kind === "paper_craft" ? ", every fill-in area large enough for handwriting" : ""}, totals in the page plan match the files.`,
+    `PASS 2 - Check and report: ${profile.art ? "all text and cut lines inside the safe margins (full-bleed art may reach the edge)" : "every page inside the safe margins"}, text readable at 100% ${input.kind === "digital_planner" ? "zoom on a tablet" : input.kind === "wallpaper" ? "zoom on a phone" : "print size"}, no spelling errors${textKind || input.kind === "paper_craft" ? ", every fill-in area large enough for handwriting" : ""}, totals in the page plan match the files.`,
     input.kind === "wall_art"
       ? "PASS 3 - Files: in code, crop and resize every print from its 2:3 master to each listed ratio or size (sRGB JPG, 300 dpi, exact pixel size), and build the size guide, how-to-print, thank-you and license pages as one PDF."
+      : input.kind === "wallpaper"
+      ? "PASS 3 - Files: in code, crop every wallpaper from its 1290x2796 px master to each listed screen size (sRGB PNG, exact pixel size, no stretching), and build the setup guide, thank-you and license pages as one PDF."
       : profile.art
-      ? `PASS 3 - Assembly: build one print-ready HTML document per format that places the artwork files (art-01.png, art-02.png ... in Brief B order, as mapped in the page plan) with CSS @page set to the exact size (for example @page { size: 8.5in 11in; margin: 0 }) so 'Save as PDF' gives the exact size.${input.kind === "paper_craft" ? " Save every paper also as a 3600x3600 px JPG for the 12x12 set." : ""}`
+      ? `PASS 3 - Assembly: build one print-ready HTML document per format that places the artwork files (art-01.png, art-02.png ... in Brief B order, as mapped in the page plan) with CSS @page set to the exact size (for example @page { size: ${input.kind === "calendar" ? "11in 8.5in" : "8.5in 11in"}; margin: 0 }) so 'Save as PDF' gives the exact size.${input.kind === "paper_craft" ? " Save every paper also as a 3600x3600 px JPG for the 12x12 set." : input.kind === "calendar" ? " Generate every date grid in code from the calendar module." : ""}`
       : input.kind === "digital_planner"
         ? "PASS 3 - Final files: generate the planner with a Python script (one template per layout plus loops; for example reportlab with internal links) so every tab and index link works, then export one hyperlinked PDF per format."
         : "PASS 3 - Final files: one print-ready HTML document per format with CSS @page set to the exact size (for example @page { size: 8.5in 11in; margin: 0 }) using vector shapes (inline SVG) only, ready to 'Save as PDF' without edits. If you can create files, export the PDFs directly.",
@@ -850,6 +1053,7 @@ function nounPhrase(phrase: string): string | undefined {
 // Düz yazıda formatlar: "US Letter, A4 and A5 sizes", duvar sanatında "five frame ratios up to 24x36 in".
 function formatsProse(formats: string[], kind: PrintableKind): string | undefined {
   if (kind === "wall_art") return "frame sizes up to 18x24 in";
+  if (kind === "wallpaper") return `${formats.length} phone screen ${formats.length > 1 ? "sizes" : "size"}`;
   if (kind === "digital_planner") return formats.some((format) => !/tablet|hyperlink/i.test(format)) ? "landscape and portrait tablet PDFs in light and dark themes, plus a printable US Letter version" : "landscape and portrait tablet PDFs in light and dark themes";
   const short = [...new Set(formats.map((format) => format.replace(/\s*\(.*\)/, "").replace(/\s+in\s+(sheets|cards)$/i, "").replace(/\s+binder pages$/i, "").replace(/^4x6 and 5x7$/, "4x6, 5x7").trim()).flatMap((format) => format.split(/,\s*/)).filter((format) => /^(us letter|half letter|a4|a5|4x6|5x7|12x12|8x10|11x14)$/i.test(format)))];
   return short.length ? `${joinWords(short.slice(0, 4))} ${short.length > 1 ? "sizes" : "size"}` : undefined;
@@ -880,7 +1084,13 @@ function contentsSummary(items: string[]): string {
   const parts = items
     .filter((item) => !/^\d+x\d+|up to/i.test(item))
     .map((item) => item.replace(/\s*\(.*?\)/g, "").trim())
-    .map((item) => /^\d/.test(item) ? item : `${article(item)} ${item.charAt(0).toLowerCase()}${item.slice(1)}`);
+    .map((item) => {
+      if (/^\d/.test(item)) return item;
+      const first = item.split(/[\s-]/)[0];
+      const text = /^(US|A\d|Sunday|Monday|PDF|PNG)$/.test(first) ? item : `${item.charAt(0).toLowerCase()}${item.slice(1)}`;
+      // "Sunday-start weeks", "every sticker…": çoğul veya "every" ile başlayan maddeye "a" gelmez.
+      return /^(every|all)\b/i.test(item) || /s$/.test(item.split(" ")[0].replace(/-.*/, "")) || /s$/.test(item.split(" ").at(-1)!) && !/ss$/.test(item.split(" ").at(-1)!) && item.split(" ").length <= 3 ? text : `${article(text)} ${text}`;
+    });
   return joinWords(parts);
 }
 
@@ -949,7 +1159,7 @@ function buildPins(prepared: Prepared, name: string, art: ArtPlan): PrintableBri
       `${name} is ${proseCase(product)}${withPalette(featureClause(feature && !phrase.includes(feature) ? feature : undefined, profile, input.kind), palette)}.`,
       looking ? lookingLines[angle % lookingLines.length](proseCase(looking)) : "",
       `${includeLines[angle % includeLines.length]} ${included}.${formats ? ` Available in ${formats}.` : ""}`,
-      input.kind === "digital_planner" ? "Instant digital download for your tablet." : `Instant digital download: ${input.kind === "wall_art" || input.kind === "paper_craft" ? "print at home or at a print shop" : "print at home"}${tablet ? " or use it on your tablet" : ""}.`,
+      input.kind === "digital_planner" ? "Instant digital download for your tablet." : input.kind === "wallpaper" ? "Instant digital download for your phone." : `Instant digital download: ${input.kind === "wall_art" || input.kind === "paper_craft" ? "print at home or at a print shop" : "print at home"}${tablet ? " or use it on your tablet" : ""}.`,
       audienceLine,
       "Designed by GXL Market Studio."
     ];
@@ -968,14 +1178,17 @@ function checklistFor(prepared: Prepared): string[] {
   return [
     input.kind === "digital_planner"
       ? "Every page reads well at 100% zoom on a tablet, and every tab and index link jumps to the right page."
+      : input.kind === "wallpaper"
+      ? `Every wallpaper has the exact pixel size of each listed screen (${formats.join(", ")}), and the main subject stays inside the safe area.`
       : `Every page sits inside the safe margins and prints at 100% (Actual size) in every included size (${printSizes.join(", ")}) without clipping.`,
     textRule(prepared),
-    "The whole product follows one theme; nothing from another season, holiday or mood appears.",
+    input.kind === "calendar" ? "All 12 months share one style and palette, and each month's artwork fits its own month." : "The whole product follows one theme; nothing from another season, holiday or mood appears.",
+    ...(input.kind === "calendar" ? [`Every date in the ${CAL_YEAR} grids was generated in code and checked against the real calendar.`] : []),
     "All fonts are licensed for commercial use; list them.",
     "No brand, character or celebrity names; all artwork is original and no other seller's image was used as a reference.",
     "Etsy allows at most 5 files of at most 20 MB each per digital listing; the upload set follows the 'Upload set' line and every file name is clear.",
     "Listing images show the real pages from the files.",
-    `${input.kind === "digital_planner" ? "Import guide" : input.kind === "wall_art" ? "Size guide, how-to-print" : "How-to-print"}, thank-you and license pages are included.`
+    `${input.kind === "digital_planner" ? "Import guide" : input.kind === "wall_art" ? "Size guide, how-to-print" : input.kind === "wallpaper" ? "Setup guide" : "How-to-print"}, thank-you and license pages are included.`
   ];
 }
 
@@ -1014,6 +1227,7 @@ export function buildPrintableBrief(raw: PrintablePlanInput): PrintableBrief {
       artNotes: art.notes,
       adVisuals,
       pins,
+      assistant: input.assistant,
       qa: qaProtocol({ type: "printable", name, kind: input.kind, formats, pages, pagesNote: art.pagesNote, papersOnly: input.kind === "paper_craft" && paperMode(input.productType) === "papers" }),
       checklist: checklistFor(prepared)
     }),
@@ -1044,6 +1258,7 @@ function primaryPhrase(input: PrintablePlanInput): string {
 function formatPhrase(formats: string[], kind?: PrintableKind): string | undefined {
   if (kind === "wall_art") return "Sizes up to 18x24";
   if (kind === "digital_planner") return "Tablet PDF";
+  if (kind === "wallpaper") return undefined;
   const short = formats.map((format) => format.replace(/\s*\(.*\)/, "").replace(/\s+in\s+(sheets|cards)$/i, "").replace(/\s+binder pages$/i, "").trim())
     .filter((format) => /letter|a4|a5|4x6|5x7|12x12/i.test(format));
   const unique = [...new Set(short)];
@@ -1102,7 +1317,7 @@ function buildTitle(prepared: Prepared, art: ArtPlan, primary = primaryPhrase(pr
 }
 
 // Önce alıcı ifadeleri (trend), sonra bu ürünün formatları, renkleri ve kelimeleri; türün genel ifadeleri yalnızca 13'ü tamamlamak için.
-const GENERIC_HEADS = /^(pages?|art|cards?|games?|sheets?|kit|pack|paper|printables?|templates?|worksheets?|activities|prints?)$/;
+const GENERIC_HEADS = /^(pages?|art|cards?|games?|sheets?|kit|pack|paper|printables?|templates?|worksheets?|activities|prints?|search)$/;
 const SEARCHED_SIZES: Array<[RegExp, string]> = [[/^us letter/i, "us letter"], [/^a4/i, "a4"], [/^a5/i, "a5"], [/^half letter/i, "half letter"], [/^4x6/i, "4x6"], [/^5x7/i, "5x7"], [/^8x10/i, "8x10"], [/^11x14/i, "11x14"], [/^12x12/i, "12x12"]];
 
 function buildTags(prepared: Prepared, art: ArtPlan): string[] {
@@ -1134,11 +1349,12 @@ function buildTags(prepared: Prepared, art: ArtPlan): string[] {
     ...relevantTrendTags(prepared, art),
     ...featureTags,
     product,
-    ...(input.kind !== "digital_planner" ? [`printable ${tagHead}`, `${tagHead} printable`] : []),
-    ...(input.kind !== "wall_art" ? [`${tagHead} pdf`] : []),
+    // Tablet planlayıcı ve telefon duvar kâğıdı basılmaz: "printable" ve "pdf" etiketi yanlış vaat olur.
+    ...(input.kind !== "digital_planner" && input.kind !== "wallpaper" ? [`printable ${tagHead}`, `${tagHead} printable`] : []),
+    ...(input.kind !== "wall_art" && input.kind !== "wallpaper" ? [`${tagHead} pdf`] : []),
     ...sizeTags.map((size) => `${size} ${tagHead}`),
     ...(input.kind === "wall_art" ? (input.colors || []).map((color) => `${color.toLowerCase()} ${tagHead}`) : []),
-    ...(words.length > 1 && !GENERIC_HEADS.test(words[0]) ? [`${words.slice(0, -1).join(" ")} printable`] : []),
+    ...(words.length > 1 && !GENERIC_HEADS.test(words[0]) && !GENERIC_HEADS.test(words.at(-1)!) && input.kind !== "stickers" && input.kind !== "wallpaper" ? [`${words.slice(0, -1).join(" ")} printable`] : []),
     ...(["planner", "recipe", "party", "journal"].includes(input.kind) ? [`${tagHead} template`] : []),
     ...(input.audience ? [`${tagHead} for ${input.audience.split(",")[0].trim().toLowerCase()}`] : []),
     ...(kit ? ["junk journal", "printable ephemera", "journal ephemera", "junk journal pages"] : []),
@@ -1147,7 +1363,7 @@ function buildTags(prepared: Prepared, art: ArtPlan): string[] {
     ...(input.kind === "digital_planner" || input.kind === "paper_craft" ? [`digital ${tagHead}`] : []),
     "instant download"
   ].filter((tag) => !isIpRisky(tag) && !MISLEADING_FEATURE.test(tag) && fitsTheme(tag, prepared.themes)
-    && !(input.kind === "digital_planner" && /\bprintables?\b/.test(tag))
+    && !((input.kind === "digital_planner" || input.kind === "wallpaper") && /\b(printables?|pdf)\b/.test(tag))
     && !(/\bkids?\b|toddler|preschool/.test(product) && /\b(relaxing|stress relief|mindful|adult)\b/.test(tag))
     && (!SEARCHED_SIZES.some(([pattern]) => pattern.test(tag)) || sizeTagBudget.take())));
 }
@@ -1161,7 +1377,7 @@ function buildDescription(prepared: Prepared, name: string, art: ArtPlan, hook?:
   // Açılış cümlesi pinlerle aynı dili kullanır: tema "with a Christmas theme", stil "in a boho style"; kâğıt isimleri atılır.
   const leadFeature = features.find((feature) => themeFamilies(feature).size || feature.split(" ").every((word) => STYLE_WORDS.has(word)));
   const lead = leadFeature ? featureClause(stripPaperNouns(leadFeature) || leadFeature, profile, input.kind) : "";
-  const included = input.kind === "wall_art" || input.kind === "paper_craft" || input.kind === "coloring" ? art.includedEn : [`${pages} pages`, ...profile.includedEn];
+  const included = profile.art ? art.includedEn : [`${pages} pages`, ...profile.includedEn];
   const note = healthNote(input);
   const tablet = formats.some((format) => isTablet(format));
   const lastStep: Record<PrintableKind, string> = {
@@ -1173,13 +1389,21 @@ function buildDescription(prepared: Prepared, name: string, art: ArtPlan, hook?:
     recipe: "Write in your favorite recipes and file the cards.",
     journal: "Grab a pen and start writing.",
     kids: "Hand out the pages and start learning.",
-    paper_craft: "Cut, fold and create."
+    paper_craft: "Cut, fold and create.",
+    calendar: "Hang it up or keep it on your desk and start planning.",
+    stickers: "Cut out the stickers, or use the PNG files in your digital planner.",
+    cards: "Fold the card, write your note and give it.",
+    puzzles: "Grab a pencil and start solving.",
+    wallpaper: "Set it as your lock screen or home screen.",
+    labels: "Cut out the labels and organize your space."
   };
   const steps = input.kind === "digital_planner"
     ? ["1. Purchase and download the files from your Etsy Purchases page.", "2. Import the PDF into a note-taking app that supports PDF links.", `3. ${lastStep.digital_planner}`, ...(formats.some((format) => !isTablet(format)) ? ["4. To print, use the US Letter file at Actual size / 100% scale."] : [])]
+    : input.kind === "wallpaper"
+    ? ["1. Purchase and download the files from your Etsy Purchases page.", "2. Unzip the size that fits your phone and save the image to your photos.", `3. ${lastStep.wallpaper}`]
     : [
       "1. Purchase and download the files from your Etsy Purchases page.",
-      `2. ${input.kind === "wall_art" ? "Unzip the size you need and print it at home or at a print shop" : input.kind === "paper_craft" ? "Unzip the files and print at home or at a print shop" : "Print at home or at a print shop"} at Actual size / 100% scale.`,
+      `2. ${input.kind === "wall_art" ? "Unzip the size you need and print it at home or at a print shop" : input.kind === "paper_craft" || input.kind === "stickers" ? "Unzip the files and print at home or at a print shop" : "Print at home or at a print shop"} at Actual size / 100% scale.`,
       `3. ${lastStep[input.kind]}`,
       ...(tablet ? ["4. On a tablet: import the hyperlinked PDF into a note-taking app that supports PDF links."] : [])
     ];
@@ -1201,7 +1425,7 @@ function buildDescription(prepared: Prepared, name: string, art: ArtPlan, hook?:
     "",
     "PLEASE NOTE",
     ...(note ? [`• ${note}`] : []),
-    `• Colors may look slightly different depending on your ${input.kind === "digital_planner" ? "screen" : "screen and printer"}.`,
+    `• Colors may look slightly different depending on your ${input.kind === "digital_planner" || input.kind === "wallpaper" ? "screen" : "screen and printer"}.`,
     "• The listing images show the real pages: one is an unedited preview of the files, and the others are mockups made from them.",
     ...(input.aiAssisted !== false ? ["• Designed with the help of AI tools and checked with automated file tests."] : []),
     "• Because this is a digital file, all sales are final, but message us with any question and we will help.",
