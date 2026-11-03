@@ -8,7 +8,7 @@ export type PatternCraft = "crochet" | "knitting" | "embroidery" | "cross_stitch
 
 // Kadınlara yönelik yazdırılabilir / dijital PDF ürün türleri.
 export type PrintableKind = "planner" | "digital_planner" | "coloring" | "wall_art" | "party" | "recipe" | "journal" | "kids" | "paper_craft"
-  | "calendar" | "stickers" | "cards" | "puzzles" | "wallpaper" | "labels";
+  | "calendar" | "stickers" | "cards" | "puzzles" | "wallpaper" | "labels" | "app_icons" | "spreadsheet";
 
 // Takvim yılı: ağustostan itibaren alıcı bir sonraki yılın takvimini arar (Kasım 2026 → 2027 takvimi).
 export function calendarYear(now = Date.now()): number {
@@ -34,7 +34,7 @@ interface GroupProfile {
 }
 
 export const TREND_GROUPS: Record<TrendGroup, GroupProfile> = {
-  printables: { labelTr: "PDF ürünleri", expectsDigital: true, priceUsd: [2, 15] },
+  printables: { labelTr: "Dijital ürünler", expectsDigital: true, priceUsd: [2, 15] },
   patterns: { labelTr: "Hobi desenleri", expectsDigital: true, priceUsd: [2, 12] },
   tesbih: { labelTr: "Tesbih ve gümüş", expectsDigital: false, priceUsd: [15, 250] },
   vintage: { labelTr: "Vintage", expectsDigital: false, priceUsd: [15, 250] },
@@ -67,6 +67,8 @@ export const TREND_NICHES: TrendNiche[] = [
   { id: "word-search", keyword: "large print word search", labelTr: "Büyük puntolu kelime avı", group: "printables", kind: "puzzles" },
   { id: "phone-wallpaper", keyword: "phone wallpaper", labelTr: "Telefon duvar kâğıdı", group: "printables", kind: "wallpaper" },
   { id: "pantry-labels", keyword: "pantry labels printable", labelTr: "Kiler ve düzen etiketleri", group: "printables", kind: "labels" },
+  { id: "app-icons", keyword: "aesthetic app icons", labelTr: "Telefon ikon ve widget paketi", group: "printables", kind: "app_icons" },
+  { id: "budget-spreadsheet", keyword: "budget spreadsheet", labelTr: "Bütçe tablosu (Excel / Google Sheets)", group: "printables", kind: "spreadsheet" },
   { id: "quilt-pattern", keyword: "quilt pattern pdf", labelTr: "Kapitone / yorgan deseni", group: "patterns", craft: "sewing" },
   { id: "crochet-doily", keyword: "crochet doily pattern", labelTr: "Tığ işi dantel / sehpa örtüsü", group: "patterns", craft: "crochet" },
   { id: "crochet-bag", keyword: "crochet bag pattern", labelTr: "Tığ işi çanta", group: "patterns", craft: "crochet" },
@@ -103,11 +105,13 @@ export function isTrendGroup(value: unknown): value is TrendGroup {
 }
 
 const CRAFT_IN_KEYWORD = /\b(crochet|knit|knitting|sewing|sew|embroidery|cross stitch|macrame|punch needle|amigurumi|quilt|quilting|needlepoint)\b/i;
-const PRINTABLE_IN_KEYWORD = /\b(printables?|planners?|journal|journaling|coloring|colouring|wall art|worksheets?|tracker|checklist|recipe cards?|invitations?|games|digital paper|clipart|stickers?|templates?|calendars?|workbook|flash ?cards|greeting cards?|gift tags?|word search|sudoku|crosswords?|puzzles?|wallpapers?|lock ?screen|labels?)\b/i;
+const PRINTABLE_IN_KEYWORD = /\b(printables?|planners?|journal|journaling|coloring|colouring|wall art|worksheets?|tracker|checklist|recipe cards?|invitations?|games|digital paper|clipart|stickers?|templates?|calendars?|workbook|flash ?cards|greeting cards?|gift tags?|word search|sudoku|crosswords?|puzzles?|wallpapers?|lock ?screen|labels?|app icons?|icon packs?|widgets?|spreadsheets?)\b/i;
 
 export function inferPrintableKind(keyword: string): PrintableKind | undefined {
   const value = keyword.toLowerCase();
   if (/\bdigital planner|goodnotes|notability|hyperlinked\b/.test(value)) return "digital_planner";
+  if (/\bapp icons?\b|\bicon packs?\b|\bwidgets?\b|\bhome ?screen icons?\b|\bphone icons?\b/.test(value)) return "app_icons";
+  if (/\bspreadsheets?\b|\bgoogle sheets\b|\bexcel\b|\bxlsx\b/.test(value)) return "spreadsheet";
   if (/\bwallpapers?\b|\block ?screen\b|\bhome ?screen\b|\bphone backgrounds?\b/.test(value)) return "wallpaper";
   if (/\bcolou?ring\b/.test(value)) return "coloring";
   if (/\bwall art|poster|art print|digital print\b/.test(value)) return "wall_art";

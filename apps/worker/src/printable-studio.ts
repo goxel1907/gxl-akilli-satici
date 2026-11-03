@@ -328,6 +328,40 @@ export const PRINTABLE_KINDS: Record<PrintableKind, KindProfile> = {
     tagStems: ["pantry labels", "printable labels", "organization labels", "kitchen labels", "storage labels", "jar labels", "label stickers", "home organization", "pantry organization", "label set", "container labels", "bin labels", "minimalist labels"],
     vocabulary: ["label", "labels", "pantry", "kitchen", "organization", "organizing", "jar", "jars", "storage", "printable", "stickers", "home", "bin", "bins"],
     pageWord: "labels"
+  },
+  // ---------- Telefona yüklenip kullanılan dijital ürünler ----------
+  app_icons: {
+    labelTr: "Telefon ikon ve widget paketi", labelEn: "app icon pack",
+    defaultFormats: ["PNG app icons (1024x1024 px)", "PNG widget images (small, medium and large)", "PNG phone wallpapers (1290x2796 px)"], defaultPages: 64, art: true,
+    contentEn: [
+      "App icons in one style for everyday phone functions (camera, messages, phone, mail, music, maps, calendar, clock, notes, weather, photos, settings and more), each a simple symbol: never another company's logo, a letter or an app name",
+      "Every icon as its own 1024x1024 px PNG, plus blank icons in the palette for any extra app",
+      "3 widget images (small, medium and large) and 2 matching wallpapers (lock screen and home screen)",
+      "A one-page PDF with plain-language setup steps for iPhone (with the Shortcuts app) and Android (with a launcher or an icon changer app), app names as plain text only"
+    ],
+    designEn: ["Icons at 1024x1024 px PNG with the same corner radius, padding and line weight across the whole set", "Widget images at 1024x1024 px (small), 2048x1024 px (medium) and 2048x2048 px (large); wallpapers at 1290x2796 px with the subject in the safe area", "sRGB PNG files"],
+    textRuleEn: "US English spelling, no typos. Icons, widgets and wallpapers carry no text, letters, logos or app names; only the setup guide, thank-you and license pages carry text.",
+    signatureEn: "a set detail that top-ranking icon packs lack (for example matching blank icons in every palette color or a seasonal icon variant)",
+    includedEn: [],
+    tagStems: ["app icons", "icon pack", "home screen icons", "aesthetic icons", "widget icons", "app icon pack", "phone icons", "icon bundle", "home screen", "phone theme", "aesthetic widgets", "custom icons", "phone aesthetic"],
+    vocabulary: ["app", "apps", "icon", "icons", "pack", "widget", "widgets", "home", "screen", "phone", "aesthetic", "theme", "bundle", "custom"],
+    pageWord: "designs"
+  },
+  spreadsheet: {
+    labelTr: "Bütçe / takip tablosu (Excel, Google Sheets)", labelEn: "spreadsheet template",
+    defaultFormats: ["XLSX workbook (opens in Excel and Google Sheets)", "PDF quick-start guide"], defaultPages: 16, art: false,
+    contentEn: [
+      "A workbook built for the product, with a 'Start here' tab of short how-to-use notes, the working tabs (for a budget: 12 monthly tabs, an annual summary, savings goals and debt payoff) and a settings tab for the currency symbol and categories",
+      "Every total, chart and progress bar is a live formula; input cells are shaded, and formula cells are locked with sheet protection without a password so they are not deleted by mistake",
+      "Works on a computer and in phone spreadsheet apps: no macros, scripts, external links or pivot tables"
+    ],
+    designEn: ["Built in code (for example Python openpyxl) as an .xlsx file with formulas, data validation drop-downs, conditional formatting, frozen header rows and charts", "Palette colors for headers and input cells; at least 11 pt text; columns wide enough to read on a phone", "US date and currency format by default"],
+    textRuleEn: "US English spelling, no typos; tab names short and clear; currency and dates in US format by default, with a settings cell to change the currency symbol.",
+    signatureEn: "a useful extra (for example a debt payoff chart or a sinking funds tracker) that top-ranking spreadsheets lack",
+    includedEn: ["XLSX workbook with live formulas and charts", "Works in Excel and Google Sheets, on a computer or a phone", "One-page quick-start guide"],
+    tagStems: ["spreadsheet template", "digital tracker", "spreadsheet tracker", "tracker template", "digital template", "spreadsheet planner", "auto calculating", "digital spreadsheet", "spreadsheet bundle", "simple spreadsheet", "life organizer", "xlsx template", "digital download"],
+    vocabulary: ["spreadsheet", "spreadsheets", "template", "templates", "tracker", "trackers", "budget", "planner", "digital", "monthly", "weekly", "annual", "finance", "expense", "savings", "debt", "bill", "money", "personal"],
+    pageWord: "tabs"
   }
 };
 
@@ -407,6 +441,8 @@ function printGuide(kind: PrintableKind): string {
     case "stickers": return "A one-page 'How to print' guide: print on matte or glossy sticker paper at Actual size / 100% scale, cut along the white borders by hand or with a cutting machine (named as plain text only), and use the PNG files in digital planners.";
     case "cards": return "A one-page 'How to print' guide: print single-sided on 80-110 lb cardstock at Actual size / 100% scale, cut along the crop marks, fold on the fold line; fits a standard A7 envelope.";
     case "labels": return "A one-page 'How to print' guide: print on sticker paper or cardstock at Actual size / 100% scale, cut along the cut lines, and laminate or use clear tape for jars that get wet.";
+    case "app_icons": return "A one-page 'How to set up' guide in plain words: save the icons and widgets to your photos; on iPhone, give an app a new icon with the Shortcuts app and show the widget images with a photo widget app; on Android, use a launcher or an icon changer app (app names as plain text only, no logos).";
+    case "spreadsheet": return "A one-page 'Quick start' PDF: how to open the .xlsx in Excel or Google Sheets (File > Import) on a computer or phone, where to type (the shaded cells), and how the totals and charts update (app names as plain text only).";
     case "wallpaper": return "A one-page 'How to set your wallpaper' guide in plain words: unzip the size that fits your phone, save the image to your photos, then choose it in your phone's wallpaper settings (no brand names or logos).";
     default: return "A one-page 'How to print' guide: print at Actual size / 100% scale, paper weight suggestions, double-sided and print-shop tips.";
   }
@@ -417,6 +453,8 @@ function useSentence(kind: PrintableKind): string {
   if (kind === "wall_art") return "ready to print at home or at a print shop and frame";
   if (kind === "paper_craft") return "ready to print at home or at a print shop";
   if (kind === "wallpaper") return "ready to download and set as your phone's lock screen or home screen";
+  if (kind === "app_icons") return "ready to download and set up on your phone's home screen";
+  if (kind === "spreadsheet") return "ready to use in Excel or Google Sheets on your computer or phone";
   return "designed to be printed at home and used right away";
 }
 
@@ -434,8 +472,11 @@ interface Prepared {
   dropped: string[];
 }
 
+// Basılmayan ürünler: ilan, pin ve etiketler baskıdan söz etmez.
+const SCREEN_ONLY = new Set<PrintableKind>(["digital_planner", "wallpaper", "app_icons", "spreadsheet"]);
+
 // Yapay zekâ destekli yeni türler: özellik yalnız ürünün kendi kelimelerinden oluşuyorsa ("wall" takvim) özellik sayılmaz.
-const NEW_KINDS = new Set<PrintableKind>(["calendar", "stickers", "cards", "puzzles", "wallpaper", "labels"]);
+const NEW_KINDS = new Set<PrintableKind>(["calendar", "stickers", "cards", "puzzles", "wallpaper", "labels", "app_icons", "spreadsheet"]);
 
 function prepare(raw: PrintablePlanInput): Prepared {
   const productWords = new Set(raw.productType.split(/\s+/).flatMap((word) => [word, singular(word)]));
@@ -492,8 +533,19 @@ const KIND_SUBJECTS: Partial<Record<PrintableKind, string[]>> = {
   paper_craft: ["botanical sprigs", "garden flowers", "small stars and dots", "soft geometric shapes"],
   stickers: ["cute coffee cups and pastries", "potted plants and flowers", "stars, hearts and clouds", "books and reading glasses", "small animals with happy faces", "fruit and picnic treats"],
   cards: ["a bouquet of garden flowers", "a cozy mug with a heart-shaped steam swirl", "a little bird on a flowering branch", "balloons and confetti", "a wreath of leaves and berries", "a sunny landscape with soft hills"],
+  app_icons: ["a cozy flat lay of the theme's colors and textures", "a calm sky with soft clouds", "a simple botanical sprig", "a starry night sky"],
   wallpaper: ["a calm mountain landscape at sunrise", "soft abstract waves", "a field of wildflowers", "a starry night sky", "a quiet beach at sunset", "pressed botanical leaves"]
 };
+
+// İkon setleri: günlük telefon işlevleri için marka içermeyen semboller (16'lık gruplar halinde).
+const ICON_SETS = [
+  "camera, messages, phone, mail, music, maps, calendar, clock, notes, weather, photos, settings, shopping bag, books, wallet, heart",
+  "video, podcasts, news, calculator, files, contacts, translate, compass, games, reminders, home, fitness, sleep moon, coffee cup, gift, star",
+  "chat bubble, bank card, airplane, car, bus, shopping cart, recipe book, plant, paw print, cloud, sun, bell, lock, globe, headphones, pencil",
+  "alarm, timer, flashlight, voice memo, magnifier, bookmark, ticket, tv screen, microphone, paint palette, dumbbell, baby bottle, graduation cap, briefcase, umbrella, map pin",
+  "sparkles, flower, leaf, candle, cupcake, popcorn, music note, film reel, ring, crown, key, envelope, trophy, smile, moon and stars, rainbow",
+  "laptop, tablet, printer, wifi, battery, download arrow, cloud upload, calendar check, checklist, shopping tag, receipt, piggy bank, chart, doctor bag, pill, tooth"
+];
 
 // Takvim: her ay kendi mevsimini çizer (tek stil ve palet); tema kuralı burada aylara göre işler.
 const MONTH_NAMES = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
@@ -739,6 +791,27 @@ function buildArtPlan(prepared: Prepared, profile: KindProfile, pages: number): 
     };
   }
 
+  if (input.kind === "app_icons") {
+    const icons = Math.min(Math.max(pages, 16), 96);
+    const sheets = Math.ceil(icons / 16);
+    const tile = `each a simple symbol on a rounded-square tile, ${palette}, ${style}, the same corner radius, padding and line weight on every tile, even spacing on a flat light gray (#DDDDDD) background; never a company logo, a letter, a number or an app name; no text.`;
+    return {
+      prompts: [
+        ...Array.from({ length: sheets }, (_, index) => `Icon sheet ${index + 1}: 16 app icons in a 4x4 grid (${ICON_SETS[index % ICON_SETS.length]}), ${tile}`),
+        `Widget art (small, square): ${distinctAt(0)}, ${palette}, ${style}, original artwork, square composition, no text, no letters.`,
+        `Widget art (medium, wide 2:1): ${distinctAt(1)}, ${palette}, ${style}, original artwork, wide composition, no text, no letters.`,
+        `Widget art (large, square): ${distinctAt(2)}, ${palette}, ${style}, original artwork, square composition, no text, no letters.`,
+        `Lock screen wallpaper: ${distinctAt(3)}, ${palette}, ${style}, original artwork, tall 9:19.5 portrait composition with calm space at the top for the clock, no text, no letters.`,
+        `Home screen wallpaper: a calm, simple background that matches the set, ${palette}, ${style}, tall 9:19.5 portrait composition that keeps the icon grid readable, no text, no letters.`
+      ],
+      notes: [...sharedNotes, "Image tools give about 1024-1536 px. Upscale each icon sheet 2-3x, cut every tile in code into its own 1024x1024 px PNG, remove the gray background outside the rounded square, and check that all tiles have the same size, corner radius and padding. Make 4-6 blank icons in the palette in code.", "Widgets: crop and upscale to 1024x1024 px (small), 2048x1024 px (medium) and 2048x2048 px (large); wallpapers to 1290x2796 px with the subject in the safe area."],
+      budget: [`${icons} app icons from ${sheets} icon sheets (Brief B), each saved as a 1024x1024 px PNG`, "Blank icons in the palette, made in code", "3 widget images and 2 matching wallpapers (Brief B)", "Plus one PDF with the setup guide, thank-you and license pages"],
+      includedEn: [`${icons} app icons`, "Extra blank icons", "3 widget images", "2 matching wallpapers", "Setup guide"],
+      components, subjects: [0, 1, 2, 3].map((index) => distinctAt(index)), style,
+      pagesNote: `${icons} icons plus the blank icons, 3 widget images, 2 wallpapers and one PDF with the setup guide, thank-you and license pages`
+    };
+  }
+
   if (input.kind === "wallpaper") {
     const count = Math.min(Math.max(pages, 1), 12);
     return {
@@ -864,6 +937,12 @@ function deliverables(prepared: Prepared, name: string, formats: string[]): stri
     const zips = formats.map((format) => `${file}-${fileSlug(format)}.zip (every wallpaper at ${format.replace(/^phone\s*/i, "")})`);
     return [`Upload set: ${fit(zips).join("; ")}; put the PDF with the setup guide, thank-you and license pages inside the first zip.`, limit];
   }
+  if (input.kind === "app_icons") {
+    return [`Upload set: ${file}-Icons.zip (every icon as a 1024x1024 px PNG, plus the blank icons); ${file}-Widgets-and-Wallpapers.zip (3 widget images and 2 wallpapers); put the PDF with the setup guide, thank-you and license pages inside the first zip.`, limit];
+  }
+  if (input.kind === "spreadsheet") {
+    return [`Upload set: ${file}.zip (the .xlsx workbook and the quick-start PDF).`, limit];
+  }
   if (input.kind === "stickers") {
     const pdfs = formats.filter((format) => !/png/i.test(format)).map((format) => `${file}-${fileSlug(format)}.pdf (printable sticker sheets)`);
     return [`Upload set: ${fit([...pdfs, `${file}${/Stickers$/.test(file) ? "" : "-Stickers"}-PNG.zip (every sticker as a transparent PNG)`]).join("; ")}.`, limit];
@@ -909,8 +988,10 @@ function buildPdfPrompt(prepared: Prepared, profile: KindProfile, name: string, 
   return [
     input.kind === "digital_planner"
       ? `You are a senior digital planner designer, copywriter and technical editor for Etsy ${profile.labelEn} products. Create an ORIGINAL, sellable ${productPhrase(input.productType)} and produce ready-to-use tablet files.`
-      : input.kind === "wallpaper"
-      ? `You are a senior digital artist, copywriter and technical editor for Etsy ${profile.labelEn} products. Create an ORIGINAL, sellable ${productPhrase(input.productType)} set and produce ready-to-use image files.`
+      : input.kind === "wallpaper" || input.kind === "app_icons"
+      ? `You are a senior digital artist, copywriter and technical editor for Etsy ${profile.labelEn} products. Create an ORIGINAL, sellable ${productPhrase(input.productType)}${input.kind === "wallpaper" ? " set" : ""} and produce ready-to-use image files.`
+      : input.kind === "spreadsheet"
+      ? `You are a senior spreadsheet designer, copywriter and technical editor for Etsy ${profile.labelEn} products. Create an ORIGINAL, sellable ${productPhrase(input.productType)} and produce a ready-to-use .xlsx workbook.`
       : `You are a senior print designer, copywriter and technical editor for Etsy ${profile.labelEn} products. Create an ORIGINAL, sellable ${productPhrase(input.productType)} and produce print-ready files.`,
     "",
     "## Product name",
@@ -925,6 +1006,10 @@ function buildPdfPrompt(prepared: Prepared, profile: KindProfile, name: string, 
       ? `- Size: ${Math.min(Math.max(pages, 1), 12)} wallpapers, each delivered in every listed screen size`
       : input.kind === "calendar"
       ? `- Size: 12 month pages for ${CAL_YEAR}; the cover, year-at-a-glance, how-to-print, thank-you and license pages come on top`
+      : input.kind === "app_icons"
+      ? `- Size: ${Math.min(Math.max(pages, 16), 96)} app icons plus blank icons, 3 widget images and 2 matching wallpapers`
+      : input.kind === "spreadsheet"
+      ? `- Size: ${pages} tabs in the workbook, plus a one-page quick-start PDF`
       : `- Size: ${pages} core pages; the cover, ${input.kind === "digital_planner" ? "import guide" : "how-to-print"}, thank-you and license pages come on top`,
     `- Formats (deliver each as its own file): ${formats.join(", ")}`,
     `- Palette: ${input.colors?.length ? input.colors.join(", ") : "propose one with hex codes"}`,
@@ -949,10 +1034,20 @@ function buildPdfPrompt(prepared: Prepared, profile: KindProfile, name: string, 
     `- ${textRule(prepared)}`,
     "",
     "## Work in three passes",
-    `PASS 1 - Page plan: a table with one line per page (number, title, purpose, elements, format notes)${art.budget.length ? " that follows the page budget exactly" : ""}.`,
-    `PASS 2 - Check and report: ${profile.art ? "all text and cut lines inside the safe margins (full-bleed art may reach the edge)" : "every page inside the safe margins"}, text readable at 100% ${input.kind === "digital_planner" ? "zoom on a tablet" : input.kind === "wallpaper" ? "zoom on a phone" : "print size"}, no spelling errors${textKind || input.kind === "paper_craft" ? ", every fill-in area large enough for handwriting" : ""}, totals in the page plan match the files.`,
+    input.kind === "spreadsheet"
+      ? "PASS 1 - Tab plan: a table with one line per tab (name, purpose, input cells, formulas, charts)."
+      : input.kind === "app_icons"
+      ? "PASS 1 - File plan: a table with one line per file group (icon sheet, icon names and count, widget sizes, wallpaper sizes) that follows the page budget exactly."
+      : `PASS 1 - Page plan: a table with one line per page (number, title, purpose, elements, format notes)${art.budget.length ? " that follows the page budget exactly" : ""}.`,
+    input.kind === "spreadsheet"
+      ? "PASS 2 - Check and report: with sample numbers in a copy, every total and chart is right and no cell shows an error; input cells are shaded and formula cells locked; text readable at 100% zoom; no spelling errors."
+      : `PASS 2 - Check and report: ${profile.art ? "all text and cut lines inside the safe margins (full-bleed art may reach the edge)" : "every page inside the safe margins"}, text readable at 100% ${input.kind === "digital_planner" ? "zoom on a tablet" : input.kind === "wallpaper" || input.kind === "app_icons" ? "zoom on a phone" : "print size"}, no spelling errors${textKind || input.kind === "paper_craft" ? ", every fill-in area large enough for handwriting" : ""}, totals in the page plan match the files.`,
     input.kind === "wall_art"
       ? "PASS 3 - Files: in code, crop and resize every print from its 2:3 master to each listed ratio or size (sRGB JPG, 300 dpi, exact pixel size), and build the size guide, how-to-print, thank-you and license pages as one PDF."
+      : input.kind === "app_icons"
+      ? "PASS 3 - Files: in code, cut every icon tile into its own 1024x1024 px PNG (gray background removed outside the rounded square), make the blank icons, crop the widgets and wallpapers to their exact sizes (PNG, no stretching), sort them into Icons, Widgets and Wallpapers folders, and build the setup guide, thank-you and license pages as one PDF."
+      : input.kind === "spreadsheet"
+      ? "PASS 3 - Files: build the .xlsx in code (for example Python openpyxl) with live formulas, data validation drop-downs, conditional formatting, frozen header rows and charts; protect the formula cells without a password; no macros, scripts, external links or pivot tables. Then build the quick-start, thank-you and license pages as one short PDF."
       : input.kind === "wallpaper"
       ? "PASS 3 - Files: in code, crop every wallpaper from its 1290x2796 px master to each listed screen size (sRGB PNG, exact pixel size, no stretching), and build the setup guide, thank-you and license pages as one PDF."
       : profile.art
@@ -1054,6 +1149,8 @@ function nounPhrase(phrase: string): string | undefined {
 function formatsProse(formats: string[], kind: PrintableKind): string | undefined {
   if (kind === "wall_art") return "frame sizes up to 18x24 in";
   if (kind === "wallpaper") return `${formats.length} phone screen ${formats.length > 1 ? "sizes" : "size"}`;
+  if (kind === "app_icons") return "PNG files for any phone";
+  if (kind === "spreadsheet") return "an .xlsx workbook that works in Excel and Google Sheets";
   if (kind === "digital_planner") return formats.some((format) => !/tablet|hyperlink/i.test(format)) ? "landscape and portrait tablet PDFs in light and dark themes, plus a printable US Letter version" : "landscape and portrait tablet PDFs in light and dark themes";
   const short = [...new Set(formats.map((format) => format.replace(/\s*\(.*\)/, "").replace(/\s+in\s+(sheets|cards)$/i, "").replace(/\s+binder pages$/i, "").replace(/^4x6 and 5x7$/, "4x6, 5x7").trim()).flatMap((format) => format.split(/,\s*/)).filter((format) => /^(us letter|half letter|a4|a5|4x6|5x7|12x12|8x10|11x14)$/i.test(format)))];
   return short.length ? `${joinWords(short.slice(0, 4))} ${short.length > 1 ? "sizes" : "size"}` : undefined;
@@ -1128,7 +1225,7 @@ function buildPins(prepared: Prepared, name: string, art: ArtPlan): PrintableBri
   const formats = formatsProse(input.formats?.length ? input.formats : profile.defaultFormats, input.kind);
   const palette = input.colors?.length ? `${article(input.colors[0])} ${joinWords(input.colors.slice(0, 3))} palette` : "";
   const pages = input.pageCount || profile.defaultPages;
-  const included = art.includedEn.length && profile.art ? contentsSummary(art.includedEn) : `${pages} pages`;
+  const included = art.includedEn.length && profile.art ? contentsSummary(art.includedEn) : `${pages} ${input.kind === "spreadsheet" ? "tabs" : "pages"}`;
   const tablet = (input.formats || []).some((format) => /tablet|hyperlink/i.test(format)) || input.kind === "digital_planner";
   // Pinler aynı açıklamayı tekrar etmesin diye her açının kendi cümle kalıbı vardır.
   const lookingLines = [(phrase: string) => `A thoughtful pick for anyone looking for ${phrase}.`, (phrase: string) => `Perfect if you are looking for ${phrase}.`, (phrase: string) => `A fresh take on ${phrase}.`];
@@ -1158,8 +1255,8 @@ function buildPins(prepared: Prepared, name: string, art: ArtPlan): PrintableBri
       // "in a boho style in a rust ... palette" olmaz: stil cümlesinden sonra palet "and a ... palette" ile bağlanır.
       `${name} is ${proseCase(product)}${withPalette(featureClause(feature && !phrase.includes(feature) ? feature : undefined, profile, input.kind), palette)}.`,
       looking ? lookingLines[angle % lookingLines.length](proseCase(looking)) : "",
-      `${includeLines[angle % includeLines.length]} ${included}.${formats ? ` Available in ${formats}.` : ""}`,
-      input.kind === "digital_planner" ? "Instant digital download for your tablet." : input.kind === "wallpaper" ? "Instant digital download for your phone." : `Instant digital download: ${input.kind === "wall_art" || input.kind === "paper_craft" ? "print at home or at a print shop" : "print at home"}${tablet ? " or use it on your tablet" : ""}.`,
+      `${includeLines[angle % includeLines.length]} ${included}.${formats ? /^(an? |PNG)/.test(formats) ? ` Delivered as ${formats}.` : ` Available in ${formats}.` : ""}`,
+      input.kind === "digital_planner" ? "Instant digital download for your tablet." : input.kind === "wallpaper" || input.kind === "app_icons" ? "Instant digital download for your phone." : input.kind === "spreadsheet" ? "Instant digital download for your computer or phone." : `Instant digital download: ${input.kind === "wall_art" || input.kind === "paper_craft" ? "print at home or at a print shop" : "print at home"}${tablet ? " or use it on your tablet" : ""}.`,
       audienceLine,
       "Designed by GXL Market Studio."
     ];
@@ -1180,6 +1277,10 @@ function checklistFor(prepared: Prepared): string[] {
       ? "Every page reads well at 100% zoom on a tablet, and every tab and index link jumps to the right page."
       : input.kind === "wallpaper"
       ? `Every wallpaper has the exact pixel size of each listed screen (${formats.join(", ")}), and the main subject stays inside the safe area.`
+      : input.kind === "app_icons"
+      ? "Every icon is a 1024x1024 px PNG with the same corner radius and padding, no icon looks like another company's logo, and the widgets and wallpapers have their exact sizes."
+      : input.kind === "spreadsheet"
+      ? "Every formula works with sample numbers and shows no error, and the workbook opens in Excel and Google Sheets with no macros."
       : `Every page sits inside the safe margins and prints at 100% (Actual size) in every included size (${printSizes.join(", ")}) without clipping.`,
     textRule(prepared),
     input.kind === "calendar" ? "All 12 months share one style and palette, and each month's artwork fits its own month." : "The whole product follows one theme; nothing from another season, holiday or mood appears.",
@@ -1188,7 +1289,7 @@ function checklistFor(prepared: Prepared): string[] {
     "No brand, character or celebrity names; all artwork is original and no other seller's image was used as a reference.",
     "Etsy allows at most 5 files of at most 20 MB each per digital listing; the upload set follows the 'Upload set' line and every file name is clear.",
     "Listing images show the real pages from the files.",
-    `${input.kind === "digital_planner" ? "Import guide" : input.kind === "wall_art" ? "Size guide, how-to-print" : input.kind === "wallpaper" ? "Setup guide" : "How-to-print"}, thank-you and license pages are included.`
+    `${input.kind === "digital_planner" ? "Import guide" : input.kind === "wall_art" ? "Size guide, how-to-print" : input.kind === "wallpaper" || input.kind === "app_icons" ? "Setup guide" : input.kind === "spreadsheet" ? "Quick-start guide" : "How-to-print"}, thank-you and license pages are included.`
   ];
 }
 
@@ -1258,7 +1359,7 @@ function primaryPhrase(input: PrintablePlanInput): string {
 function formatPhrase(formats: string[], kind?: PrintableKind): string | undefined {
   if (kind === "wall_art") return "Sizes up to 18x24";
   if (kind === "digital_planner") return "Tablet PDF";
-  if (kind === "wallpaper") return undefined;
+  if (kind === "wallpaper" || kind === "app_icons" || kind === "spreadsheet") return undefined;
   const short = formats.map((format) => format.replace(/\s*\(.*\)/, "").replace(/\s+in\s+(sheets|cards)$/i, "").replace(/\s+binder pages$/i, "").trim())
     .filter((format) => /letter|a4|a5|4x6|5x7|12x12/i.test(format));
   const unique = [...new Set(short)];
@@ -1350,8 +1451,10 @@ function buildTags(prepared: Prepared, art: ArtPlan): string[] {
     ...featureTags,
     product,
     // Tablet planlayıcı ve telefon duvar kâğıdı basılmaz: "printable" ve "pdf" etiketi yanlış vaat olur.
-    ...(input.kind !== "digital_planner" && input.kind !== "wallpaper" ? [`printable ${tagHead}`, `${tagHead} printable`] : []),
-    ...(input.kind !== "wall_art" && input.kind !== "wallpaper" ? [`${tagHead} pdf`] : []),
+    ...(!SCREEN_ONLY.has(input.kind) ? [`printable ${tagHead}`, `${tagHead} printable`] : []),
+    ...(input.kind !== "wall_art" && !SCREEN_ONLY.has(input.kind) ? [`${tagHead} pdf`] : []),
+    // Bütçe tablosu en çok bütçe ifadeleriyle aranır; başka tablolarda (alışkanlık, düğün) bu etiketler girmez.
+    ...(input.kind === "spreadsheet" && /budget|finance|money|debt|saving|expense|bill/.test(product) ? ["budget spreadsheet", "budget template", "monthly budget", "expense tracker", "savings tracker", "debt tracker", "bill tracker", "budget tracker", "paycheck budget"] : []),
     ...sizeTags.map((size) => `${size} ${tagHead}`),
     ...(input.kind === "wall_art" ? (input.colors || []).map((color) => `${color.toLowerCase()} ${tagHead}`) : []),
     ...(words.length > 1 && !GENERIC_HEADS.test(words[0]) && !GENERIC_HEADS.test(words.at(-1)!) && input.kind !== "stickers" && input.kind !== "wallpaper" ? [`${words.slice(0, -1).join(" ")} printable`] : []),
@@ -1363,7 +1466,7 @@ function buildTags(prepared: Prepared, art: ArtPlan): string[] {
     ...(input.kind === "digital_planner" || input.kind === "paper_craft" ? [`digital ${tagHead}`] : []),
     "instant download"
   ].filter((tag) => !isIpRisky(tag) && !MISLEADING_FEATURE.test(tag) && fitsTheme(tag, prepared.themes)
-    && !((input.kind === "digital_planner" || input.kind === "wallpaper") && /\b(printables?|pdf)\b/.test(tag))
+    && !(SCREEN_ONLY.has(input.kind) && /\b(printables?|pdf)\b/.test(tag))
     && !(/\bkids?\b|toddler|preschool/.test(product) && /\b(relaxing|stress relief|mindful|adult)\b/.test(tag))
     && (!SEARCHED_SIZES.some(([pattern]) => pattern.test(tag)) || sizeTagBudget.take())));
 }
@@ -1377,7 +1480,7 @@ function buildDescription(prepared: Prepared, name: string, art: ArtPlan, hook?:
   // Açılış cümlesi pinlerle aynı dili kullanır: tema "with a Christmas theme", stil "in a boho style"; kâğıt isimleri atılır.
   const leadFeature = features.find((feature) => themeFamilies(feature).size || feature.split(" ").every((word) => STYLE_WORDS.has(word)));
   const lead = leadFeature ? featureClause(stripPaperNouns(leadFeature) || leadFeature, profile, input.kind) : "";
-  const included = profile.art ? art.includedEn : [`${pages} pages`, ...profile.includedEn];
+  const included = profile.art ? art.includedEn : [`${pages} ${input.kind === "spreadsheet" ? "tabs" : "pages"}`, ...profile.includedEn];
   const note = healthNote(input);
   const tablet = formats.some((format) => isTablet(format));
   const lastStep: Record<PrintableKind, string> = {
@@ -1395,12 +1498,18 @@ function buildDescription(prepared: Prepared, name: string, art: ArtPlan, hook?:
     cards: "Fold the card, write your note and give it.",
     puzzles: "Grab a pencil and start solving.",
     wallpaper: "Set it as your lock screen or home screen.",
-    labels: "Cut out the labels and organize your space."
+    labels: "Cut out the labels and organize your space.",
+    app_icons: "Follow the setup guide to give your home screen a new look.",
+    spreadsheet: "Type your numbers in the shaded cells; the totals and charts update by themselves."
   };
   const steps = input.kind === "digital_planner"
     ? ["1. Purchase and download the files from your Etsy Purchases page.", "2. Import the PDF into a note-taking app that supports PDF links.", `3. ${lastStep.digital_planner}`, ...(formats.some((format) => !isTablet(format)) ? ["4. To print, use the US Letter file at Actual size / 100% scale."] : [])]
     : input.kind === "wallpaper"
     ? ["1. Purchase and download the files from your Etsy Purchases page.", "2. Unzip the size that fits your phone and save the image to your photos.", `3. ${lastStep.wallpaper}`]
+    : input.kind === "app_icons"
+    ? ["1. Purchase and download the files from your Etsy Purchases page.", "2. Unzip the files and save the icons, widgets and wallpapers to your phone's photos.", `3. ${lastStep.app_icons}`]
+    : input.kind === "spreadsheet"
+    ? ["1. Purchase and download the files from your Etsy Purchases page.", "2. Unzip the files and open the .xlsx in Excel, or upload it to Google Sheets; it also opens in phone spreadsheet apps.", `3. ${lastStep.spreadsheet}`]
     : [
       "1. Purchase and download the files from your Etsy Purchases page.",
       `2. ${input.kind === "wall_art" ? "Unzip the size you need and print it at home or at a print shop" : input.kind === "paper_craft" || input.kind === "stickers" ? "Unzip the files and print at home or at a print shop" : "Print at home or at a print shop"} at Actual size / 100% scale.`,
@@ -1425,7 +1534,7 @@ function buildDescription(prepared: Prepared, name: string, art: ArtPlan, hook?:
     "",
     "PLEASE NOTE",
     ...(note ? [`• ${note}`] : []),
-    `• Colors may look slightly different depending on your ${input.kind === "digital_planner" || input.kind === "wallpaper" ? "screen" : "screen and printer"}.`,
+    `• Colors may look slightly different depending on your ${SCREEN_ONLY.has(input.kind) ? "screen" : "screen and printer"}.`,
     "• The listing images show the real pages: one is an unedited preview of the files, and the others are mockups made from them.",
     ...(input.aiAssisted !== false ? ["• Designed with the help of AI tools and checked with automated file tests."] : []),
     "• Because this is a digital file, all sales are final, but message us with any question and we will help.",

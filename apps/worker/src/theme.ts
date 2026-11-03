@@ -195,7 +195,7 @@ const PROPER_SOURCE: Array<[string, string, string?]> = [
   ["etsy", "Etsy"], ["pinterest", "Pinterest"], ["instagram", "Instagram"], ["facebook", "Facebook"], ["canva", "Canva"],
   ["us letter", "US Letter", "i"], ["half letter", "Half Letter"], ["a([3-6])", "A$1"], ["adhd", "ADHD"], ["diy", "DIY"], ["pdf", "PDF"],
   ["us terms", "US terms", "i"], ["english", "English"], ["american", "American"], ["turkish", "Turkish"], ["islamic", "Islamic"],
-  ["art deco", "Art Deco"], ["art nouveau", "Art Nouveau"], ["self care", "self-care"], ["oltu", "Oltu"]
+  ["art deco", "Art Deco"], ["art nouveau", "Art Nouveau"], ["self care", "self-care"], ["zero based", "zero-based"], ["oltu", "Oltu"]
 ];
 // Dosya adı, adres ve kod parçalarına (planner.pdf, etsy.com, page-01) dokunmaz.
 const PROPER: Array<[RegExp, string]> = PROPER_SOURCE.map(([core, replacement, flags]) => [new RegExp(`(?<![\\w./@-])${core}(?![\\w/@-]|\\.\\w)`, `g${flags || ""}`), replacement]);

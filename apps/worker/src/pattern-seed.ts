@@ -363,9 +363,9 @@ const PRINT_FORMAT_SIGNALS: Array<[string, RegExp]> = [
 ];
 
 // PDF ürünlerinde format: türün standart formatları + rakiplerde geçen ek formatlar.
-const FIXED_FORMAT_KINDS = new Set<PrintableKind>(["calendar", "stickers", "cards", "puzzles", "wallpaper", "labels"]);
+const FIXED_FORMAT_KINDS = new Set<PrintableKind>(["calendar", "stickers", "cards", "puzzles", "wallpaper", "labels", "app_icons", "spreadsheet"]);
 // Sayfa/tasarım sayısı rakipten türetilir ama türün mantıklı aralığında kalır (takvim her zaman 12 ay).
-const PAGE_RANGE: Partial<Record<PrintableKind, [number, number]>> = { calendar: [12, 12], stickers: [4, 12], cards: [4, 9], wallpaper: [3, 12], labels: [6, 20], puzzles: [20, 60] };
+const PAGE_RANGE: Partial<Record<PrintableKind, [number, number]>> = { calendar: [12, 12], stickers: [4, 12], cards: [4, 9], wallpaper: [3, 12], labels: [6, 20], puzzles: [20, 60], app_icons: [32, 96], spreadsheet: [6, 20] };
 
 function printableFormats(kind: PrintableKind, texts: Array<{ text: string; weight: number }>): { formats: string[]; mined: string[] } {
   const counts = new Map<string, number>();
@@ -512,7 +512,7 @@ function buildCompetition(result: TrendResult | undefined, kind: PrintableKind |
   if (competitorPages && ourPages) {
     planTr.push(`İçerik: rakipler ortanca ${competitorPages} sayfa → bizde ${ourPages} sayfa.`);
     // Birim türe göre: duvar kâğıdında "wallpapers", çıkartmada "sticker sheets", takvimde "month pages".
-    const unit = kind === "wallpaper" ? "wallpapers" : kind === "stickers" ? "sticker sheets" : kind === "calendar" ? "month pages" : "pages";
+    const unit = kind === "wallpaper" ? "wallpapers" : kind === "stickers" ? "sticker sheets" : kind === "calendar" ? "month pages" : kind === "app_icons" ? "icons" : kind === "spreadsheet" ? "tabs" : "pages";
     planEn.push(`include about ${ourPages} ${unit} (the top listings' median is ${competitorPages})`);
   }
   // Yapay zekânın tek sohbette üretebileceği ve ilanda dürüstçe yazılabilecek formatlar talimata girer.

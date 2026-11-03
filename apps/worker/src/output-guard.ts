@@ -107,7 +107,7 @@ function lintPrompt(c: Collector, field: string, prompt: string, context: Prompt
   find(c, field, prompt, /\b(repeat|illustration|featuring) of (an? )?(ephemera|[a-z ]*\b(pack|kit|bundle|sheets|pages))\b|\bfeaturing (ephemera|[a-z ]*\b(pack|kit|bundle))\b/i, "meta_subject", "Çizilecek konu yerine ürün/kâğıt adı yazılmış.");
   c.checks += 1;
   if (!/another seller's/i.test(prompt)) c.issues.push({ code: "reference_rule", field, severity: "error", messageTr: "Başka satıcının ilan görselini veya telifli görseli referans almayı yasaklayan kural yok." });
-  if (context.kind && ["paper_craft", "wall_art", "coloring", "stickers", "wallpaper", "cards"].includes(context.kind)) {
+  if (context.kind && ["paper_craft", "wall_art", "coloring", "stickers", "wallpaper", "cards", "app_icons"].includes(context.kind)) {
     find(c, field, prompt, /consistent page numbers and footer on every page|footer on every page(?! except)/i, "footer_conflict", "Tam sayfa kâğıt/duvar sanatı/boyama sayfasına altbilgi ve sayfa numarası isteniyor.");
   }
   if (context.kind && !["planner", "digital_planner", "journal"].includes(context.kind)) {

@@ -24,7 +24,7 @@ export function isIpRisky(text: string): boolean {
 
 // Uyumluluk markaları (iPad, GoodNotes, DMC…) açıklamada düz metin olarak "works with" diye geçebilir;
 // etikete ve başlığa girmez, çünkü marka sahibinin adıyla arama trafiği almak Etsy'de fikrî mülkiyet şikâyeti getirir.
-const COMPAT_BRANDS = /(^|[^a-z])(ipad|iphone|android|goodnotes|notability|dmc|cricut|canva|kindle|procreate|samsung|apple|silhouette cameo|anchor floss)([^a-z]|$)/;
+const COMPAT_BRANDS = /(^|[^a-z])(ipad|iphone|ios|android|goodnotes|notability|dmc|cricut|canva|kindle|procreate|samsung|apple|silhouette cameo|anchor floss|excel|google sheets|notion|lightroom|instagram|tiktok)([^a-z]|$)/;
 
 export function hasBrandName(text: string): boolean {
   return COMPAT_BRANDS.test(text.toLowerCase());

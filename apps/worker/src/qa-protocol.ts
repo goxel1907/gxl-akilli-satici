@@ -16,7 +16,7 @@ const POINT_SIZES: Array<[RegExp, string]> = [
 ];
 // Her format için ilk eşleşen ölçü alınır ("US Letter (landscape)" dikey Letter sayılmaz).
 const pageSizes = (formats: string[]) => [...new Set(formats.flatMap((format) => { const found = POINT_SIZES.find(([pattern]) => pattern.test(format)); return found ? [found[1]] : []; }))].join(", ") || "the size of each format";
-const TEXT_KINDS = new Set<PrintableKind>(["planner", "digital_planner", "journal", "recipe", "party", "kids", "puzzles", "labels"]);
+const TEXT_KINDS = new Set<PrintableKind>(["planner", "digital_planner", "journal", "recipe", "party", "kids", "puzzles", "labels", "spreadsheet"]);
 
 const KIND_CHECKS: Partial<Record<PrintableKind, string[]>> = {
   planner: ["CALENDAR — monthly grids have 6 rows × 7 columns; Monday-start and Sunday-start versions differ only in weekday order."],
@@ -31,6 +31,12 @@ const KIND_CHECKS: Partial<Record<PrintableKind, string[]>> = {
   cards: ["CARDS — every card sheet has a fold line and crop marks, the inside text is upright when the card is folded, every greeting is spelled correctly, and the gift tags have hole marks."],
   puzzles: ["PUZZLES — a script re-solves every puzzle: each listed word appears exactly once in its grid, every sudoku has exactly one solution, and each answer key matches its puzzle number."],
   wallpaper: ["WALLPAPER SIZES — every file has the exact pixel size of its listed screen, the main subject stays inside the central 70%, and no image is stretched (sizes are cropped, never squeezed)."],
+  app_icons: ["ICONS — every icon has the same size, corner radius, padding and line weight; no icon uses a letter, an app name or anything that looks like another company's logo (compare the contact sheet with the best-known app logos); no two icons use the same symbol."],
+  spreadsheet: [
+    "FORMULAS — in a copy, fill every input cell with sample numbers, recalculate with a formula engine (for example LibreOffice headless or the Python formulas package) and confirm that no cell shows an error (#REF!, #DIV/0!, #VALUE!, #NAME?), every total equals the sum of its inputs and every chart points to the right range; deliver the clean file without the sample numbers.",
+    "INPUTS — input cells are shaded, formula cells are locked with sheet protection that has no password, and every drop-down has data validation.",
+    "NO MACROS — the file is .xlsx (not .xlsm) with no macros, scripts, external links, pivot tables or hidden tabs, so it works in Excel, Google Sheets and phone spreadsheet apps."
+  ],
   labels: ["LABELS — every label word is in an English dictionary with US spelling, no word repeats within a set, and the cut lines line up with the label boxes."],
   paper_craft: ["PATTERN TILES — for every tile, the left and right edge columns and the top and bottom edge rows match (mean difference under 3%), the 2×2 preview shows no seam, and every 12×12 paper is a 3600×3600 px JPG."]
 };
@@ -41,7 +47,8 @@ const ART_TEXT_CHECKS: Partial<Record<PrintableKind, string>> = {
   calendar: `TEXT-FREE ART — the month artworks contain no text, numbers or letters: ${OCR} Text appears only in the code-made date grids, month names and the bottom © line.`,
   stickers: `TEXT-FREE ART — the illustrated stickers contain no text or letters: ${OCR} Words appear only on the functional stickers made in code.`,
   cards: `TEXT-FREE ART — the card front artworks contain no drawn text or letters: ${OCR} Greetings are set in code.`,
-  wallpaper: `TEXT-FREE ART — the wallpapers contain no text, letters or watermark: ${OCR}`
+  wallpaper: `TEXT-FREE ART — the wallpapers contain no text, letters or watermark: ${OCR}`,
+  app_icons: `TEXT-FREE ART — the icons, widgets and wallpapers contain no text, letters, numbers or logos: ${OCR}`
 };
 
 // Sayfa sayısı, talimattaki sayfa bütçesiyle aynı cümleden gelir; tablet ve baskı sürümleri ayrı ölçülür.
@@ -55,6 +62,8 @@ function filesCheck(input: Extract<QaInput, { type: "printable" }>): string {
     const pdfs = print.filter((format) => !/12x12/.test(format));
     return `FILES — ${pdfs.length ? `the ${pdfs.join(" and ")} PDF editions exist, open and have the same page order and count (${count}); each page size matches its format within 1 pt (${pageSizes(pdfs)}); ` : ""}the 12×12 papers exist as JPG files; ${limit}.`;
   }
+  if (input.kind === "app_icons") return `FILES — the Icons zip holds every icon as a 1024×1024 px PNG plus the blank icons; the second zip holds 3 widget images (1024×1024, 2048×1024 and 2048×2048 px) and 2 wallpapers (1290×2796 px); the PDF holds the setup guide, thank-you and license pages; ${limit}.`;
+  if (input.kind === "spreadsheet") return `FILES — the zip holds the .xlsx workbook and the quick-start PDF; the workbook opens with openpyxl and has the tabs in the tab plan (${input.pages} tabs); ${limit}.`;
   if (input.kind === "wallpaper") return `FILES — every wallpaper exists in every listed size (${input.formats.join(", ")}) as a PNG with that exact pixel size, and the PDF holds the setup guide, thank-you and license pages; ${limit}.`;
   if (input.kind === "stickers") return `FILES — the ${print.filter((format) => !/png/i.test(format)).map((format) => format.replace(/\s*\(.*\)/, "")).join(" and ")} sticker-sheet PDFs exist and open, have the same pages (${count}) and match ${pageSizes(print.filter((format) => !/png/i.test(format)))}; the PNG zip holds every sticker as a transparent PNG; ${limit}.`;
   if (input.kind === "cards") return `FILES — the US Letter and A4 card PDFs exist and open, pages match ${pageSizes(print)}, every edition holds the same cards and the gift tag sheet, and each folded card front measures 5×7 in (360×504 pt) within 1 pt; ${limit}.`;
@@ -113,7 +122,7 @@ export function qaProtocol(input: QaInput): string[] {
   ];
   // Cilt payı yalnız deliği/cildi olan sayfalarda: planlayıcı, günlük, tarif dosyası sayfaları ve desen PDF'i (kartlarda yok).
   const binding = input.type === "printable" && ["planner", "journal"].includes(input.kind);
-  const nameWhere = input.type === "printable" && input.kind === "wall_art" ? "on the size guide and the license page" : input.type === "printable" && input.kind === "wallpaper" ? "on the setup guide and the license page" : "on the cover and on the thank-you or final page";
+  const nameWhere = input.type === "printable" && input.kind === "wall_art" ? "on the size guide and the license page" : input.type === "printable" && (input.kind === "wallpaper" || input.kind === "app_icons") ? "on the setup guide and the license page" : input.type === "printable" && input.kind === "spreadsheet" ? "on the 'Start here' tab and in the quick-start PDF" : "on the cover and on the thank-you or final page";
   const common = (name: string) => [
     `NAME — the product name "${name}" appears ${nameWhere}, spelled exactly like this, and no other product name or old working name appears anywhere.`,
     "PLACEHOLDERS — no \"Lorem\", \"TODO\", \"TBD\", \"XXX\", \"undefined\", \"NaN\", stray brackets or empty headings.",
@@ -128,11 +137,15 @@ export function qaProtocol(input: QaInput): string[] {
     const checks = [
       filesCheck(input),
       ...(["planner", "digital_planner", "journal"].includes(input.kind) ? ["SEQUENCES — extract the text of every page and test every numbered sequence: hour labels run in order with the right AM/PM (… 11 AM, 12 PM, 1 PM …), day numbers 1–31 have no gaps or repeats, weekday lists follow the page's Monday-start or Sunday-start order, and footer page numbers match the real page index."] : []),
-      ...(textKind && !["planner", "digital_planner", "journal", "labels"].includes(input.kind) ? ["PAGE NUMBERS — footer page numbers match the real page index and have no gaps or repeats."] : []),
-      input.kind === "wall_art" || input.kind === "wallpaper"
+      ...(textKind && !["planner", "digital_planner", "journal", "labels", "spreadsheet"].includes(input.kind) ? ["PAGE NUMBERS — footer page numbers match the real page index and have no gaps or repeats."] : []),
+      input.kind === "app_icons"
+        ? "DUPLICATES — no two icons use the same symbol, and no two widgets or wallpapers share the same artwork."
+        : input.kind === "spreadsheet"
+        ? "DUPLICATES — repeated tabs (for example the 12 monthly tabs) are the same template on purpose; every other tab has its own purpose."
+        : input.kind === "wall_art" || input.kind === "wallpaper"
         ? `DUPLICATES — no two ${input.kind === "wallpaper" ? "wallpapers" : "prints"} share the same artwork or composition (the size files of one ${input.kind === "wallpaper" ? "wallpaper" : "print"} are the same art on purpose).`
         : `DUPLICATES — no two pages share the same or nearly the same ${textKind ? "text (90% or more), except declared Monday/Sunday variants and declared repeated template pages (for example the daily page of an undated planner, or free-writing pages)" : "artwork or composition"}. Every page must earn its place.`,
-      ...(input.kind !== "wall_art" && input.kind !== "wallpaper" ? ["COVER — page 1 is a real cover: no page number, running header or navigation label."] : []),
+      ...(!["wall_art", "wallpaper", "app_icons", "spreadsheet"].includes(input.kind) ? ["COVER — page 1 is a real cover: no page number, running header or navigation label."] : []),
       ...(tablet ? ["LINKS — the tablet edition has working internal links (count them) and every page links back to the index; print editions have no tab bars or buttons that only work on a tablet."] : []),
       ...(!textKind ? [ART_TEXT_CHECKS[input.kind] || (input.kind === "coloring"
         ? "TEXT-FREE ART — the line art itself contains no text or letters: run OCR (for example pytesseract) on every art image before it is placed; on the pages, text is allowed only in the bottom margin (the small page number and © line); if OCR is not available, list every image where letters or pseudo-letters are visible on the contact sheet."
@@ -140,8 +153,10 @@ export function qaProtocol(input: QaInput): string[] {
       ...(input.kind === "paper_craft" && !input.papersOnly ? ["EPHEMERA — every ephemera PNG has a transparent background and keeps its white cutting border."] : []),
       input.kind === "calendar"
         ? "THEME — every month's artwork fits its own month, and all 12 months share one style and palette."
-        : input.kind === "wallpaper"
-        ? "THEME — every wallpaper fits the theme in the Product spec; none adds a different holiday, season or mood."
+        : input.kind === "wallpaper" || input.kind === "app_icons"
+        ? `THEME — every ${input.kind === "app_icons" ? "icon, widget and wallpaper" : "wallpaper"} fits the theme in the Product spec; none adds a different holiday, season or mood.`
+        : input.kind === "spreadsheet"
+        ? "THEME — every tab uses the same palette, fonts and header style from the Product spec."
         : "THEME — list every page title; none names a different holiday, season or mood than the theme in the Product spec.",
       ...(textKind || input.kind === "calendar" || input.kind === "cards" ? ["LEGIBILITY — body text at least 9 pt, labels at least 7 pt, label color contrast at least 4.5:1 on white."] : []),
       ...(KIND_CHECKS[input.kind] || []),
