@@ -28,6 +28,8 @@ export interface PrintablePlanInput {
   seed?: string;
   avoidNames?: string[];
   aiAssisted?: boolean;
+  // Satıcının kullandığı yapay zekâ (ChatGPT veya Claude); paket ona göre yazılır.
+  assistant?: "chatgpt" | "claude";
 }
 
 export interface PrintableBrief {
@@ -130,7 +132,7 @@ export const PRINTABLE_KINDS: Record<PrintableKind, KindProfile> = {
     textRuleEn: "US English spelling, no typos; each coloring page carries only a small page number and © line in the bottom margin, outside the art, and the cover carries none.",
     signatureEn: "a theme twist or interactive element (hidden objects, a story thread across pages, or a matching colored reference) that top listings lack",
     includedEn: ["Single-sided pages", "US Letter + A4", "Color test page"],
-    tagStems: ["coloring book", "coloring sheets", "printable coloring", "coloring pdf", "relaxing coloring", "coloring pages", "coloring gift", "line art coloring"],
+    tagStems: ["coloring book", "coloring sheets", "printable coloring", "coloring pdf", "relaxing coloring", "coloring pages", "coloring gift", "line art coloring", "coloring bundle", "coloring activity", "coloring for adults", "simple coloring"],
     vocabulary: ["coloring", "colouring", "book", "pages", "sheets", "relaxing", "adult", "adults"],
     pageWord: "designs"
   },
@@ -147,7 +149,7 @@ export const PRINTABLE_KINDS: Record<PrintableKind, KindProfile> = {
     textRuleEn: "US English spelling, no typos. The art prints carry no text, footer, page number or signature; only the size guide, how-to-print, thank-you and license pages carry text.",
     signatureEn: "a distinct artistic detail (texture, composition or palette move) that sets the set apart from the top-ranking prints",
     includedEn: ["One file per frame ratio", "Prints up to 18x24 in", "Size guide"],
-    tagStems: ["art print", "digital print", "gallery wall art", "printable poster", "home decor print", "wall decor", "printable art", "set of prints"],
+    tagStems: ["art print", "digital print", "gallery wall art", "printable poster", "home decor print", "wall decor", "printable art", "set of prints", "wall art print", "printable decor", "art print set", "living room art", "bedroom wall art"],
     vocabulary: ["wall", "art", "print", "prints", "poster", "posters", "decor", "gallery", "home"],
     pageWord: "designs"
   },
@@ -164,7 +166,7 @@ export const PRINTABLE_KINDS: Record<PrintableKind, KindProfile> = {
     textRuleEn: TEXT_PAGES,
     signatureEn: "one original game or twist that most competing bundles do not offer",
     includedEn: ["Answer keys", "Cut lines", "Matching sign + tags"],
-    tagStems: ["party games", "printable games", "party printable", "shower games", "game cards", "party activities", "game bundle", "fun party games"],
+    tagStems: ["party games", "printable games", "party printable", "shower games", "game cards", "party activities", "game bundle", "fun party games", "party game cards", "shower activities", "game printable", "party bundle", "group games"],
     vocabulary: ["games", "game", "party", "cards", "activities", "signs", "sign", "invitation"],
     pageWord: "pages"
   },
@@ -213,7 +215,7 @@ export const PRINTABLE_KINDS: Record<PrintableKind, KindProfile> = {
     textRuleEn: TEXT_PAGES,
     signatureEn: "a motivating element (story characters, rewards or a theme) that top listings lack",
     includedEn: ["Answer keys", "Certificate of completion", "How-to-print guide"],
-    tagStems: ["kids worksheets", "learning printable", "kids activities", "learning activities", "kids printable", "homeschool printable", "kids activity book", "fun learning pages"],
+    tagStems: ["kids worksheets", "learning printable", "kids activities", "learning activities", "kids printable", "homeschool printable", "kids activity book", "fun learning pages", "busy book printable", "preschool printable", "kids learning pages", "activity sheets", "kids printables"],
     vocabulary: ["kids", "worksheets", "worksheet", "activities", "activity", "learning", "pages", "kid"],
     pageWord: "pages"
   },
@@ -275,7 +277,7 @@ export const PRINTABLE_KINDS: Record<PrintableKind, KindProfile> = {
     textRuleEn: "US English spelling, no typos. Card sheets carry no footer or page number; the front artwork carries no text drawn by the image tool (any front greeting is set in code); only the cover, how-to-print, thank-you and license pages carry other text.",
     signatureEn: "a design detail (for example a matching back-of-card motif) that top-ranking printable cards lack",
     includedEn: [],
-    tagStems: ["greeting card", "printable card", "folded card", "card printable", "gift tags", "printable gift tags", "holiday card", "card pdf"],
+    tagStems: ["greeting card", "printable card", "folded card", "card printable", "gift tags", "printable gift tags", "holiday card", "card pdf", "folded greeting card", "card set", "card bundle", "gift tag printable", "printable stationery"],
     vocabulary: ["card", "cards", "greeting", "folded", "gift", "tags", "tag", "printable", "holiday", "envelope"],
     pageWord: "designs"
   },
@@ -356,7 +358,8 @@ export function normalizePrintablePlanInput(raw: Record<string, unknown>): Print
     pageCount: Number.isInteger(pages) && pages > 0 && pages <= 1000 ? pages : undefined,
     audience: cleanText(raw.audience, 60) || undefined,
     seed: cleanText(raw.seed, 60) || undefined,
-    aiAssisted: raw.aiAssisted !== false
+    aiAssisted: raw.aiAssisted !== false,
+    ...(raw.assistant === "chatgpt" || raw.assistant === "claude" ? { assistant: raw.assistant } : {})
   };
 }
 
@@ -1224,6 +1227,7 @@ export function buildPrintableBrief(raw: PrintablePlanInput): PrintableBrief {
       artNotes: art.notes,
       adVisuals,
       pins,
+      assistant: input.assistant,
       qa: qaProtocol({ type: "printable", name, kind: input.kind, formats, pages, pagesNote: art.pagesNote, papersOnly: input.kind === "paper_craft" && paperMode(input.productType) === "papers" }),
       checklist: checklistFor(prepared)
     }),

@@ -80,3 +80,22 @@ Etsy yapay zekâ kurallarını 22 Ekim 2026'da sıkılaştırdı. Uygulama bu ku
 - **Doğru vaat.**
   - "Ücretsiz kargo" yalnız kargo bedeli fiyata eklendiyse yazılır.
   - Üründe birden çok malzeme varsa (ör. Oltu taşı ve galalit) hepsi yazılır.
+
+## Yapay zekâyla satılabilen ürün türleri
+
+Uygulamada 15 dijital ürün türü var. Her türün kendi sayfa bütçesi, görsel planı, dosya seti ve otomatik kontrol listesi vardır:
+
+- **Mevcut türler:** planlayıcı, dijital planlayıcı, günlük, boyama, duvar sanatı, parti oyunları, boş tarif kartı, çocuk etkinlik sayfaları, junk journal kiti / dijital kâğıt.
+- **Yeni türler ve kontrolleri:**
+  - Yıllık takvim: tarihler kodla üretilir ve gerçek takvimle karşılaştırılır.
+  - Çıkartma seti: basılır, kesilir, ayrıca şeffaf PNG olarak gelir.
+  - Tebrik kartı ve hediye etiketi: 5x7 katlanır; katlama ve kesim işaretleri kontrol edilir.
+  - Büyük puntolu bulmaca kitabı: her bulmaca kodla yeniden çözülür ve cevap anahtarı denetlenir.
+  - Telefon duvar kâğıdı: piksel ölçüleri kesindir; ilanda baskı kelimesi geçmez.
+  - Kiler ve ev düzeni etiketleri: her kelimenin yazımı denetlenir.
+
+Her tür trend verisi olmasa bile 13 etiketin tamamını doldurur.
+
+Paket, Stüdyo'da seçilen yapay zekâya göre yazılır:
+- **ChatGPT:** görselleri kendi görsel aracıyla üretir.
+- **Claude:** görselleri kodla vektör olarak çizer. Fotoğraf gibi sahneler için görsel promptunu verir.

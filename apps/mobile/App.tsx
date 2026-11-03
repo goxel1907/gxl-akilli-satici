@@ -1474,8 +1474,37 @@ const PRINTABLE_KIND_OPTIONS = [
   { id: "recipe", label: "Tarif" },
   { id: "journal", label: "Günlük" },
   { id: "kids", label: "Çocuk etkinlik" },
-  { id: "paper_craft", label: "Kâğıt işi" }
+  { id: "paper_craft", label: "Kâğıt işi" },
+  { id: "calendar", label: "Takvim" },
+  { id: "stickers", label: "Çıkartma" },
+  { id: "cards", label: "Kart / etiket" },
+  { id: "puzzles", label: "Bulmaca" },
+  { id: "wallpaper", label: "Duvar kâğıdı" },
+  { id: "labels", label: "Düzen etiketi" }
 ];
+
+// Her türün kısa açıklaması: ne olduğu, kime satıldığı, Etsy'deki fiyat aralığı ve dikkat edilecek kural.
+const KIND_HELP: Record<string, string> = {
+  planner: "Yazdırılabilir planlayıcı (günlük, haftalık, bütçe, yemek). Alıcı: düzen arayan kadınlar, anneler. Etsy'de çoğu 3–12 USD.",
+  digital_planner: "Tablette (not uygulamasında) kullanılan, sekmeli dijital planlayıcı. Basılmaz. Etsy'de çoğu 5–20 USD.",
+  coloring: "Boyama sayfaları (yetişkin veya çocuk). Çizimler yazısız, kapalı çizgili. Etsy'de çoğu 3–8 USD.",
+  wall_art: "Çerçeveye konacak duvar sanatı seti; her oran ayrı dosya. Etsy'de çoğu 3–15 USD.",
+  party: "Parti, düğün ve bebek partisi oyunları; cevap anahtarlı. Etsy'de çoğu 3–10 USD.",
+  recipe: "Boş, doldurulabilir tarif kartı ve tarif defteri sayfaları. Tarif yazılmaz (Etsy yapay zekâ tarifini yasakladı). 3–8 USD.",
+  journal: "Rehberli günlük (okuma, öz bakım, şükran). Etsy'de çoğu 3–10 USD.",
+  kids: "Çocuk etkinlik ve çalışma sayfaları; tek sınıf kullanım lisansı. Etsy'de çoğu 3–8 USD.",
+  paper_craft: "Junk journal kiti ve dijital kâğıt paketi (desenli kâğıt, süs parçaları). Etsy'de çoğu 3–9 USD.",
+  calendar: "Gelecek yılın 12 aylık yazdırılabilir takvimi; her ay kendi mevsim resmiyle. Tarihler kodla üretilip kontrol edilir. Ağustos–ocak arası çok satar; 4–10 USD.",
+  stickers: "Basılıp kesilen çıkartma sayfaları ve tablet planlayıcılar için şeffaf PNG çıkartmalar. Etsy'de çoğu 2–7 USD.",
+  cards: "Yazdırılıp katlanan 5x7 tebrik kartları (Noel, doğum günü, teşekkür) ve eşleşen hediye etiketleri. Etsy'de çoğu 3–8 USD.",
+  puzzles: "Büyük puntolu kelime avı ve sudoku kitabı; bulmacalar kodla üretilir, çözülür ve cevap anahtarı eklenir. Yaşlılar ve yetişkinler alır; 3–8 USD.",
+  wallpaper: "Telefon kilit ekranı ve ana ekran duvar kâğıtları; 3 ekran ölçüsü. Basılmaz, kargo yok. Etsy'de çoğu 2–6 USD.",
+  labels: "Kiler, mutfak ve ev düzeni etiketleri; hazır yazılı ve boş etiketler, 3 ölçü. Etsy'de çoğu 3–8 USD."
+};
+
+// Satıcının kullandığı yapay zekâ: paket o araca göre yazılır. Seçim telefonda hatırlanır.
+const ASSISTANT_KEY = "gxl.assistant";
+const ASSISTANT_OPTIONS = [{ id: "chatgpt", label: "ChatGPT" }, { id: "claude", label: "Claude" }];
 const STUDIO_MODES = [
   { id: "printable", label: "PDF ürünü" },
   { id: "pattern", label: "El işi deseni" },
@@ -1498,6 +1527,9 @@ function CompetitionCard({ competition }: any) {
 
 function PrintableStudio({ online, seed, seeding, onReseed, onPickKind, onUpload }: any) {
   const [kind, setKind] = useState("planner");
+  const [assistant, setAssistant] = useState("chatgpt");
+  useEffect(() => { AsyncStorage.getItem(ASSISTANT_KEY).then((value) => { if (value === "claude" || value === "chatgpt") setAssistant(value); }).catch(() => undefined); }, []);
+  const chooseAssistant = (next: string) => { setAssistant(next); setPlan(undefined); AsyncStorage.setItem(ASSISTANT_KEY, next).catch(() => undefined); };
   const [productType, setProductType] = useState("");
   const [referenceNotes, setReferenceNotes] = useState("");
   const [colors, setColors] = useState("");
@@ -1529,7 +1561,7 @@ function PrintableStudio({ online, seed, seeding, onReseed, onPickKind, onUpload
     if (productType.trim().length < 3) return Alert.alert("Ürün", "Ürünü İngilizce yazın (ör. budget planner, adult coloring pages).");
     setWorking(true);
     try {
-      setPlan(await apiJson("/api/printables/plan", { method: "POST", headers: apiHeaders(true), body: JSON.stringify({ kind, productType, referenceNotes, colors, formats, pageCount: pageCount ? Number(pageCount) : undefined, audience, keyword, trendTags, trendFeatures, seed: String(Date.now()) }) }));
+      setPlan(await apiJson("/api/printables/plan", { method: "POST", headers: apiHeaders(true), body: JSON.stringify({ kind, productType, referenceNotes, colors, formats, pageCount: pageCount ? Number(pageCount) : undefined, audience, keyword, trendTags, trendFeatures, assistant, seed: String(Date.now()) }) }));
     } catch (error) { Alert.alert("Hazırlanamadı", errorText(error)); }
     finally { setWorking(false); }
   };
@@ -1548,6 +1580,10 @@ function PrintableStudio({ online, seed, seeding, onReseed, onPickKind, onUpload
     {!seeding && <CompetitionCard competition={seed?.competition} />}
     <Text style={styles.fieldLabel}>PDF türü</Text>
     <ChipGroup options={PRINTABLE_KIND_OPTIONS} value={kind} onChange={(next: string) => { setKind(next); onPickKind(next); }} />
+    {!!KIND_HELP[kind] && <Text style={styles.formHint}>{KIND_HELP[kind]}</Text>}
+    <Text style={styles.fieldLabel}>Hangi yapay zekâyla üreteceksiniz?</Text>
+    <ChipGroup options={ASSISTANT_OPTIONS} value={assistant} onChange={chooseAssistant} />
+    <Text style={styles.formHint}>{assistant === "claude" ? "Claude: dosyaları ve vektör (SVG) çizimleri kendisi yapar; fotoğraf üretemez. Fotoğraf gibi sahneler için size görsel promptunu verir, onu bir görsel aracında çalıştırırsınız." : "ChatGPT: görselleri kendi görsel aracıyla, dosyaları Python ile hazırlar ve indirme bağlantısı verir."}</Text>
     <Field label="Ürün (İngilizce)" value={productType} onChangeText={setProductType} placeholder="budget planner, adult coloring pages, recipe cards" autoCapitalize="none" />
     <Field label="Trend özeti (Etsy üst ilanlarından)" value={referenceNotes} onChangeText={setReferenceNotes} placeholder="Trendden gelince otomatik dolar" multiline />
     <Field label="Renkler" value={colors} onChangeText={setColors} placeholder="sage green, cream, terracotta" autoCapitalize="none" />
@@ -1563,7 +1599,7 @@ function PrintableStudio({ online, seed, seeding, onReseed, onPickKind, onUpload
         <Text style={styles.warningTitle}>Özgünlük planı</Text>
         {brief.originalityPlan.map((line: string) => <Text style={styles.analysisLine} key={line}>• {line}</Text>)}
       </View>
-      <MasterPromptCard brief={brief} quality={plan?.quality} />
+      <MasterPromptCard brief={brief} quality={plan?.quality} assistant={assistant} />
       <PromptBox title="1) PDF promptu (Claude / ChatGPT)" text={brief.pdfPrompt} shareTitle={`${brief.name} PDF prompt`} />
       {!!brief.artPrompts?.length && <PromptBox title="2) Sayfa görselleri promptları" text={brief.artPrompts.join("\n\n")} shareTitle={`${brief.name} artwork prompts`} />}
       <AdVisualsPanel visuals={brief.adVisuals} />
@@ -1639,18 +1675,19 @@ function shareChecked(quality: any, message: string, title?: string) {
 
 // Paylaşım ChatGPT/Claude'da her seferinde yeni sohbet açar; parçalar ayrı sohbetlere düşerse ad, palet ve spec kaybolur.
 // Tek paket tüm adımları sırayla içerir: bir kez gönderilir, tüm iş aynı sohbette yürür.
-function MasterPromptCard({ brief, quality }: any) {
+function MasterPromptCard({ brief, quality, assistant }: any) {
+  const tool = assistant === "claude" ? "Claude" : assistant === "chatgpt" ? "ChatGPT" : "ChatGPT'ye (veya Claude'a)";
   if (!brief?.masterPrompt) return null;
   const steps = (brief.masterPrompt.match(/^- STEP \d+/gm) || []).length;
   return <View style={[styles.analysisCard, styles.masterCard]}>
     <Text style={styles.cardTitle}>Tek paket: tek sohbette hepsi</Text>
     <Text style={styles.analysisLine}>Parça parça gönderme: her paylaşım yeni sohbet açar ve yeni sohbet önceki ürün adını, paleti ve sayfa planını bilmez. Bu paket ürün dosyası, görseller ve varsa pinler dahil tüm parçaları {steps} sıralı adımda birleştirir.</Text>
-    <Text style={styles.analysisLine}>1. Aşağıdaki düğmeyle bir kez ChatGPT'ye (veya Claude'a) gönder.</Text>
+    <Text style={styles.analysisLine}>1. Aşağıdaki düğmeyle bir kez {assistant === "claude" ? "Claude'a" : assistant === "chatgpt" ? "ChatGPT'ye" : tool} gönder; paylaş ekranında {assistant === "claude" ? "Claude" : "ChatGPT"} uygulamasını seç.</Text>
     <Text style={styles.analysisLine}>2. Her adım bitince aynı sohbete "next" yaz; yeni sohbet açma.</Text>
-    <Text style={styles.analysisLine}>3. Görseller için ChatGPT kullan; Claude fotoğraf üretmez, dosyaları ve vektör çizimleri yapar.</Text>
+    <Text style={styles.analysisLine}>3. {assistant === "claude" ? "Claude görselleri kodla vektör çizer; fotoğraf gibi sahnelerin promptunu verir, onları bir görsel aracında üretip aynı sohbete yükle." : "ChatGPT görselleri kendi görsel aracıyla üretir; dosyaları indirme bağlantısıyla verir."}</Text>
     <Text style={styles.small}>{Math.round(brief.masterPrompt.length / 100) / 10} bin karakter. Uygulama uzun metni almazsa paylaş ekranının üstündeki kopyala simgesine dokunup aynı sohbete yapıştır.</Text>
     <QualityNote quality={quality} />
-    <Pressable style={[styles.primary, { marginTop: 12, marginBottom: 0 }]} onPress={() => shareChecked(quality, brief.masterPrompt, `${brief.name} - tek paket`)}><Text style={styles.primaryText}>Tek paketi gönder</Text><Ionicons name="paper-plane-outline" size={18} color="white" /></Pressable>
+    <Pressable style={[styles.primary, { marginTop: 12, marginBottom: 0 }]} onPress={() => shareChecked(quality, brief.masterPrompt, `${brief.name} - tek paket`)}><Text style={styles.primaryText}>{assistant === "claude" ? "Tek paketi Claude'a gönder" : assistant === "chatgpt" ? "Tek paketi ChatGPT'ye gönder" : "Tek paketi gönder"}</Text><Ionicons name="paper-plane-outline" size={18} color="white" /></Pressable>
     <Text style={[styles.small, { marginTop: 10 }]}>Aşağıdaki parçalar bu paketin içindekilerdir. Ayrı kullanacaksan hepsini aynı sohbete yapıştır.</Text>
   </View>;
 }
@@ -2270,6 +2307,21 @@ const ETSY_GUIDE: Array<{ id: string; title: string; icon: any; steps: string[] 
     "İlanı uygulama taslak olarak açar; yayına almadan önce siz kontrol edersiniz. Etsy insan kontrolü olmadan açılan ilanı yasaklar.",
     "Fiziksel üründe gerçek ürün fotoğrafı kullanın. Render tek başına alıcıyı yanıltabilir.",
     "Başlıklara eyalet adı doldurmayın. Etsy ilanı tüm ABD'de gösterir; bölge hedeflemesi doğru arama ifadesi ve sezon seçimiyle yapılır."
+  ] },
+  { id: "categories", title: "Yapay zekâyla satabileceğimiz ürünler", icon: "sparkles-outline", steps: [
+    "Etsy, yapay zekâ destekli dijital ürüne izin verir. İki şart var: satıcının gerçek bir yaratıcı payı olmalı ve açıklamada yapay zekâ beyanı yazmalı. Uygulamanın talimatları ve ilanları ikisini de karşılar.",
+    "Uygulamada hazır 15 tür var. Her biri Stüdyo → PDF ürünü → türü seçerek ya da Trend'de o türün aramasında 'Bu nişte PDF hazırla' ile başlar:",
+    "• Planlayıcı ve dijital (tablet) planlayıcı · • Günlük · • Boyama sayfaları · • Duvar sanatı · • Parti ve düğün oyunları · • Boş tarif kartı ve defteri · • Çocuk etkinlik sayfaları · • Junk journal kiti ve dijital kâğıt",
+    "• Yıllık takvim (yeni) · • Çıkartma (sticker) seti (yeni) · • Tebrik kartı ve hediye etiketi (yeni) · • Büyük puntolu bulmaca kitabı (yeni) · • Telefon duvar kâğıdı (yeni) · • Kiler ve ev düzeni etiketleri (yeni)",
+    "Yasak olanlar (yapay zekâyla üretilip satılamaz):",
+    "• örgü, tığ, dikiş, nakış, kanaviçe, punch ve makrome desenleri;",
+    "• yemek tarifleri ve talimat kılavuzları;",
+    "• yapay zekâ prompt paketleri;",
+    "• insan kontrolü olmadan açılan ilanlar.",
+    "Kendi yazıp denediğiniz desen ise satılabilir (Stüdyo → El işi deseni).",
+    "Henüz uygulamada olmayan ama Etsy'de serbest olan türler: düzenlenebilir şablon (Canva/Word: davetiye, özgeçmiş) ve kişiye özel kart. Bunlar ayrı bir araç veya alıcıyla yazışma ister; isterseniz ekleriz.",
+    "Hangi türle başlamalı? Trend sekmesi her türün Etsy'deki talebini ve rekabetini puanlar. Mevsim fırsatları kartı o an en çok aranan türü gösterir. Kasım–aralıkta takvim, Noel kartı ve Noel duvar kâğıdı öne çıkar.",
+    "Ürün ChatGPT'yle de Claude'la da üretilir; Stüdyo'da hangisini kullandığınızı seçin, paket ona göre yazılır."
   ] },
   { id: "setup", title: "Mağaza açılışı adım adım", icon: "storefront-outline", steps: [
     "Kimlik, banka, kart ve şifre bilgileri yalnız Etsy'nin kendi sayfasına girilir; uygulamaya, sohbete veya ekran görüntüsüne yazılmaz.",
