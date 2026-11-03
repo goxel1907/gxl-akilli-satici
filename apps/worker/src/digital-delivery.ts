@@ -1,4 +1,5 @@
 import { etsyRequest, EtsyIntegrationError, getConnectedShop, type EtsyRuntimeEnv } from "./etsy.js";
+import { isCraftSupply, patternPolicyMessage } from "./etsy-policy.js";
 import type { PatternCraft, PrintableKind } from "./etsy-trends.js";
 import { normalizeEtsyTags, normalizeEtsyTitle, validateEtsyListingText } from "./pattern-studio.js";
 
@@ -42,7 +43,7 @@ export interface DigitalProduct {
   listing: { title: string; description: string; tags: string[]; materials: string[] };
   pins?: Array<{ title: string; description: string; overlay?: string }>;
   prices: { usd?: number; try?: number };
-  flags: { aiAssisted: boolean; photosAreRenders: boolean; testMade: boolean };
+  flags: { aiAssisted: boolean; photosAreRenders: boolean; testMade: boolean; ownPattern?: boolean };
   etsy?: { listingId: number; editUrl: string; createdAt: string; imagesUploaded: number; fileUploaded: boolean; filesUploaded?: number; error?: string };
   createdAt: string;
 }
@@ -298,9 +299,14 @@ export async function createDigitalProduct(store: DigitalStore, form: FormData, 
     listing,
     ...(pins.length ? { pins } : {}),
     prices: { usd: positivePrice(prices.usd), try: positivePrice(prices.try) },
-    flags: { aiAssisted: flags.aiAssisted !== false, photosAreRenders: flags.photosAreRenders !== false, testMade: flags.testMade === true },
+    // Desen: Etsy yapay zekâ desenini yasakladı; varsayılan "kendi deseni, gerçek fotoğraf" olur ve şartlar aşağıda denetlenir.
+    flags: kind
+      ? { aiAssisted: flags.aiAssisted !== false, photosAreRenders: flags.photosAreRenders !== false, testMade: flags.testMade === true }
+      : { aiAssisted: flags.aiAssisted === true, photosAreRenders: flags.photosAreRenders !== false, testMade: flags.testMade === true, ownPattern: flags.ownPattern === true },
     createdAt: new Date().toISOString()
   };
+  const blockedPattern = product.craft ? patternPolicyMessage(product.flags) : undefined;
+  if (blockedPattern) throw new DigitalDeliveryError("VALIDATION_FAILED", blockedPattern);
   for (const [index, bytes] of fileBytes.entries()) await store.put(fileKey(product.id, index), bytes);
   await store.put(`${PRODUCT_PREFIX}${product.id}`, JSON.stringify(product));
   const index = (await readJson<string[]>(store, PRODUCT_INDEX)) || [];
@@ -483,6 +489,9 @@ export async function createEtsyDigitalDraft(
   if (product.etsy?.listingId && product.etsy.fileUploaded) {
     return { product, listingId: product.etsy.listingId, editUrl: product.etsy.editUrl, alreadyCreated: true };
   }
+  // Eski kayıtlardaki yapay zekâ desenleri de Etsy'ye gönderilmez.
+  const blockedPattern = product.craft ? patternPolicyMessage(product.flags) : undefined;
+  if (blockedPattern) throw new DigitalDeliveryError("VALIDATION_FAILED", blockedPattern);
   const check = validateEtsyListingText(product.listing);
   if (check.issues.some((issue) => !issue.startsWith("Etsy 13 etiket"))) {
     throw new DigitalDeliveryError("VALIDATION_FAILED", `İlan metni Etsy kurallarına uymuyor: ${check.issues.join(" ")}`);
@@ -505,7 +514,7 @@ export async function createEtsyDigitalDraft(
       who_made: "i_did",
       when_made: "2020_2026",
       taxonomy_id: String(taxonomyId),
-      is_supply: "true",
+      is_supply: isCraftSupply(product) ? "true" : "false",
       type: "download"
     });
     if (product.listing.tags.length) form.set("tags", product.listing.tags.join(","));

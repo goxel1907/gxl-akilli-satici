@@ -56,7 +56,7 @@ test("the Christmas junk journal package that went to ChatGPT is now one coheren
   assert.match(master, /Upload set: .*12x12-Papers\.zip .*Ephemera\.zip/);
   // Kontrol listesi bu ürüne uyar: saat sırası ve tablet bağlantısı kontrolü yok.
   assert.doesNotMatch(master, /AM\/PM|LINKS —/);
-  assert.match(master, /TEXT-FREE ART — patterned papers, solid papers and ephemera sheets/);
+  assert.match(master, /TEXT-FREE ART — the patterned papers, solid papers and ephemera sheets contain no text/);
   // İlan: tek tema, yanıltıcı ifade yok, başlıkta tekrar yok.
   assert.ok(!item.listing.tags.some((tag) => /witch|academia|halloween|commercial/.test(tag)), item.listing.tags.join(", "));
   assert.equal(item.listing.tags.length, 13);
@@ -191,7 +191,7 @@ test("English posts never carry Turkish names, and the Turkish meaning matches t
 test("physical listings open with a sentence, not a copy of the title, and never repeat a title phrase", () => {
   const plan = buildProductPlan(normalizeProductInput({ titleTr: "925 Ayar Gümüş Özel Tasarım Kafesli Tespih - Kral Zincir Püsküllü", origin: "designed_by_seller", materialVerified: true, weightGrams: 45, beadCount: 33 }), ["sterling silver prayer beads", "islamic gift for men"], [], {});
   assert.notEqual(plan.description.split("\n")[0], plan.title);
-  assert.match(plan.description.split("\n")[0], /sterling silver prayer beads with 33 beads/i);
+  assert.match(plan.description.split("\n")[0], /sterling silver prayer beads \(33 beads\) with cage/i);
   const segments = plan.title.toLowerCase().split(/,\s*/);
   assert.equal(new Set(segments).size, segments.length, plan.title);
   assert.ok((plan.title.match(/gift/gi) || []).length <= 1, plan.title);

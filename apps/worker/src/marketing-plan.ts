@@ -235,14 +235,15 @@ function templateCopy(input: MarketingPlanInput): Copy {
   const claimTr = DIGITAL.has(input.kind) ? "anında indirilebilir dijital ürün" : input.kind === "vintage" ? "Türkiye'den tek parça vintage ürün" : input.kind === "knitwear" ? "Türkiye'de el yapımı" : "Türkiye'den";
   const etsy = input.channel === "etsy";
   const plural = isPluralName(nameEn);
-  const shipEn = DIGITAL.has(input.kind) ? "" : etsy ? `, ${plural ? "ship" : "ships"} to the US` : "";
+  // Tam cümle: "Sterling silver prayer beads from Türkiye, shipped to the US." (emir gibi okunan parça cümle olmaz).
+  const shipEn = DIGITAL.has(input.kind) ? "" : etsy ? ", shipped to the US" : "";
   const gloss = etsy ? turkishGloss(name) : undefined;
   const shipTr = DIGITAL.has(input.kind) ? "" : etsy ? ", ABD'ye gönderilir" : "";
   return {
     captionTr: etsy
       ? `${name}${gloss && gloss.toLowerCase() !== name.toLowerCase() ? ` (${gloss})` : ""}: ${claimTr}${shipTr}. Etsy mağazamızda (bağlantı profilde).`
       : `${name}: ${claimTr}.${price ? ` Fiyat: ${price}.` : ""} Sipariş ve sorularınız için profildeki bağlantıya dokunun ya da DM atın.`,
-    captionEn: `${nameEn}: ${claimEn}${shipEn}. Find ${plural ? "them" : "it"} in our ${etsy ? "Etsy" : "online"} shop (link in bio).`,
+    captionEn: `${nameEn}${DIGITAL.has(input.kind) ? `: ${claimEn}` : claimEn.startsWith("from") ? ` ${claimEn}` : `, ${claimEn}`}${shipEn}. Find ${plural ? "them" : "it"} in our ${etsy ? "Etsy" : "online"} shop (link in bio).`,
     hashtagsTr: hashtagsFor(input, "tr", tagsTr[input.kind]),
     hashtagsEn: hashtagsFor(input, "en", tagsEn[input.kind]),
     storyTr: `Yeni ${kind}: ${name}. Bağlantıya dokunun 👆`,

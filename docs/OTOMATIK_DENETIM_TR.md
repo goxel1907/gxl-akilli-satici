@@ -60,3 +60,23 @@ Sorun yoksa yeşil kutuda "Otomatik denetim: N kontrol, sorun yok" yazar.
 - **Desen görselleri.** Görsel yalnız stil ve rengi gösterir. Tam sayılar kodla çizilen şemalardadır, çünkü görsel modelleri sayıları tutturamaz.
 
 Çıktıları okumak için: `node --import tsx apps/api/test/fixtures/dump-outputs.ts <klasör> --first`
+
+## Etsy kuralları (22 Ekim 2026 güncellemesi)
+
+Etsy yapay zekâ kurallarını 22 Ekim 2026'da sıkılaştırdı. Uygulama bu kurallara göre çalışır:
+
+- **Yapay zekâ deseni yasak.** Örgü, tığ, dikiş, nakış, kanaviçe, punch ve makrome deseni, tarif ve talimat kılavuzu yapay zekâyla yazılamaz; ilanda belirtmek de yetmez.
+  - Uygulama artık yapay zekâya desen yazdırmaz.
+  - Desen bölümü yalnız sizin veya mağaza üyenizin yazıp bizzat denediği desen için ilan metni hazırlar.
+  - Desen yalnız şu üç onayla yüklenebilir: kendi deseni, denendi, gerçek fotoğraf.
+- **Gerçek fotoğraf ve önizleme.**
+  - Desen ilanında bitmiş ürünün gerçek, düzenlenmemiş fotoğrafı olmalı.
+  - Dijital üründe görsellerden biri PDF sayfalarının düzenlenmemiş önizlemesidir. Talimattaki C4 görseli bu yüzden görsel aracıyla değil, kodla ve gerçek sayfalardan yapılır.
+- **Yapay zekâ beyanı.** Yapay zekâ destekli PDF ürünlerinde açıklamada beyan bulunur. Etsy formu sorarsa "evet" seçilir.
+- **Robot ilanı yasak.** Uygulama yalnız taslak açar; yayına almadan önce ilanı siz kontrol edersiniz.
+- **Doğru ürün türü.** Planlayıcı, duvar sanatı, boyama sayfası, oyun, günlük ve tarif kartı "bitmiş ürün" olarak; desen ve kâğıt kiti "malzeme" olarak listelenir.
+- **Marka adı yok.** iPad, Android, GoodNotes, DMC gibi uyumluluk markaları başlığa ve etikete girmez; gerekirse açıklamada düz metin olarak yazılır.
+- **"Vintage" yalnız eski ürüne.** Yeni üründe "vintage-style" yazılır.
+- **Doğru vaat.**
+  - "Ücretsiz kargo" yalnız kargo bedeli fiyata eklendiyse yazılır.
+  - Üründe birden çok malzeme varsa (ör. Oltu taşı ve galalit) hepsi yazılır.
