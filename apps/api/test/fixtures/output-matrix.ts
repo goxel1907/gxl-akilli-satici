@@ -74,6 +74,20 @@ export const PRINTABLE_SCENARIOS: PrintableScenario[] = [
     examples: [example("Christmas Phone Wallpaper Bundle, Aesthetic Lock Screen, Digital Download", 500, 30)],
     signals: { formats: formats([["letter", 0.05]]), bundleShare: 0.6, pageCountMedian: 8, ipRisks: [] }
   }) },
+  { id: "app-icons", keyword: "aesthetic app icons", kind: "app_icons", result: trend("aesthetic app icons", "printables", {
+    kind: "app_icons",
+    topTags: tags([["app icons", 30], ["ios app icons", 18], ["aesthetic icons", 14], ["widget icons", 10], ["boho app icons", 9], ["home screen", 8], ["icon pack", 8]]),
+    risingTags: rising([["christmas app icons", 14]]),
+    examples: [example("Boho App Icons Pack, Aesthetic Home Screen, Widgets and Wallpapers", 900, 50)],
+    signals: { formats: formats([["png", 0.8]]), bundleShare: 0.5, pageCountMedian: 60, ipRisks: [] }
+  }) },
+  { id: "budget-spreadsheet", keyword: "budget spreadsheet", kind: "spreadsheet", result: trend("budget spreadsheet", "printables", {
+    kind: "spreadsheet",
+    topTags: tags([["budget spreadsheet", 30], ["google sheets budget", 20], ["excel budget", 14], ["monthly budget", 12], ["paycheck budget", 10], ["sinking funds", 8], ["budget template", 8]]),
+    risingTags: rising([["zero based budget", 12]]),
+    examples: [example("Budget Spreadsheet, Monthly Budget Template, Paycheck Budget, Sinking Funds", 1500, 90)],
+    signals: { formats: formats([["letter", 0.05]]), bundleShare: 0.3, pageCountMedian: 12, ipRisks: [] }
+  }) },
   { id: "pantry-labels", keyword: "pantry labels printable", kind: "labels", result: trend("pantry labels printable", "printables", {
     kind: "labels",
     topTags: tags([["pantry labels", 30], ["printable labels", 18], ["kitchen labels", 14], ["jar labels", 12], ["organization labels", 10], ["minimalist labels", 8], ["spice labels", 7]]),

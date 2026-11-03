@@ -745,7 +745,7 @@ function ShopierProductForm({ visible, product, saving, online, onClose, onSave 
 // durdurma kuralı ve kopyalanacak hazır metinler. Uygulama kimseye kendiliğinden mesaj atmaz.
 const SALES_KINDS = [
   { id: "tesbih", label: "Tesbih" }, { id: "vintage", label: "Vintage" }, { id: "knitwear", label: "Örgü giyim" },
-  { id: "pdf", label: "PDF ürünü" }, { id: "pattern", label: "Hobi deseni" }, { id: "other", label: "Diğer" }
+  { id: "pdf", label: "Dijital ürün" }, { id: "pattern", label: "Hobi deseni" }, { id: "other", label: "Diğer" }
 ];
 const SALES_CHANNELS = [{ id: "shopier", label: "Shopier'de (Türkiye)" }, { id: "etsy", label: "Etsy'de (ABD)" }];
 const WHATSAPP_NUMBER_KEY = "gxl.whatsappNumber";
@@ -1106,7 +1106,7 @@ function EtsyScreen({ online, channels, initialSection = "Trend" }: any) {
     <View style={styles.segment}>
       {(["Trend", "Stüdyo", "Dijital", "Pinterest", "Kılavuz"] as const).map((item) => <Pressable key={item} style={[styles.segmentItem, section === item && styles.segmentActive]} onPress={() => setSection(item)}><Text style={[styles.segmentText, section === item && styles.segmentTextActive]}>{item}</Text></Pressable>)}
     </View>
-    {!online && section !== "Kılavuz" && <Text style={styles.shopierBlocker}>Sunucu bağlantısı yok. Trend tarama, prompt üretimi, mağaza durumu ve PDF yükleme için sunucuya bağlanmak gerekir; üstteki "Yeniden bağlan" düğmesine basın.</Text>}
+    {!online && section !== "Kılavuz" && <Text style={styles.shopierBlocker}>Sunucu bağlantısı yok. Trend tarama, prompt üretimi, mağaza durumu ve dosya yükleme için sunucuya bağlanmak gerekir; üstteki "Yeniden bağlan" düğmesine basın.</Text>}
     {section === "Trend" && <TrendPanel online={online} onUse={(seed: any) => { setStudioSeed(seed); setSection("Stüdyo"); }} />}
     <View style={section === "Stüdyo" ? undefined : styles.hidden}><StudioPanel online={online} active={section === "Stüdyo"} etsyReady={shopReady} seed={studioSeed} onUpload={(prefill: any) => { setUploadPrefill(prefill); setSection("Dijital"); }} /></View>
     {section === "Dijital" && <DigitalPanel online={online} shopReady={shopReady} prefill={uploadPrefill} onPrefillUsed={() => setUploadPrefill(undefined)} />}
@@ -1169,7 +1169,7 @@ function TrendCard({ title, keyword: plannedKeyword, result, expanded, onToggle,
         {result.examples.map((example: any, index: number) => <Pressable key={`${example.url}-${index}`} onPress={() => example.url && openUrl(example.url, "Etsy ilanı")}><Text style={styles.linkNote} numberOfLines={2}>{example.favorites} favori · {example.ageDays} gün · {example.priceUsd ? `${example.priceUsd.toFixed(2)} USD · ` : ""}{example.title}</Text></Pressable>)}
         <Pressable style={[styles.secondaryButton, { marginTop: 12 }]} onPress={() => openUrl(`https://trends.google.com/trends/explore?geo=US&date=${encodeURIComponent(trendsRange)}&q=${encodeURIComponent(keyword)}`, "Google Trends")}><Text style={styles.secondaryButtonText}>{trendsRange === "today 5-y" ? "ABD eyaletleri ve sezon zirveleri (Google Trends)" : "ABD'de hangi eyaletlerde aranıyor? (Google Trends)"}</Text></Pressable>
         {isPattern || isPrintable
-          ? <Pressable style={[styles.primary, { marginTop: 14, marginBottom: 0 }]} onPress={onUse}><Text style={styles.primaryText}>{isPrintable ? "Bu nişte PDF hazırla" : "Bu nişte kendi desenimi listele"}</Text><Ionicons name="arrow-forward" size={18} color="white" /></Pressable>
+          ? <Pressable style={[styles.primary, { marginTop: 14, marginBottom: 0 }]} onPress={onUse}><Text style={styles.primaryText}>{isPrintable ? "Bu nişte dijital ürün hazırla" : "Bu nişte kendi desenimi listele"}</Text><Ionicons name="arrow-forward" size={18} color="white" /></Pressable>
           : <Pressable style={[styles.primary, { marginTop: 14, marginBottom: 0 }]} onPress={() => Share.share({ message: result.topTags.map((tag: any) => tag.tag).slice(0, 13).join(", "), title: `${keyword} etiketleri` })}><Text style={styles.primaryText}>Üst etiketleri kopyala</Text><Ionicons name="copy-outline" size={18} color="white" /></Pressable>}
       </>}
     </>}
@@ -1242,7 +1242,7 @@ function TrendPanel({ online, onUse }: any) {
   const [keyword, setKeyword] = useState("");
   const [custom, setCustom] = useState<any[]>([]);
   const [group, setGroup] = useState("printables");
-  const groups = [...(board?.groups || [{ id: "printables", labelTr: "PDF ürünleri" }, { id: "patterns", labelTr: "Hobi desenleri" }, { id: "tesbih", labelTr: "Tesbih ve gümüş" }, { id: "vintage", labelTr: "Vintage" }]), { id: "discovered", labelTr: "Keşfedilenler" }, { id: "season", labelTr: "Sezon fırsatları" }];
+  const groups = [...(board?.groups || [{ id: "printables", labelTr: "Dijital ürünler" }, { id: "patterns", labelTr: "Hobi desenleri" }, { id: "tesbih", labelTr: "Tesbih ve gümüş" }, { id: "vintage", labelTr: "Vintage" }]), { id: "discovered", labelTr: "Keşfedilenler" }, { id: "season", labelTr: "Sezon fırsatları" }];
   const topOverall = (board?.niches || []).filter((row: any) => row.result).sort((a: any, b: any) => b.result.score - a.result.score).slice(0, 5);
   const visibleNiches = (board?.niches || []).filter((row: any) => (row.group || "patterns") === group);
   const sortNiches = (rows: any[]) => [...rows].sort((a, b) => (b.result?.score ?? -1) - (a.result?.score ?? -1));
@@ -1319,11 +1319,11 @@ function TrendPanel({ online, onUse }: any) {
   </>;
 }
 
-const GROUP_LABELS: Record<string, string> = { patterns: "Hobi deseni", printables: "PDF ürünü", tesbih: "Tesbih", vintage: "Vintage", other: "Diğer" };
+const GROUP_LABELS: Record<string, string> = { patterns: "Hobi deseni", printables: "Dijital ürün", tesbih: "Tesbih", vintage: "Vintage", other: "Diğer" };
 
 // Her grup düğmesinin altında: içinde ne var, kim alır, nasıl teslim edilir. Hiç kullanmamış biri için.
 const GROUP_INTROS: Record<string, { title: string; text: string; icon: string }> = {
-  printables: { icon: "document-text-outline", title: "PDF ürünleri nedir?", text: "Alıcının satın alıp indirdiği ve kendi yazıcısında bastığı dosyalar: günlük/haftalık planlayıcı, bütçe defteri, boyama sayfası, duvar posteri, tarif kartı, parti oyunu. Kargo yok; bir kez hazırlanır, defalarca satılır. Etsy'de çoğu 2–15 USD." },
+  printables: { icon: "document-text-outline", title: "Dijital ürünler nedir?", text: "Alıcının satın alıp indirdiği dosyalar. Bir kısmı yazıcıda basılır: planlayıcı, takvim, boyama sayfası, duvar posteri, tarif kartı, tebrik kartı, çıkartma, etiket, bulmaca, parti oyunu. Bir kısmı telefona ve tablete yüklenir: telefon duvar kâğıdı, ikon ve widget paketi, dijital planlayıcı, bütçe tablosu. Kargo yok; bir kez hazırlanır, defalarca satılır. Etsy'de çoğu 2–15 USD." },
   patterns: { icon: "color-palette-outline", title: "Hobi desenleri nedir?", text: "Örgü, tığ işi, nakış, kanaviçe, dikiş ve makrome için adım adım yapım tarifi (PDF). Alıcı ürünü kendisi yapar; siz yalnız tarifi satarsınız. Kargo yok. Etsy'de çoğu 2–12 USD. Dikkat: Etsy yapay zekâyla yazılmış deseni yasakladı; yalnız kendi yazıp denediğiniz deseni satabilirsiniz." },
   tesbih: { icon: "ellipse-outline", title: "Tesbih ve gümüş nedir?", text: "Elinizdeki gerçek tesbihler: 925 gümüş, kehribar, oltu, kuka ve İslami hediyeler. Fiziksel ürün: fotoğrafını çekip satarsınız, ABD'ye kargolarsınız. Etsy'de çoğu 15–250 USD." },
   vintage: { icon: "time-outline", title: "Vintage nedir?", text: "En az 20 yıllık eski eşyalar: gümüş takı, broş, halı, kilim, bakır. Etsy kuralı: 20 yıldan yeni ürün 'vintage' diye satılamaz, 100 yıldan yeni ürüne 'antika' denmez. Fiziksel ürün, kargo gerekir." },
@@ -1480,7 +1480,9 @@ const PRINTABLE_KIND_OPTIONS = [
   { id: "cards", label: "Kart / etiket" },
   { id: "puzzles", label: "Bulmaca" },
   { id: "wallpaper", label: "Duvar kâğıdı" },
-  { id: "labels", label: "Düzen etiketi" }
+  { id: "labels", label: "Düzen etiketi" },
+  { id: "app_icons", label: "Telefon ikonu" },
+  { id: "spreadsheet", label: "Bütçe tablosu" }
 ];
 
 // Her türün kısa açıklaması: ne olduğu, kime satıldığı, Etsy'deki fiyat aralığı ve dikkat edilecek kural.
@@ -1499,14 +1501,16 @@ const KIND_HELP: Record<string, string> = {
   cards: "Yazdırılıp katlanan 5x7 tebrik kartları (Noel, doğum günü, teşekkür) ve eşleşen hediye etiketleri. Etsy'de çoğu 3–8 USD.",
   puzzles: "Büyük puntolu kelime avı ve sudoku kitabı; bulmacalar kodla üretilir, çözülür ve cevap anahtarı eklenir. Yaşlılar ve yetişkinler alır; 3–8 USD.",
   wallpaper: "Telefon kilit ekranı ve ana ekran duvar kâğıtları; 3 ekran ölçüsü. Basılmaz, kargo yok. Etsy'de çoğu 2–6 USD.",
-  labels: "Kiler, mutfak ve ev düzeni etiketleri; hazır yazılı ve boş etiketler, 3 ölçü. Etsy'de çoğu 3–8 USD."
+  labels: "Kiler, mutfak ve ev düzeni etiketleri; hazır yazılı ve boş etiketler, 3 ölçü. Etsy'de çoğu 3–8 USD.",
+  app_icons: "Telefona yüklenir: ana ekran ikon paketi (64–96 ikon), widget görselleri ve eşleşen duvar kâğıtları. İkonlar sade semboldür; hiçbir şirket logosu kullanılmaz. Etsy'de çoğu 3–9 USD.",
+  spreadsheet: "Telefona ve bilgisayara yüklenir: formüllü bütçe/takip tablosu (.xlsx). Excel, Google Sheets ve telefon tablo uygulamalarında çalışır; makro yok. Etsy'de çok satar; 4–15 USD."
 };
 
 // Satıcının kullandığı yapay zekâ: paket o araca göre yazılır. Seçim telefonda hatırlanır.
 const ASSISTANT_KEY = "gxl.assistant";
 const ASSISTANT_OPTIONS = [{ id: "chatgpt", label: "ChatGPT" }, { id: "claude", label: "Claude" }];
 const STUDIO_MODES = [
-  { id: "printable", label: "PDF ürünü" },
+  { id: "printable", label: "Dijital ürün" },
   { id: "pattern", label: "El işi deseni" },
   { id: "physical", label: "Elimdeki ürün (fotoğraf)" }
 ];
@@ -1578,7 +1582,7 @@ function PrintableStudio({ online, seed, seeding, onReseed, onPickKind, onUpload
       </View>
     </View>}
     {!seeding && <CompetitionCard competition={seed?.competition} />}
-    <Text style={styles.fieldLabel}>PDF türü</Text>
+    <Text style={styles.fieldLabel}>Dijital ürün türü</Text>
     <ChipGroup options={PRINTABLE_KIND_OPTIONS} value={kind} onChange={(next: string) => { setKind(next); onPickKind(next); }} />
     {!!KIND_HELP[kind] && <Text style={styles.formHint}>{KIND_HELP[kind]}</Text>}
     <Text style={styles.fieldLabel}>Hangi yapay zekâyla üreteceksiniz?</Text>
@@ -1605,7 +1609,7 @@ function PrintableStudio({ online, seed, seeding, onReseed, onPickKind, onUpload
       <AdVisualsPanel visuals={brief.adVisuals} />
       <View style={styles.analysisCard}>
         <Text style={styles.cardTitle}>Pinterest pinleri</Text>
-        <Text style={styles.small}>Dijital PDF ürünlerinde en büyük dış trafik Pinterest'ten gelir. Pinleri farklı günlerde paylaş; görsel için 9. görsel promptunu kullan.</Text>
+        <Text style={styles.small}>Dijital ürünlerde en büyük dış trafik Pinterest'ten gelir. Pinleri farklı günlerde paylaş; görsel için 9. görsel promptunu kullan.</Text>
         {brief.pins.map((pin: any) => <View key={pin.title} style={styles.visualRow}>
           <Text style={styles.rowTitle}>{pin.title}</Text>
           <Text style={styles.trendVerdict}>Görsel üstü yazı: {pin.overlay}</Text>
@@ -1958,11 +1962,11 @@ function DigitalUploadForm({ visible, prefill, onClose, onSaved }: any) {
   };
   const save = () => {
     if (!name.trim() || !productType.trim() || !title.trim() || !description.trim()) return Alert.alert("Eksik bilgi", "Ürün adı, ürün türü, başlık ve açıklama gerekli. Önce Stüdyo'da ilanı hazırlayın.");
-    if (!files.length) return Alert.alert("Dosya seçin", "Satılacak PDF dosyalarını seçin (en fazla 5; fazlası ZIP).");
+    if (!files.length) return Alert.alert("Dosya seçin", "Satılacak dosyaları seçin: PDF veya ZIP (duvar kâğıdı, ikon paketi ve tablo ZIP içinde gelir); en fazla 5.");
     if (!priceUsd && !priceTry) return Alert.alert("Fiyat", "Etsy mağaza para birimine göre USD veya TL fiyatı girin.");
     if (kind === "pattern" && (!ownPattern || !testMade || photosAreRenders || aiAssisted)) return Alert.alert("Etsy kuralı", "Etsy yapay zekâyla yazılmış deseni yasakladı. Desen yalnız sizin veya mağaza üyenizin yazdığı, bizzat yapıp denediği ve bitmiş ürününün gerçek fotoğrafıyla yüklenebilir.");
     if (!images.length) return Alert.alert("Görsel ekleyin", kind === "pattern" ? "Bitmiş ürünün en az bir gerçek, düzenlenmemiş fotoğrafını ekleyin." : "En az bir görsel ekleyin; biri PDF sayfalarının düzenlenmemiş önizlemesi olsun (talimattaki C4).");
-    Alert.alert("PDF güvenli depoya yüklensin mi?", "Dosya herkese açık değildir. Müşteri yalnızca Etsy'de ödeme yaptıktan sonra Etsy üzerinden veya sizin oluşturduğunuz kişiye özel bağlantıyla indirebilir.", [
+    Alert.alert("Dosyalar güvenli depoya yüklensin mi?", "Dosyalar herkese açık değildir. Müşteri yalnızca Etsy'de ödeme yaptıktan sonra Etsy üzerinden veya sizin oluşturduğunuz kişiye özel bağlantıyla indirebilir.", [
       { text: "Vazgeç", style: "cancel" },
       { text: "Yükle", onPress: async () => {
         setSaving(true);
@@ -1994,8 +1998,8 @@ function DigitalUploadForm({ visible, prefill, onClose, onSaved }: any) {
   };
   return <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
     <SafeAreaView style={styles.formSafe}><StatusBar barStyle="dark-content" /><ScrollView contentContainerStyle={styles.formContent}>
-      <View style={styles.formHeader}><Text style={styles.sectionTitle}>Dijital PDF yükle</Text><Pressable onPress={onClose}><Ionicons name="close" size={26} color="#315B4C" /></Pressable></View>
-      <Pressable style={styles.uploadRow} onPress={pickFiles}><Ionicons name="document-text-outline" size={22} color="#315B4C" /><Text style={[styles.rowTitle, { flex: 1 }]}>{files.length ? `${files.length}/5 dosya seçildi · eklemek için dokunun` : "PDF dosyalarını seç (birden çok seçilebilir, en fazla 5)"}</Text></Pressable>
+      <View style={styles.formHeader}><Text style={styles.sectionTitle}>Dijital ürün yükle</Text><Pressable onPress={onClose}><Ionicons name="close" size={26} color="#315B4C" /></Pressable></View>
+      <Pressable style={styles.uploadRow} onPress={pickFiles}><Ionicons name="document-text-outline" size={22} color="#315B4C" /><Text style={[styles.rowTitle, { flex: 1 }]}>{files.length ? `${files.length}/5 dosya seçildi · eklemek için dokunun` : "Dosyaları seç: PDF veya ZIP (birden çok seçilebilir, en fazla 5)"}</Text></Pressable>
       {files.map((file) => <View key={file.name} style={styles.fileRow}><Ionicons name={/\.zip$/i.test(file.name || "") ? "archive-outline" : "document-outline"} size={18} color="#56615C" /><Text style={[styles.small, { flex: 1 }]} numberOfLines={1}>{file.name} · {Math.round((file.size || 0) / 1024)} KB</Text><Pressable onPress={() => setFiles(files.filter((item) => item.name !== file.name))}><Ionicons name="close-circle-outline" size={20} color="#B4483A" /></Pressable></View>)}
       {!!files.length && <Text style={styles.formHint}>Hepsi tek seferde Etsy ilanına eklenir. Etsy en fazla 5 dosya alır; fazla formatları tek bir ZIP'te birleştirin.</Text>}
       <Pressable style={styles.uploadRow} onPress={pickImages}><Ionicons name="images-outline" size={22} color="#315B4C" /><Text style={[styles.rowTitle, { flex: 1 }]}>{images.length ? `${images.length} görsel seçildi` : kind === "pattern" ? "Bitmiş ürünün gerçek fotoğrafları (en fazla 10; ilki düzenlenmemiş)" : "İlan görselleri (en fazla 10; biri sayfaların önizlemesi)"}</Text></Pressable>
@@ -2016,7 +2020,7 @@ function DigitalUploadForm({ visible, prefill, onClose, onSaved }: any) {
         {kind === "pattern"
           ? <Toggle label="Fotoğraflar bitmiş ürünün gerçek fotoğrafı" value={!photosAreRenders} onChange={(value: boolean) => setPhotosAreRenders(!value)} />
           : <Toggle label="Görsellerin bir kısmı mockup (sayfalar gerçek)" value={photosAreRenders} onChange={setPhotosAreRenders} />}
-        {kind !== "pattern" && <Toggle label="PDF hazırlanırken yapay zekâ kullanıldı" value={aiAssisted} onChange={setAiAssisted} />}
+        {kind !== "pattern" && <Toggle label="Ürün hazırlanırken yapay zekâ kullanıldı" value={aiAssisted} onChange={setAiAssisted} />}
       </View>
       {kind === "pattern" && <Text style={styles.warningText}>Etsy kuralı: yapay zekâyla yazılmış desen satılamaz. Yalnız kendi yazdığınız, bizzat yapıp denediğiniz ve bitmiş ürününün gerçek fotoğrafı olan deseni yükleyin.</Text>}
       {!testMade && kind !== "pattern" && <Text style={styles.warningText}>Satıştan önce her formattan bir sayfayı %100 ölçekte yazdırıp kenar boşluklarını kontrol edin.</Text>}
@@ -2081,7 +2085,7 @@ function DigitalPanel({ online, shopReady, prefill, onPrefillUsed }: any) {
   const etsyDraft = (product: any) => {
     if (product.etsy?.fileUploaded) return openUrl(product.etsy.editUrl, "Etsy taslak ilanı");
     if (!shopReady) return Alert.alert("Etsy mağazası hazır değil", "Mağaza açılıp uygulamada Etsy bağlantısı 'Bağlı' görünene kadar taslak oluşturulamaz.");
-    Alert.alert("Etsy'de taslak ilan oluşturulsun mu?", "Başlık, açıklama, etiketler, görseller ve PDF Etsy'ye taslak olarak gönderilir. İlan yayına girmez; kontrol edip Etsy'de siz yayınlarsınız. Yayınlarken Etsy ilan ücreti alır.", [
+    Alert.alert("Etsy'de taslak ilan oluşturulsun mu?", "Başlık, açıklama, etiketler, görseller ve dosyalar Etsy'ye taslak olarak gönderilir. İlan yayına girmez; kontrol edip Etsy'de siz yayınlarsınız. Yayınlarken Etsy ilan ücreti alır.", [
       { text: "Vazgeç", style: "cancel" },
       { text: "Taslak oluştur", onPress: async () => {
         setBusy(product.id);
@@ -2102,7 +2106,7 @@ function DigitalPanel({ online, shopReady, prefill, onPrefillUsed }: any) {
     } }
   ]);
   return <>
-    <View style={styles.guardrail}><Ionicons name="lock-closed-outline" size={20} color="#315B4C" /><Text style={[styles.guardrailText, { flex: 1 }]}>PDF herkese açık değildir. Etsy'de dosyayı Etsy yalnızca ödeme yapan alıcıya verir. Shopier ve doğrudan satışlarda her sipariş için sınırlı indirmeli, süreli ve kapatılabilir özel bağlantı oluşturulur.</Text></View>
+    <View style={styles.guardrail}><Ionicons name="lock-closed-outline" size={20} color="#315B4C" /><Text style={[styles.guardrailText, { flex: 1 }]}>Dosyalar herkese açık değildir. Etsy'de dosyayı Etsy yalnızca ödeme yapan alıcıya verir. Shopier ve doğrudan satışlarda her sipariş için sınırlı indirmeli, süreli ve kapatılabilir özel bağlantı oluşturulur.</Text></View>
     <View style={styles.sectionHeading}><Text style={styles.sectionTitle}>Dijital desenler</Text><Pressable style={[styles.addButton, !online && styles.primaryDisabled]} disabled={!online} onPress={() => setFormVisible(true)}><Ionicons name="add" size={18} color="white" /><Text style={styles.addButtonText}>PDF yükle</Text></Pressable></View>
     {loading && <ActivityIndicator color="#C88B47" />}
     {!loading && !products.length && <Empty icon="document-text-outline" title="Henüz dijital desen yok" text="Stüdyo'da ilanı hazırlayıp PDF ve render görsellerini buradan yükleyin." />}
@@ -2224,10 +2228,10 @@ function PinterestPanel({ online }: any) {
 
 const ETSY_GUIDE: Array<{ id: string; title: string; icon: any; steps: string[] }> = [
   { id: "daily", title: "Her gün 10 dakika", icon: "today-outline", steps: [
-    "Uygulama Etsy sekmesiyle açılır. Trend → PDF ürünleri'ndeki 'İlgi sıralaması'na ve Keşfedilenler'e bakın. Sunucu siz uygulamayı açmasanız da her 30 dakikada bir Etsy'yi tarar.",
+    "Uygulama Etsy sekmesiyle açılır. Trend → Dijital ürünler'deki 'İlgi sıralaması'na ve Keşfedilenler'e bakın. Sunucu siz uygulamayı açmasanız da her 30 dakikada bir Etsy'yi tarar.",
     "65 ve üstü puan (Yüksek fırsat) olan aramaları açın. 'Talep zayıf' ve 'Rekabet yoğun' yazanları şimdilik atlayın.",
     "Sezon fırsatları'nda 'Hemen listele' yazan bir dönem varsa önce ona hazırlanın.",
-    "PDF aramasında 'Bu nişte PDF hazırla', desen aramasında 'Bu nişte desen hazırla' düğmesine basın. Elinizdeki fiziksel ürün için Stüdyo → 'Elimdeki ürün (fotoğraf)' bölümünü kullanın; Shopier gerekmez.",
+    "Dijital ürün aramasında 'Bu nişte dijital ürün hazırla', desen aramasında 'Bu nişte desen hazırla' düğmesine basın. Elinizdeki fiziksel ürün için Stüdyo → 'Elimdeki ürün (fotoğraf)' bölümünü kullanın; Shopier gerekmez.",
     "Siparişleri ve mesajları Etsy'nin 'Sell on Etsy' uygulamasından takip edin. Mesajlara 24 saat içinde dönmek Star Seller rozetini korur."
   ] },
   { id: "discovery", title: "Otomatik keşif nasıl çalışır?", icon: "sync-circle-outline", steps: [
@@ -2242,27 +2246,27 @@ const ETSY_GUIDE: Array<{ id: string; title: string; icon: any; steps: string[] 
     "Etsy satış adedini paylaşmaz. Puan favori ve ilan verisinden yapılan bir tahmindir. Karar vermeden önce kartı açıp rakip ilanlara bakın.",
     "Pahalı fiziksel ürünlerde (gümüş tesbih vb.) favori sayısı doğal olarak düşüktür. Az satış da yüksek kazanç demektir."
   ] },
-  { id: "printables", title: "PDF ürün satışı adım adım (planlayıcı, boyama, duvar sanatı…)", icon: "document-attach-outline", steps: [
-    "Trend → PDF ürünleri: planlayıcı, dijital planlayıcı, boyama, duvar sanatı, tarif kartı, parti oyunları, günlük, çocuk etkinlikleri ve kâğıt işi nişleri puanlanır. 'İlgi sıralaması' alıcı ilgisini çubukla gösterir: talep, ortanca ilan ile öne çıkan çeyreğin aylık favorisinden birlikte hesaplanır. İlgisi yüksek ama puanı düşük nişte rekabet yoğundur; dar bir alt ifadeyle girin.",
-    "Bir kartı açıp 'Öne geçmek için ne yapmalı?' önerilerini okuyun, sonra 'Bu nişte PDF hazırla'ya basın.",
-    "Stüdyo'yu açtığınızda veya bir PDF türüne bastığınızda sistem o türde en güçlü Etsy aramasını kendisi seçer ve tüm alanları doldurur: ürün, trend özellikleri, renkler (trend rengi yoksa trend stiline uygun palet), formatlar (rakiplerin az sunduğu formatlar eklenir), sayfa sayısı (rakip ortancasının %20 fazlası) ve hedef kitle. 'Başka arama seç' sıradaki güçlü aramayı getirir.",
+  { id: "printables", title: "Dijital ürün satışı adım adım (planlayıcı, duvar kâğıdı, ikon paketi…)", icon: "document-attach-outline", steps: [
+    "Trend → Dijital ürünler: planlayıcı, dijital planlayıcı, takvim, boyama, duvar sanatı, tarif kartı, tebrik kartı, çıkartma, etiket, bulmaca, parti oyunları, günlük, çocuk etkinlikleri, kâğıt işi, telefon duvar kâğıdı, ikon paketi ve bütçe tablosu nişleri puanlanır. 'İlgi sıralaması' alıcı ilgisini çubukla gösterir: talep, ortanca ilan ile öne çıkan çeyreğin aylık favorisinden birlikte hesaplanır. İlgisi yüksek ama puanı düşük nişte rekabet yoğundur; dar bir alt ifadeyle girin.",
+    "Bir kartı açıp 'Öne geçmek için ne yapmalı?' önerilerini okuyun, sonra 'Bu nişte dijital ürün hazırla'ya basın.",
+    "Stüdyo'yu açtığınızda veya bir ürün türüne bastığınızda sistem o türde en güçlü Etsy aramasını kendisi seçer ve tüm alanları doldurur: ürün, trend özellikleri, renkler (trend rengi yoksa trend stiline uygun palet), formatlar (rakiplerin az sunduğu formatlar eklenir), sayfa sayısı (rakip ortancasının %20 fazlası) ve hedef kitle. 'Başka arama seç' sıradaki güçlü aramayı getirir.",
     "'Rakipleri geçmek için' kartı rakip ortanca fiyatını, önerilen başlangıç ve set fiyatını, format boşluklarını ve geçilecek rakipleri gösterir; önerilen fiyat yükleme formuna otomatik gelir. Siz 'Prompt, görsel ve ilanı hazırla'ya basarsınız.",
-    "'Tek paketi gönder' ile her şeyi bir kez ChatGPT'ye gönderin: PDF, sayfa görselleri, 10 reklam görseli ve pin görselleri sıralı adımlarla aynı sohbette yapılır. Her adım bitince aynı sohbete 'next' yazın. Parçaları ayrı ayrı paylaşmayın; her paylaşım yeni sohbet açar ve yeni sohbet ürün adını, paleti ve sayfa planını bilmez.",
-    "Claude dosyaları (PDF/HTML/SVG) çok iyi kurar ama fotoğraf üretmez. Claude kullanırsanız paketin fotoğraf adımlarını ChatGPT'de, yine tek sohbette yapın; Product spec JSON'unu oraya da yapıştırın.",
+    "Stüdyo'da kullanacağınız yapay zekâyı seçin (ChatGPT veya Claude), sonra 'Tek paketi gönder' ile her şeyi bir kez gönderin: dosyalar, sayfa görselleri, 10 reklam görseli ve pin görselleri sıralı adımlarla aynı sohbette yapılır. Her adım bitince aynı sohbete 'next' yazın. Parçaları ayrı ayrı paylaşmayın; her paylaşım yeni sohbet açar ve yeni sohbet ürün adını, paleti ve sayfa planını bilmez.",
+    "ChatGPT seçiliyse görselleri kendi görsel aracıyla üretir. Claude seçiliyse çizimleri kodla vektör olarak kendisi çizer; fotoğraf gibi sahneler için hazır görsel promptu verir, onu bir görsel aracında çalıştırırsınız.",
     "Dosyalar gelince modelden 'Automated QA' betik çıktısını isteyin: tek satırda FAIL olmamalı (saat AM/PM, kopya sayfa, eksik format, ad, kapak, kenar boşluğu). Uygulama da yüklemede ilanda yazan formatın dosyalarda olmamasını ve aynı dosyanın iki kez yüklenmesini engeller.",
-    "Reklam tadında 10 görselin her birinde nerede kullanılacağı (Etsy kapak, galeri, Pinterest, Instagram), ölçüsü ve üstüne yazılacak kısa metin yazar. Görseli üretirken PDF sayfalarınızı referans olarak yükleyin, yazıyı Canva ile ekleyin.",
+    "Reklam tadında 10 görselin her birinde nerede kullanılacağı (Etsy kapak, galeri, Pinterest, Instagram), ölçüsü ve üstüne yazılacak kısa metin yazar. Görseli üretirken kendi sayfalarınızı veya ekran görüntülerinizi referans olarak yükleyin, yazıyı Canva ile ekleyin.",
     "Pinterest pinlerini farklı günlerde paylaşın. Paket fikriyle aynı stilde bir set hazırlayın.",
-    "Dijital → tüm PDF dosyalarını tek seferde seçin (en fazla 5; fazla formatlar tek bir ZIP'te) ve görselleri ekleyin → 'Etsy taslağı oluştur'. Dosyaların hepsi ilana otomatik eklenir. Etsy'de yapay zekâ beyanını ve kategoriyi kontrol edip yayınlayın."
+    "Dijital → tüm dosyaları tek seferde seçin (PDF veya ZIP, en fazla 5; duvar kâğıdı, ikon paketi ve tablo ZIP içinde gelir) ve görselleri ekleyin → 'Etsy taslağı oluştur'. Dosyaların hepsi ilana otomatik eklenir. Etsy'de yapay zekâ beyanını ve kategoriyi kontrol edip yayınlayın."
   ] },
-  { id: "pdf-win", title: "PDF satışında öne geçmek", icon: "trophy-outline", steps: [
+  { id: "pdf-win", title: "Dijital ürün satışında öne geçmek", icon: "trophy-outline", steps: [
     "Kapak görseli satışın yarısıdır: küçük görünümde okunan 3-5 kelimelik başlık ve sayfa sayısı ya da format rozeti ekleyin.",
     "10 görselin hepsini kullanın. 'Neler var?', 'Ölçü/format' ve 'Nasıl çalışır' görselleri yanlış beklentiyi, iadeyi ve kötü yorumu azaltır.",
     "ABD alıcısı US Letter kullanır: Letter ve A4'ü birlikte sunun. Rakiplerin az sunduğu formatı (A5, düzenlenebilir, tablet) Trend kartındaki boşluk önerisine göre ekleyin.",
     "Aynı stilde ürün ailesi kurun (ör. planlayıcı + takip sayfası + günlük) ve paket satın; tekli ilanların açıklamasında pakete yönlendirin.",
-    "Pinterest'i açın; dijital PDF ürünlerinde en büyük dış trafik kaynağıdır. Her ürün için Stüdyo'nun hazırladığı 3 pini kullanın.",
+    "Pinterest'i açın; dijital ürünlerde en büyük dış trafik kaynağıdır. Her ürün için Stüdyo'nun hazırladığı 3 pini kullanın.",
     "Düzenli yeni ürün ekleyin: yeni ilanlar aramada kısa süreli görünürlük kazanır ve mağazanız daha çok aramada yer alır.",
     "Marka, karakter ve ünlü adı kullanmayın; sistem bu kelimeleri ilanlarınızdan otomatik çıkarır. İhlal, ilan kaldırma ve mağaza kapanmasının en sık nedenidir.",
-    "PDF'in içine 'Nasıl yazdırılır' sayfası ve teşekkür sayfası koyun; satıştan sonra kısa bir teşekkür mesajı gönderin. Etsy kuralları gereği yorum karşılığında indirim veya hediye vermeyin."
+    "Dosyanın içine 'Nasıl kullanılır / yazdırılır' sayfası ve teşekkür sayfası koyun; satıştan sonra kısa bir teşekkür mesajı gönderin. Etsy kuralları gereği yorum karşılığında indirim veya hediye vermeyin."
   ] },
   { id: "pinterest", title: "Pinterest otomatik pin (kurulum ve kullanım)", icon: "logo-pinterest", steps: [
     "pinterest.com/business adresinden ücretsiz bir Pinterest işletme hesabı açın (veya mevcut hesabınızı işletme hesabına çevirin).",
@@ -2292,27 +2296,34 @@ const ETSY_GUIDE: Array<{ id: string; title: string; icon: any; steps: string[] 
     "Başlığı, etiketleri ve fiyatı isterseniz düzeltin → 'Etsy taslağı oluştur' (fotoğraflar bu adımda yüklenir) → 'Taslağı kontrol et' → 'Etsy'de yayınla'. Yayınlamada Etsy 0,20 USD ilan ücreti keser.",
     "Shopier'de zaten olan ürünler için Shopier sekmesindeki 'Etsy ilanı hazırla' da aynı motoru kullanır."
   ] },
-  { id: "delivery", title: "PDF teslimi ve koruma", icon: "lock-closed-outline", steps: [
-    "Etsy satışında PDF'i Etsy teslim eder. Alıcı ödeme yaptıktan sonra dosyayı Etsy'deki 'Purchases' (Satın alımlar) sayfasından indirir. Ödeme yapmayan erişemez.",
+  { id: "delivery", title: "Dosya teslimi ve koruma", icon: "lock-closed-outline", steps: [
+    "Etsy satışında dosyayı Etsy teslim eder. Alıcı ödeme yaptıktan sonra dosyayı Etsy'deki 'Purchases' (Satın alımlar) sayfasından indirir. Ödeme yapmayan erişemez.",
     "Shopier veya doğrudan satışta: ödeme gelince Dijital → ürün → 'Satış bağlantısı' ile siparişe özel bir bağlantı oluşturun (varsayılan 3 indirme, 14 gün) ve alıcıya gönderin.",
     "İade olursa veya bağlantının paylaşıldığından şüphelenirseniz bağlantıyı 'Bağlantılar' bölümünden kapatın.",
-    "İndirilmiş bir dosyanın kopyalanmasını hiçbir sistem tamamen engelleyemez. PDF'teki telif altbilgisi ve lisans sayfası caydırıcıdır. Kopyayı görürseniz Etsy'nin fikrî mülkiyet bildirim formunu kullanın."
+    "İndirilmiş bir dosyanın kopyalanmasını hiçbir sistem tamamen engelleyemez. Dosyadaki telif altbilgisi ve lisans sayfası caydırıcıdır. Kopyayı görürseniz Etsy'nin fikrî mülkiyet bildirim formunu kullanın."
   ] },
   { id: "rules", title: "Etsy kuralları: dikkat edilecekler", icon: "shield-checkmark-outline", steps: [
     "Hazır alınıp yeniden satılan ürün listelenmez (vintage ve el işi malzemesi hariç).",
     "Başkasının desenini, fotoğrafını veya metnini kopyalamayın. Stüdyo her desen için bir farklılaştırma planı üretir.",
     "Başlıkta başka markaların adını ve abartılı iddiaları kullanmayın, aynı kelimeyi üst üste tekrarlamayın. Sistem başlığın uzunluğunu ve özel karakterlerini Etsy kurallarına göre düzeltir.",
-    "Yapay zekâ destekli PDF ürünlerinde (planlayıcı, boyama, duvar sanatı, kâğıt kiti) açıklamadaki yapay zekâ beyanını silmeyin; Etsy formu sorarsa 'evet' deyin. Yapay zekâyla yazılmış desen, tarif ve talimat kılavuzu ise Etsy'de hiç satılamaz.",
-    "Dijital üründe görsellerden biri PDF sayfalarının düzenlenmemiş önizlemesi olsun; Etsy alıcının ne alacağını görmek ister.",
+    "Yapay zekâ destekli dijital ürünlerde (planlayıcı, boyama, duvar sanatı, kâğıt kiti, duvar kâğıdı, ikon paketi) açıklamadaki yapay zekâ beyanını silmeyin; Etsy formu sorarsa 'evet' deyin. Yapay zekâyla yazılmış desen, tarif ve talimat kılavuzu ise Etsy'de hiç satılamaz.",
+    "Dijital üründe görsellerden biri dosyaların düzenlenmemiş önizlemesi olsun; Etsy alıcının ne alacağını görmek ister.",
     "İlanı uygulama taslak olarak açar; yayına almadan önce siz kontrol edersiniz. Etsy insan kontrolü olmadan açılan ilanı yasaklar.",
     "Fiziksel üründe gerçek ürün fotoğrafı kullanın. Render tek başına alıcıyı yanıltabilir.",
     "Başlıklara eyalet adı doldurmayın. Etsy ilanı tüm ABD'de gösterir; bölge hedeflemesi doğru arama ifadesi ve sezon seçimiyle yapılır."
   ] },
   { id: "categories", title: "Yapay zekâyla satabileceğimiz ürünler", icon: "sparkles-outline", steps: [
     "Etsy, yapay zekâ destekli dijital ürüne izin verir. İki şart var: satıcının gerçek bir yaratıcı payı olmalı ve açıklamada yapay zekâ beyanı yazmalı. Uygulamanın talimatları ve ilanları ikisini de karşılar.",
-    "Uygulamada hazır 15 tür var. Her biri Stüdyo → PDF ürünü → türü seçerek ya da Trend'de o türün aramasında 'Bu nişte PDF hazırla' ile başlar:",
+    "Uygulamada hazır 17 tür var. Her biri Stüdyo → Dijital ürün → türü seçerek ya da Trend'de o türün aramasında 'Bu nişte dijital ürün hazırla' ile başlar:",
     "• Planlayıcı ve dijital (tablet) planlayıcı · • Günlük · • Boyama sayfaları · • Duvar sanatı · • Parti ve düğün oyunları · • Boş tarif kartı ve defteri · • Çocuk etkinlik sayfaları · • Junk journal kiti ve dijital kâğıt",
-    "• Yıllık takvim (yeni) · • Çıkartma (sticker) seti (yeni) · • Tebrik kartı ve hediye etiketi (yeni) · • Büyük puntolu bulmaca kitabı (yeni) · • Telefon duvar kâğıdı (yeni) · • Kiler ve ev düzeni etiketleri (yeni)",
+    "• Yıllık takvim · • Çıkartma (sticker) seti · • Tebrik kartı ve hediye etiketi · • Büyük puntolu bulmaca kitabı · • Kiler ve ev düzeni etiketleri",
+    "Telefona yüklenip kullanılan ürünler (basılmaz, kargo yok):",
+    "• Telefon duvar kâğıdı: kilit ve ana ekran.",
+    "• Telefon ikon ve widget paketi: ana ekranı baştan tasarlar.",
+    "• Bütçe / takip tablosu: Excel, Google Sheets ve telefon tablo uygulamalarında çalışır.",
+    "• Dijital planlayıcı: tablette ve telefonda not uygulamasıyla açılır.",
+    "• Çıkartma setinin PNG dosyaları: dijital planlayıcıya eklenir.",
+    "Gerçek telefon uygulaması (APK) Etsy'de satılacak bir ürün değil. Uygulamalar Google Play ve App Store'dan dağıtılır; Etsy yazılım veya abonelik erişimi satmayı da yasaklar. Fotoğraf filtresi (preset) paketleri ise bir markanın uygulamasına bağlıdır ve özel dosya biçimi ister; bu yüzden şimdilik eklenmedi.",
     "Yasak olanlar (yapay zekâyla üretilip satılamaz):",
     "• örgü, tığ, dikiş, nakış, kanaviçe, punch ve makrome desenleri;",
     "• yemek tarifleri ve talimat kılavuzları;",
@@ -2338,7 +2349,7 @@ const ETSY_GUIDE: Array<{ id: string; title: string; icon: any; steps: string[] 
   { id: "safe", title: "Etsy'den engellenmemek için", icon: "shield-outline", steps: [
     "Tek kişi, tek hesap: ikinci mağaza açmayın, kapatılmış bir hesaba aynı telefondan veya ağdan girmeyin, VPN kullanmayın.",
     "Kimlikteki ad, banka hesabındaki ad ve Etsy hesabındaki ad aynı olsun; adres gerçek olsun. Mağaza açıldıktan hemen sonra banka veya e-posta değiştirmeyin.",
-    "Yapay zekâyla yazılmış desen, tarif veya talimat kılavuzu satmayın (Etsy 22 Ekim 2026 kuralı). Yapay zekâ destekli PDF ürünlerinde açıklamadaki beyanı silmeyin.",
+    "Yapay zekâyla yazılmış desen, tarif veya talimat kılavuzu satmayın (Etsy 22 Ekim 2026 kuralı). Yapay zekâ destekli dijital ürünlerde açıklamadaki beyanı silmeyin.",
     "Başlıkta, etikette ve görselde marka ya da karakter adı kullanmayın (Disney, Harry Potter, iPad, GoodNotes, DMC…). Uygulama bunları otomatik çıkarır.",
     "Fiziksel üründe kendi gerçek fotoğrafınızı kullanın, en az biri düzenlenmemiş olsun. Dijital üründe görsellerden biri sayfaların gerçek önizlemesi olsun.",
     "İlana, mesaja veya pakete Shopier, WhatsApp ya da Instagram bağlantısı yazmayın; Etsy alıcıyı dışarı yönlendirmeyi yasaklar.",
@@ -3099,7 +3110,7 @@ function SellRouteContent({ online, channels, route, setRoute, setTab, back }: a
   if (route === "choose") return <>
     <Text style={styles.homeHello}>Ne satacaksınız?</Text>
     <ChoiceTile icon="cube-outline" title="Elimdeki bir ürünü" text="Tesbih, vintage eşya, örgü kazak/hırka ya da başka bir ürün. Fotoğrafını çekip satarsınız." onPress={() => setRoute("where")} />
-    <ChoiceTile icon="document-text-outline" title="PDF ürünü ya da kendi deseniniz" text="Planlayıcı, boyama sayfası, junk journal kiti gibi indirilebilir dosya ya da kendi yazıp denediğiniz örgü deseni. Kargo yok; bir kez hazırlanır, çok satılır." onPress={() => setRoute("digital")} />
+    <ChoiceTile icon="document-text-outline" title="Dijital ürün ya da kendi deseniniz" text="Planlayıcı, boyama sayfası, junk journal kiti gibi indirilebilir dosya ya da kendi yazıp denediğiniz örgü deseni. Kargo yok; bir kez hazırlanır, çok satılır." onPress={() => setRoute("digital")} />
     <ChoiceTile icon="bulb-outline" title="Bilmiyorum, fikir ver" text="Etsy'de şu an aranan ve rakibi az olan ürünleri gösteririm." onPress={() => setRoute("trend")} />
     <ShopListingsScorecard online={online} />
   </>;
@@ -3123,7 +3134,7 @@ function SellRouteContent({ online, channels, route, setRoute, setTab, back }: a
   </>;
   return <>
     {back}
-    {route === "digital" && <View style={styles.guardrail}><Ionicons name="information-circle-outline" size={20} color="#315B4C" /><Text style={[styles.guardrailText, { flex: 1 }]}>PDF işi üç adımdır: 1) Trend'den konu seçin ("Bu nişte PDF hazırla"), 2) Stüdyo'nun verdiği tek paketi ChatGPT ya da Claude'a gönderip dosyayı aldırın, 3) Dijital bölümünden Etsy'ye yükleyin. Desen için yapay zekâ kullanılmaz: yalnız kendi yazıp denediğiniz desen yüklenir.</Text></View>}
+    {route === "digital" && <View style={styles.guardrail}><Ionicons name="information-circle-outline" size={20} color="#315B4C" /><Text style={[styles.guardrailText, { flex: 1 }]}>Dijital ürün işi üç adımdır: 1) Trend'den konu seçin ("Bu nişte dijital ürün hazırla"), 2) Stüdyo'nun verdiği tek paketi ChatGPT ya da Claude'a gönderip dosyayı aldırın, 3) Dijital bölümünden Etsy'ye yükleyin. Desen için yapay zekâ kullanılmaz: yalnız kendi yazıp denediğiniz desen yüklenir.</Text></View>}
     <EtsyScreen key={route} online={online} channels={channels} initialSection={route === "digital" ? "Stüdyo" : "Trend"} />
   </>;
 }
@@ -3137,7 +3148,7 @@ function HelpScreen({ online, channels, onExpert, onSell }: any) {
     <EtsyGuide shopReady={shopReady} authorized={Boolean(etsy.authorized || etsy.connected)} />
     <View style={styles.card}>
       <Text style={styles.cardTitle}>Uzman mod</Text>
-      <Text style={styles.evidence}>Shopier yönetimi, Onaylar, Müşteriler, Pinterest, PDF stüdyosu ve ayrıntılı trend ekranları uzman moddadır. İstediğiniz zaman Özet ekranının altından basit moda dönebilirsiniz.</Text>
+      <Text style={styles.evidence}>Shopier yönetimi, Onaylar, Müşteriler, Pinterest, dijital ürün stüdyosu ve ayrıntılı trend ekranları uzman moddadır. İstediğiniz zaman Özet ekranının altından basit moda dönebilirsiniz.</Text>
       <Pressable style={[styles.secondaryButton, { alignSelf: "flex-start", marginTop: 10 }]} onPress={onExpert}><Text style={styles.secondaryButtonText}>Uzman moda geç</Text></Pressable>
     </View>
     <Text style={styles.versionText}>{appVersionText()}</Text>

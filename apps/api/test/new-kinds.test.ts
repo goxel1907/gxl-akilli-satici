@@ -16,6 +16,10 @@ test("every AI-allowed digital type is recognized from a buyer search", () => {
   assert.equal(inferPrintableKind("large print word search"), "puzzles");
   assert.equal(inferPrintableKind("christmas phone wallpaper"), "wallpaper");
   assert.equal(inferPrintableKind("pantry labels printable"), "labels");
+  assert.equal(inferPrintableKind("aesthetic app icons"), "app_icons");
+  assert.equal(inferPrintableKind("home screen icons widgets"), "app_icons");
+  assert.equal(inferPrintableKind("budget spreadsheet"), "spreadsheet");
+  assert.equal(inferPrintableKind("google sheets budget template"), "spreadsheet");
   // Eski türler bozulmaz.
   assert.equal(inferPrintableKind("recipe card printable"), "recipe");
   assert.equal(inferPrintableKind("budget planner printable"), "planner");
@@ -86,10 +90,29 @@ test("the package is written for the assistant the seller picked", () => {
 });
 
 test("every type fills all 13 Etsy tags even without trend data", () => {
-  const products: Record<string, string> = { planner: "daily planner", digital_planner: "digital planner", coloring: "adult coloring pages", wall_art: "wall art", party: "bridal shower games", recipe: "recipe card", journal: "gratitude journal", kids: "kids activity pages", paper_craft: "junk journal kit", calendar: "calendar", stickers: "planner stickers", cards: "christmas cards", puzzles: "word search", wallpaper: "phone wallpaper", labels: "pantry labels" };
-  assert.equal(printableKindOptions().length, 15);
+  const products: Record<string, string> = { planner: "daily planner", digital_planner: "digital planner", coloring: "adult coloring pages", wall_art: "wall art", party: "bridal shower games", recipe: "recipe card", journal: "gratitude journal", kids: "kids activity pages", paper_craft: "junk journal kit", calendar: "calendar", stickers: "planner stickers", cards: "christmas cards", puzzles: "word search", wallpaper: "phone wallpaper", labels: "pantry labels", app_icons: "app icons", spreadsheet: "budget spreadsheet" };
+  assert.equal(printableKindOptions().length, 17);
   for (const option of printableKindOptions()) {
     const listing = buildPrintableListing(normalizePrintablePlanInput({ kind: option.id, productType: products[option.id], seed: "z" }), "Test Name");
     assert.equal(listing.tags.length, 13, `${option.id}: ${listing.tags.join(", ")}`);
   }
+});
+
+test("phone app icons and spreadsheets are delivered as phone-ready files, never as print", () => {
+  const icons = outputs.find((row) => row.id === "app-icons/a")!;
+  assert.match(icons.brief.masterPrompt, /Icon sheet 1: 16 app icons in a 4x4 grid/);
+  assert.match(icons.brief.masterPrompt, /never a company logo, a letter, a number or an app name/);
+  assert.match(icons.brief.masterPrompt, /ICONS — every icon has the same size/);
+  assert.ok(!icons.listing.tags.some((tag) => /\b(ios|iphone|android|printable|pdf)\b/.test(tag)), icons.listing.tags.join(", "));
+  assert.doesNotMatch(icons.listing.description, /print at home|Actual size/i);
+  const sheet = outputs.find((row) => row.id === "budget-spreadsheet/a")!;
+  assert.match(sheet.brief.masterPrompt, /FORMULAS — in a copy, fill every input cell with sample numbers/);
+  assert.match(sheet.brief.masterPrompt, /NO MACROS — the file is \.xlsx/);
+  assert.match(sheet.brief.masterPrompt, /Upload set: .*\.zip \(the \.xlsx workbook and the quick-start PDF\)/);
+  assert.ok(!sheet.listing.tags.some((tag) => /\b(excel|google sheets|printable|pdf)\b/.test(tag)), sheet.listing.tags.join(", "));
+  assert.match(sheet.listing.description, /15 tabs|\d+ tabs/);
+  // Bütçe dışı tablo bütçe etiketi almaz.
+  const habit = buildPrintableListing(normalizePrintablePlanInput({ kind: "spreadsheet", productType: "habit tracker spreadsheet", seed: "h" }), "Habit Test Spreadsheet");
+  assert.ok(!habit.tags.some((tag) => /budget|debt|bill/.test(tag)), habit.tags.join(", "));
+  assert.equal(habit.tags.length, 13);
 });

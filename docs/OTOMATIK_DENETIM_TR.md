@@ -44,7 +44,7 @@ Sorun yoksa yeşil kutuda "Otomatik denetim: N kontrol, sorun yok" yazar.
 
 ## Nasıl doğrulandı?
 
-1. `apps/api/test/fixtures/output-matrix.ts` gerçek Etsy aramalarına benzeyen 25'ten fazla senaryoyu her biri 3 farklı tohumla üretir. Senaryolar PDF ürünleri, desenler, tesbih/vintage/örgü ürünleri ve reklam planlarıdır.
+1. `apps/api/test/fixtures/output-matrix.ts` gerçek Etsy aramalarına benzeyen 25'ten fazla senaryoyu her biri 3 farklı tohumla üretir. Senaryolar dijital ürünler (basılan ve telefona yüklenen), desenler, tesbih/vintage/örgü ürünleri ve reklam planlarıdır.
 2. `apps/api/test/output-guard.test.ts` bu üretimlerin hiçbirinde hata kalmamasını şart koşar.
 3. Aynı test, denetleyicinin bu üretimlerde düzeltecek bir şey bulmamasını da şart koşar. Yani metinler kaynağında temiz üretilir; denetleyici yalnız beklenmedik durumlar için güvenlik ağıdır.
 4. Kullanıcının ChatGPT'ye gönderdiği gerçek paketteki altı hata da testte yer alır; denetleyicinin bunları yakaladığı ayrıca test edilir.
@@ -71,8 +71,8 @@ Etsy yapay zekâ kurallarını 22 Ekim 2026'da sıkılaştırdı. Uygulama bu ku
   - Desen yalnız şu üç onayla yüklenebilir: kendi deseni, denendi, gerçek fotoğraf.
 - **Gerçek fotoğraf ve önizleme.**
   - Desen ilanında bitmiş ürünün gerçek, düzenlenmemiş fotoğrafı olmalı.
-  - Dijital üründe görsellerden biri PDF sayfalarının düzenlenmemiş önizlemesidir. Talimattaki C4 görseli bu yüzden görsel aracıyla değil, kodla ve gerçek sayfalardan yapılır.
-- **Yapay zekâ beyanı.** Yapay zekâ destekli PDF ürünlerinde açıklamada beyan bulunur. Etsy formu sorarsa "evet" seçilir.
+  - Dijital üründe görsellerden biri dosyaların düzenlenmemiş önizlemesidir. Talimattaki C4 görseli bu yüzden görsel aracıyla değil, kodla ve gerçek sayfalardan yapılır.
+- **Yapay zekâ beyanı.** Yapay zekâ destekli dijital ürünlerde açıklamada beyan bulunur. Etsy formu sorarsa "evet" seçilir.
 - **Robot ilanı yasak.** Uygulama yalnız taslak açar; yayına almadan önce ilanı siz kontrol edersiniz.
 - **Doğru ürün türü.** Planlayıcı, duvar sanatı, boyama sayfası, oyun, günlük ve tarif kartı "bitmiş ürün" olarak; desen ve kâğıt kiti "malzeme" olarak listelenir.
 - **Marka adı yok.** iPad, Android, GoodNotes, DMC gibi uyumluluk markaları başlığa ve etikete girmez; gerekirse açıklamada düz metin olarak yazılır.
@@ -83,18 +83,24 @@ Etsy yapay zekâ kurallarını 22 Ekim 2026'da sıkılaştırdı. Uygulama bu ku
 
 ## Yapay zekâyla satılabilen ürün türleri
 
-Uygulamada 15 dijital ürün türü var. Her türün kendi sayfa bütçesi, görsel planı, dosya seti ve otomatik kontrol listesi vardır:
+Uygulamada 17 dijital ürün türü var. Her türün kendi sayfa bütçesi, görsel planı, dosya seti ve otomatik kontrol listesi vardır:
 
 - **Mevcut türler:** planlayıcı, dijital planlayıcı, günlük, boyama, duvar sanatı, parti oyunları, boş tarif kartı, çocuk etkinlik sayfaları, junk journal kiti / dijital kâğıt.
-- **Yeni türler ve kontrolleri:**
+- **Basılan yeni türler ve kontrolleri:**
   - Yıllık takvim: tarihler kodla üretilir ve gerçek takvimle karşılaştırılır.
   - Çıkartma seti: basılır, kesilir, ayrıca şeffaf PNG olarak gelir.
   - Tebrik kartı ve hediye etiketi: 5x7 katlanır; katlama ve kesim işaretleri kontrol edilir.
   - Büyük puntolu bulmaca kitabı: her bulmaca kodla yeniden çözülür ve cevap anahtarı denetlenir.
-  - Telefon duvar kâğıdı: piksel ölçüleri kesindir; ilanda baskı kelimesi geçmez.
   - Kiler ve ev düzeni etiketleri: her kelimenin yazımı denetlenir.
+- **Telefona ve tablete yüklenen türler (baskı yok):**
+  - Telefon duvar kâğıdı: piksel ölçüleri kesindir; her ölçü ayrı ZIP'tir.
+  - İkon ve widget paketi: her sette 16 genel sembol, widget görselleri ve uyumlu duvar kâğıtları vardır. İkonlar 1024 piksel kare, şeffaf PNG'dir; marka logosu çizilmez.
+  - Bütçe tablosu: formüller, giriş hücreleri ve makrosuz dosya kontrol edilir; Excel ve Google Sheets'te açılır.
+  - Ekranda kullanılan türlerin (dijital planlayıcı dahil) ilanında "printable", "PDF" veya baskı kelimesi geçmez.
 
 Her tür trend verisi olmasa bile 13 etiketin tamamını doldurur.
+
+**Satılmayanlar ve nedeni:** Etsy dijital ürünlerde yazılım, uygulama erişimi ve abonelik satışını yasaklar. Bu yüzden APK veya telefon uygulaması satılmaz; telefona yüklenen ürünler duvar kâğıdı, ikon paketi, dijital planlayıcı ve tablo gibi dosyalardır. Lightroom preset gibi fotoğraf düzenleme ayarları da eklenmedi: yapay zekâ gerçek bir düzenleme ayarı dosyası üretemez ve denenmemiş preset iade ve kötü yorum getirir.
 
 Paket, Stüdyo'da seçilen yapay zekâya göre yazılır:
 - **ChatGPT:** görselleri kendi görsel aracıyla üretir.

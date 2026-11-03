@@ -167,6 +167,8 @@ function hashtagsFor(input: MarketingPlanInput, lang: "tr" | "en", fallback: str
   if (input.kind !== "pdf") return fallback;
   const name = `${input.productName} ${input.productNameEn || ""}`.toLowerCase();
   const rows: Array<[RegExp, string[], string[]]> = [
+    [/app icons?|icon pack|widget|ikon/, ["#appicons", "#homescreen", "#aestheticphone", "#widgets", "#etsyfinds"], ["#telefonikonu", "#dijitalürün"]],
+    [/spreadsheet|tablo/, ["#budgetspreadsheet", "#budgeting", "#personalfinance", "#moneytracker", "#etsyfinds"], ["#bütçe", "#dijitalürün"]],
     [/wallpaper|lock ?screen|duvar k[âa]ğıdı/, ["#phonewallpaper", "#lockscreen", "#aestheticwallpaper", "#digitaldownload", "#etsyfinds"], ["#telefonduvarkağıdı", "#dijitalürün"]],
     [/calendar|takvim/, ["#printablecalendar", "#wallcalendar", "#calendar", "#printables", "#etsyfinds"], ["#takvim", "#dijitalürün"]],
     [/sticker|çıkartma/, ["#plannerstickers", "#printablestickers", "#stickers", "#journaling", "#etsyfinds"], ["#sticker", "#dijitalürün"]],
