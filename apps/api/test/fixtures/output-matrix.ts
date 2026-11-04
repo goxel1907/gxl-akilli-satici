@@ -88,6 +88,28 @@ export const PRINTABLE_SCENARIOS: PrintableScenario[] = [
     examples: [example("Budget Spreadsheet, Monthly Budget Template, Paycheck Budget, Sinking Funds", 1500, 90)],
     signals: { formats: formats([["letter", 0.05]]), bundleShare: 0.3, pageCountMedian: 12, ipRisks: [] }
   }) },
+  // Program şablonları: rakip etiketlerinde marka (powerpoint, jeopardy, word) bulunur; hiçbiri ilana girmemeli.
+  { id: "christmas-trivia-slides", keyword: "christmas trivia game", kind: "slides", result: trend("christmas trivia game", "printables", {
+    kind: "slides",
+    topTags: tags([["christmas trivia", 28], ["powerpoint game", 22], ["christmas games", 18], ["family game night", 12], ["jeopardy style game", 9], ["holiday party game", 9], ["office party game", 7]]),
+    risingTags: rising([["virtual christmas game", 10]]),
+    examples: [example("Christmas Trivia Game, PowerPoint Game, Holiday Party Game, Family Game Night", 900, 60)],
+    signals: { formats: formats([["editable", 0.4]]), bundleShare: 0.2, pageCountMedian: 25, ipRisks: ["jeopardy"] }
+  }) },
+  { id: "classroom-review-slides", keyword: "classroom review game slides", kind: "slides", result: trend("classroom review game slides", "printables", {
+    kind: "slides",
+    topTags: tags([["review game", 24], ["classroom game", 20], ["google slides game", 16], ["test prep game", 10], ["teacher resources", 9], ["quiz game", 8]]),
+    risingTags: rising([["end of year review", 8]]),
+    examples: [example("Classroom Review Game Slides, Google Slides Game, Quiz Show Template", 600, 40)],
+    signals: { formats: formats([["editable", 0.5]]), bundleShare: 0.15, pageCountMedian: 30, ipRisks: [] }
+  }) },
+  { id: "resume-template", keyword: "resume template", kind: "resume", result: trend("resume template", "printables", {
+    kind: "resume",
+    topTags: tags([["resume template", 32], ["modern resume", 20], ["resume word", 16], ["cover letter", 14], ["professional resume", 12], ["minimalist resume", 9], ["google docs resume", 8]]),
+    risingTags: rising([["ats resume", 12]]),
+    examples: [example("Resume Template, Modern Resume, Cover Letter, Word and Google Docs Resume", 2500, 120)],
+    signals: { formats: formats([["letter", 0.6], ["a4", 0.5], ["editable", 0.8]]), bundleShare: 0.4, pageCountMedian: 4, ipRisks: [] }
+  }) },
   { id: "pantry-labels", keyword: "pantry labels printable", kind: "labels", result: trend("pantry labels printable", "printables", {
     kind: "labels",
     topTags: tags([["pantry labels", 30], ["printable labels", 18], ["kitchen labels", 14], ["jar labels", 12], ["organization labels", 10], ["minimalist labels", 8], ["spice labels", 7]]),

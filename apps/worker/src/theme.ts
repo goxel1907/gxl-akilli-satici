@@ -53,6 +53,8 @@ const TERMS: Array<[ThemeFamily, RegExp]> = [
 export const META_WORDS = new Set(["page", "pages", "kit", "kits", "pack", "packs", "bundle", "bundles", "set", "sets", "sheet", "sheets", "paper", "papers", "printable", "printables", "digital", "download", "downloads", "instant", "pdf", "svg", "png", "jpg", "file", "files", "commercial", "use", "personal", "editable", "template", "templates", "insert", "inserts", "bonus", "collection", "scrapbook", "clipart", "mega", "journal", "journals", "junk"]);
 // "commercial use" ve "editable" yanıltıcıdır: bu ürünler kişisel kullanım lisanslı ve düzenlenemez PDF olarak satılır.
 export const MISLEADING_FEATURE = /\b(commercial use|commercial license|personal use|editable|canva|fillable)\b/;
+// Düzenlenebilir program şablonlarında (sunum oyunu, özgeçmiş) "editable" gerçektir; diğer yanıltıcı ifadeler yine yasaktır.
+export const MISLEADING_EXCEPT_EDITABLE = /\b(commercial use|commercial license|personal use|canva|fillable)\b/;
 
 // Pazar özetinden (eski tohumlardan gelebilir) yanıltıcı teklifleri ve tema dışı ifadeleri çıkarır; liste dilbilgisi korunur.
 const MANUAL_OFFER_EN = ["a commercial-use license option", "a short video tutorial", "an editable template version"];
@@ -195,7 +197,8 @@ const PROPER_SOURCE: Array<[string, string, string?]> = [
   ["etsy", "Etsy"], ["pinterest", "Pinterest"], ["instagram", "Instagram"], ["facebook", "Facebook"], ["canva", "Canva"],
   ["us letter", "US Letter", "i"], ["half letter", "Half Letter"], ["a([3-6])", "A$1"], ["adhd", "ADHD"], ["diy", "DIY"], ["pdf", "PDF"],
   ["us terms", "US terms", "i"], ["english", "English"], ["american", "American"], ["turkish", "Turkish"], ["islamic", "Islamic"],
-  ["art deco", "Art Deco"], ["art nouveau", "Art Nouveau"], ["self care", "self-care"], ["zero based", "zero-based"], ["oltu", "Oltu"]
+  ["art deco", "Art Deco"], ["art nouveau", "Art Nouveau"], ["self care", "self-care"], ["zero based", "zero-based"], ["oltu", "Oltu"],
+  ["ats", "ATS", "i"], ["pptx", "PPTX", "i"], ["docx", "DOCX", "i"], ["xlsx", "XLSX", "i"]
 ];
 // Dosya adı, adres ve kod parçalarına (planner.pdf, etsy.com, page-01) dokunmaz.
 const PROPER: Array<[RegExp, string]> = PROPER_SOURCE.map(([core, replacement, flags]) => [new RegExp(`(?<![\\w./@-])${core}(?![\\w/@-]|\\.\\w)`, `g${flags || ""}`), replacement]);

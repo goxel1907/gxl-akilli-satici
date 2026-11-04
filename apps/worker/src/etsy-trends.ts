@@ -8,7 +8,9 @@ export type PatternCraft = "crochet" | "knitting" | "embroidery" | "cross_stitch
 
 // Kadınlara yönelik yazdırılabilir / dijital PDF ürün türleri.
 export type PrintableKind = "planner" | "digital_planner" | "coloring" | "wall_art" | "party" | "recipe" | "journal" | "kids" | "paper_craft"
-  | "calendar" | "stickers" | "cards" | "puzzles" | "wallpaper" | "labels" | "app_icons" | "spreadsheet";
+  | "calendar" | "stickers" | "cards" | "puzzles" | "wallpaper" | "labels" | "app_icons" | "spreadsheet"
+  // Program şablonları: PowerPoint/Google Slides oyunu ve Word/Google Docs özgeçmişi (alıcı kendi programında açar).
+  | "slides" | "resume";
 
 // Takvim yılı: ağustostan itibaren alıcı bir sonraki yılın takvimini arar (Kasım 2026 → 2027 takvimi).
 export function calendarYear(now = Date.now()): number {
@@ -69,6 +71,8 @@ export const TREND_NICHES: TrendNiche[] = [
   { id: "pantry-labels", keyword: "pantry labels printable", labelTr: "Kiler ve düzen etiketleri", group: "printables", kind: "labels" },
   { id: "app-icons", keyword: "aesthetic app icons", labelTr: "Telefon ikon ve widget paketi", group: "printables", kind: "app_icons" },
   { id: "budget-spreadsheet", keyword: "budget spreadsheet", labelTr: "Bütçe tablosu (Excel / Google Sheets)", group: "printables", kind: "spreadsheet" },
+  { id: "trivia-slides", keyword: "trivia game slides", labelTr: "Sunum oyunu: bilgi yarışması (PowerPoint / Google Slides)", group: "printables", kind: "slides" },
+  { id: "resume-template", keyword: "resume template", labelTr: "Özgeçmiş şablonu (Word / Google Docs)", group: "printables", kind: "resume" },
   { id: "quilt-pattern", keyword: "quilt pattern pdf", labelTr: "Kapitone / yorgan deseni", group: "patterns", craft: "sewing" },
   { id: "crochet-doily", keyword: "crochet doily pattern", labelTr: "Tığ işi dantel / sehpa örtüsü", group: "patterns", craft: "crochet" },
   { id: "crochet-bag", keyword: "crochet bag pattern", labelTr: "Tığ işi çanta", group: "patterns", craft: "crochet" },
@@ -105,11 +109,14 @@ export function isTrendGroup(value: unknown): value is TrendGroup {
 }
 
 const CRAFT_IN_KEYWORD = /\b(crochet|knit|knitting|sewing|sew|embroidery|cross stitch|macrame|punch needle|amigurumi|quilt|quilting|needlepoint)\b/i;
-const PRINTABLE_IN_KEYWORD = /\b(printables?|planners?|journal|journaling|coloring|colouring|wall art|worksheets?|tracker|checklist|recipe cards?|invitations?|games|digital paper|clipart|stickers?|templates?|calendars?|workbook|flash ?cards|greeting cards?|gift tags?|word search|sudoku|crosswords?|puzzles?|wallpapers?|lock ?screen|labels?|app icons?|icon packs?|widgets?|spreadsheets?)\b/i;
+const PRINTABLE_IN_KEYWORD = /\b(resumes?|cover letters?|powerpoint|google slides|pptx|slides|printables?|planners?|journal|journaling|coloring|colouring|wall art|worksheets?|tracker|checklist|recipe cards?|invitations?|games|digital paper|clipart|stickers?|templates?|calendars?|workbook|flash ?cards|greeting cards?|gift tags?|word search|sudoku|crosswords?|puzzles?|wallpapers?|lock ?screen|labels?|app icons?|icon packs?|widgets?|spreadsheets?)\b/i;
 
 export function inferPrintableKind(keyword: string): PrintableKind | undefined {
   const value = keyword.toLowerCase();
   if (/\bdigital planner|goodnotes|notability|hyperlinked\b/.test(value)) return "digital_planner";
+  // Program şablonları önce bakılır: "trivia game slides" parti oyunu değil, sunum oyunudur.
+  if (/\b(resumes?|cv templates?|cover letters?|curriculum vitae)\b/.test(value)) return "resume";
+  if (/\b(powerpoint|google slides|keynote|pptx|slides?|slideshow)\b/.test(value)) return "slides";
   if (/\bapp icons?\b|\bicon packs?\b|\bwidgets?\b|\bhome ?screen icons?\b|\bphone icons?\b/.test(value)) return "app_icons";
   if (/\bspreadsheets?\b|\bgoogle sheets\b|\bexcel\b|\bxlsx\b/.test(value)) return "spreadsheet";
   if (/\bwallpapers?\b|\block ?screen\b|\bhome ?screen\b|\bphone backgrounds?\b/.test(value)) return "wallpaper";
