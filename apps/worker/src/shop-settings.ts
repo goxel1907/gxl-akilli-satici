@@ -32,12 +32,14 @@ export const SHOP_PRESETS: Record<ShopAudience, ShopPreset> = {
   planners: {
     labelTr: "Planlayıcı ve PDF alıcıları (önerilen)",
     audienceTr: "ABD'de düzen, alışkanlık ve sakin bir gün arayan kadınlar: anneler, öğrenciler, çalışan kadınlar.",
-    tagline: "Printable planners & trackers for calm, organized days",
-    title: "Printable Planners, Trackers & Junk Journal Kits",
-    announcement: "Welcome to GXL Market Studio! We design calm, practical printables for real, busy lives: undated planners, gentle habit and life trackers, and printable kits for paper crafts. Every file is an instant download that prints cleanly at home on US Letter or A4. Questions about printing or sizes? Send us a message; we're happy to help.",
+    tagline: "Printable planners, party games & digital templates",
+    // Mağaza başlığı Etsy aramasında da okunur (en fazla 55 karakter): mağazanın 19 türünü kapsayan alıcı ifadeleri.
+    title: "Printable Planners, Party Games & Digital Templates",
+    announcement: "Welcome to GXL Market Studio! We design calm, practical digital downloads for real, busy lives: undated planners and trackers, holiday and party games, calendars and cards, budget spreadsheets and editable templates. Every file is an instant download from your Etsy Purchases page; printables print cleanly at home on US Letter or A4. New designs arrive every week, so tap the heart to follow the shop. Questions about printing, sizes or editing? Send us a message; we reply within 24 hours.",
     saleMessage: "Thank you for your order from GXL Market Studio! If you have any questions about your item, just reply to this message and we will help.",
     digitalSaleMessage: DIGITAL_THANKS,
-    sections: ["Printable Planners", "Habit & Life Trackers", "Junk Journal Kits"]
+    // Bölümler Etsy'de ilan girdikçe görünür; mağazanın ana türleri ve mevsim koleksiyonu.
+    sections: ["Christmas & Holiday", "Printable Planners", "Party & Trivia Games", "Calendars & Cards", "Budget & Templates", "Kids Activities", "Junk Journal Kits"]
   },
   crafts: {
     labelTr: "Örgü ve el işi yapanlar",

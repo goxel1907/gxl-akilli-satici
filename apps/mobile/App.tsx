@@ -2149,12 +2149,14 @@ function PinterestPanel({ online }: any) {
   const [listingUrl, setListingUrl] = useState("");
   const [customLink, setCustomLink] = useState("");
   const [busy, setBusy] = useState<string>();
+  const [manual, setManual] = useState<any[]>([]);
   const load = async () => {
     setLoading(true);
     try {
-      const [nextStatus, queue] = await Promise.all([apiJson("/api/pinterest/status", { headers: apiHeaders() }), apiJson("/api/pinterest/queue", { headers: apiHeaders() })]);
+      const [nextStatus, queue, shares] = await Promise.all([apiJson("/api/pinterest/status", { headers: apiHeaders() }), apiJson("/api/pinterest/queue", { headers: apiHeaders() }), apiJson("/api/pinterest/manual", { headers: apiHeaders() }).catch(() => ({ items: [] }))]);
       setStatus(nextStatus);
       setJobs(queue.jobs || []);
+      setManual(shares.items || []);
     } catch (error) { Alert.alert("Pinterest durumu alınamadı", errorText(error)); }
     finally { setLoading(false); }
   };
@@ -2193,6 +2195,15 @@ function PinterestPanel({ online }: any) {
     } catch (error) { Alert.alert("Gönderilemedi", errorText(error)); }
     finally { setBusy(undefined); }
   };
+  // API onayı olmadan: Pinterest'in pin oluşturma sayfası görsel, link ve açıklamayla açılır; pano seçilip "Kaydet"e basılır.
+  const markShared = async (item: any) => {
+    setBusy(`shared-${item.jobId}`);
+    try {
+      await apiJson(`/api/pinterest/queue/${item.jobId}/shared`, { method: "POST", headers: apiHeaders(true), body: JSON.stringify({ confirm: true }) });
+      await load();
+    } catch (error) { Alert.alert("Kaydedilemedi", errorText(error)); }
+    finally { setBusy(undefined); }
+  };
   const dateText = (value: string) => new Date(value).toLocaleString("tr-TR", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
   return <>
     <View style={styles.guardrail}><Ionicons name="logo-pinterest" size={20} color="#B5333D" /><Text style={[styles.guardrailText, { flex: 1 }]}>Etsy taslağı oluşan her ürün için 3 pin planlanır. İlan Etsy'de yayına girince pinler ilanın görseli, satış linki, başlığı, açıklaması, anahtar kelimeleri ve hashtag'leriyle 0., 2. ve 5. günlerde otomatik atılır.</Text></View>
@@ -2207,6 +2218,21 @@ function PinterestPanel({ online }: any) {
       <Text style={styles.small}>Zamanlandı {status.queue?.scheduled || 0} · Yayın bekleniyor {status.queue?.waiting || 0} · Pinlendi {status.queue?.posted || 0} · Hata {status.queue?.failed || 0}</Text>
       <Text style={styles.warningText}>{status.note}</Text>
     </View>}
+    <View style={styles.analysisCard}>
+      <Text style={styles.cardTitle}>Elle paylaş (API onayı gerekmez)</Text>
+      <Text style={styles.small}>Pinterest otomatik pin onayını verene kadar pinleri buradan paylaşın. "Pinterest'te paylaş" dokunuşu pini görseli, satış linki ve açıklamasıyla hazır açar; panoyu seçip "Kaydet"e basın, sonra burada "Paylaştım" deyin. Zamanı gelenler üstte; günde 1-2 pin yeter.</Text>
+      {!manual.length && <Text style={styles.evidence}>Paylaşılacak pin yok. Etsy'de yayına giren ürünlerin pinleri burada görünür.</Text>}
+      {manual.map((item) => <View style={styles.visualRow} key={item.jobId}>
+        <Text style={styles.rowTitle} numberOfLines={2}>{item.title || `Etsy ilanı #${item.listingId}`}</Text>
+        <Text style={styles.small}>Pin {item.pinIndex + 1}/3 · Pano: {item.boardName} · {item.due ? "Zamanı geldi" : `Önerilen: ${dateText(item.dueAt)}`}</Text>
+        {!item.ready && <Text style={styles.warningText}>{item.reason}</Text>}
+        {item.ready && item.aiAssisted && <Text style={styles.evidence}>Pinterest yapay zekâ etiketi sorarsa "AI modified" seçin.</Text>}
+        {item.ready && <View style={styles.inlineActions}>
+          <Pressable style={styles.secondaryButton} onPress={() => openUrl(item.shareUrl, "Pinterest'te paylaş")}><Text style={styles.secondaryButtonText}>Pinterest'te paylaş</Text></Pressable>
+          <Pressable style={[styles.secondaryButton, busy === `shared-${item.jobId}` && styles.primaryDisabled]} disabled={busy === `shared-${item.jobId}`} onPress={() => markShared(item)}><Text style={styles.secondaryButtonText}>Paylaştım</Text></Pressable>
+        </View>}
+      </View>)}
+    </View>
     <View style={styles.analysisCard}>
       <Text style={styles.cardTitle}>Mevcut bir Etsy ilanını pinle</Text>
       <Field label="Etsy ilan linki veya numarası" value={listingUrl} onChangeText={setListingUrl} placeholder="https://www.etsy.com/listing/1234567890/..." autoCapitalize="none" />
@@ -2282,7 +2308,9 @@ const ETSY_GUIDE: Array<{ id: string; title: string; icon: any; steps: string[] 
     "Yeni Pinterest uygulamaları 'Trial access' ile başlar; bu aşamada pinleri yalnızca siz görürsünüz. Herkese açık pin için developers.pinterest.com'da uygulamanızdan Standard access başvurusu yapın. Başvuruya bağlanma ekranını ve bir pinin oluşturulup panoda göründüğünü gösteren kısa bir ekran kaydı ekleyin; bu uygulamanın Pinterest bölümü bunu göstermek için yeterlidir.",
     "Sonrası otomatiktir: Etsy taslağı oluşan her ürün için 3 pin planlanır; ilan Etsy'de yayına girince pinler ilanın görseli, satış linki, başlığı, açıklaması, anahtar kelimeleri ve hashtag'leriyle 0., 2. ve 5. günlerde atılır. Pinler ürün türüne göre otomatik açılan panolara (ör. 'Printable Planners & Trackers') eklenir.",
     "Pinterest'te ayrı bir etiket alanı yoktur; aramada bulunmayı başlıktaki, açıklamadaki ve alt metindeki anahtar kelimeler ile pano adı sağlar. Etsy etiketlerinden en fazla 5 hashtag açıklamanın sonuna eklenir; marka/telif riski taşıyanlar eklenmez.",
-    "Mevcut bir Etsy ilanını da pinleyebilirsiniz: Pinterest bölümüne ilan linkini yapıştırın; isterseniz Shopier gibi farklı bir satış linki girin."
+    "Mevcut bir Etsy ilanını da pinleyebilirsiniz: Pinterest bölümüne ilan linkini yapıştırın; isterseniz Shopier gibi farklı bir satış linki girin.",
+    "Bağlanamıyorsanız veya onay gelmediyse: developers.pinterest.com → My apps → uygulamanız. Orada erişim düzeyi yazar (Trial / Standard). Trial ise 'Upgrade' ile Standard erişim isteyin. Başvuruda uygulamanın Pinterest'e bağlanmasını ve bir pin oluşturmasını gösteren kısa bir ekran videosu istenir; video bağlanma ekranını göstermezse başvuru çoğunlukla reddedilir. Videoyu telefonun ekran kaydıyla çekebilirsiniz: Bağla → Pinterest izin ekranı → izin ver → Şimdi gönder.",
+    "Onay beklerken satış durmaz: Pinterest bölümündeki 'Elle paylaş' listesi her pini görseli, satış linki ve açıklamasıyla hazırlar. 'Pinterest'te paylaş' deyip panoyu seçin, 'Kaydet'e basın, sonra 'Paylaştım' deyin. Bu yol için bağlantı veya onay gerekmez."
   ] },
   { id: "pattern", title: "El işi deseni satışı adım adım", icon: "document-text-outline", steps: [
     "Etsy 22 Ekim 2026'dan beri yapay zekâyla yazılmış deseni (örgü, tığ, dikiş, nakış, kanaviçe, punch, makrome) yasakladı; ilanda belirtmek de yetmiyor. Uygulama artık yapay zekâya desen yazdırmaz.",

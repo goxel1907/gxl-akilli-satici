@@ -184,3 +184,33 @@ test("a board deleted on Pinterest is forgotten and the pin is retried", async (
   assert.equal(result.status, "scheduled");
   assert.deepEqual(JSON.parse(kv.values.get("pinterest:boards")!), {});
 });
+
+test("without API approval every pin can be shared by hand with its image, sale link and text", async () => {
+  const { manualPinShares, markPinShared } = await import("../../worker/src/pinterest.js");
+  const kv = memoryKv();
+  // Pinterest bağlı değil: elle paylaşım yine çalışır.
+  await enqueueListingPins(kv.store, { listingId: 123456789, boardName: "Printable Planners & Trackers", pins: [{ title: "Budget Planner Printable | Sinking Funds", description: "Plan your money with sinking funds." }], aiAssisted: true }, NOW);
+  let state = "draft";
+  const calls: string[] = [];
+  const fetcher = (async (input: string | URL | Request) => { calls.push(String(input)); return Response.json(listing(state)); }) as typeof fetch;
+  const waiting = await manualPinShares(env(kv.store), kv.store, fetcher, NOW);
+  assert.equal(waiting.items.length, 3);
+  assert.ok(waiting.items.every((item) => !item.ready && /yayında değil/.test(item.reason || "")));
+  assert.equal(calls.length, 1, "one Etsy request for the three pins of one listing");
+  state = "active";
+  const ready = await manualPinShares(env(kv.store), kv.store, fetcher, NOW);
+  const first = ready.items[0] as { ready: boolean; due: boolean; shareUrl: string; aiAssisted: boolean; jobId: string };
+  assert.equal(first.ready, true);
+  assert.equal(first.due, true);
+  assert.equal(first.aiAssisted, true);
+  const share = new URL(first.shareUrl);
+  assert.equal(share.origin + share.pathname, "https://www.pinterest.com/pin/create/button/");
+  assert.match(share.searchParams.get("url") || "", /^https:\/\/www\.etsy\.com\/listing\/123456789\?utm_source=pinterest/);
+  assert.equal(share.searchParams.get("media"), "https://i.etsystatic.com/tall.jpg");
+  assert.match(share.searchParams.get("description") || "", /^Budget Planner Printable \| Sinking Funds\. Plan your money/);
+  assert.doesNotMatch(share.searchParams.get("description") || "", /disney/i);
+  await markPinShared(kv.store, first.jobId, NOW);
+  const after = await manualPinShares(env(kv.store), kv.store, fetcher, NOW);
+  assert.equal(after.items.length, 2);
+  assert.equal((await listPinJobs(kv.store)).find((job) => job.id === first.jobId)?.manual, true);
+});

@@ -27,6 +27,23 @@ Etsy'de yayına giren her ürün, kendi satış linki, görseli, başlığı, a�
 
 **Etiketler hakkında:** Pinterest'te Etsy'deki gibi ayrı bir etiket alanı yoktur. Aramada bulunmayı başlık, açıklama ve alt metindeki anahtar kelimeler ile pano adı sağlar. Hashtag'ler açıklamanın sonuna eklenir. Marka/telif riski taşıyan kelimeler (Disney vb.) hiçbir zaman eklenmez.
 
+## Onay beklerken: elle paylaş (API gerekmez)
+
+Pinterest yeni geliştirici uygulamalarına önce **Trial** erişim verir. Bu erişimle açılan pinleri yalnız hesap sahibi görür. Herkese açık otomatik pin için **Standard** erişim onayı gerekir.
+
+Onay gelene kadar uygulama pinleri yine hazırlar:
+1. Etsy → Pinterest → **Elle paylaş** listesini açın. Zamanı gelen pinler üsttedir.
+2. **Pinterest'te paylaş** düğmesine basın. Pinterest'in pin oluşturma sayfası; ilanın görseli, satış linki (utm etiketli) ve hazır açıklamayla açılır.
+3. Panoyu seçip **Kaydet**'e basın. Yapay zekâ etiketi sorulursa "AI modified" seçin.
+4. Uygulamaya dönüp **Paylaştım** deyin. Pin sıradan düşer.
+
+Bu yol için Pinterest bağlantısı, uygulama anahtarı veya onay gerekmez. Günde 1-2 pin yeterlidir.
+
+**Standard erişim başvurusu:**
+- developers.pinterest.com → My apps → uygulama. Erişim düzeyi orada yazar.
+- Trial ise **Upgrade** ile Standard erişim isteyin.
+- Başvuruda uygulamanın Pinterest'e bağlanmasını (OAuth izin ekranı dahil) ve bir pin oluşturmasını gösteren kısa bir ekran videosu istenir. Video izin ekranını göstermezse başvuru çoğunlukla reddedilir.
+
 ## Kurulum (bir kez)
 
 1. **Pinterest işletme hesabı:** `pinterest.com/business` adresinden ücretsiz bir işletme hesabı açın veya mevcut hesabınızı işletme hesabına çevirin.

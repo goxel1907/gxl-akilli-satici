@@ -51,6 +51,8 @@ import {
   getPinterestStatus,
   handlePinterestCallback,
   listPinJobs,
+  manualPinShares,
+  markPinShared,
   parseListingId,
   PinterestError,
   processPinQueue,
@@ -584,6 +586,17 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
         link: input.link ? String(input.link) : undefined
       });
       return json(201, { jobs, alreadyQueued: jobs.length === 0 });
+    }
+    if (request.method === "GET" && url.pathname === "/api/pinterest/manual") {
+      return json(200, await manualPinShares(env, env.ETSY_OAUTH as unknown as PinterestStore | undefined));
+    }
+    const pinSharedMatch = url.pathname.match(/^\/api\/pinterest\/queue\/([A-Za-z0-9_-]{8,32})\/shared$/);
+    if (pinSharedMatch && request.method === "POST") {
+      const input = await readBody(request);
+      const blocked = requireConfirmedWrite(env, input, "Pini paylaşıldı olarak işaretleme");
+      if (blocked) return blocked;
+      if (!env.ETSY_OAUTH) return json(503, { error: "Güvenli KV deposu bağlı değil." });
+      return json(200, { job: await markPinShared(env.ETSY_OAUTH as unknown as PinterestStore, pinSharedMatch[1]) });
     }
     const pinRunMatch = url.pathname.match(/^\/api\/pinterest\/queue\/([A-Za-z0-9_-]{8,32})\/run$/);
     if (pinRunMatch && request.method === "POST") {
