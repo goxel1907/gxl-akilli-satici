@@ -970,14 +970,14 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
   } catch (error) {
     console.error(error);
     const code = error instanceof Error ? error.message : "";
-    if (code === "PAYLOAD_TOO_LARGE") return json(413, { error: "İstek çok büyük; PDF en fazla 20 MB, görseller sıkıştırılmış olmalıdır." });
+    if (code === "PAYLOAD_TOO_LARGE") return json(413, { error: "İstek çok büyük; her dosya (PDF veya ZIP) en fazla 20 MB olmalı ve görseller sıkıştırılmış olmalıdır." });
     if (code === "AI_PROVIDER_NOT_CONFIGURED") return json(503, { error: "Gemini anahtarı henüz sunucuya eklenmedi." });
     if (code === "AI_FREE_QUOTA_EXCEEDED") return json(429, { error: "Ücretsiz Gemini kotası doldu. Kota yenilenince tekrar deneyin; ücretli işlem yapılmadı." });
     if (code === "AI_PROVIDER_REQUEST_FAILED") return json(502, { error: "Gemini geçici olarak yanıt vermedi. Bir süre sonra tekrar deneyin." });
     if (code === "INVALID_IMAGE_INPUT") return json(400, { error: "Görsel biçimi veya boyutu uygun değil." });
     if (code === "PATTERN_CRAFT_INVALID") return json(400, { error: "El işi türünü seçin." });
     if (code === "PRODUCT_TITLE_REQUIRED") return json(400, { error: "Ürün adı gerekli." });
-    if (code === "PRINTABLE_KIND_INVALID") return json(400, { error: "PDF türünü seçin." });
+    if (code === "PRINTABLE_KIND_INVALID") return json(400, { error: "Ürün türünü seçin." });
     if (code === "PATTERN_KEYWORD_REQUIRED") return json(400, { error: "Desen için bir Etsy araması seçin." });
     if (code === "PATTERN_PRODUCT_REQUIRED") return json(400, { error: "Ürün türünü yazın (ör. doily, slippers)." });
     if (error instanceof DigitalDeliveryError) return json(error.status, { error: error.message });

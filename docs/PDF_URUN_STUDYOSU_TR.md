@@ -59,7 +59,7 @@ Kartta ayrıca rakiplerin format kapsamı (ör. "US Letter %17 · A5 %17 · Pake
 
 ## 3. Trendden otomatik doldurma
 
-**Trende gitmeden de çalışır:** Stüdyo'yu açtığınızda, "PDF ürünü / El işi deseni" seçimini değiştirdiğinizde veya bir PDF türüne ya da el işi türüne bastığınızda, sistem o türde önbellekteki en yüksek puanlı aramayı (sabit nişler ve keşfedilen aramalar arasından) kendisi seçer ve alanları doldurur. Son seçilen aramalar atlanır; **Başka arama seç** sıradaki güçlü aramayı getirir.
+**Trende gitmeden de çalışır:** Stüdyo'yu açtığınızda, "Dijital ürün / El işi deseni" seçimini değiştirdiğinizde veya bir PDF türüne ya da el işi türüne bastığınızda, sistem o türde önbellekteki en yüksek puanlı aramayı (sabit nişler ve keşfedilen aramalar arasından) kendisi seçer ve alanları doldurur. Son seçilen aramalar atlanır; **Başka arama seç** sıradaki güçlü aramayı getirir.
 
 **Rakipleri geçmek için** kartı:
 - **Fiyat:** Rakip ortanca fiyatı; ilk yorumlara kadar %12 altı başlangıç fiyatı (.49/.99 biten) ve set fiyatı (yaklaşık 2,3 katı). Önerilen fiyat yükleme formuna otomatik gelir.

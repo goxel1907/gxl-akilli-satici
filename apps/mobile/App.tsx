@@ -753,8 +753,11 @@ const WHATSAPP_NUMBER_KEY = "gxl.whatsappNumber";
 function guessSalesKind(title: string): string {
   if (/tesbih|tespih|kehribar|oltu|misbaha/i.test(title)) return "tesbih";
   if (/vintage|antika|eski|nostalji/i.test(title)) return "vintage";
+  // Desen, el örgüsü üründen önce bakılır ("Crochet Pattern PDF" bir desendir, örgü ürün değil).
+  if (/desen|pattern/i.test(title) && /crochet|knit|sew|embroider|cross stitch|macrame|punch needle|amigurumi|quilt|tığ|örgü|dikiş|nakış|kanaviçe|makrome/i.test(title)) return "pattern";
   if (/kazak|hırka|yelek|bere|atkı|örgü|tığ/i.test(title)) return "knitwear";
-  if (/planlayıcı|planner|pdf|boyama/i.test(title)) return "pdf";
+  // Uygulamanın 19 dijital ürün türü: basılan, telefona yüklenen ve programda açılan şablonlar.
+  if (/planlayıcı|planner|pdf|boyama|coloring|printable|digital|calendar|takvim|sticker|çıkartma|card|kart|trivia|game|oyun|resume|özgeçmiş|spreadsheet|tablo|wallpaper|duvar kâğıdı|icon|ikon|template|şablon|journal|günlük|label|etiket|puzzle|bulmaca|word search|wall art|recipe|tarif|worksheet/i.test(title)) return "pdf";
   if (/desen|pattern/i.test(title)) return "pattern";
   return "other";
 }
@@ -1641,7 +1644,7 @@ function PrintableStudio({ online, seed, seeding, onReseed, onPickKind, onUpload
       {listing.warnings.map((warning: string) => <Text style={styles.warningText} key={warning}>• {warning}</Text>)}
       <View style={styles.inlineActions}>
         <Pressable style={styles.secondaryButton} onPress={() => shareChecked(plan?.quality, `${listing.title}\n\n${listing.description}\n\nTags: ${listing.tags.join(", ")}`)}><Text style={styles.secondaryButtonText}>İlan metnini kopyala</Text></Pressable>
-        <Pressable style={styles.secondaryButton} onPress={() => onUpload({ name: brief?.name, kind, productType, listing, pins: brief?.pins, priceUsd: seed?.competition?.launchPriceUsd })}><Text style={styles.secondaryButtonText}>PDF hazırsa yükle →</Text></Pressable>
+        <Pressable style={styles.secondaryButton} onPress={() => onUpload({ name: brief?.name, kind, productType, listing, pins: brief?.pins, priceUsd: seed?.competition?.launchPriceUsd })}><Text style={styles.secondaryButtonText}>Dosyalar hazırsa yükle →</Text></Pressable>
       </View>
     </View>}
   </>;
@@ -1896,7 +1899,7 @@ function StudioPanel({ online, active, seed, onUpload, etsyReady }: any) {
       {listing.warnings.map((warning: string) => <Text style={styles.warningText} key={warning}>• {warning}</Text>)}
       <View style={styles.inlineActions}>
         <Pressable style={styles.secondaryButton} onPress={() => shareChecked(plan?.quality, `${listing.title}\n\n${listing.description}\n\nTags: ${listing.tags.join(", ")}`)}><Text style={styles.secondaryButtonText}>İlan metnini kopyala</Text></Pressable>
-        <Pressable style={styles.secondaryButton} onPress={() => onUpload({ name: brief?.name || patternName.trim() || listing.title.split(",")[0], craft, productType, listing, priceUsd: competition?.launchPriceUsd, ownPattern: true })}><Text style={styles.secondaryButtonText}>PDF hazırsa yükle →</Text></Pressable>
+        <Pressable style={styles.secondaryButton} onPress={() => onUpload({ name: brief?.name || patternName.trim() || listing.title.split(",")[0], craft, productType, listing, priceUsd: competition?.launchPriceUsd, ownPattern: true })}><Text style={styles.secondaryButtonText}>Dosyalar hazırsa yükle →</Text></Pressable>
       </View>
     </View>}
     </>}
@@ -2112,16 +2115,17 @@ function DigitalPanel({ online, shopReady, prefill, onPrefillUsed }: any) {
   ]);
   return <>
     <View style={styles.guardrail}><Ionicons name="lock-closed-outline" size={20} color="#315B4C" /><Text style={[styles.guardrailText, { flex: 1 }]}>Dosyalar herkese açık değildir. Etsy'de dosyayı Etsy yalnızca ödeme yapan alıcıya verir. Shopier ve doğrudan satışlarda her sipariş için sınırlı indirmeli, süreli ve kapatılabilir özel bağlantı oluşturulur.</Text></View>
-    <View style={styles.sectionHeading}><Text style={styles.sectionTitle}>Dijital desenler</Text><Pressable style={[styles.addButton, !online && styles.primaryDisabled]} disabled={!online} onPress={() => setFormVisible(true)}><Ionicons name="add" size={18} color="white" /><Text style={styles.addButtonText}>PDF yükle</Text></Pressable></View>
+    <View style={styles.sectionHeading}><Text style={styles.sectionTitle}>Dijital ürünler</Text><Pressable style={[styles.addButton, !online && styles.primaryDisabled]} disabled={!online} onPress={() => setFormVisible(true)}><Ionicons name="add" size={18} color="white" /><Text style={styles.addButtonText}>PDF yükle</Text></Pressable></View>
     {loading && <ActivityIndicator color="#C88B47" />}
-    {!loading && !products.length && <Empty icon="document-text-outline" title="Henüz dijital desen yok" text="Stüdyo'da ilanı hazırlayıp PDF ve render görsellerini buradan yükleyin." />}
+    {!loading && !products.length && <Empty icon="document-text-outline" title="Henüz dijital ürün yok" text="Stüdyo'da ilanı hazırlayın; yapay zekânın verdiği dosyaları ve ilan görsellerini buradan yükleyin." />}
     {products.map((product) => <View style={styles.card} key={product.id}>
       <View style={styles.shopierProductTop}>
         {product.images?.[0] ? <Image source={{ uri: product.images[0].url }} style={styles.productImagePhoto} /> : <View style={styles.productImage}><Ionicons name="document-text" size={26} color="#C88B47" /></View>}
         <View style={{ flex: 1 }}><Text style={styles.cardTitle}>{product.name}</Text><Text style={styles.small}>{product.files?.length > 1 ? `${product.files.length} dosya · ${Math.round(product.files.reduce((sum: number, file: any) => sum + file.size, 0) / 1024)} KB` : `${product.fileName} · ${Math.round(product.fileSize / 1024)} KB`} · {product.images?.length || 0} görsel</Text><Text style={styles.price}>{[product.prices?.usd ? `${product.prices.usd} USD` : "", product.prices?.try ? `${product.prices.try} TL` : ""].filter(Boolean).join(" · ")}</Text></View>
       </View>
       <Text style={styles.small} numberOfLines={2}>{product.listing?.title}</Text>
-      {!product.flags?.testMade && <Text style={styles.warningText}>• Test edilmedi</Text>}
+      {/* "Denendi" yalnız desen için anlamlıdır (Etsy kuralı); hazır dijital üründe uyarı gösterilmez. */}
+      {!!product.craft && !product.flags?.testMade && <Text style={styles.warningText}>• Desen denenmedi</Text>}
       {!!product.etsy?.error && <Text style={styles.warningText}>• Etsy: {product.etsy.error}</Text>}
       <View style={styles.inlineActions}>
         <Pressable style={[styles.secondaryButton, busy === product.id && styles.primaryDisabled]} disabled={busy === product.id} onPress={() => etsyDraft(product)}><Text style={styles.secondaryButtonText}>{product.etsy?.fileUploaded ? "Etsy taslağını aç" : product.etsy?.listingId ? "Etsy yüklemesini tamamla" : "Etsy taslağı oluştur"}</Text></Pressable>
@@ -2266,7 +2270,7 @@ const ETSY_GUIDE: Array<{ id: string; title: string; icon: any; steps: string[] 
     "Siparişleri ve mesajları Etsy'nin 'Sell on Etsy' uygulamasından takip edin. Mesajlara 24 saat içinde dönmek Star Seller rozetini korur."
   ] },
   { id: "discovery", title: "Otomatik keşif nasıl çalışır?", icon: "sync-circle-outline", steps: [
-    "Başlangıç listesi: 28 sabit niş ve yaklaşan ABD sezonlarının aramaları.",
+    "Başlangıç listesi: 58 sabit niş (29 dijital ürün, 17 desen, 6 tesbih, 6 vintage) ve yaklaşan ABD sezonlarının aramaları.",
     "Her taramada Etsy'de son 120 günde açılıp hızla favori toplayan ilanların etiketleri okunur. Bu etiketlerdeki 2+ kelimelik arama ifadeleri 'Keşfedilenler' listesine eklenir. Böylece liste sabit kalıpta kalmaz; alıcıların yeni kullanmaya başladığı ifadelerle büyür.",
     "Sunucu her 30 dakikada bir, en uzun süredir taranmamış aramayı tarar (günde 48 tarama). Liste en çok 80 arama tutar; puanı düşenler sona düşer.",
     "Google Trends'in herkese açık bir API'si yoktur. Kartlardaki Google Trends düğmesi ABD eyaletlerini ve 'İlgili sorgular'ı gösterir. Orada gördüğünüz ifadeyi Trend'deki arama kutusuna yazıp taratın; ifade otomatik keşif listesine de girer ve düzenli taranır."

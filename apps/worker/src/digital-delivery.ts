@@ -221,7 +221,7 @@ export async function createDigitalProduct(store: DigitalStore, form: FormData, 
   const craft = kind ? undefined : String(metadata.craft || "") as PatternCraft;
   const productType = String(metadata.productType || "").replace(/\s+/g, " ").trim().toLowerCase().slice(0, 60);
   if (!name) throw new DigitalDeliveryError("VALIDATION_FAILED", "Ürün adı gerekli.");
-  if (!kind && !CRAFTS.has(craft!)) throw new DigitalDeliveryError("VALIDATION_FAILED", "El işi veya PDF türü geçersiz.");
+  if (!kind && !CRAFTS.has(craft!)) throw new DigitalDeliveryError("VALIDATION_FAILED", "El işi veya ürün türü geçersiz.");
   if (productType.length < 3) throw new DigitalDeliveryError("VALIDATION_FAILED", "Ürün türü gerekli.");
 
   const listingInput = metadata.listing && typeof metadata.listing === "object" ? metadata.listing as Record<string, unknown> : {};
@@ -238,7 +238,7 @@ export async function createDigitalProduct(store: DigitalStore, form: FormData, 
 
   // "files" alanı birden çok PDF/ZIP taşır; eski uygulama sürümleri tek "pdf" alanı gönderir.
   const uploads = [...form.getAll("files"), ...form.getAll("pdf")].filter((item): item is File => typeof item !== "string");
-  if (!uploads.length) throw new DigitalDeliveryError("VALIDATION_FAILED", "PDF dosyası seçilmedi.");
+  if (!uploads.length) throw new DigitalDeliveryError("VALIDATION_FAILED", "Satılacak dosya seçilmedi (PDF veya ZIP).");
   if (uploads.length > MAX_FILES) throw new DigitalDeliveryError("VALIDATION_FAILED", "Etsy bir dijital ilana en fazla 5 dosya kabul eder. Fazla formatları bir ZIP dosyasında birleştirin.");
   const files: DigitalFile[] = [];
   const fileBytes: ArrayBuffer[] = [];

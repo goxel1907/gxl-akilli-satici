@@ -62,7 +62,7 @@ export class MarketingPlanError extends Error {
 
 const KINDS: MarketingProductKind[] = ["pdf", "pattern", "tesbih", "vintage", "knitwear", "other"];
 const DECISION_TR: Record<Decision, string> = { now: "Şimdi yap", later: "Sonra", skip: "Önerilmez", always: "Mutlaka" };
-const KIND_TR: Record<MarketingProductKind, string> = { pdf: "PDF ürünü", pattern: "hobi deseni", tesbih: "tesbih", vintage: "vintage ürün", knitwear: "örgü giyim", other: "ürün" };
+const KIND_TR: Record<MarketingProductKind, string> = { pdf: "dijital ürün", pattern: "hobi deseni", tesbih: "tesbih", vintage: "vintage ürün", knitwear: "örgü giyim", other: "ürün" };
 const DIGITAL = new Set<MarketingProductKind>(["pdf", "pattern"]);
 
 // Etsy Ads: en az 1 USD/gün; Etsy yeni kullanıcıya küçük başlayıp 30 gün dokunmamayı önerir.
