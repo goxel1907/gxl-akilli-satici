@@ -107,3 +107,14 @@ test("typing a product by hand, without trend data, still gives a clean package 
   const kids = buildPrintableBrief(normalizePrintablePlanInput({ kind: "coloring", productType: "kids coloring pages", seed: "k" }));
   assert.ok(!kids.artSubjects.some((subject) => /tea party|still life/.test(subject)), kids.artSubjects.join(" | "));
 });
+
+test("listing image headlines are added in code by the assistant, so no Canva step is left for the seller", () => {
+  for (const assistant of ["chatgpt", "claude"]) {
+    const prompt = buildPrintableBrief(normalizePrintablePlanInput({ kind: "calendar", productType: "calendar", keyword: "calendar", seed: "h", assistant })).masterPrompt;
+    assert.doesNotMatch(prompt, /Canva/);
+    assert.match(prompt, /Headline rules \(every image that has a headline\):/);
+    assert.match(prompt, /add the headline in code \(Python Pillow\)/);
+    assert.match(prompt, /### C1\. [^\n]+\nUsed for: [^\n]+Headline \(add in code\): "/);
+    assert.match(prompt, /read the headline back with OCR/);
+  }
+});

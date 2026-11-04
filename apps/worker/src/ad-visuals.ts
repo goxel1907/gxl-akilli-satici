@@ -2,7 +2,7 @@ import type { PatternCraft, PrintableKind } from "./etsy-trends.js";
 import { proseCase, vintageStyle } from "./theme.js";
 
 // Reklam tadında ürün görselleri: her görsel nerede kullanılacağı, oranı ve üstüne yazılacak kısa reklam metniyle gelir.
-// Görsel modelleri yazıyı bozduğu için promptlar yazı alanını boş bırakır; metin Canva gibi bir araçla eklenir.
+// Görsel modelleri yazıyı bozduğu için promptlar yazı alanını boş bırakır; başlık görsel bitince kodla (Pillow) eklenir.
 export interface AdVisual {
   slot: number;
   titleTr: string;
@@ -214,7 +214,7 @@ export function buildAdVisuals(input: AdVisualInput): AdVisual[] {
     : "Show the real pages made in this chat: paste the page images into the scene with code (keep them flat and undistorted), or use them as the only reference images. Never use another seller's images as a reference.";
   const noText = isPattern ? "Do not add any text, letters, logos or watermarks." : "Do not add any new text, letters, logos or watermarks (text that is part of the real pages may show).";
   const base = `Commercial product photography for an Etsy shop ad, color palette ${palette}, soft natural daylight, shallow depth of field, realistic textures, magazine-quality styling. ${reference} ${noText} Make the image at the image tool's closest native size, then crop and resize it in code to the size given.`;
-  const space = "Keep the product in the lower two thirds and leave the top third clean for a headline that will be added later.";
+  const space = "Keep the product in the lower two thirds and leave the top third clean for the headline, which is added in code afterwards.";
   // Başlık yazısı için kısa format adları: "12x12 in sheets" → "12X12", "2:3 ratio (4x6 to 24x36 in)" → "2:3".
   const patternSizes = isPattern && input.formats?.[0] ? /\b(XXS|XS|S|M|L|XL|[2-6]XL)\s*(?:-|to)\s*(XXS|XS|S|M|L|XL|[2-6]XL)\b/i.exec(input.formats[0]) : null;
   const formats = patternSizes

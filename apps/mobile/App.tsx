@@ -1447,7 +1447,7 @@ function AdVisualsPanel({ visuals }: any) {
   const all = visuals.map((item: any) => `${item.slot}. ${item.titleTr} (${item.aspect})\nNerede: ${item.useTr}${item.overlay ? `\nGörsel üstü yazı: ${item.overlay}` : ""}\n${item.prompt}`).join("\n\n");
   return <View style={styles.analysisCard}>
     <View style={styles.shopierProductTop}><Text style={[styles.cardTitle, { flex: 1 }]}>Reklam tadında görseller</Text><Pressable style={styles.secondaryButton} onPress={() => Share.share({ message: all, title: "Görsel promptları" })}><Text style={styles.secondaryButtonText}>Tümünü kopyala</Text></Pressable></View>
-    <Text style={styles.small}>ChatGPT gibi bir görsel aracında üret; ürün sayfalarını referans görsel olarak yükle. Görsel üstü yazıyı Canva ile ekle; görsel modelleri yazıyı bozar.</Text>
+    <Text style={styles.small}>ChatGPT gibi bir görsel aracında üret; ürün sayfalarını referans görsel olarak yükle. Görsel üstü yazıyı yapay zekâ görsel bitince kodla ekler; görsel aracına yazı çizdirilmez, çünkü görsel modelleri yazıyı bozar.</Text>
     {visuals.map((item: any) => <View key={item.slot} style={styles.visualRow}>
       <Pressable style={styles.shopierProductTop} onPress={() => setOpen(open === item.slot ? undefined : item.slot)}>
         <Text style={[styles.rowTitle, { flex: 1 }]}>{item.slot}. {item.titleTr}</Text>
@@ -2286,7 +2286,7 @@ const ETSY_GUIDE: Array<{ id: string; title: string; icon: any; steps: string[] 
     "Paket Türkçe yazılmıştır: yapay zekâ sizinle Türkçe konuşur ve sizden istediği her işi Türkçe yazar. Ürünü, dosya adlarını, görsellerdeki yazıları ve ilanı ABD'deki alıcı için Amerikan İngilizcesiyle yapar. Takvimde resmî tatil, bütçe tablosunda vergi oranı gibi eyaletten eyalete değişen bilgiler ürüne yazılmaz.",
     "ChatGPT seçiliyse görselleri kendi görsel aracıyla üretir. Claude seçiliyse çizimleri kodla vektör olarak kendisi çizer; fotoğraf gibi sahneler için hazır görsel promptu verir, onu bir görsel aracında çalıştırırsınız.",
     "Dosyalar gelince modelden 'Automated QA' betik çıktısını isteyin: tek satırda FAIL olmamalı (saat AM/PM, kopya sayfa, eksik format, ad, kapak, kenar boşluğu). Uygulama da yüklemede ilanda yazan formatın dosyalarda olmamasını ve aynı dosyanın iki kez yüklenmesini engeller.",
-    "Reklam tadında 10 görselin her birinde nerede kullanılacağı (Etsy kapak, galeri, Pinterest, Instagram), ölçüsü ve üstüne yazılacak kısa metin yazar. Görseli üretirken kendi sayfalarınızı veya ekran görüntülerinizi referans olarak yükleyin, yazıyı Canva ile ekleyin.",
+    "Reklam tadında 10 görselin her birinde nerede kullanılacağı (Etsy kapak, galeri, Pinterest, Instagram), ölçüsü ve üstüne yazılacak kısa metin yazar. Yapay zekâ önce yazısız görseli üretir, sonra görsel üstü başlığı kodla kendisi ekler ve yazımı kontrol eder; Canva gerekmez. Fotoğraf gibi sahneleri bir görsel aracında siz ürettiyseniz aynı sohbete yükleyin, başlığı o ekler.",
     "Pinterest pinlerini farklı günlerde paylaşın. Paket fikriyle aynı stilde bir set hazırlayın.",
     "Dijital → tüm dosyaları tek seferde seçin (PDF veya ZIP, en fazla 5; duvar kâğıdı, ikon paketi, tablo, sunum oyunu ve özgeçmiş ZIP içinde gelir) ve görselleri ekleyin → 'Etsy taslağı oluştur'. Dosyaların hepsi ilana otomatik eklenir. Etsy'de yapay zekâ beyanını ve kategoriyi kontrol edip yayınlayın."
   ] },
