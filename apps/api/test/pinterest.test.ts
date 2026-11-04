@@ -195,7 +195,7 @@ test("without API approval every pin can be shared by hand with its image, sale 
   const fetcher = (async (input: string | URL | Request) => { calls.push(String(input)); return Response.json(listing(state)); }) as typeof fetch;
   const waiting = await manualPinShares(env(kv.store), kv.store, fetcher, NOW);
   assert.equal(waiting.items.length, 3);
-  assert.ok(waiting.items.every((item) => !item.ready && /yayında değil/.test(item.reason || "")));
+  assert.ok(waiting.items.every((item) => !item.ready && /yayında değil/.test((item as { reason?: string }).reason || "")));
   assert.equal(calls.length, 1, "one Etsy request for the three pins of one listing");
   state = "active";
   const ready = await manualPinShares(env(kv.store), kv.store, fetcher, NOW);
