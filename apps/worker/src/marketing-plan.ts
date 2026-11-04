@@ -356,8 +356,8 @@ function etsyAds(input: MarketingPlanInput, margin?: number): ChannelAdvice {
     stopRuleTr,
     stepsTr: steps,
     copy: [],
-    openUrl: "https://www.etsy.com/your/shops/me/dashboard",
-    openLabelTr: "Etsy Mağaza Yöneticisini aç"
+    openUrl: "https://www.etsy.com/your/shops/me/advertising",
+    openLabelTr: "Etsy Ads sayfasını aç"
   });
 }
 

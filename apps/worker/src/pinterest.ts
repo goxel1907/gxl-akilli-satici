@@ -35,6 +35,8 @@ export interface PinJob {
   listingTitle?: string;
   pinId?: string;
   pinUrl?: string;
+  // API onayı olmadan satıcının telefonundan elle paylaşılan pin.
+  manual?: boolean;
   error?: string;
   createdAt: string;
   updatedAt: string;
@@ -445,6 +447,53 @@ export async function processPinQueue(env: PinterestRuntimeEnv, store: Pinterest
   return { jobId: job.id, status: job.status, error: job.error };
 }
 
+// API onayı gerekmeden paylaşım: Pinterest'in herkese açık "pin oluştur" bağlantısı görseli, satış linkini ve açıklamayı
+// hazır getirir; satıcı panoyu seçip "Kaydet"e basar. Pinterest Standard erişim onayı gelene kadar pinler böyle paylaşılır.
+export function pinShareUrl(input: { link: string; imageUrl: string; title: string; description: string }): string {
+  const text = `${input.title}. ${input.description}`.replace(/\s+/g, " ").slice(0, 500);
+  return `https://www.pinterest.com/pin/create/button/?url=${encodeURIComponent(input.link)}&media=${encodeURIComponent(input.imageUrl)}&description=${encodeURIComponent(text)}`;
+}
+
+export async function manualPinShares(env: PinterestRuntimeEnv, store: PinterestStore | undefined, fetcher: Fetcher = fetch, now = Date.now()) {
+  if (!store || !env.ETSY_API_KEY) return { items: [], skipped: "not_configured" as const };
+  const jobs = (await listPinJobs(store)).filter((job) => job.status !== "posted").sort((a, b) => a.dueAt.localeCompare(b.dueAt)).slice(0, 9);
+  // Aynı ilanın üç pini tek Etsy isteğiyle hazırlanır.
+  const listings = new Map<number, EtsyListing | undefined>();
+  const items = [];
+  for (const job of jobs) {
+    if (!listings.has(job.listingId)) {
+      try {
+        listings.set(job.listingId, await etsyRequest<EtsyListing>(env, `/application/listings/${job.listingId}`, { authenticated: false, query: { includes: "Images" } }, fetcher));
+      } catch {
+        listings.set(job.listingId, undefined);
+      }
+    }
+    const listing = listings.get(job.listingId);
+    const base = { jobId: job.id, listingId: job.listingId, pinIndex: job.pinIndex, boardName: job.boardName, dueAt: job.dueAt, due: Date.parse(job.dueAt) <= now };
+    if (!listing) { items.push({ ...base, ready: false, reason: "Etsy ilanı okunamadı; biraz sonra yeniden deneyin." }); continue; }
+    if (listing.state !== "active") { items.push({ ...base, ready: false, title: String(listing.title || "").slice(0, 100), reason: "Etsy ilanı henüz yayında değil; yayına girince paylaşılabilir." }); continue; }
+    try {
+      const payload = buildPinPayload(job, listing, "");
+      items.push({ ...base, ready: true, title: payload.title, description: payload.description, link: payload.link, imageUrl: payload.media_source.url, aiAssisted: Boolean(job.aiAssisted), shareUrl: pinShareUrl({ link: payload.link, imageUrl: payload.media_source.url, title: payload.title, description: payload.description }) });
+    } catch (error) {
+      items.push({ ...base, ready: false, reason: error instanceof Error ? error.message : "Pin hazırlanamadı." });
+    }
+  }
+  return { items };
+}
+
+export async function markPinShared(store: PinterestStore, jobId: string, now = Date.now()) {
+  const jobs = await listPinJobs(store);
+  const job = jobs.find((item) => item.id === jobId);
+  if (!job) throw new PinterestError("NOT_FOUND", "Pin işi bulunamadı.", 404);
+  job.status = "posted";
+  job.manual = true;
+  delete job.error;
+  job.updatedAt = new Date(now).toISOString();
+  await saveJobs(store, jobs);
+  return job;
+}
+
 export async function getPinterestStatus(env: PinterestRuntimeEnv) {
   const store = env.ETSY_OAUTH as unknown as PinterestStore | undefined;
   const tokens = store ? await readJson<PinterestTokens | null>(store, TOKEN_KEY, null) : null;
@@ -456,7 +505,7 @@ export async function getPinterestStatus(env: PinterestRuntimeEnv) {
     username: tokens?.username,
     settings: await readPinterestSettings(store),
     queue: { scheduled: count("scheduled"), waiting: count("waiting_listing"), posted: count("posted"), failed: count("failed") },
-    note: "Pinterest uygulamanız Trial erişimindeyse oluşturulan pinleri yalnızca siz görürsünüz. Herkese açık pin için Pinterest'ten Standard erişim onayı alın (Kılavuz → Pinterest)."
+    note: "Pinterest yeni uygulamalara önce Trial erişim verir: bu erişimle açılan pinleri yalnızca siz görürsünüz. Herkese açık otomatik pin için Standard erişim onayı gerekir (Kılavuz → Pinterest). Onay gelene kadar aşağıdaki 'Elle paylaş' listesini kullanın; bağlantı veya onay gerekmez."
   };
 }
 
