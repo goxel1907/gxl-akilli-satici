@@ -2,6 +2,10 @@ import type { AdVisual } from "./ad-visuals.js";
 
 // Android paylaşımı ChatGPT/Claude'da her seferinde yeni sohbet açar; yeni sohbet önceki parçayı (ad, palet, spec) bilmez.
 // Bu yüzden tüm parçalar sıralı adımlarla tek bir pakete toplanır: tek paylaşım, tek sohbet, tutarlı ürün.
+//
+// Dil düzeni: paketin istek kısmı (dil kuralı, ABD kuralları, adımlar, araç notları) Türkçedir; yapay zekâ satıcıyla
+// Türkçe konuşur ve ondan istediği her işi Türkçe yazar. "---" çizgisinden sonraki teknik şartname İngilizcedir, çünkü
+// ürüne aynen girecek metinleri, ölçüleri ve görsel tariflerini birebir verir; ürün Amerikan İngilizcesiyle yapılır.
 export interface MasterPromptInput {
   name: string;
   productLabel: string;
@@ -18,60 +22,83 @@ export interface MasterPromptInput {
   qa?: string[];
   // Satıcının seçtiği yapay zekâ: paket o aracın yapabildiğine göre yazılır (Claude fotoğraf üretmez, vektör çizer).
   assistant?: "chatgpt" | "claude";
+  // Türün Türkçe adı (giriş cümlesi) ve ABD pazarı kuralları (us-market.ts, Türkçe).
+  productLabelTr?: string;
+  usRules?: string[];
 }
 
-const TOOL_NOTES: Record<"chatgpt" | "claude" | "any", string[]> = {
-  chatgpt: ["- ChatGPT: make images with the built-in image generator and build the files with Python (for example reportlab or HTML to PDF), then give download links."],
-  claude: [
-    "- Claude: you cannot generate photos or raster images. Draw every artwork in Brief B as clean vector SVG in code, in the spec palette, and render it to PNG at the stated size. Build the files with your code and file tools and give download links.",
-    "- If a style cannot be drawn well as vector art (for example watercolor or photo-like textures), say so at the artwork step and give me the Brief B prompts with the spec values filled in, so I can make the images in an image tool and upload them here.",
-    "- Listing images: build the previews, flat lays and size cards yourself in code from the real pages. For photo-style scenes, return each prompt with the spec values filled in so I can run it in an image tool."
-  ],
-  any: [
-    "- ChatGPT: make images with the built-in image generator and build the files with Python (for example reportlab or HTML to PDF), then give download links.",
-    "- Claude: you cannot make photos. Build the files with your file tools (HTML, SVG or PDF) and make artwork as clean vector SVG. For photo steps, return the prompts unchanged with the spec values filled in, so I can run them in an image tool."
-  ]
-};
+// Teknik şartnamenin başladığı çizgi; otomatik denetim Türkçe ve İngilizce kısmı buradan ayırır.
+export const SPEC_DIVIDER = "---";
+
+function toolNotes(assistant: MasterPromptInput["assistant"], hasArt: boolean): string[] {
+  const chatgpt = "- ChatGPT: görselleri yerleşik görsel aracınla üret, dosyaları Python ile kur (ör. reportlab ya da HTML'den PDF) ve indirme bağlantısı ver.";
+  if (assistant === "chatgpt") return [chatgpt];
+  const claude = [
+    hasArt
+      ? "- Claude: fotoğraf ya da piksel tabanlı görsel üretemezsin. Brief B'deki her görseli kodla, spec paletinde temiz vektör SVG olarak çiz ve belirtilen ölçüde PNG'ye çevir. Dosyaları kendi kod ve dosya araçlarınla kur, indirme bağlantısı ver."
+      : "- Claude: fotoğraf ya da piksel tabanlı görsel üretemezsin. Dosyaları kendi kod ve dosya araçlarınla kur (HTML, SVG, PDF veya XLSX), çizimleri temiz vektör SVG olarak yap ve indirme bağlantısı ver.",
+    ...(hasArt ? ["- Bir stil vektörle iyi çizilemiyorsa (ör. suluboya ya da fotoğraf gibi doku) bunu görsel adımında bana Türkçe söyle ve Brief B promptlarını spec değerleri doldurulmuş hâlde ver; görselleri bir görsel aracında yapıp bu sohbete yüklerim."] : []),
+    "- İlan görselleri: önizleme, düz serim (flat lay) ve ölçü görsellerini gerçek sayfalardan kodla kendin kur. Fotoğraf gibi sahneler için her promptu spec değerleri doldurulmuş hâlde, İngilizce ver; ben bir görsel aracında çalıştırırım."
+  ];
+  if (assistant === "claude") return claude;
+  return [chatgpt, "- Claude: fotoğraf üretemezsin. Dosyaları dosya araçlarınla kur (HTML, SVG, PDF veya XLSX), çizimleri temiz vektör SVG olarak yap. Fotoğraf adımlarında promptları spec değerleri doldurulmuş hâlde, İngilizce ver; ben bir görsel aracında çalıştırırım."];
+}
 
 export function buildMasterPrompt(input: MasterPromptInput): string {
   const spec = input.specName;
   const pinVisual = input.adVisuals.find((visual) => visual.aspect.startsWith("2:3"));
+  const claude = input.assistant === "claude";
+  const hasArt = Boolean(input.artPrompts?.length);
+  const realProduct = input.renderPrompt ? "Brief R'deki renderlardaki ürün" : "bu sohbette yapılan gerçek sayfalar";
   // Sanat gerektiren türlerde dosyalar görselleri yerleştirdiği için önce görseller üretilir.
   const steps: Array<{ title: string; body: string }> = [
-    { title: `${spec} first`, body: `Read the whole package. Before any file, output the ${spec} JSON described in Brief A. It is the single source of truth: every later file and image must match it exactly (name, palette hex codes, fonts, page or motif list, counts). If I ask for a change, update the JSON first and show it again. Show the final JSON again when the product files are finished.` }
+    { title: `Önce ${spec}`, body: `Paketin tamamını oku. Hiçbir dosyadan önce Brief A'da tarif edilen ${spec} JSON'unu yaz; JSON'daki değerler İngilizcedir. Bu JSON tek doğru kaynaktır: sonraki her dosya ve görsel ona birebir uyar (ad, palet hex kodları, yazı tipleri, sayfa veya motif listesi, sayılar). Bir değişiklik istersem önce JSON'u güncelle ve yeniden göster. Ürün dosyaları bitince son JSON'u tekrar göster.` }
   ];
-  const claude = input.assistant === "claude";
-  if (input.artPrompts?.length) steps.push({ title: "Artwork", body: claude
-    ? "Draw the artworks in Brief B as clean vector SVG in code, one per reply, following the rules at the top of Brief B, in the spec palette and one consistent style, and render each to PNG. Name them art-01.png, art-02.png and so on in Brief B order; the page plan from step 1 says where each one goes."
-    : "Create the artworks in Brief B one image per reply, following the rules at the top of Brief B, in the spec palette and one consistent style. Name them art-01.png, art-02.png and so on in Brief B order; the page plan from step 1 says where each one goes." });
-  steps.push({ title: "Product files", body: "Build the product files exactly as Brief A says, pass by pass. Deliver every format: none may be missing. Before you write STEP DONE, run the Automated QA script on the finished files, paste its output and fix every FAIL. Then give me ONE download zip that contains the Etsy upload set described in Brief A (at most 5 files, each under 20 MB) so I can download everything at once. If you cannot run code or create files, say so at the start of this step, give complete print-ready HTML I can save as PDF, and replace the script output with your own PASS/FAIL line for every Automated QA check." });
-  if (input.renderPrompt) steps.push({ title: "Product renders", body: `Create the renders in Brief R, one image per reply. Use the colors, style and finished size from the ${spec} JSON in step 1 of this chat; the exact counts stay in the charts and diagrams.` });
-  steps.push({ title: "Listing images", body: claude ? `Make the listing images in Brief C in order: build the preview, flat-lay and size images in code from ${input.renderPrompt ? "the renders" : "the real pages made in this chat"}; for each photo-style scene, give me the prompt with the spec values filled in so I can run it in an image tool. Never use images from other sellers or the internet, and never draw new text, letters or logos; I add headlines later in Canva.` : `Create the listing images in Brief C one per reply, in order. The product shown must be ${input.renderPrompt ? "the item from the renders in Brief R" : "the real pages made in this chat"}. If you cannot see them as images, ask me to upload 2-3 screenshots of ${input.renderPrompt ? "those renders" : "those pages"}; never use images from other sellers or the internet. Never draw new text, letters or logos in the image; I add headlines later in Canva.` });
-  if (input.pins?.length && pinVisual) steps.push({ title: "Pinterest images", body: claude
-    ? `For each pin in Brief D give me one 2:3 vertical image prompt based on image C${pinVisual.slot} with the spec values filled in, changing the scene so the pins look different and match each pin's angle; keep the top 30% clean for the headline.`
-    : `For each pin in Brief D create one 2:3 vertical image based on image C${pinVisual.slot}, changing the scene so the pins look different and match each pin's angle. Keep the top 30% clean for the headline.` });
-  steps.push({ title: "Final check", body: input.qa?.length ? "Run the Automated QA script again on the final upload set and paste its output, then check the Final checklist. Everything must pass before you call the product ready." : "Check everything against the Final checklist and list what passes and what still needs fixing." });
+  if (hasArt) steps.push({ title: "Görseller", body: claude
+    ? "Brief B'deki görselleri kodla temiz vektör SVG olarak, her yanıtta bir tane çiz; Brief B'nin başındaki kurallara uy, spec paletini ve tek tutarlı stili kullan ve her birini PNG'ye çevir. Adlarını Brief B sırasıyla art-01.png, art-02.png diye koy; hangisinin nereye gideceğini 1. adımdaki sayfa planı söyler."
+    : "Brief B'deki görselleri her yanıtta bir tane olacak şekilde üret; Brief B'nin başındaki kurallara uy, spec paletini ve tek tutarlı stili kullan. Adlarını Brief B sırasıyla art-01.png, art-02.png diye koy; hangisinin nereye gideceğini 1. adımdaki sayfa planı söyler." });
+  steps.push({ title: "Ürün dosyaları", body: "Ürün dosyalarını Brief A'da yazdığı gibi, geçiş geçiş (PASS 1, 2, 3) kur. Her formatı teslim et; hiçbiri eksik olmasın. Adımı bitirmeden önce bitmiş dosyalarda Otomatik QA betiğini çalıştır, çıktısını aynen yapıştır, her FAIL satırını düzelt ve sonucu bana Türkçe kısaca anlat. Sonra Brief A'daki Etsy yükleme setini (en fazla 5 dosya, her biri 20 MB'den küçük) içeren TEK bir indirme zip'i ver ki hepsini bir kerede indireyim. Kod çalıştıramıyor ya da dosya oluşturamıyorsan bunu adımın başında Türkçe söyle, eksiksiz dosya içeriğini (ör. PDF olarak kaydedebileceğim baskıya hazır HTML) ver ve betik çıktısı yerine her Otomatik QA kontrolü için kendi PASS/FAIL satırını yaz." });
+  if (input.renderPrompt) steps.push({ title: "Ürün renderları", body: `Brief R'deki renderları her yanıtta bir tane olacak şekilde üret. 1. adımdaki ${spec} JSON'unun renklerini, stilini ve bitmiş ölçüsünü kullan; tam sayılar şemalarda ve çizimlerde kalır.` });
+  steps.push({ title: "İlan görselleri", body: claude
+    ? `Brief C'deki ilan görsellerini sırayla yap: önizleme, düz serim ve ölçü görsellerini ${input.renderPrompt ? "renderlardan" : "bu sohbette yapılan gerçek sayfalardan"} kodla kur; fotoğraf gibi her sahne için spec değerleri doldurulmuş İngilizce promptu ver ve altına bir satır Türkçe açıklama yaz, ben bir görsel aracında çalıştırayım. Başka satıcıların ya da internetin görsellerini asla kullanma; görsele yeni yazı, harf veya logo çizme, başlıkları sonra Canva'da ben eklerim.`
+    : `Brief C'deki ilan görsellerini sırayla, her yanıtta bir tane üret. Görselde görünen ürün ${realProduct} olmalı. Onları görsel olarak göremiyorsan benden Türkçe olarak 2-3 ekran görüntüsü yüklememi iste; başka satıcıların ya da internetin görsellerini asla kullanma. Görsele yeni yazı, harf veya logo çizme; başlıkları sonra Canva'da ben eklerim.` });
+  if (input.pins?.length && pinVisual) steps.push({ title: "Pinterest görselleri", body: claude
+    ? `Brief D'deki her pin için C${pinVisual.slot} görseline dayanan, spec değerleri doldurulmuş 2:3 dikey bir görsel promptu ver (İngilizce, altında bir satır Türkçe açıklama); pinler birbirinden farklı görünsün diye sahneyi her pinin konusuna göre değiştir ve üstteki %30'u başlık için boş bırak.`
+    : `Brief D'deki her pin için C${pinVisual.slot} görseline dayanan 2:3 dikey bir görsel üret; pinler birbirinden farklı görünsün diye sahneyi her pinin konusuna göre değiştir. Üstteki %30'u başlık için boş bırak.` });
+  steps.push({ title: "Son kontrol", body: input.qa?.length
+    ? "Son yükleme setinde Otomatik QA betiğini yeniden çalıştır, çıktısını yapıştır, sonra Final checklist'i kontrol et. Ürüne hazır demeden önce her şey geçmeli. Sonucu bana Türkçe özetle: geçenler, düzelttiklerin ve benim yapmam gerekenler."
+    : "Her şeyi Final checklist'e göre kontrol et ve bana Türkçe yaz: geçenler ve hâlâ düzeltilmesi gerekenler." });
 
+  const briefs = ["A", ...(hasArt ? ["B"] : []), ...(input.renderPrompt ? ["R"] : []), "C", ...(input.pins?.length ? ["D"] : [])];
   const lines = [
-    `# ${input.name} - complete product package (GXL Market Studio)`,
+    `# ${input.name} - eksiksiz ürün paketi (GXL Market Studio)`,
     "",
-    `This is ONE package for an original Etsy ${input.productLabel}. Do every step in THIS chat, in order, so the name, palette, fonts and ${spec} stay identical in every file and image. Do not split the work across chats.`,
+    `Bu paket Etsy'de ABD'li alıcılara satılacak özgün bir ürün içindir: ${input.productLabelTr ? `${input.productLabelTr.replace(/\s*\(.*\)$/, "")} ("${input.productLabel}")` : `"${input.productLabel}"`}. Bütün adımları BU sohbette, sırayla yap; böylece ürün adı, palet, yazı tipleri ve ${spec} her dosyada ve görselde aynı kalır. İşi başka sohbetlere bölme.`,
     "",
-    "## How we will work",
-    "- Work one step at a time. End each step with \"STEP n DONE - write next to continue\" and wait for me.",
-    "- If a step does not fit in one reply, stop at a clean point and continue when I write \"next\".",
-    ...steps.map((step, index) => `- STEP ${index + 1} - ${step.title}: ${step.body}`),
+    "## Dil kuralı (zorunlu)",
+    "- Benimle her zaman Türkçe konuş: adım özetleri, sorular, açıklamalar, QA sonuçlarının yorumu ve benden istediğin her iş (ör. ekran görüntüsü yüklemem, bir promptu görsel aracında çalıştırmam, Canva'da başlık eklemem) Türkçe olsun. Benim yapmam gereken işleri kısa, numaralı Türkçe adımlarla yaz.",
+    `- Ürüne giren her şey Amerikan İngilizcesiyle olur: dosyalardaki bütün yazılar, sayfa ve sekme adları, dosya adları, ${spec} JSON değerleri, görsellerdeki yazılar, görsel promptları, ilan ve pin metinleri. Ürüne tek bir Türkçe kelime ya da Türkçe harf (ç, ğ, ı, ö, ş, ü) girmez.`,
+    `- Aşağıdaki teknik şartname (${briefs.map((brief) => `Brief ${brief}`).join(", ")}${input.qa?.length ? ", Automated QA" : ""} ve Final checklist) bu yüzden İngilizce yazıldı: ürüne aynen girecek metinleri, ölçüleri ve görsel tariflerini birebir verir. Onu harfiyen uygula; tırnak içindeki İngilizce ifadeleri çevirme ve değiştirme.`,
+    "- Görsel aracında çalıştırmam için bana bir prompt verirsen promptu İngilizce yaz, altına bir satır Türkçe ne olduğunu açıkla.",
+    ...(input.usRules?.length ? ["", "## ABD pazarı kuralları (eyalet farkları dahil)", ...input.usRules.map((rule) => `- ${rule}`)] : []),
     "",
-    "## Tool notes",
-    ...TOOL_NOTES[input.assistant || "any"],
+    "## Nasıl çalışacağız",
+    "- Her seferinde tek adım yap. Her adımı şu satırla bitir ve beni bekle: \"ADIM n TAMAM - devam etmek için 'devam' yaz\".",
+    "- Bir adım tek yanıta sığmazsa temiz bir noktada dur; 'devam' yazınca kaldığın yerden sürdür. 'next' yazarsam da aynı anlama gelir.",
+    "- Her adımın sonunda bana Türkçe kısa bir özet ver: ne yaptın, hangi dosyalar hazır ve varsa benim ne yapmam gerekiyor.",
+    ...steps.map((step, index) => `- ADIM ${index + 1} - ${step.title}: ${step.body}`),
     "",
-    "---",
+    "## Araç notları",
+    ...toolNotes(input.assistant, hasArt),
+    "",
+    "# Teknik şartname (İngilizce: ürüne aynen giren metin, ölçü ve görsel tarifleri)",
+    SPEC_DIVIDER,
     "## Brief A - product files",
     // Brief içindeki başlıklar bir alt düzeye iner; paketin kendi bölümleriyle karışmaz.
     input.filesBrief.trim().replace(/^## /gm, "### ")
   ];
-  if (input.artPrompts?.length) {
-    lines.push("", "## Brief B - artwork (one image per reply)", ...(input.artNotes || []).map((note) => `- ${note}`), ...input.artPrompts.map((prompt, index) => `B${index + 1}. ${prompt}`));
+  if (hasArt) {
+    lines.push("", "## Brief B - artwork (one image per reply)", ...(input.artNotes || []).map((note) => `- ${note}`), ...(input.artPrompts || []).map((prompt, index) => `B${index + 1}. ${prompt}`));
   }
   if (input.renderPrompt) {
     lines.push("", "## Brief R - product renders (one image per reply)", input.renderPrompt.trim());
@@ -87,6 +114,13 @@ export function buildMasterPrompt(input: MasterPromptInput): string {
   if (input.qa?.length) lines.push("## Automated QA (mandatory, run with code)", ...input.qa, "");
   lines.push("## Final checklist", ...input.checklist.map((item) => `- ${item}`));
   return lines.join("\n");
+}
+
+// Paketi Türkçe istek kısmı ve İngilizce teknik şartname olarak ikiye ayırır (otomatik denetim için).
+export function splitMasterPrompt(prompt: string): { requestTr: string; specEn: string } {
+  const lines = prompt.split("\n");
+  const index = lines.indexOf(SPEC_DIVIDER);
+  return index < 0 ? { requestTr: "", specEn: prompt } : { requestTr: lines.slice(0, index).join("\n"), specEn: lines.slice(index + 1).join("\n") };
 }
 
 // "4:3 yatay · 3000x2250 px" → "4:3 landscape, 3000x2250 px"

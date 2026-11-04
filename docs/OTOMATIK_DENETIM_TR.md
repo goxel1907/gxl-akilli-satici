@@ -105,3 +105,50 @@ Her tür trend verisi olmasa bile 13 etiketin tamamını doldurur.
 Paket, Stüdyo'da seçilen yapay zekâya göre yazılır:
 - **ChatGPT:** görselleri kendi görsel aracıyla üretir.
 - **Claude:** görselleri kodla vektör olarak çizer. Fotoğraf gibi sahneler için görsel promptunu verir.
+
+## Dil düzeni: Türkçe istek, Amerikan İngilizcesi ürün
+
+Talimat paketi iki kısımdır:
+
+- **Türkçe istek kısmı.** Dil kuralı, ABD pazarı kuralları, adımlar ve araç notları Türkçedir.
+  - Yapay zekâ sizinle hep Türkçe konuşur.
+  - Sizden istediği her işi (ekran görüntüsü yükleme, bir promptu görsel aracında çalıştırma, Canva'da başlık ekleme) kısa, numaralı Türkçe adımlarla yazar.
+  - Her adım "ADIM n TAMAM - devam etmek için 'devam' yaz" satırıyla biter. Siz "devam" yazarsınız.
+- **İngilizce teknik şartname.** Brief A–D, Automated QA ve Final checklist İngilizcedir.
+  - Bu kısım ürüne aynen girecek metinleri, ölçüleri ve görsel tariflerini birebir verir.
+  - Çevrilirse ürüne Türkçe kelime veya yanlış çeviri sızabilir.
+
+Ürüne giren her şey Amerikan İngilizcesidir: dosyalar, dosya adları, görsellerdeki yazılar, ilan ve pinler. Otomatik denetim şunlara bakar:
+
+- Şartnamede Türkçe harf olmamalı.
+- İngiliz yazımı (colour, grey, organise, Mum, icing sugar) ilan ve pinlerde yerinde Amerikan yazımına çevrilir. Karşılığı bağlama göre değişenler (fortnight, postcode) raporlanır.
+- Paket dil kuralını içermeli; istek kısmında İngilizce adım kalmamalı.
+
+Yapay zekânın çalıştırdığı kalite betiği de dosyalarda Türkçe harf, Türkçe kelime ve İngiliz yazımı arar.
+
+## ABD pazarı ve eyalet farkları
+
+Her paket, türüne uyan ABD kurallarını Türkçe olarak taşır. Eyaletten eyalete değişen bilgiler ürüne sabit olarak yazılmaz:
+
+- **Vergi.** Satış vergisi ve eyalet gelir vergisi eyalete göre değişir.
+  - Oregon, Montana, New Hampshire ve Delaware'de satış vergisi yoktur.
+  - Texas ve Florida gibi dokuz eyalette eyalet gelir vergisi yoktur.
+  - Bütçe tablosu ve bütçe planlayıcısında vergi oranı sabit yazılmaz; alıcının dolduracağı boş bir alan olur.
+  - İlanda "tax included" yazılmaz; Etsy vergiyi alıcının eyaletine göre kendisi ekler.
+- **Resmî tatiller.** Bazı tatiller yalnız birkaç eyalette geçerlidir (ör. Patriots' Day Massachusetts ve Maine'de). Takvim ve planlayıcıya tatil basılmaz.
+- **Okul yılı.** Okul yılı güneyde ve batıda Ağustos'ta, kuzeydoğuda Eylül'de başlar. Öğretmen ve öğrenci planlayıcıları tarihsizdir ve Ağustos–Temmuz düzenindedir.
+- **Müfredat.** Eyaletlerin standartları farklıdır. Çocuk çalışma kâğıdında "Common Core" veya bir eyalet standardına uyum iddia edilmez. Sınıf adları ABD'deki gibidir (Pre-K, Kindergarten, 1st grade).
+- **İklim.** Florida, Arizona, Hawaii ve güney California'da kış karlı geçmez. İlan ve pin metinleri herkese aynı iklimi varsaymaz.
+- **Alkol yaşı.** Alkol yaşı her eyalette 21'dir. Alkolden söz eden parti oyununa "21+" yazılır.
+- **Biçimler.**
+  - Kâğıt boyutu önce US Letter.
+  - Ölçü önce inç ve °F.
+  - Tarih "January 5, 2027" veya ay/gün/yıl.
+  - Saat AM/PM ile; hafta Pazar başlar.
+  - Para "$1,234.56".
+  - Tarif ve kiler etiketlerinde ABD market adları kullanılır (powdered sugar, all-purpose flour).
+- **Telefon.** ABD'de telefonların yarıdan fazlası iPhone'dur. Duvar kâğıdı ve ikon paketlerinde önce iPhone ölçüleri gelir.
+
+**Pinterest zamanlaması.** İlk pin ilan yayına girince gider. Sonraki pinler ABD akşamına zamanlanır: Doğu saatiyle 20:00–21:00, Pasifik saatiyle 17:00–18:00.
+
+**Trend verisi olmadan.** Ürünü elle yazdığınızda da paket temiz üretilir; ürün adındaki konu çizilir ("mandala coloring pages" → mandala sayfaları). 17 türün hepsi için bu test edilir.

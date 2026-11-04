@@ -62,7 +62,10 @@ test("connect session asks for board and pin scopes and stores a one-time state"
 test("each listing gets three pins spread over days, without duplicates", async () => {
   const kv = memoryKv();
   const jobs = await enqueueListingPins(kv.store, { listingId: 123456789, boardName: "Printable Planners & Trackers", pins: [{ title: "Budget Planner Printable | Sinking Funds", description: "Plan your money with sinking funds." }] }, NOW);
-  assert.deepEqual(jobs.map((job) => (Date.parse(job.dueAt) - NOW) / DAY), [0, 2, 5]);
+  // İlk pin hemen; sonrakiler 2 ve 5 gün sonra, ABD akşamında (01:00 UTC = Doğu 20:00/21:00, Pasifik 17:00/18:00).
+  assert.equal(Date.parse(jobs[0].dueAt), NOW);
+  assert.deepEqual(jobs.slice(1).map((job) => new Date(job.dueAt).getUTCHours()), [1, 1]);
+  assert.deepEqual(jobs.slice(1).map((job) => Math.floor((Date.parse(job.dueAt) - NOW) / DAY)), [2, 5]);
   assert.equal(jobs[0].pin?.title, "Budget Planner Printable | Sinking Funds");
   assert.equal(jobs[1].pin, undefined);
   assert.deepEqual(await enqueueListingPins(kv.store, { listingId: 123456789, boardName: "x" }, NOW), []);
@@ -130,7 +133,8 @@ test("queue waits for the Etsy listing to go live, then creates the board and th
   assert.equal(calls.filter((call) => call.path === "/v5/boards" && call.method === "POST").length, 1);
   assert.deepEqual(await processPinQueue(env(kv.store), kv.store, fetcher, NOW + 8 * 60 * 60 * 1000), { skipped: "nothing_due" });
 
-  const next = await processPinQueue(env(kv.store), kv.store, fetcher, NOW + 2 * DAY + 1000);
+  assert.deepEqual(await processPinQueue(env(kv.store), kv.store, fetcher, NOW + 2 * DAY + 1000), { skipped: "nothing_due" });
+  const next = await processPinQueue(env(kv.store), kv.store, fetcher, NOW + 3 * DAY);
   assert.equal(next.status, "posted");
   assert.equal(calls.filter((call) => call.path === "/v5/boards" && call.method === "POST").length, 1);
 });

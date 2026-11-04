@@ -4,6 +4,7 @@ import { buildAdVisuals, type AdVisual } from "./ad-visuals.js";
 import { calendarYear, type PrintableKind } from "./etsy-trends.js";
 import { hasBrandName, isIpRisky } from "./ip-guard.js";
 import { buildMasterPrompt } from "./master-prompt.js";
+import { usMarketRulesTr } from "./us-market.js";
 import { qaProtocol } from "./qa-protocol.js";
 import { coinProductName, normalizeEtsyTags, normalizeEtsyTitle, titleCase, validateEtsyListingText } from "./pattern-studio.js";
 import { cleanBriefNotes, fitsTheme, harmonizeThemes, isHolidayFamily, META_WORDS, MISLEADING_FEATURE, proseCase, THEME_ADJECTIVES, themeFamilies, type ThemeFamily, vintageStyle } from "./theme.js";
@@ -160,7 +161,8 @@ export const PRINTABLE_KINDS: Record<PrintableKind, KindProfile> = {
       "Several complete party games with written instructions, original questions or prompts, and answer keys where needed",
       "Game cards laid out several per page with crop marks for easy cutting",
       "Matching extras: welcome sign, prize tags, and a fill-in invitation",
-      "A host checklist page"
+      "A host checklist page",
+      "Any game that mentions alcohol carries a \"21+\" note (the drinking age is 21 in every US state); games for a mom-to-be or for kids mention no alcohol"
     ],
     designEn: [PRINT_SAFE, "Large, readable type for guests; fill-in lines long enough for handwriting", "Crop marks for cut-out items"],
     textRuleEn: TEXT_PAGES,
@@ -177,7 +179,7 @@ export const PRINTABLE_KINDS: Record<PrintableKind, KindProfile> = {
       "Fill-in recipe cards: the 4x6 and the 5x7 cards are each their own PDF, with the cards laid out on US Letter sheets with crop marks so they print at home",
       "Full-page recipe binder pages with sections for ingredients, steps, servings, time and notes",
       "Section dividers, an index page, a measurement conversion chart and a weekly meal plan page",
-      "Every card and page is a blank fill-in template: write no recipes, cooking steps or food-safety advice (Etsy does not allow AI-written recipes); the conversion chart uses standard US and metric kitchen measures only, each number checked"
+      "Every card and page is a blank fill-in template: write no recipes, cooking steps or food-safety advice (Etsy does not allow AI-written recipes); the conversion chart lists US measures first (cups, tbsp, tsp, oz, lb, °F) with the metric value beside each, every number computed in code"
     ],
     designEn: [PRINT_SAFE, INK, "Writing lines at least 7 mm apart; space for a photo on the full-page version"],
     textRuleEn: TEXT_PAGES,
@@ -209,7 +211,8 @@ export const PRINTABLE_KINDS: Record<PrintableKind, KindProfile> = {
     contentEn: [
       "Age-appropriate activities for a clearly stated age range, increasing gently in difficulty",
       "Clear instructions for adults, large fonts and simple shapes drawn in code (vector) that children can color",
-      "Answer keys, a progress chart and a certificate of completion"
+      "Answer keys, a progress chart and a certificate of completion",
+      "US school terms: grade names such as Pre-K, Kindergarten and 1st grade, US coins and inches first; claim no state or Common Core standard, because standards differ by state"
     ],
     designEn: [PRINT_SAFE, INK, "Primary-school friendly fonts at 14 pt or larger; tracing lines with dashed guides"],
     textRuleEn: TEXT_PAGES,
@@ -270,7 +273,7 @@ export const PRINTABLE_KINDS: Record<PrintableKind, KindProfile> = {
     defaultFormats: ["US Letter (folds to 5x7 in)", "A4 (folds to 5x7 in)"], defaultPages: 7, art: true,
     contentEn: [
       "Folded greeting cards: each card prints on one sheet with the front and the inside panel, a fold line and crop marks, and folds to 5x7 in to fit an A7 envelope",
-      "Each card has a short, warm greeting inside, set in code and without names so any buyer can use it",
+      "Each card has a short, warm greeting inside in natural US wording that fits the theme, set in code and without names so any buyer can use it",
       "A matching gift tag sheet (8 tags per page) with hole marks"
     ],
     designEn: [PRINT_SAFE, "Front art at 300 dpi filling the 5x7 in front panel", "Greetings set in code with a licensed font, at least 14 pt; the inside text is upright when the card is folded"],
@@ -317,7 +320,7 @@ export const PRINTABLE_KINDS: Record<PrintableKind, KindProfile> = {
     labelTr: "Düzen etiketleri (kiler, ev)", labelEn: "printable labels",
     defaultFormats: ["US Letter", "A4"], defaultPages: 10, art: false,
     contentEn: [
-      "Ready-made labels for the theme (for example pantry: flour, sugar, rice, pasta, oats), 60-120 labels in all, each word checked for US spelling",
+      "Ready-made labels for the theme (for example pantry: flour, sugar, rice, pasta, oats), 60-120 labels in all, each word checked for US spelling and written with the US grocery name (powdered sugar, all-purpose flour, cornstarch, baking soda)",
       "Every label in 3 sizes (small, medium, large) on the sheets, with cut lines and 0.125 in spacing; works on sticker paper or cardstock",
       "Blank labels in the same style so buyers can hand-write their own"
     ],
@@ -353,9 +356,10 @@ export const PRINTABLE_KINDS: Record<PrintableKind, KindProfile> = {
     contentEn: [
       "A workbook built for the product, with a 'Start here' tab of short how-to-use notes, the working tabs (for a budget: 12 monthly tabs, an annual summary, savings goals and debt payoff) and a settings tab for the currency symbol and categories",
       "Every total, chart and progress bar is a live formula; input cells are shaded, and formula cells are locked with sheet protection without a password so they are not deleted by mistake",
-      "Works on a computer and in phone spreadsheet apps: no macros, scripts, external links or pivot tables"
+      "Works on a computer and in phone spreadsheet apps: no macros, scripts, external links or pivot tables",
+      "No fixed tax rate anywhere: sales-tax and income-tax rates differ by US state, so any tax line is a blank input cell for the buyer's own rate"
     ],
-    designEn: ["Built in code (for example Python openpyxl) as an .xlsx file with formulas, data validation drop-downs, conditional formatting, frozen header rows and charts", "Palette colors for headers and input cells; at least 11 pt text; columns wide enough to read on a phone", "US date and currency format by default"],
+    designEn: ["Built in code (for example Python openpyxl) as an .xlsx file with formulas, data validation drop-downs, conditional formatting, frozen header rows and charts", "Palette colors for headers and input cells; at least 11 pt text; columns wide enough to read on a phone", "Fonts that look the same in Excel and Google Sheets (for example Arial or Georgia), so nothing changes on the buyer's computer or phone", "US date and currency format by default"],
     textRuleEn: "US English spelling, no typos; tab names short and clear; currency and dates in US format by default, with a settings cell to change the currency symbol.",
     signatureEn: "a useful extra (for example a debt payoff chart or a sinking funds tracker) that top-ranking spreadsheets lack",
     includedEn: ["XLSX workbook with live formulas and charts", "Works in Excel and Google Sheets, on a computer or a phone", "One-page quick-start guide"],
@@ -504,9 +508,9 @@ const MOTIF_NOISE = /\b(kitchen|bathroom|bedroom|nursery|living|room|office|entr
 // Tema ailesine göre konu fikirleri: trendden gelen konu azsa her sayfa yine temaya uygun ve farklı olur.
 const THEME_SUBJECTS: Partial<Record<ThemeFamily, string[]>> = {
   christmas: ["vintage ornaments and pine sprigs", "a snowy cottage with a wreath on the door", "gingerbread cookies and baking tins", "stockings hung by a fireplace", "holly, berries and ribbon bows", "a winter village with lit windows", "wrapped gifts and twine", "candles, pinecones and evergreen"],
-  halloween: ["pumpkins and autumn leaves", "friendly ghosts and lanterns", "a moonlit haunted house", "black cats and candles", "apothecary bottles and spiders' webs", "a pumpkin patch at dusk"],
-  thanksgiving: ["a harvest table with pies", "pumpkins, gourds and wheat", "autumn leaves and acorns", "a cozy kitchen with apple pie"],
-  fall: ["autumn leaves and acorns", "mushrooms on a forest floor", "apples and harvest baskets", "a cozy sweater and warm tea", "pumpkins and wheat"],
+  halloween: ["pumpkins and fall leaves", "friendly ghosts and lanterns", "a moonlit haunted house", "black cats and candles", "apothecary bottles and spiders' webs", "a pumpkin patch at dusk"],
+  thanksgiving: ["a harvest table with pies", "pumpkins, gourds and wheat", "fall leaves and acorns", "a cozy kitchen with apple pie"],
+  fall: ["fall leaves and acorns", "mushrooms on a forest floor", "apples and harvest baskets", "a cozy sweater and warm tea", "pumpkins and wheat"],
   winter: ["snowflakes and mittens", "a snowy forest cabin", "hot cocoa and knitted scarves", "winter birds on bare branches"],
   spring: ["tulips and daffodils", "birds and blossoming branches", "a garden with watering cans", "butterflies and wildflowers"],
   easter: ["pastel eggs and spring flowers", "bunnies in a flower garden", "a spring basket with tulips", "chicks and blossoms"],
@@ -528,7 +532,7 @@ const THEME_SUBJECTS: Partial<Record<ThemeFamily, string[]>> = {
 };
 
 const KIND_SUBJECTS: Partial<Record<PrintableKind, string[]>> = {
-  coloring: ["a cozy cottage scene", "a flower garden", "forest animals", "a kitchen still life", "a seaside village", "a reading nook", "a mushroom forest", "a vintage tea party"],
+  coloring: ["a cozy cottage scene", "a flower garden", "forest animals", "a kitchen still life", "a village street with window boxes", "a reading nook", "a mushroom forest", "a vintage tea party"],
   wall_art: ["a botanical study", "an abstract landscape", "a still life with fruit", "a coastal horizon"],
   paper_craft: ["botanical sprigs", "garden flowers", "small stars and dots", "soft geometric shapes"],
   stickers: ["cute coffee cups and pastries", "potted plants and flowers", "stars, hearts and clouds", "books and reading glasses", "small animals with happy faces", "fruit and picnic treats"],
@@ -536,6 +540,9 @@ const KIND_SUBJECTS: Partial<Record<PrintableKind, string[]>> = {
   app_icons: ["a cozy flat lay of the theme's colors and textures", "a calm sky with soft clouds", "a simple botanical sprig", "a starry night sky"],
   wallpaper: ["a calm mountain landscape at sunrise", "soft abstract waves", "a field of wildflowers", "a starry night sky", "a quiet beach at sunset", "pressed botanical leaves"]
 };
+
+// Çocuk boyama kitabı: büyük, basit ve çocukların sevdiği konular (tek kitapta çatışan tema yok).
+const KIDS_COLORING_SUBJECTS = ["cute animals with balloons", "a friendly dinosaur in a park", "a rocket and smiling planets", "a farm with a red barn", "a castle with a rainbow", "a garden with butterflies", "a smiling sun and clouds", "a train full of toys"];
 
 // İkon setleri: günlük telefon işlevleri için marka içermeyen semboller (16'lık gruplar halinde).
 const ICON_SETS = [
@@ -552,7 +559,7 @@ const MONTH_NAMES = ["January", "February", "March", "April", "May", "June", "Ju
 const MONTH_SUBJECTS = [
   "snowy pine branches and a red cardinal", "snowdrops and early crocuses", "daffodils and spring rain", "cherry blossoms and a robin's nest",
   "peonies in a garden with bees", "strawberries, daisies and a picnic basket", "sunflowers under a summer sky", "seashells on a calm beach",
-  "apples and the first autumn leaves", "pumpkins and colorful maple leaves", "acorns, wheat and a warm cup of tea", "an evergreen wreath and soft snowfall"
+  "apples and the first fall leaves", "pumpkins and colorful maple leaves", "acorns, wheat and a warm cup of tea", "an evergreen wreath and soft snowfall"
 ];
 
 const PAPER_LAYOUTS = ["an all-over ditsy repeat", "a large-scale toile-style repeat", "a striped repeat", "a soft plaid repeat", "a scattered sprig repeat", "a damask-style repeat", "a ledger-grid repeat with small motifs", "a polka-dot repeat with small motifs", "a patchwork repeat", "a medallion wallpaper repeat", "a border-stripe repeat", "a tiny all-over texture repeat"];
@@ -613,13 +620,17 @@ const SUBJECT_VARIANTS: Record<string, string[]> = {
   space: ["a rocket launch", "an astronaut on the moon", "planets and stars", "a friendly alien in a spaceship", "a space station orbiting Earth"],
   ocean: ["a sea turtle and coral", "a whale family", "an octopus in a shipwreck", "fish in a kelp forest"],
   farm: ["a red barn with animals", "a cow and calf in a meadow", "chickens and chicks", "a tractor in a field"],
-  cat: ["a cat curled up on a rug", "kittens in a basket", "a cat in a window with plants", "a cat with yarn balls"],
-  dog: ["a puppy with a ball", "a dog on a picnic blanket", "puppies in a wagon", "a dog by a doghouse"],
+  cat: ["a cat curled up on a rug", "kittens in a basket", "a cat in a window with plants", "a cat with yarn balls", "a cat with a coffee cup and pastries", "a cat napping in a sunbeam"],
+  dog: ["a puppy with a ball", "a dog on a picnic blanket", "puppies in a wagon", "a dog by a doghouse", "a dog in a flower garden", "a dog with a cozy blanket"],
   mushroom: ["a mushroom house in the woods", "mushrooms and snails", "a fairy ring of mushrooms", "mushrooms under ferns"],
   butterfly: ["butterflies on wildflowers", "a butterfly garden", "a large detailed butterfly", "butterflies and bees"],
   flower: ["a vase of garden flowers", "a sunflower field", "roses on a trellis", "a wildflower meadow"],
   bird: ["songbirds on a branch", "an owl in a tree", "a bird bath in a garden", "hummingbirds and flowers"],
-  forest: ["a deer in the forest", "a fox in the woods", "a bear by a stream", "an owl in a hollow tree"]
+  forest: ["a deer in the forest", "a fox in the woods", "a bear by a stream", "an owl in a hollow tree"],
+  mandala: ["a floral mandala", "a geometric mandala", "a lotus mandala", "a mandala of leaves and vines", "a sun and moon mandala", "a feather mandala", "a star mandala", "a heart mandala"],
+  animal: ["a lion with a flowing mane", "an elephant and her calf", "a sleeping fox", "an owl on a branch", "a giraffe among tall trees", "a bear with cubs"],
+  horse: ["a horse running in a meadow", "a mare and her foal", "a horse by a barn", "a horse portrait with a flowing mane"],
+  unicorn: ["a unicorn on a cloud", "a unicorn by a rainbow", "a baby unicorn with stars", "a unicorn in a flower meadow"]
 };
 
 function stripPaperNouns(text: string): string {
@@ -646,6 +657,10 @@ function interleave(expanded: string[], original: string[]): string[] {
   return result;
 }
 
+// Ürün adının kendisi konu olabilen türler (boyama, duvar sanatı, duvar kâğıdı, çıkartma, kâğıt, ikon).
+const PRODUCT_SUBJECT_KINDS = new Set<PrintableKind>(["coloring", "wall_art", "wallpaper", "stickers", "paper_craft", "app_icons"]);
+// Ürün adında geçse de çizilecek konu olmayan kelimeler (yazı, kitle, zorluk, satış biçimi).
+const NOT_PRODUCT_SUBJECT = /\b(thank|you|happy|quotes?|sayings?|affirmations?|bible|verses?|names?|custom|personali[sz]ed|stress|relief|mindful(ness)?|beginners?|advanced|mega|mini|easy|large|bundle|phone|iphone|android|ipad|planner|lock|screen|home)\b/;
 function subjectsAndStyle(prepared: Prepared, profile: KindProfile): { subjects: string[]; components: string[]; styles: string[] } {
   const { input, themes } = prepared;
   const productWords = new Set(input.productType.split(/\s+/).flatMap((word) => [word, singular(word)]));
@@ -660,9 +675,15 @@ function subjectsAndStyle(prepared: Prepared, profile: KindProfile): { subjects:
   const fromTags = profile.art ? (input.trendTags || []).map((tag) => motifFromTag(tag, productWords)).filter((motif) => motif.length >= 3 && concrete(motif) && !COMPONENT.test(motif) && onTheme(motif))
     .map((motif) => featureSubject(motif, concrete)).filter((subject): subject is string => Boolean(subject)) : [];
   const fromThemes = [...themes].flatMap((family) => THEME_SUBJECTS[family] || []);
-  const own = [...fromFeatures, ...fromTags, ...fromThemes];
-  // Türün genel konuları yalnız üründe hiçbir konu yoksa kullanılır.
-  const all = (own.length ? own : KIND_SUBJECTS[input.kind] || []).filter((subject) => !TEXT_LIKE.test(subject) || features.includes(subject));
+  // Ürün adındaki konu ("mandala coloring pages" → mandala) her zaman önce gelir; tür, kitle ve satış kelimeleri atılır.
+  const productMotif = PRODUCT_SUBJECT_KINDS.has(input.kind) ? motifFromTag(input.productType.toLowerCase(), new Set(profile.vocabulary)) : "";
+  const fromProduct = productMotif.length >= 3 && !NOT_PRODUCT_SUBJECT.test(productMotif) && productMotif.split(" ").some((word) => !THEME_ADJECTIVES.has(word) && !STYLE_WORDS.has(word) && !META_WORDS.has(word))
+    ? [featureSubject(productMotif, () => true)].filter((subject): subject is string => Boolean(subject))
+    : [];
+  const own = [...fromProduct, ...fromFeatures, ...fromTags, ...fromThemes];
+  // Türün genel konuları yalnız üründe hiçbir konu yoksa kullanılır; çocuk boyama kitabı çocuk konuları alır.
+  const kidsColoring = input.kind === "coloring" && /\b(kids?|toddlers?|preschool|children|boys?|girls?)\b/i.test(input.productType);
+  const all = (own.length ? own : (kidsColoring ? KIDS_COLORING_SUBJECTS : KIND_SUBJECTS[input.kind]) || []).filter((subject) => !TEXT_LIKE.test(subject) || features.includes(subject));
   const subjects: string[] = [];
   for (const subject of all) {
     const words = subject.split(" ");
@@ -888,7 +909,8 @@ function originalityPlan(prepared: Prepared, profile: KindProfile): { tr: string
     ],
     en: [
       `Build ${features ? `the buyer-favored features (${features})` : "what these buyers want"} into one coherent, original product with a single theme, your own layout and your own wording.`,
-      `Add ${profile.signatureEn}, and name it ${input.kind === "wall_art" ? "in the size guide" : "on the cover"}.`,
+      // Kapak olmayan ürünlerde imza öğesi rehber sayfasında adlandırılır (tablo, duvar kâğıdı, ikon paketi).
+      `Add ${profile.signatureEn}, and name it ${input.kind === "wall_art" ? "in the size guide" : input.kind === "spreadsheet" ? "on the 'Start here' tab" : input.kind === "wallpaper" || input.kind === "app_icons" ? "in the setup guide" : "on the cover"}.`,
       "Use only fonts licensed for commercial use (for example Google Fonts) and list them; all text and artwork must be your own.",
       "Never use another seller's Etsy listing, photos or Pinterest pins, or any copyrighted image, as a reference or input; describe a style in words only.",
       "Never use trademarked names, characters, celebrities, logos or brand styles.",
@@ -898,12 +920,17 @@ function originalityPlan(prepared: Prepared, profile: KindProfile): { tr: string
 }
 
 function contentLines(prepared: Prepared, profile: KindProfile): string[] {
+  const { kind, productType } = prepared.input;
+  // Bütçe planlayıcısında vergi oranı eyalete göre değişir: sabit oran yazılmaz, alıcı kendi oranını yazar.
+  const money = (kind === "planner" || kind === "digital_planner") && /\b(budget|finance|financial|money|savings?|debt|expense|bills?|paycheck|income|spending)\b/i.test(productType)
+    ? ["Tax fields are blank for the buyer to fill in, with no fixed tax rate, because sales-tax and income-tax rates differ by US state"]
+    : [];
   // Dijital planlayıcıdaki baskı dosyası sekmesiz ve bağlantısızdır; yapay zekâ tahmin etmek zorunda kalmaz.
-  if (prepared.input.kind === "digital_planner") {
+  if (kind === "digital_planner") {
     const print = (prepared.input.formats || []).filter((format) => !isTablet(format));
-    return print.length ? [...profile.contentEn, `${print.join(" and ")}: a printable version of the same pages without tabs, links or buttons`] : profile.contentEn;
+    return [...profile.contentEn, ...(print.length ? [`${print.join(" and ")}: a printable version of the same pages without tabs, links or buttons`] : []), ...money];
   }
-  if (prepared.input.kind !== "paper_craft") return profile.contentEn;
+  if (kind !== "paper_craft") return [...profile.contentEn, ...money];
   const mode = paperMode(prepared.input.productType);
   return mode === "papers"
     ? ["A coordinated set of seamless patterned papers and solid coordinates in one theme", "Seamless patterns that tile without visible seams"]
@@ -917,7 +944,12 @@ const fileSlug = (format: string) => format.replace(/\s*\(.*\)/, "").replace(/:/
 function deliverables(prepared: Prepared, name: string, formats: string[]): string[] {
   const { input } = prepared;
   const file = name.replace(/[^A-Za-z0-9]+/g, "-").replace(/^-|-$/g, "");
-  const limit = input.kind === "wall_art"
+  // Dosya sınırı satırı türün dosya biçimine göre yazılır (tabloda JPG yok, duvar kâğıdı ve ikon PNG'dir).
+  const limit = input.kind === "spreadsheet"
+    ? "Etsy accepts at most 5 files of at most 20 MB each; the zip with the workbook and the guide stays far below that."
+    : input.kind === "wallpaper" || input.kind === "app_icons"
+    ? "Etsy accepts at most 5 files of at most 20 MB each. If a zip is over 20 MB, compress the PNG files losslessly (for example Pillow with optimize=True) or split that group into Part-1 and Part-2 zips while the whole set stays at 5 files."
+    : input.kind === "wall_art"
     ? "Etsy accepts at most 5 files of at most 20 MB each. Keep JPG quality between 80 and 90; if a zip is still over 20 MB, save that ratio's files at quality 75 (still sharp in print) and print each zip's size in the QA output."
     : "Etsy accepts at most 5 files of at most 20 MB each. Keep JPG quality between 80 and 90; if a file is still too big, lower the quality or split that group into Part-1 and Part-2 zips while the whole set stays at 5 files.";
   const fit = (files: string[]) => files.length <= 5 ? files : [...files.slice(0, 4), `${file}-More-Sizes.zip (${files.slice(4).map((item) => item.replace(/ \(.*\)$/, "")).join(" + ")})`];
@@ -1069,7 +1101,7 @@ function buildPdfPrompt(prepared: Prepared, profile: KindProfile, name: string, 
     "- A thank-you page from GXL Market Studio inviting the buyer to message for help and to leave a review.",
     `- A license page: "${printableLicense(input.kind, year)}"`,
     ...(healthNote(input) ? [`- A short gentle note on the first inside page: "${healthNote(input)}"`] : []),
-    "- A 'Product spec' JSON block: name, theme, page titles in order, formats, palette (name + hex), fonts and the signature element. Mockups and listing photos will be made from it.",
+    `- A 'Product spec' JSON block: name, theme, ${input.kind === "spreadsheet" ? "tab names" : input.kind === "wallpaper" || input.kind === "app_icons" ? "file names" : "page titles"} in order, formats, palette (name + hex), fonts and the signature element. Mockups and listing photos will be made from it.`,
     ...deliverables(prepared, name, formats).map((line) => `- ${line}`),
     "",
     "## Never",
@@ -1285,6 +1317,7 @@ function checklistFor(prepared: Prepared): string[] {
     textRule(prepared),
     input.kind === "calendar" ? "All 12 months share one style and palette, and each month's artwork fits its own month." : "The whole product follows one theme; nothing from another season, holiday or mood appears.",
     ...(input.kind === "calendar" ? [`Every date in the ${CAL_YEAR} grids was generated in code and checked against the real calendar.`] : []),
+    "Every word in the files, the file names and the Product spec is American English: no Turkish letters or words and no British spellings.",
     "All fonts are licensed for commercial use; list them.",
     "No brand, character or celebrity names; all artwork is original and no other seller's image was used as a reference.",
     "Etsy allows at most 5 files of at most 20 MB each per digital listing; the upload set follows the 'Upload set' line and every file name is clear.",
@@ -1321,6 +1354,8 @@ export function buildPrintableBrief(raw: PrintablePlanInput): PrintableBrief {
     masterPrompt: buildMasterPrompt({
       name,
       productLabel: input.productType,
+      productLabelTr: profile.labelTr,
+      usRules: usMarketRulesTr({ kind: input.kind, productType: input.productType, keyword: input.keyword }),
       specName: "Product spec",
       // Sanat promptları PDF briefinin içinde de geçer; pakette Brief B olarak bir kez verilir.
       filesBrief: pdfPrompt.replace(/## Artwork prompts[\s\S]*?\n\n(?=## )/, "## Artwork\nUse the artworks from Brief B.\n\n"),
@@ -1338,7 +1373,7 @@ export function buildPrintableBrief(raw: PrintablePlanInput): PrintableBrief {
       "Paketin 'Automated QA' çıktısını iste ve oku: tek satırda FAIL kalmamalı (sayfa sayısı, kopya sayfa, eksik format, ad tutarlılığı, kapak, dosya boyutu).",
       "Ürünün tek temada olduğuna bak: başka bayram, mevsim veya tarz (ör. Noel kitinde cadı sayfası) olmamalı.",
       "İlanda yazan her format dosyalarda gerçekten var mı bak; uygulama yüklemede eksik formatı ve aynı dosyanın iki kez yüklenmesini engeller.",
-      "Yazım denetimi yap (US English); 'Lorem ipsum' veya boş alan kalmasın.",
+      "Amerikan İngilizcesiyle yazım denetimi yap: dosyada Türkçe harf veya kelime ve İngiliz yazımı (colour, grey, Mum) kalmasın; 'Lorem ipsum' veya boş alan da kalmasın.",
       "Fontların ticari kullanım lisansı olsun; listeyi sakla.",
       "Marka, karakter veya ünlü adı yok; görseller tamamen özgün, başka satıcının görseli referans alınmadı.",
       "Etsy dijital ilanına en fazla 5 dosya, her biri en fazla 20 MB yüklenebilir; büyük dosyaları bölümlere ayırıp ZIP'le ve adlarını anlaşılır yap.",
@@ -1461,6 +1496,8 @@ function buildTags(prepared: Prepared, art: ArtPlan): string[] {
     ...(["planner", "recipe", "party", "journal"].includes(input.kind) ? [`${tagHead} template`] : []),
     ...(input.audience ? [`${tagHead} for ${input.audience.split(",")[0].trim().toLowerCase()}`] : []),
     ...(kit ? ["junk journal", "printable ephemera", "journal ephemera", "junk journal pages"] : []),
+    // Yalnız kâğıt paketi ("digital paper"): ürün adı türün etiketleriyle aynı olduğu için ek alıcı ifadeleri gerekir.
+    ...(input.kind === "paper_craft" && !kit ? ["paper pack", "patterned paper", "scrapbooking paper", "printable scrapbook", "digital backgrounds", "craft paper", "paper bundle"] : []),
     profile.labelEn,
     ...profile.tagStems,
     ...(input.kind === "digital_planner" || input.kind === "paper_craft" ? [`digital ${tagHead}`] : []),

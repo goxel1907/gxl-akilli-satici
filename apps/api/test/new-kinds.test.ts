@@ -73,11 +73,11 @@ test("stickers, cards, puzzles and labels each get their own files and checks", 
 test("the package is written for the assistant the seller picked", () => {
   const base = { kind: "coloring", productType: "adult coloring pages", keyword: "adult coloring pages", trendFeatures: ["cozy"], colors: ["sage", "cream"], pageCount: 30, seed: "x" };
   const claude = buildPrintableBrief(normalizePrintablePlanInput({ ...base, assistant: "claude" })).masterPrompt;
-  assert.match(claude, /Draw the artworks in Brief B as clean vector SVG in code/);
-  assert.match(claude, /you cannot generate photos or raster images/);
-  assert.doesNotMatch(claude, /built-in image generator/);
+  assert.match(claude, /Brief B'deki görselleri kodla temiz vektör SVG olarak/);
+  assert.match(claude, /fotoğraf ya da piksel tabanlı görsel üretemezsin/);
+  assert.doesNotMatch(claude, /yerleşik görsel aracınla/);
   const chatgpt = buildPrintableBrief(normalizePrintablePlanInput({ ...base, assistant: "chatgpt" })).masterPrompt;
-  assert.match(chatgpt, /make images with the built-in image generator/);
+  assert.match(chatgpt, /görselleri yerleşik görsel aracınla üret/);
   assert.doesNotMatch(chatgpt, /- Claude:/);
   // Seçim yoksa iki aracın notu da yazılır.
   const any = buildPrintableBrief(normalizePrintablePlanInput(base)).masterPrompt;

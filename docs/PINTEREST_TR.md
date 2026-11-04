@@ -1,11 +1,13 @@
 # Pinterest otomatik pin
 
-Etsy'de yayına giren her ürün, kendi satış linki, görseli, başlığı, açıklaması, anahtar kelimeleri ve hashtag'leriyle Pinterest'e otomatik pinlenir. Dijital PDF ürünlerinde Pinterest en büyük dış trafik kaynağıdır.
+Etsy'de yayına giren her ürün, kendi satış linki, görseli, başlığı, açıklaması, anahtar kelimeleri ve hashtag'leriyle Pinterest'e otomatik pinlenir. Dijital ürünlerde Pinterest en büyük dış trafik kaynağıdır.
 
 ## Nasıl çalışır?
 
 1. **Sıraya alma:** Stüdyo'da hazırlanıp **Dijital → Etsy taslağı oluştur** ile Etsy'ye gönderilen her ürün için 3 pin sıraya girer. Shopier'den gelen fiziksel ürünler de aynı şekilde sıraya girer.
 2. **Günlere yayma:** Pinler 0., 2. ve 5. günlerde atılır. Aynı linki art arda pinlemek Pinterest'te spam sayılabildiği için yayılır.
+   - İlk pin ilan yayına girince gider.
+   - 2. ve 5. gün pinleri ABD akşamına zamanlanır: Doğu saatiyle 20:00–21:00, Pasifik saatiyle 17:00–18:00 (Türkiye saatiyle gece 04:00 civarı). Alıcıların çoğu ABD'de olduğu için pin, onların Pinterest'e en çok baktığı saatte yayınlanır.
 3. **Kontrol:** Sunucu her 30 dakikada bir sırayı kontrol eder. Bunun için Etsy otopilotunu çalıştıran cron kullanılır, ek ayar gerekmez.
    - İlan Etsy'de henüz yayında değilse 6 saat sonra yeniden bakar.
    - İlan 15 gün içinde yayına girmezse iş "Hata" olarak kapanır.

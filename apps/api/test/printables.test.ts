@@ -209,10 +209,14 @@ test("an unscanned printable search is scanned as a printable, with a style-matc
 test("every part goes into one ordered master prompt for a single chat", () => {
   const coloring = buildPrintableBrief({ kind: "coloring", productType: "coloring book", keyword: "adult coloring pages", trendFeatures: ["mandala"], colors: ["sage green", "blush"], pageCount: 40, audience: "adults, moms", seed: "m" });
   const master = coloring.masterPrompt;
-  assert.match(master, /Do every step in THIS chat/);
+  assert.match(master, /Bütün adımları BU sohbette, sırayla yap/);
   assert.match(master, /Product spec JSON/);
   // Sanatlı türde görseller dosyalardan önce üretilir.
-  assert.ok(master.indexOf("- STEP 2 - Artwork") > 0 && master.indexOf("- STEP 3 - Product files") > master.indexOf("- STEP 2 - Artwork"));
+  assert.ok(master.indexOf("- ADIM 2 - Görseller") > 0 && master.indexOf("- ADIM 3 - Ürün dosyaları") > master.indexOf("- ADIM 2 - Görseller"));
+  // Yapay zekâ satıcıyla Türkçe konuşur; ürün Amerikan İngilizcesiyle yapılır ve adımlar "devam" ile ilerler.
+  assert.match(master, /Benimle her zaman Türkçe konuş/);
+  assert.match(master, /ADIM n TAMAM - devam etmek için 'devam' yaz/);
+  assert.doesNotMatch(master, /^- STEP \d+/m);
   for (const visual of coloring.adVisuals) assert.ok(master.includes(`### C${visual.slot}. `), `C${visual.slot}`);
   coloring.pins.forEach((pin, index) => assert.ok(master.includes(`D${index + 1}. Title: ${pin.title}`)));
   coloring.artPrompts.forEach((prompt) => assert.ok(master.includes(prompt)));
@@ -224,7 +228,7 @@ test("every part goes into one ordered master prompt for a single chat", () => {
   const doily = buildPatternBrief({ craft: "crochet", productType: "doily", colors: ["cream"], seed: "d" } as never);
   assert.match(doily.masterPrompt, /## Brief R - product renders/);
   assert.ok(!doily.masterPrompt.includes("<DESIGN SPEC JSON>"));
-  assert.match(doily.masterPrompt, /Design spec JSON in step 1 of this chat/);
+  assert.match(doily.masterPrompt, /1\. adımdaki Design spec JSON'unun/);
 });
 
 test("demand reads the leading quarter too, so big printable niches are not called weak", () => {
@@ -257,7 +261,9 @@ test("product names avoid search phrases, the package is fully English and the a
     assert.match(name, /Planner$/);
   }
   const brief = buildPrintableBrief({ ...input, seed: "z" });
-  assert.ok(!/yatay|dikey|kare|Etsy galerisi|Kapak/.test(brief.masterPrompt));
+  // Ürüne giren teknik şartname tamamen İngilizcedir (Türkçe olan yalnız satıcıya yazılan istek kısmıdır).
+  const spec = brief.masterPrompt.split("\n---\n")[1];
+  assert.ok(spec && !/yatay|dikey|kare|Etsy galerisi|Kapak|[çğıöşİ]/.test(spec));
   assert.match(brief.masterPrompt, /### C1\. Cover \(main image\) - 4:3 landscape, 3000x2250 px/);
   const lifestyle = brief.adVisuals[1].prompt.match(/Lifestyle scene: the "[^"]+ Planner", (.+?)\. Candid/)?.[1];
   assert.ok(lifestyle);
@@ -277,7 +283,7 @@ test("every package carries a scripted QA protocol tuned to its product type", (
   assert.match(planner.masterPrompt, /DUPLICATES/);
   assert.match(planner.masterPrompt, /every promised format exists as its own file: US Letter, A4, Tablet PDF \(hyperlinked\)/);
   assert.match(planner.masterPrompt, /CALENDAR/);
-  assert.match(planner.masterPrompt, /run the Automated QA script on the finished files/);
+  assert.match(planner.masterPrompt, /bitmiş dosyalarda Otomatik QA betiğini çalıştır/);
   const wallArt = buildPrintableBrief({ kind: "wall_art", productType: "botanical print", seed: "qa" });
   assert.match(wallArt.masterPrompt, /5400×8100 px/);
   assert.ok(!/11 AM, 12 PM/.test(wallArt.masterPrompt), "wall art does not get planner sequence checks");
