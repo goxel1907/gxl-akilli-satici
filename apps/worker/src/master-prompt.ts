@@ -60,11 +60,11 @@ export function buildMasterPrompt(input: MasterPromptInput): string {
   steps.push({ title: "Ürün dosyaları", body: "Ürün dosyalarını Brief A'da yazdığı gibi, geçiş geçiş (PASS 1, 2, 3) kur. Her formatı teslim et; hiçbiri eksik olmasın. Adımı bitirmeden önce bitmiş dosyalarda Otomatik QA betiğini çalıştır, çıktısını aynen yapıştır, her FAIL satırını düzelt ve sonucu bana Türkçe kısaca anlat. Sonra Brief A'daki Etsy yükleme setini (en fazla 5 dosya, her biri 20 MB'den küçük) içeren TEK bir indirme zip'i ver ki hepsini bir kerede indireyim. Kod çalıştıramıyor ya da dosya oluşturamıyorsan bunu adımın başında Türkçe söyle, eksiksiz dosya içeriğini (ör. PDF olarak kaydedebileceğim baskıya hazır HTML) ver ve betik çıktısı yerine her Otomatik QA kontrolü için kendi PASS/FAIL satırını yaz." });
   if (input.renderPrompt) steps.push({ title: "Ürün renderları", body: `Brief R'deki renderları her yanıtta bir tane olacak şekilde üret. 1. adımdaki ${spec} JSON'unun renklerini, stilini ve bitmiş ölçüsünü kullan; tam sayılar şemalarda ve çizimlerde kalır.` });
   steps.push({ title: "İlan görselleri", body: claude
-    ? `Brief C'deki ilan görsellerini sırayla yap: önizleme, düz serim ve ölçü görsellerini ${input.renderPrompt ? "renderlardan" : "bu sohbette yapılan gerçek sayfalardan"} kodla kur; fotoğraf gibi her sahne için spec değerleri doldurulmuş İngilizce promptu ver ve altına bir satır Türkçe açıklama yaz, ben bir görsel aracında çalıştırayım. Başka satıcıların ya da internetin görsellerini asla kullanma; görsele yeni yazı, harf veya logo çizme, başlıkları sonra Canva'da ben eklerim.`
-    : `Brief C'deki ilan görsellerini sırayla, her yanıtta bir tane üret. Görselde görünen ürün ${realProduct} olmalı. Onları görsel olarak göremiyorsan benden Türkçe olarak 2-3 ekran görüntüsü yüklememi iste; başka satıcıların ya da internetin görsellerini asla kullanma. Görsele yeni yazı, harf veya logo çizme; başlıkları sonra Canva'da ben eklerim.` });
+    ? `Brief C'deki ilan görsellerini sırayla yap: önizleme, düz serim ve ölçü görsellerini ${input.renderPrompt ? "renderlardan" : "bu sohbette yapılan gerçek sayfalardan"} kodla kur; fotoğraf gibi her sahne için spec değerleri doldurulmuş İngilizce promptu ver ve altına bir satır Türkçe açıklama yaz, ben bir görsel aracında çalıştırayım. Başka satıcıların ya da internetin görsellerini asla kullanma. Görsel aracına yazı, harf veya logo çizdirme; ben görseli yükleyince başlığı Brief C'nin başlık kurallarıyla kodla sen eklersin.`
+    : `Brief C'deki ilan görsellerini sırayla, her yanıtta bir tane üret. Görselde görünen ürün ${realProduct} olmalı. Onları görsel olarak göremiyorsan benden Türkçe olarak 2-3 ekran görüntüsü yüklememi iste; başka satıcıların ya da internetin görsellerini asla kullanma. Görsel aracına yazı, harf veya logo çizdirme (görsel modelleri yazıyı bozar); görsel bitince Brief C'deki başlığı, Brief C'nin başındaki başlık kurallarıyla kodla (Python Pillow) ekle ve bitmiş görseli ver.` });
   if (input.pins?.length && pinVisual) steps.push({ title: "Pinterest görselleri", body: claude
-    ? `Brief D'deki her pin için C${pinVisual.slot} görseline dayanan, spec değerleri doldurulmuş 2:3 dikey bir görsel promptu ver (İngilizce, altında bir satır Türkçe açıklama); pinler birbirinden farklı görünsün diye sahneyi her pinin konusuna göre değiştir ve üstteki %30'u başlık için boş bırak.`
-    : `Brief D'deki her pin için C${pinVisual.slot} görseline dayanan 2:3 dikey bir görsel üret; pinler birbirinden farklı görünsün diye sahneyi her pinin konusuna göre değiştir. Üstteki %30'u başlık için boş bırak.` });
+    ? `Brief D'deki her pin için C${pinVisual.slot} görseline dayanan, spec değerleri doldurulmuş 2:3 dikey bir görsel promptu ver (İngilizce, altında bir satır Türkçe açıklama); pinler birbirinden farklı görünsün diye sahneyi her pinin konusuna göre değiştir ve üstteki %30'u başlık için boş bırak; görseli yükleyince başlığı kodla sen eklersin.`
+    : `Brief D'deki her pin için C${pinVisual.slot} görseline dayanan 2:3 dikey bir görsel üret; pinler birbirinden farklı görünsün diye sahneyi her pinin konusuna göre değiştir. Üstteki %30'u boş bırak ve pinin başlığını Brief C'nin başlık kurallarıyla kodla ekle.` });
   steps.push({ title: "Son kontrol", body: input.qa?.length
     ? "Son yükleme setinde Otomatik QA betiğini yeniden çalıştır, çıktısını yapıştır, sonra Final checklist'i kontrol et. Ürüne hazır demeden önce her şey geçmeli. Sonucu bana Türkçe özetle: geçenler, düzelttiklerin ve benim yapmam gerekenler."
     : "Her şeyi Final checklist'e göre kontrol et ve bana Türkçe yaz: geçenler ve hâlâ düzeltilmesi gerekenler." });
@@ -76,7 +76,7 @@ export function buildMasterPrompt(input: MasterPromptInput): string {
     `Bu paket Etsy'de ABD'li alıcılara satılacak özgün bir ürün içindir: ${input.productLabelTr ? `${input.productLabelTr.replace(/\s*\(.*\)$/, "")} ("${input.productLabel}")` : `"${input.productLabel}"`}. Bütün adımları BU sohbette, sırayla yap; böylece ürün adı, palet, yazı tipleri ve ${spec} her dosyada ve görselde aynı kalır. İşi başka sohbetlere bölme.`,
     "",
     "## Dil kuralı (zorunlu)",
-    "- Benimle her zaman Türkçe konuş: adım özetleri, sorular, açıklamalar, QA sonuçlarının yorumu ve benden istediğin her iş (ör. ekran görüntüsü yüklemem, bir promptu görsel aracında çalıştırmam, Canva'da başlık eklemem) Türkçe olsun. Benim yapmam gereken işleri kısa, numaralı Türkçe adımlarla yaz.",
+    "- Benimle her zaman Türkçe konuş: adım özetleri, sorular, açıklamalar, QA sonuçlarının yorumu ve benden istediğin her iş (ör. ekran görüntüsü yüklemem, bir promptu görsel aracında çalıştırmam, beğenmediğim bir görseli değiştirmeni istemem) Türkçe olsun. Benim yapmam gereken işleri kısa, numaralı Türkçe adımlarla yaz.",
     `- Ürüne giren her şey Amerikan İngilizcesiyle olur: dosyalardaki bütün yazılar, sayfa ve sekme adları, dosya adları, ${spec} JSON değerleri, görsellerdeki yazılar, görsel promptları, ilan ve pin metinleri. Ürüne tek bir Türkçe kelime ya da Türkçe harf (ç, ğ, ı, ö, ş, ü) girmez.`,
     `- Aşağıdaki teknik şartname (${briefs.map((brief) => `Brief ${brief}`).join(", ")}${input.qa?.length ? ", Automated QA" : ""} ve Final checklist) bu yüzden İngilizce yazıldı: ürüne aynen girecek metinleri, ölçüleri ve görsel tariflerini birebir verir. Onu harfiyen uygula; tırnak içindeki İngilizce ifadeleri çevirme ve değiştirme.`,
     "- Görsel aracında çalıştırmam için bana bir prompt verirsen promptu İngilizce yaz, altına bir satır Türkçe ne olduğunu açıkla.",
@@ -103,13 +103,20 @@ export function buildMasterPrompt(input: MasterPromptInput): string {
   if (input.renderPrompt) {
     lines.push("", "## Brief R - product renders (one image per reply)", input.renderPrompt.trim());
   }
-  lines.push("", "## Brief C - listing images (one per reply, in this order)");
+  lines.push("", "## Brief C - listing images (one per reply, in this order)",
+    // Etsy'de en çok tıklanan kapaklar: tek net ürün, 3-6 kelimelik fayda başlığı, küçük bir sayı rozeti, sade arka plan.
+    "Headline rules (every image that has a headline):",
+    "- Make the image first with no text at all, then add the headline in code (Python Pillow) in the clean area the prompt leaves for it; never let the image tool draw letters.",
+    "- Use the bold heading font from the spec, exactly the words given, in capital letters; the headline height is at least 7% of the image height so it reads on a phone thumbnail.",
+    "- Use a palette color with at least 4.5:1 contrast, or place it on a soft rounded band in a palette color; at most one small badge (for example a page or question count) besides it.",
+    "- Keep the composition uncluttered: one clear hero, real product visible, no stickers, arrows or extra words. The best-selling Etsy covers read in one second.",
+    "- After adding it, read the headline back with OCR and fix any spelling difference.");
   for (const visual of input.adVisuals) {
-    lines.push(`### C${visual.slot}. ${visual.titleEn} - ${aspectEn(visual.aspect)}`, `Used for: ${visual.useEn}${visual.overlay ? `. Headline added later in Canva: "${visual.overlay}"` : ""}`, visual.prompt, "");
+    lines.push(`### C${visual.slot}. ${visual.titleEn} - ${aspectEn(visual.aspect)}`, `Used for: ${visual.useEn}${visual.overlay ? `. Headline (add in code): "${visual.overlay}"` : ""}`, visual.prompt, "");
   }
   if (input.pins?.length) {
     lines.push("## Brief D - Pinterest pins");
-    input.pins.forEach((pin, index) => lines.push(`D${index + 1}. Title: ${pin.title}`, `Description: ${pin.description}`, `Headline added later: ${pin.overlay}`, ""));
+    input.pins.forEach((pin, index) => lines.push(`D${index + 1}. Title: ${pin.title}`, `Description: ${pin.description}`, `Headline (add in code): ${pin.overlay}`, ""));
   }
   if (input.qa?.length) lines.push("## Automated QA (mandatory, run with code)", ...input.qa, "");
   lines.push("## Final checklist", ...input.checklist.map((item) => `- ${item}`));
