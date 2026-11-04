@@ -65,7 +65,7 @@ test("printable seed fills kind, product, formats and a page count above competi
   assert.deepEqual(seed.formats.slice(0, 4), ["US Letter", "A4", "A5", "Half Letter"]);
   assert.equal(seed.pageCount, 42);
   assert.ok(!seed.trendTags.some((tag) => tag.includes("disney")));
-  assert.ok(seed.basis.some((line) => line.startsWith("PDF türü: Planlayıcı")));
+  assert.ok(seed.basis.some((line) => line.startsWith("Ürün türü: Planlayıcı")));
 
   const kids = buildPatternSeed("coloring pages for kids", undefined, { nonce: "1" });
   assert.equal(kids.kind, "coloring");

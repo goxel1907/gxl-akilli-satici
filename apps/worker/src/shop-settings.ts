@@ -30,7 +30,7 @@ const DIGITAL_THANKS = "Thank you for your purchase! Your files are ready on you
 
 export const SHOP_PRESETS: Record<ShopAudience, ShopPreset> = {
   planners: {
-    labelTr: "Planlayıcı ve PDF alıcıları (önerilen)",
+    labelTr: "Dijital ürün alıcıları (önerilen)",
     audienceTr: "ABD'de düzen, alışkanlık ve sakin bir gün arayan kadınlar: anneler, öğrenciler, çalışan kadınlar.",
     tagline: "Printable planners, party games & digital templates",
     // Mağaza başlığı Etsy aramasında da okunur (en fazla 55 karakter): mağazanın 19 türünü kapsayan alıcı ifadeleri.
@@ -84,8 +84,8 @@ export function recommendAudience(products: Array<{ kind?: string; craft?: strin
   const printables = products.filter((product) => product.kind).length;
   const patterns = products.filter((product) => !product.kind && product.craft).length;
   if (patterns > printables) return { audience: "crafts", reasonTr: `Mağazadaki dijital ürünlerin çoğu desen (${patterns} desen, ${printables} PDF ürünü).` };
-  if (printables) return { audience: "planners", reasonTr: `Mağazadaki dijital ürünlerin çoğu PDF ürünü (${printables} PDF ürünü, ${patterns} desen).` };
-  return { audience: "planners", reasonTr: "Henüz ürün yok; uygulamanın Etsy stratejisi PDF ürünleriyle başlıyor. Trend taramalarında bu ürünlerin alıcıları ağırlıkla kadınlar, anneler ve öğrenciler." };
+  if (printables) return { audience: "planners", reasonTr: `Mağazadaki dijital ürünlerin çoğu hazır dijital ürün (${printables} dijital ürün, ${patterns} desen).` };
+  return { audience: "planners", reasonTr: "Henüz ürün yok; uygulamanın Etsy stratejisi dijital ürünlerle başlıyor. Trend taramalarında bu ürünlerin alıcıları ağırlıkla kadınlar, anneler ve öğrenciler." };
 }
 
 export class ShopSettingsError extends Error {

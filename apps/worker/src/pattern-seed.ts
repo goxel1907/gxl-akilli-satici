@@ -2,7 +2,7 @@ import type { EtsyRuntimeEnv } from "./etsy.js";
 import { RELEVANT_FORMATS } from "./advice.js";
 import { listDiscoveries } from "./discovery.js";
 import { inferPrintableKind, inferTrendGroup, isTrendGroup, normalizeKeyword, readCached, scanTrend, TREND_NICHES, type PatternCraft, type PrintableKind, type TrendGroup, type TrendResult, type TrendStore } from "./etsy-trends.js";
-import { isIpRisky } from "./ip-guard.js";
+import { hasBrandName, isIpRisky } from "./ip-guard.js";
 import { craftDefaultMaterial, type SkillLevel } from "./pattern-studio.js";
 import { defaultPrintableFormats, defaultPrintablePages, PRINTABLE_KINDS } from "./printable-studio.js";
 import { familiesConflict, fitsTheme, holidayAllowed, holidayOutOfWindow, META_WORDS, MISLEADING_FEATURE, proseCase, themeFamilies, type ThemeFamily } from "./theme.js";
@@ -573,6 +573,11 @@ function mineAudience(texts: Array<{ text: string; weight: number }>): string | 
 
 const SKILL_TR: Record<SkillLevel, string> = { beginner: "Başlangıç", easy: "Kolay", intermediate: "Orta", experienced: "İleri" };
 
+// Seed kartında sayının birimi türe göre yazılır (tabloda sekme, oyunda soru).
+function unitTr(kind: PrintableKind): string {
+  return kind === "spreadsheet" ? "Sekme" : kind === "slides" ? "Soru" : kind === "resume" ? "Şablon" : kind === "wallpaper" ? "Duvar kâğıdı" : kind === "app_icons" ? "İkon" : kind === "stickers" ? "Çıkartma sayfası" : kind === "wall_art" ? "Baskı" : "Sayfa";
+}
+
 export function buildPatternSeed(keywordInput: string, result: TrendResult | undefined, options: { craftHint?: string; kindHint?: PrintableKind; groupHint?: TrendGroup; nonce?: string; history?: SeedHistory; now?: number } = {}): PatternSeed & { comboKey: string; paletteKey: string } {
   const keyword = normalizeKeyword(keywordInput);
   const texts = corpus(result).filter((item) => !isIpRisky(item.text));
@@ -598,7 +603,8 @@ export function buildPatternSeed(keywordInput: string, result: TrendResult | und
   // Arama ifadesinin kendi bayramı (ör. "halloween coloring pages") düşürülmez; zamanlama uyarısı satıcıya gösterilir.
   const outOfWindow: string[] = [];
   const usable = ([phrase]: [string, number]) => {
-    if (isIpRisky(phrase) || MISLEADING_FEATURE.test(phrase)) return false;
+    // Program ve cihaz markaları ("google sheets excel") özellik olmaz; uyumluluk yalnız açıklamada yazılır.
+    if (isIpRisky(phrase) || hasBrandName(phrase) || MISLEADING_FEATURE.test(phrase)) return false;
     if (phrase.split(" ").every((word) => META_WORDS.has(word) || productWords.has(word))) return false;
     if (!CONSTRUCTIONS.has(phrase) && phrase.split(" ").some((word) => PRODUCT_NOUNS.has(singular(word)) && !productWords.has(word) && !productWords.has(singular(word)))) return false;
     const timing = holidayOutOfWindow(phrase, studio, now);
@@ -666,12 +672,12 @@ export function buildPatternSeed(keywordInput: string, result: TrendResult | und
     ...(keywordTiming ? [`Dikkat: ${keywordTiming.nameTr} ${keywordTiming.daysUntil} gün sonra (${keywordTiming.date}). ${keywordTiming.daysUntil < (studio === "pattern" ? 30 : 14) ? "Yeni ilan arama sonuçlarına oturmadan bayram geçer; bu ürünü gelecek yıl için hazırla." : "Alıcılar bu bayram için henüz aramıyor; ürünü hazırlayıp bayramdan yaklaşık 2 ay önce yayınla."}`] : [])
   ];
   const basis = kind ? [
-    `PDF türü: ${PRINTABLE_KINDS[kind].labelTr} · Ürün: ${product.product} (${product.source})`,
+    `Ürün türü: ${PRINTABLE_KINDS[kind].labelTr} · Ürün: ${product.product} (${product.source})`,
     chosen.features.length ? `Bu seferki trend özellikleri: ${chosen.features.join(", ")}${risingFeatures.length ? ` · yeni ilanlarda yükselen: ${risingFeatures.join(", ")}` : ""}` : "Trendde belirgin özellik sinyali yok; özgün tasarım yapay zekâya bırakıldı.",
     `Renkler: ${palette.colors.join(", ")} (${palette.source})`,
     `Formatlar: ${printable!.formats.join(", ")}${competition.gapFormats.length ? " (rakiplerde az olanlar eklendi)" : printable!.mined.length ? ` (rakiplerde geçen: ${printable!.mined.slice(0, 3).join(", ")})` : " (türün standart formatları)"}`,
     ...(audience ? [`Hedef kitle: ${audience} (etiket ve başlıklardan)`] : []),
-    competitorPages ? `Sayfa: ${pageCount} (rakiplerin ortancası ${competitorPages}; daha fazla değer için %20 fazlası)` : `Sayfa: ${pageCount} (trendde sayfa sayısı sinyali yok; türün tipik değeri)`,
+    competitorPages ? `${unitTr(kind)}: ${pageCount} (rakiplerin ortancası ${competitorPages}; daha fazla değer için %20 fazlası)` : `${unitTr(kind)}: ${pageCount} (trendde bu sayı için sinyal yok; türün tipik değeri)`,
     chosen.fresh ? "Bu özellik kombinasyonu bu arama için ilk kez kullanılıyor." : "Bu aramadaki tüm özellik kombinasyonları denendi; palet ve ad yine yeni seçildi.",
     ...themeNotes
   ] : [

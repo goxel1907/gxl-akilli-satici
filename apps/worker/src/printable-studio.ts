@@ -800,7 +800,11 @@ function buildArtPlan(prepared: Prepared, profile: KindProfile, pages: number): 
   // Çıkartma sayfası, kart ve duvar kâğıdında "as one large central subject" gibi kompozisyon eki anlamsızdır:
   // konu listesi türün yedek konularıyla tamamlanır, her görsel ayrı bir konu alır.
   const fillers = (KIND_SUBJECTS[input.kind] || []).filter((subject) => !subjects.includes(subject));
-  const distinctAt = (index: number) => [...subjects, ...fillers][index % Math.max(1, subjects.length + fillers.length)] || subjectAt(index);
+  // Konu havuzu görsel sayısından azsa tekrar eden konu farklı bir kompozisyonla istenir; aynı görsel iki kez istenmez.
+  const distinctPool = [...subjects, ...fillers];
+  const distinctAt = (index: number) => !distinctPool.length ? subjectAt(index)
+    : index < distinctPool.length ? distinctPool[index]
+      : `${distinctPool[index % distinctPool.length]}, ${compositions[Math.floor(index / distinctPool.length - 1) % Math.max(1, compositions.length)] || "from a new angle"}`;
   const sharedNotes = [
     "Keep one consistent style and the spec palette across every image, and replace any image that breaks a rule.",
     "Never copy or imitate another seller's listing images, Pinterest pins or any copyrighted artwork, and never upload them as references; describe the style in words only."

@@ -977,7 +977,7 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
     if (code === "INVALID_IMAGE_INPUT") return json(400, { error: "Görsel biçimi veya boyutu uygun değil." });
     if (code === "PATTERN_CRAFT_INVALID") return json(400, { error: "El işi türünü seçin." });
     if (code === "PRODUCT_TITLE_REQUIRED") return json(400, { error: "Ürün adı gerekli." });
-    if (code === "PRINTABLE_KIND_INVALID") return json(400, { error: "PDF türünü seçin." });
+    if (code === "PRINTABLE_KIND_INVALID") return json(400, { error: "Ürün türünü seçin." });
     if (code === "PATTERN_KEYWORD_REQUIRED") return json(400, { error: "Desen için bir Etsy araması seçin." });
     if (code === "PATTERN_PRODUCT_REQUIRED") return json(400, { error: "Ürün türünü yazın (ör. doily, slippers)." });
     if (error instanceof DigitalDeliveryError) return json(error.status, { error: error.message });
