@@ -26,7 +26,7 @@ Desen kartlarındaki **Bu nişte desen hazırla** düğmesi, nişin anahtar keli
 
 ### Otomatik keşif (Keşfedilenler)
 
-Taranan aramalar 28 sabit nişle sınırlı kalmaz. Sistem alıcıların gerçekten kullandığı yeni arama ifadelerini kendisi bulur:
+Taranan aramalar 58 sabit nişle sınırlı kalmaz. Sistem alıcıların gerçekten kullandığı yeni arama ifadelerini kendisi bulur:
 
 1. Her taramada üst ilanlardan **son 120 günde açılmış** olanların etiketleri, ilanın aylık favori hızıyla ağırlıklandırılır. Bunlar kartta **Yeni ilanlarda yükselen etiketler** olarak görünür.
 2. Bu etiketlerden ve üst ilanların en sık etiketlerinden en az 2 kelimelik, gruba uygun ifadeler seçilir:

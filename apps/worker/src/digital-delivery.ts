@@ -238,7 +238,7 @@ export async function createDigitalProduct(store: DigitalStore, form: FormData, 
 
   // "files" alanı birden çok PDF/ZIP taşır; eski uygulama sürümleri tek "pdf" alanı gönderir.
   const uploads = [...form.getAll("files"), ...form.getAll("pdf")].filter((item): item is File => typeof item !== "string");
-  if (!uploads.length) throw new DigitalDeliveryError("VALIDATION_FAILED", "PDF dosyası seçilmedi.");
+  if (!uploads.length) throw new DigitalDeliveryError("VALIDATION_FAILED", "Satılacak dosya seçilmedi (PDF veya ZIP).");
   if (uploads.length > MAX_FILES) throw new DigitalDeliveryError("VALIDATION_FAILED", "Etsy bir dijital ilana en fazla 5 dosya kabul eder. Fazla formatları bir ZIP dosyasında birleştirin.");
   const files: DigitalFile[] = [];
   const fileBytes: ArrayBuffer[] = [];

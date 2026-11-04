@@ -83,7 +83,7 @@ export const DEFAULT_SHOP_SETTINGS: ShopSettings = settingsOf(SHOP_PRESETS.plann
 export function recommendAudience(products: Array<{ kind?: string; craft?: string }>): { audience: ShopAudience; reasonTr: string } {
   const printables = products.filter((product) => product.kind).length;
   const patterns = products.filter((product) => !product.kind && product.craft).length;
-  if (patterns > printables) return { audience: "crafts", reasonTr: `Mağazadaki dijital ürünlerin çoğu desen (${patterns} desen, ${printables} PDF ürünü).` };
+  if (patterns > printables) return { audience: "crafts", reasonTr: `Mağazadaki dijital ürünlerin çoğu desen (${patterns} desen, ${printables} dijital ürün).` };
   if (printables) return { audience: "planners", reasonTr: `Mağazadaki dijital ürünlerin çoğu hazır dijital ürün (${printables} dijital ürün, ${patterns} desen).` };
   return { audience: "planners", reasonTr: "Henüz ürün yok; uygulamanın Etsy stratejisi dijital ürünlerle başlıyor. Trend taramalarında bu ürünlerin alıcıları ağırlıkla kadınlar, anneler ve öğrenciler." };
 }
