@@ -2,6 +2,7 @@ import { vintageStyle } from "./theme.js";
 import { hasBrandName } from "./ip-guard.js";
 import { generateStructuredObject, hasAiProvider, type AiRuntimeEnv } from "../../api/src/structured-ai.js";
 import { buildMasterPrompt } from "./master-prompt.js";
+import { usMarketRulesTr } from "./us-market.js";
 import { qaProtocol } from "./qa-protocol.js";
 import { buildAdVisuals, type AdVisual } from "./ad-visuals.js";
 import type { PatternCraft } from "./etsy-trends.js";
@@ -670,6 +671,7 @@ export function buildPatternBrief(input: PatternPlanInput): PatternBrief {
       name,
       // "tote bag sewing pattern", "crochet cardigan pattern": alıcının okuduğu sıra.
       productLabel: CRAFTS[input.craft].order === "craft-first" ? `${CRAFTS[input.craft].label.toLowerCase()} ${input.productType} pattern` : `${input.productType} ${CRAFTS[input.craft].label.toLowerCase()} pattern`,
+      usRules: usMarketRulesTr({ productType: input.productType }),
       specName: "Design spec",
       filesBrief: patternPrompt,
       renderPrompt,

@@ -1604,8 +1604,8 @@ function PrintableStudio({ online, seed, seeding, onReseed, onPickKind, onUpload
         {brief.originalityPlan.map((line: string) => <Text style={styles.analysisLine} key={line}>• {line}</Text>)}
       </View>
       <MasterPromptCard brief={brief} quality={plan?.quality} assistant={assistant} />
-      <PromptBox title="1) PDF promptu (Claude / ChatGPT)" text={brief.pdfPrompt} shareTitle={`${brief.name} PDF prompt`} />
-      {!!brief.artPrompts?.length && <PromptBox title="2) Sayfa görselleri promptları" text={brief.artPrompts.join("\n\n")} shareTitle={`${brief.name} artwork prompts`} />}
+      <PromptBox title="1) Ürün dosyası şartnamesi (İngilizce; tek pakette zaten var)" text={brief.pdfPrompt} shareTitle={`${brief.name} PDF prompt`} />
+      {!!brief.artPrompts?.length && <PromptBox title="2) Sayfa görselleri promptları (İngilizce)" text={brief.artPrompts.join("\n\n")} shareTitle={`${brief.name} artwork prompts`} />}
       <AdVisualsPanel visuals={brief.adVisuals} />
       <View style={styles.analysisCard}>
         <Text style={styles.cardTitle}>Pinterest pinleri</Text>
@@ -1682,12 +1682,13 @@ function shareChecked(quality: any, message: string, title?: string) {
 function MasterPromptCard({ brief, quality, assistant }: any) {
   const tool = assistant === "claude" ? "Claude" : assistant === "chatgpt" ? "ChatGPT" : "ChatGPT'ye (veya Claude'a)";
   if (!brief?.masterPrompt) return null;
-  const steps = (brief.masterPrompt.match(/^- STEP \d+/gm) || []).length;
+  const steps = (brief.masterPrompt.match(/^- (ADIM|STEP) \d+/gm) || []).length;
   return <View style={[styles.analysisCard, styles.masterCard]}>
     <Text style={styles.cardTitle}>Tek paket: tek sohbette hepsi</Text>
     <Text style={styles.analysisLine}>Parça parça gönderme: her paylaşım yeni sohbet açar ve yeni sohbet önceki ürün adını, paleti ve sayfa planını bilmez. Bu paket ürün dosyası, görseller ve varsa pinler dahil tüm parçaları {steps} sıralı adımda birleştirir.</Text>
+    <Text style={styles.analysisLine}>Dil: paketin istek kısmı Türkçedir. Yapay zekâ sizinle Türkçe konuşur ve sizden isteyeceği her işi (ekran görüntüsü yükleme, bir promptu görsel aracında çalıştırma) Türkçe yazar. Ürün, dosyalar, görsellerdeki yazılar ve ilan ise ABD'deki alıcı için Amerikan İngilizcesiyle hazırlanır; vergi, resmî tatil, okul yılı ve iklim gibi eyaletten eyalete değişen konular ürüne sabit bilgi olarak yazılmaz.</Text>
     <Text style={styles.analysisLine}>1. Aşağıdaki düğmeyle bir kez {assistant === "claude" ? "Claude'a" : assistant === "chatgpt" ? "ChatGPT'ye" : tool} gönder; paylaş ekranında {assistant === "claude" ? "Claude" : "ChatGPT"} uygulamasını seç.</Text>
-    <Text style={styles.analysisLine}>2. Her adım bitince aynı sohbete "next" yaz; yeni sohbet açma.</Text>
+    <Text style={styles.analysisLine}>2. Her adım bitince aynı sohbete "devam" yaz; yeni sohbet açma.</Text>
     <Text style={styles.analysisLine}>3. {assistant === "claude" ? "Claude görselleri kodla vektör çizer; fotoğraf gibi sahnelerin promptunu verir, onları bir görsel aracında üretip aynı sohbete yükle." : "ChatGPT görselleri kendi görsel aracıyla üretir; dosyaları indirme bağlantısıyla verir."}</Text>
     <Text style={styles.small}>{Math.round(brief.masterPrompt.length / 100) / 10} bin karakter. Uygulama uzun metni almazsa paylaş ekranının üstündeki kopyala simgesine dokunup aynı sohbete yapıştır.</Text>
     <QualityNote quality={quality} />
@@ -2251,7 +2252,8 @@ const ETSY_GUIDE: Array<{ id: string; title: string; icon: any; steps: string[] 
     "Bir kartı açıp 'Öne geçmek için ne yapmalı?' önerilerini okuyun, sonra 'Bu nişte dijital ürün hazırla'ya basın.",
     "Stüdyo'yu açtığınızda veya bir ürün türüne bastığınızda sistem o türde en güçlü Etsy aramasını kendisi seçer ve tüm alanları doldurur: ürün, trend özellikleri, renkler (trend rengi yoksa trend stiline uygun palet), formatlar (rakiplerin az sunduğu formatlar eklenir), sayfa sayısı (rakip ortancasının %20 fazlası) ve hedef kitle. 'Başka arama seç' sıradaki güçlü aramayı getirir.",
     "'Rakipleri geçmek için' kartı rakip ortanca fiyatını, önerilen başlangıç ve set fiyatını, format boşluklarını ve geçilecek rakipleri gösterir; önerilen fiyat yükleme formuna otomatik gelir. Siz 'Prompt, görsel ve ilanı hazırla'ya basarsınız.",
-    "Stüdyo'da kullanacağınız yapay zekâyı seçin (ChatGPT veya Claude), sonra 'Tek paketi gönder' ile her şeyi bir kez gönderin: dosyalar, sayfa görselleri, 10 reklam görseli ve pin görselleri sıralı adımlarla aynı sohbette yapılır. Her adım bitince aynı sohbete 'next' yazın. Parçaları ayrı ayrı paylaşmayın; her paylaşım yeni sohbet açar ve yeni sohbet ürün adını, paleti ve sayfa planını bilmez.",
+    "Stüdyo'da kullanacağınız yapay zekâyı seçin (ChatGPT veya Claude), sonra 'Tek paketi gönder' ile her şeyi bir kez gönderin: dosyalar, sayfa görselleri, 10 reklam görseli ve pin görselleri sıralı adımlarla aynı sohbette yapılır. Her adım bitince aynı sohbete 'devam' yazın. Parçaları ayrı ayrı paylaşmayın; her paylaşım yeni sohbet açar ve yeni sohbet ürün adını, paleti ve sayfa planını bilmez.",
+    "Paket Türkçe yazılmıştır: yapay zekâ sizinle Türkçe konuşur ve sizden istediği her işi Türkçe yazar. Ürünü, dosya adlarını, görsellerdeki yazıları ve ilanı ABD'deki alıcı için Amerikan İngilizcesiyle yapar. Takvimde resmî tatil, bütçe tablosunda vergi oranı gibi eyaletten eyalete değişen bilgiler ürüne yazılmaz.",
     "ChatGPT seçiliyse görselleri kendi görsel aracıyla üretir. Claude seçiliyse çizimleri kodla vektör olarak kendisi çizer; fotoğraf gibi sahneler için hazır görsel promptu verir, onu bir görsel aracında çalıştırırsınız.",
     "Dosyalar gelince modelden 'Automated QA' betik çıktısını isteyin: tek satırda FAIL olmamalı (saat AM/PM, kopya sayfa, eksik format, ad, kapak, kenar boşluğu). Uygulama da yüklemede ilanda yazan formatın dosyalarda olmamasını ve aynı dosyanın iki kez yüklenmesini engeller.",
     "Reklam tadında 10 görselin her birinde nerede kullanılacağı (Etsy kapak, galeri, Pinterest, Instagram), ölçüsü ve üstüne yazılacak kısa metin yazar. Görseli üretirken kendi sayfalarınızı veya ekran görüntülerinizi referans olarak yükleyin, yazıyı Canva ile ekleyin.",

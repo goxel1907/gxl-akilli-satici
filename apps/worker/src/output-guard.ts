@@ -2,6 +2,7 @@ import { hasBrandName } from "./ip-guard.js";
 import type { PatternCraft, PrintableKind } from "./etsy-trends.js";
 import { isIpRisky } from "./ip-guard.js";
 import { validateEtsyListingText } from "./pattern-studio.js";
+import { splitMasterPrompt } from "./master-prompt.js";
 import { familiesConflict, MISLEADING_FEATURE, proseCase, themeFamilies, type ThemeFamily } from "./theme.js";
 
 // Otomatik denetleyici: uygulamanın ürettiği her metin (yapay zekâ talimat paketi, Etsy başlığı, etiketler, açıklama,
@@ -45,7 +46,29 @@ const A_BEFORE_VOWEL = /(?<![\w'-])a\s+(?![A-Z]{2}|one\b|once\b|uni|use|usa|usb|
 const AN_BEFORE_CONSONANT = /(?<![\w'-])an\s+(?![A-Z]{2}|hour|honest|hono|heir)[bcdfgjklmnpqrstvwxyzBCDFGJKLMNPQRSTVWXYZ]\w/;
 const PLACEHOLDER = /\b(undefined|NaN)\b|\[object Object\]|\$\{|<DESIGN SPEC JSON>|\[(fiyat|Shopier bağlantısı|link|price|name)\]/;
 const DOUBLE_WORD = /\b([A-Za-z]{3,})[^\S\n]+\1\b/i;
-const BRITISH = /\b(colour|colours|fibre|recognisable|labelled|organise|organised|favourite|centre|grey)\b/;
+// İngiliz yazımı ve kelimeleri: ABD'li alıcı için yanlış görünür. Yazım farkları yerinde düzeltilir (US_SPELLING);
+// karşılığı bağlama göre değişen kelimeler (fortnight, postcode) yalnız raporlanır.
+const US_SPELLING: Array<[RegExp, string]> = [
+  [/\bcolour(s|ed|ful|ing)?\b/g, "color$1"], [/\bColour(s|ed|ful|ing)?\b/g, "Color$1"],
+  [/\bfavourite(s)?\b/g, "favorite$1"], [/\bFavourite(s)?\b/g, "Favorite$1"], [/\bfavour(s)?\b/g, "favor$1"],
+  [/\bflavour(s|ed)?\b/g, "flavor$1"], [/\bbehaviour(s)?\b/g, "behavior$1"], [/\bneighbour(s|hood)?\b/g, "neighbor$1"],
+  [/\bhonour(s|ed)?\b/g, "honor$1"], [/\bhumour\b/g, "humor"],
+  [/\borganis(e|ed|er|ers|ing|ation|ations)\b/g, "organiz$1"], [/\bOrganis(e|ed|er|ers|ing|ation|ations)\b/g, "Organiz$1"],
+  [/\bpersonalis(e|ed|ation)\b/g, "personaliz$1"], [/\bcustomis(e|ed|able)\b/g, "customiz$1"], [/\brecognisable\b/g, "recognizable"],
+  [/\bcentre(s|d)?\b/g, "center$1"], [/\btheatre(s)?\b/g, "theater$1"], [/\bfibre(s)?\b/g, "fiber$1"],
+  [/(?<!Earl )\bgrey(s|ish)?\b/g, "gray$1"], [/(?<!Earl )\bGrey(s|ish)?\b/g, "Gray$1"], [/\bjewellery\b/g, "jewelry"], [/\bJewellery\b/g, "Jewelry"],
+  [/\blabell(ed|ing)\b/g, "label$1"], [/\bcancell(ed|ing)\b/g, "cancel$1"], [/\btravell(ed|ing|er|ers)\b/g, "travel$1"], [/\bmodelling\b/g, "modeling"],
+  [/\bcatalogue(s)?\b/g, "catalog$1"], [/\bpyjamas\b/g, "pajamas"], [/\baluminium\b/g, "aluminum"], [/\bmaths\b/g, "math"],
+  [/\bMum\b/g, "Mom"], [/\bmum-to-be\b/g, "mom-to-be"], [/\bicing sugar\b/g, "powdered sugar"], [/\bcornflour\b/g, "cornstarch"],
+  [/\bplain flour\b/g, "all-purpose flour"], [/\bbicarbonate of soda\b/g, "baking soda"], [/\bcourgette(s)?\b/g, "zucchini"], [/\baubergine(s)?\b/g, "eggplant$1"],
+  [/\bhen party\b/g, "bachelorette party"], [/\bHappy Christmas\b/g, "Merry Christmas"]
+];
+const BRITISH = new RegExp(`${US_SPELLING.map(([pattern]) => pattern.source).join("|")}|\\b(fortnight|postcode|nappy|nappies|whilst|caster sugar|self-raising)\\b`);
+const outsideQuotes = (text: string) => text.split("\"").filter((_, index) => index % 2 === 0).join(" ");
+// Tırnak içi (örnek gösterilen kelimeler, aynen kalacak metin) düzeltilmez; yalnız tırnak dışı ABD yazımına çevrilir.
+function usSpelling(text: string): string {
+  return text.split("\"").map((part, index) => index % 2 ? part : US_SPELLING.reduce((value, [pattern, replacement]) => value.replace(pattern, replacement), part)).join("\"");
+}
 const LOWER_PROPER = /(?<![\w./@-])(christmas|halloween|easter|thanksgiving|hanukkah|ipad|pinterest|instagram|facebook)(?![\w/@-]|\.\w)/;
 
 // Her metne uygulanan genel kontroller.
@@ -61,7 +84,8 @@ function lintText(c: Collector, field: string, text: string, options: { english:
     find(c, field, text, A_BEFORE_VOWEL, "article", "İngilizcede ünlüden önce \"an\" olmalı (\"a orange\" yanlış).");
     find(c, field, text, AN_BEFORE_CONSONANT, "article", "İngilizcede ünsüzden önce \"a\" olmalı.");
     find(c, field, text, TR_LETTERS, "turkish_in_english", "İngilizce metinde Türkçe harf/kelime var; ABD'li alıcı okuyamaz.");
-    find(c, field, text, BRITISH, "british_spelling", "İngiliz yazımı var; ürün US English istiyor (color, fiber, labeled).", "warn");
+    // Örnek olarak tırnak içinde gösterilen kelimeler ("colour" yerine "color") kurala girmez.
+    find(c, field, outsideQuotes(text), BRITISH, "british_spelling", "İngiliz yazımı veya kelimesi var; ABD'li alıcı için Amerikan İngilizcesi olmalı (color, gray, Mom, powdered sugar).");
   }
   if (options.prose) {
     const outsideQuotes = text.split("\"").filter((_, index) => index % 2 === 0).join(" ");
@@ -89,7 +113,19 @@ export interface PromptContext {
   subjects?: string[];
 }
 
-function lintPrompt(c: Collector, field: string, prompt: string, context: PromptContext) {
+function lintPrompt(c: Collector, field: string, fullPrompt: string, context: PromptContext) {
+  // Paketin istek kısmı Türkçedir (yapay zekâ satıcıyla Türkçe konuşur); "---" sonrasındaki teknik şartname
+  // ürüne giren metinleri taşıdığı için Amerikan İngilizcesi kurallarıyla denetlenir.
+  const { requestTr, specEn: prompt } = splitMasterPrompt(fullPrompt);
+  c.checks += 1;
+  if (/^## Brief A /m.test(fullPrompt) && !(/Benimle her zaman Türkçe konuş/.test(requestTr) && /Amerikan İngilizcesi/.test(requestTr))) {
+    c.issues.push({ code: "language_rule", field, severity: "error", messageTr: "Pakette dil kuralı yok: yapay zekâ sizinle Türkçe konuşmalı, ürünü Amerikan İngilizcesiyle yapmalı." });
+  }
+  if (requestTr) {
+    lintText(c, field, requestTr, { english: false, prose: false });
+    // Türkçe istek kısmında İngilizce adım satırı kalmamalı; satıcı ne istendiğini okuyabilmeli.
+    find(c, field, requestTr, /^- STEP \d+|write next to continue|^## How we will work/m, "english_request", "Paketin istek kısmında İngilizce adım kaldı; adımlar Türkçe olmalı.");
+  }
   lintText(c, field, prompt, { english: true, prose: false });
   const ruleFree = prompt.split("\n").filter((line) => !/^-?\s*(Never|- Never)|^\d+\.\s*Never|Never offer or mention/.test(line.trim())).join("\n");
   find(c, field, ruleFree, /commercial[- ]use license option|offer[^.\n]*commercial[- ]use|state them clearly on the cover/i, "license_conflict", "Talimat ticari lisans sunmayı istiyor ama lisans 'yalnız kişisel kullanım'.");
@@ -131,13 +167,14 @@ function lintPrompt(c: Collector, field: string, prompt: string, context: Prompt
     if (META_SUBJECT.test(subject.toLowerCase()) || STYLE_ONLY.test(subject)) c.issues.push({ code: "meta_subject", field, severity: "error", messageTr: "Görsel konusu çizilecek bir şey değil (satış kelimesi, kitle veya yalnız sıfat).", excerpt: subject });
   }
   // Brief ve görsel atıfları gerçekten var olan bölümlere gitmeli.
-  for (const match of prompt.matchAll(/\bBrief ([A-Z])\b/g)) {
+  for (const match of fullPrompt.matchAll(/\bBrief ([A-Z])\b/g)) {
     c.checks += 1;
     if (!new RegExp(`^## Brief ${match[1]} `, "m").test(prompt)) c.issues.push({ code: "dangling_reference", field, severity: "error", messageTr: `Talimat olmayan bir bölüme (Brief ${match[1]}) atıf yapıyor.` });
   }
-  for (const match of prompt.matchAll(/\bimage C(\d+)\b/g)) {
+  for (const match of fullPrompt.matchAll(/\bimage C(\d+)\b|\bC(\d+) görsel/g)) {
     c.checks += 1;
-    if (!new RegExp(`^### C${match[1]}\\. `, "m").test(prompt)) c.issues.push({ code: "dangling_reference", field, severity: "error", messageTr: `Talimat olmayan bir görsele (C${match[1]}) atıf yapıyor.` });
+    const slot = match[1] || match[2];
+    if (!new RegExp(`^### C${slot}\\. `, "m").test(prompt)) c.issues.push({ code: "dangling_reference", field, severity: "error", messageTr: `Talimat olmayan bir görsele (C${slot}) atıf yapıyor.` });
   }
   // Sayfa bütçesi toplamı ürün boyutuna eşit olmalı.
   const size = /^- Size: (\d+) core pages/m.exec(prompt);
@@ -208,8 +245,17 @@ export function repairText(text: string, options: { prose?: boolean } = {}): str
     .split("\n").map((line) => line.replace(/(?<=\S)[^\S\n]{2,}(?=\S)/g, " ").replace(/[^\S\n]+,/g, ",").replace(/,\s*,/g, ",").replace(/[^\S\n]+$/g, "")).join("\n")
     .replace(/(?<![\w'-])a(\s+)(?![A-Z]{2}|one\b|once\b|uni|use|usa|usb|uk\b|us\b|u\.)([aeiouAEIOU]\w)/g, "an$1$2")
     .replace(/(?<![\w'-])A(\s+)(?![A-Z]{2}|one\b|once\b|uni|use|usa|usb|uk\b|us\b|u\.)([aeiouAEIOU]\w)/g, "An$1$2");
+  value = usSpelling(value);
   if (options.prose) value = proseCase(value);
   return value;
+}
+
+// Talimat paketinde yalnız İngilizce teknik şartname düzeltilir; Türkçe istek kısmına yalnız boşluk düzeltmesi uygulanır.
+function repairPrompt(prompt: string): string {
+  const { requestTr, specEn } = splitMasterPrompt(prompt);
+  if (!requestTr) return repairText(prompt);
+  const tr = requestTr.split("\n").map((line) => line.replace(/(?<=\S)[^\S\n]{2,}(?=\S)/g, " ").replace(/[^\S\n]+$/g, "")).join("\n");
+  return `${tr}\n---\n${repairText(specEn)}`;
 }
 
 function repairListing<T extends ListingLike>(listing: T, fixed: string[], field: string): T {
@@ -231,7 +277,7 @@ interface PinLike { title: string; description: string; overlay: string }
 export function guardPrintablePlan<B extends { masterPrompt: string; pdfPrompt: string; pins: PinLike[]; artSubjects?: string[] }, L extends ListingLike>(brief: B, listing: L, context: { kind: PrintableKind; formats?: string[] }) {
   const c: Collector = { issues: [], checks: 0 };
   const fixed: string[] = [];
-  const masterPrompt = repairText(brief.masterPrompt);
+  const masterPrompt = repairPrompt(brief.masterPrompt);
   const pdfPrompt = repairText(brief.pdfPrompt);
   if (masterPrompt !== brief.masterPrompt) fixed.push("masterPrompt");
   const pins = brief.pins.map((pin, index) => {
@@ -254,7 +300,7 @@ export function guardPrintablePlan<B extends { masterPrompt: string; pdfPrompt: 
 export function guardPatternPlan<B extends { masterPrompt: string; patternPrompt: string }, L extends ListingLike>(brief: B, listing: L, context: { craft: PatternCraft }) {
   const c: Collector = { issues: [], checks: 0 };
   const fixed: string[] = [];
-  const masterPrompt = repairText(brief.masterPrompt);
+  const masterPrompt = repairPrompt(brief.masterPrompt);
   const patternPrompt = repairText(brief.patternPrompt);
   if (masterPrompt !== brief.masterPrompt) fixed.push("masterPrompt");
   const safeListing = repairListing(listing, fixed, "listing");

@@ -62,6 +62,14 @@ const SETTINGS_KEY = "pinterest:settings";
 const DAY_MS = 24 * 60 * 60 * 1000;
 // Aynı ürünün pinleri aynı gün değil 0., 2. ve 5. günlerde atılır; art arda aynı link spam sayılabilir.
 const PIN_SPACING_DAYS = [0, 2, 5];
+// Alıcılar ABD'de: sonraki pinler ABD akşamına denk gelir. 01:00 UTC kışın Doğu'da 20:00, Pasifik'te 17:00;
+// yazın 21:00 ve 18:00'dir. İlk pin ilan yayına girince hemen gider (ilan kontrolü zaten bekletir).
+const US_EVENING_UTC_HOUR = 1;
+export function nextUsEvening(at: number): number {
+  const day = new Date(at);
+  const slot = Date.UTC(day.getUTCFullYear(), day.getUTCMonth(), day.getUTCDate(), US_EVENING_UTC_HOUR);
+  return slot >= at ? slot : slot + DAY_MS;
+}
 const MAX_QUEUE = 300;
 const LISTING_RECHECK_MS = 6 * 60 * 60 * 1000;
 const MAX_LISTING_CHECKS = 60;
@@ -287,7 +295,7 @@ export async function enqueueListingPins(store: PinterestStore, input: { listing
     id: randomToken(12),
     listingId: input.listingId,
     pinIndex: index,
-    dueAt: new Date(now + days * DAY_MS).toISOString(),
+    dueAt: new Date(days ? nextUsEvening(now + days * DAY_MS) : now).toISOString(),
     status: "scheduled",
     attempts: 0,
     boardName: input.boardName.slice(0, 50),

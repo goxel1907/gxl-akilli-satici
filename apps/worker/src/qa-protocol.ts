@@ -22,22 +22,32 @@ const KIND_CHECKS: Partial<Record<PrintableKind, string[]>> = {
   planner: ["CALENDAR — monthly grids have 6 rows × 7 columns; Monday-start and Sunday-start versions differ only in weekday order."],
   wall_art: ["PRINT SIZE — every 2:3 master is 5400×8100 px, every ratio file has the stated pixel size at 300 dpi (for example 3:4 = 5400×7200 px for 18×24 in), and important elements stay inside the safe area in every ratio."],
   coloring: ["LINE ART — after thresholding, the line art is pure black on white with no gray fills, lines are closed and at least 1 pt thick, and no two pages repeat the same subject in the same composition; the PDF has no blank pages."],
-  party: ["ANSWER KEYS — every game with right answers (quizzes, matching, word games) has an answer key with one answer per question; games without right answers (advice cards, predictions) are marked \"no key needed\"."],
-  recipe: ["CUT LINES — 4×6 and 5×7 cards have crop marks, and the card content stays 3 mm inside them (cards have no binding margin)."],
+  party: [
+    "ANSWER KEYS — every game with right answers (quizzes, matching, word games) has an answer key with one answer per question; games without right answers (advice cards, predictions) are marked \"no key needed\".",
+    "21+ — any game that mentions alcohol carries a \"21+\" note (the drinking age is 21 in every US state), and games for a mom-to-be or for kids mention no alcohol."
+  ],
+  recipe: [
+    "CUT LINES — 4×6 and 5×7 cards have crop marks, and the card content stays 3 mm inside them (cards have no binding margin).",
+    "US UNITS — the conversion chart lists US measures first (cups, tbsp, tsp, oz, lb, °F) with the metric value beside each; every metric value is computed in code (1 cup = 236.6 ml, °C = (°F − 32) × 5/9) and rounded the same way."
+  ],
   journal: ["PROMPTS — no prompt is repeated; count the prompts and confirm there are at least 40, as the content requires."],
-  kids: ["ANSWER KEYS — every activity with a correct answer has a matching key entry; the age range is stated on the cover."],
-  calendar: [`DATES — for every month of ${calendarYear()}, compare the printed grid with Python's calendar module: day 1 falls on the right weekday, the month has the right number of days, weeks start on Sunday, and the month name and year are right; print one PASS/FAIL line per month.`],
+  kids: [
+    "ANSWER KEYS — every activity with a correct answer has a matching key entry; the age range is stated on the cover.",
+    "US SCHOOL TERMS — grade names (Pre-K, Kindergarten, 1st grade …), coins (penny, nickel, dime, quarter) and measures (inches first) follow US usage, and no page claims a state or Common Core standard."
+  ],
+  calendar: [`DATES — for every month of ${calendarYear()}, compare the printed grid with Python's calendar module: day 1 falls on the right weekday, the month has the right number of days, weeks start on Sunday, the month name and year are right, and no holiday is printed (holidays differ by state); print one PASS/FAIL line per month.`],
   stickers: ["STICKERS — every sticker PNG has a transparent background and keeps its white border; on the sheets, every sticker is at least 0.6 in wide, 0.25 in from its neighbors and 0.5 in from the page edge; the number of PNG files equals the number of stickers on the illustrated sheets."],
-  cards: ["CARDS — every card sheet has a fold line and crop marks, the inside text is upright when the card is folded, every greeting is spelled correctly, and the gift tags have hole marks."],
+  cards: ["CARDS — every card sheet has a fold line and crop marks, the inside text is upright when the card is folded, every greeting is spelled correctly in natural US wording (never British forms such as \"Mum\"), and the gift tags have hole marks."],
   puzzles: ["PUZZLES — a script re-solves every puzzle: each listed word appears exactly once in its grid, every sudoku has exactly one solution, and each answer key matches its puzzle number."],
   wallpaper: ["WALLPAPER SIZES — every file has the exact pixel size of its listed screen, the main subject stays inside the central 70%, and no image is stretched (sizes are cropped, never squeezed)."],
   app_icons: ["ICONS — every icon has the same size, corner radius, padding and line weight; no icon uses a letter, an app name or anything that looks like another company's logo (compare the contact sheet with the best-known app logos); no two icons use the same symbol."],
   spreadsheet: [
     "FORMULAS — in a copy, fill every input cell with sample numbers, recalculate with a formula engine (for example LibreOffice headless or the Python formulas package) and confirm that no cell shows an error (#REF!, #DIV/0!, #VALUE!, #NAME?), every total equals the sum of its inputs and every chart points to the right range; deliver the clean file without the sample numbers.",
     "INPUTS — input cells are shaded, formula cells are locked with sheet protection that has no password, and every drop-down has data validation.",
-    "NO MACROS — the file is .xlsx (not .xlsm) with no macros, scripts, external links, pivot tables or hidden tabs, so it works in Excel, Google Sheets and phone spreadsheet apps."
+    "NO MACROS — the file is .xlsx (not .xlsm) with no macros, scripts, external links, pivot tables or hidden tabs, so it works in Excel, Google Sheets and phone spreadsheet apps.",
+    "US FORMAT — currency cells use the $ format ($1,234.56), dates use MM/DD/YYYY, and no cell holds a fixed sales-tax or income-tax rate: tax rates differ by state, so any tax rate is a blank input cell."
   ],
-  labels: ["LABELS — every label word is in an English dictionary with US spelling, no word repeats within a set, and the cut lines line up with the label boxes."],
+  labels: ["LABELS — every label word is in an English dictionary with US spelling and uses the US grocery name (powdered sugar, all-purpose flour, cornstarch, baking soda; never \"icing sugar\", \"plain flour\", \"cornflour\" or \"bicarbonate of soda\"), no word repeats within a set, and the cut lines line up with the label boxes."],
   paper_craft: ["PATTERN TILES — for every tile, the left and right edge columns and the top and bottom edge rows match (mean difference under 3%), the 2×2 preview shows no seam, and every 12×12 paper is a 3600×3600 px JPG."]
 };
 
@@ -126,9 +136,13 @@ export function qaProtocol(input: QaInput): string[] {
   const common = (name: string) => [
     `NAME — the product name "${name}" appears ${nameWhere}, spelled exactly like this, and no other product name or old working name appears anywhere.`,
     "PLACEHOLDERS — no \"Lorem\", \"TODO\", \"TBD\", \"XXX\", \"undefined\", \"NaN\", stray brackets or empty headings.",
-    "FONTS — every font is embedded; print the font list.",
-    `MARGINS — every word's bounding box is at least 6 mm from each page edge${binding ? " (19 mm on the binding side of print editions)" : input.type === "printable" && input.kind === "recipe" ? " (19 mm on the binding side of the binder pages)" : ""}; nothing is clipped.`,
-    `SPELLING — list every word that is not in an English dictionary and fix the real typos (the product name "${input.name}" is a coined word: keep it).`,
+    input.type === "printable" && input.kind === "spreadsheet"
+      ? "FONTS — the quick-start PDF embeds every font, and the workbook uses only fonts that come with both Excel and Google Sheets (for example Arial or Georgia); print the font list."
+      : "FONTS — every font is embedded; print the font list.",
+    input.type === "printable" && input.kind === "spreadsheet"
+      ? "MARGINS — in the quick-start PDF every word's bounding box is at least 6 mm from each page edge; in the workbook no text is cut off in its cell at 100% zoom."
+      : `MARGINS — every word's bounding box is at least 6 mm from each page edge${binding ? " (19 mm on the binding side of print editions)" : input.type === "printable" && input.kind === "recipe" ? " (19 mm on the binding side of the binder pages)" : ""}; nothing is clipped.`,
+    `AMERICAN ENGLISH — list every word in the files and file names that is not in an American English dictionary and fix the real typos (the product name "${input.name}" is a coined word: keep it); also list and fix any British spelling or word (\"colour\", \"favourite\", \"organise\", \"grey\", \"centre\", \"Mum\", \"maths\") and any Turkish word or Turkish-only letter (c-cedilla, g-breve, dotless i, o-umlaut, s-cedilla, u-umlaut).`,
     "VISUAL — render every page to a contact-sheet image, look at it and list anything empty, crowded, cut off or inconsistent."
   ];
   if (input.type === "printable") {
