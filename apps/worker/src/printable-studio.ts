@@ -7,7 +7,7 @@ import { buildMasterPrompt } from "./master-prompt.js";
 import { usMarketRulesTr } from "./us-market.js";
 import { qaProtocol } from "./qa-protocol.js";
 import { coinProductName, normalizeEtsyTags, normalizeEtsyTitle, titleCase, validateEtsyListingText } from "./pattern-studio.js";
-import { cleanBriefNotes, fitsTheme, harmonizeThemes, isHolidayFamily, META_WORDS, MISLEADING_FEATURE, proseCase, THEME_ADJECTIVES, themeFamilies, type ThemeFamily, vintageStyle } from "./theme.js";
+import { cleanBriefNotes, fitsTheme, harmonizeThemes, isHolidayFamily, META_WORDS, MISLEADING_EXCEPT_EDITABLE, MISLEADING_FEATURE, proseCase, THEME_ADJECTIVES, themeFamilies, type ThemeFamily, vintageStyle } from "./theme.js";
 
 // Kadınlara yönelik yazdırılabilir / dijital PDF ürünleri için stüdyo:
 // türüne özel içerik kuralları, Claude/ChatGPT promptu, gerekirse sayfa sayfa görsel promptları,
@@ -78,6 +78,15 @@ interface KindProfile {
 }
 
 const CAL_YEAR = calendarYear();
+// Sunum oyunu tahtası 5 kategoridir: soru sayısı 5'in katı ve 15-50 arasıdır.
+const slideQuestions = (pages: number) => Math.min(50, Math.max(15, Math.round(pages / 5) * 5));
+// Sanatsız türlerde "neler var" satırının birimi: tablo sekme, oyun soru, özgeçmiş şablon sayar.
+function contentCount(kind: PrintableKind, pages: number): string {
+  if (kind === "spreadsheet") return `${pages} tabs`;
+  if (kind === "slides") return `${slideQuestions(pages)} questions in 5 categories`;
+  if (kind === "resume") return "4 editable templates";
+  return `${pages} pages`;
+}
 const PRINT_SAFE = "Print-safe margins: at least 0.25 in (6 mm) on every side and nothing important within 0.5 in of the edge, so home printers never cut content.";
 const INK = "Ink-friendly: light tints, thin lines and no full-page dark backgrounds, so every page prints well in color or in black and white on a home printer.";
 const TEXT_PAGES = "US English spelling, no typos, page numbers and a small footer on every page except the cover.";
@@ -366,6 +375,42 @@ export const PRINTABLE_KINDS: Record<PrintableKind, KindProfile> = {
     tagStems: ["spreadsheet template", "digital tracker", "spreadsheet tracker", "tracker template", "digital template", "spreadsheet planner", "auto calculating", "digital spreadsheet", "spreadsheet bundle", "simple spreadsheet", "life organizer", "xlsx template", "digital download"],
     vocabulary: ["spreadsheet", "spreadsheets", "template", "templates", "tracker", "trackers", "budget", "planner", "digital", "monthly", "weekly", "annual", "finance", "expense", "savings", "debt", "bill", "money", "personal"],
     pageWord: "tabs"
+  },
+  // ---------- Program şablonları: alıcı kendi programında açar ve düzenler (Etsy'de satıcının kendi tasarımı olarak serbest) ----------
+  slides: {
+    labelTr: "Sunum oyunu (PowerPoint, Google Slides)", labelEn: "slide game template",
+    defaultFormats: ["PPTX file (PowerPoint, Google Slides, Keynote)", "PDF host guide"], defaultPages: 25, art: false,
+    contentEn: [
+      "An interactive quiz-show game: a title slide, a how-to-play slide, a clickable game board with 5 categories, one question slide and one answer slide for every board tile, a bonus round and a final scoreboard slide",
+      "Every board tile links to its question slide, every question slide has a 'Show answer' link to its answer slide, and every answer slide links back to the board; the links work in slideshow mode in PowerPoint, Google Slides and Keynote",
+      "Original, family-friendly questions written for the theme, each with one correct answer that is checked; no brand, character, celebrity, TV show or game show names, and no question whose answer is disputed or changes over time",
+      "A printable PDF host guide with the rules, the full answer key and a score sheet"
+    ],
+    designEn: ["16:9 widescreen slides (13.333 x 7.5 in)", "Built in code (for example python-pptx) with vector shapes and text boxes in the palette; no macros, embedded video or audio, and no links to websites or other files", "Fonts that look the same in PowerPoint, Google Slides and Keynote (for example Arial or Georgia)", "Question, answer and title text at least 28 pt, so it reads on a TV or a projector across the room"],
+    textRuleEn: "US English spelling, no typos; slides carry no page numbers or footers, and only the host guide carries the license line.",
+    signatureEn: "a game twist (for example a bonus round or a double-points tile) that top-ranking slide games lack",
+    includedEn: ["Clickable game board", "Opens in PowerPoint, Google Slides and Keynote", "Printable host guide and answer key"],
+    // Marka adı (PowerPoint, Google Slides) etikete girmez; uyumluluk açıklamada düz metin olarak yazılır.
+    tagStems: ["trivia game", "slide game", "interactive game", "game night", "party trivia", "classroom game", "quiz game", "virtual game", "family game", "trivia night", "digital game", "pptx game", "group game"],
+    vocabulary: ["trivia", "game", "games", "slides", "slide", "quiz", "interactive", "virtual", "digital", "party", "family", "classroom", "night", "pptx", "template", "questions"],
+    pageWord: "questions"
+  },
+  resume: {
+    labelTr: "Özgeçmiş şablonu (Word, Google Docs)", labelEn: "resume template",
+    defaultFormats: ["US Letter DOCX (Word, Google Docs, Pages)", "A4 DOCX", "PDF quick-start guide"], defaultPages: 4, art: false,
+    contentEn: [
+      "A matching set of editable templates: a one-page resume, a two-page resume, a cover letter and a references page, each as its own .docx file in US Letter and in A4",
+      "Built with real Word styles (Title, Heading 1, Normal) and simple tables for the layout; no text boxes, floating shapes, columns or text inside images, so the layout stays the same in Google Docs and Pages and screening software (ATS) can read every word",
+      "Sample text is clearly placeholder copy in US style: a fictional name, City, ST, the phone number (555) 555-0123 and a name@example.com email; no real company, school or person names",
+      "US resume rules: no photo, date of birth, age, marital status or salary, and no 'References available upon request' line; the US Letter edition comes first"
+    ],
+    designEn: ["Margins between 0.5 and 1 in; the name at 24-36 pt, section headings at 12-14 pt and body text at 10-11 pt", "Fonts that come with Word and Google Docs (for example Arial, Georgia or Garamond)", "One accent color from the palette; black text on white so it prints well and screening software reads it"],
+    textRuleEn: "US English spelling, no typos; the resume, cover letter and references pages carry no page numbers, footer or product name, and only the quick-start guide carries the license line.",
+    signatureEn: "a useful extra (for example a matching thank-you letter template or a second skills layout) that top-ranking resume templates lack",
+    includedEn: ["One-page and two-page resume", "Cover letter and references page", "US Letter and A4"],
+    tagStems: ["resume template", "cover letter", "modern resume", "professional resume", "simple resume", "resume docx", "one page resume", "resume design", "minimalist resume", "creative resume", "job resume", "resume bundle", "editable resume", "cv template"],
+    vocabulary: ["resume", "resumes", "template", "templates", "cover", "letter", "cv", "professional", "modern", "simple", "minimalist", "creative", "job", "docx", "editable", "references", "page"],
+    pageWord: "templates"
   }
 };
 
@@ -447,6 +492,8 @@ function printGuide(kind: PrintableKind): string {
     case "labels": return "A one-page 'How to print' guide: print on sticker paper or cardstock at Actual size / 100% scale, cut along the cut lines, and laminate or use clear tape for jars that get wet.";
     case "app_icons": return "A one-page 'How to set up' guide in plain words: save the icons and widgets to your photos; on iPhone, give an app a new icon with the Shortcuts app and show the widget images with a photo widget app; on Android, use a launcher or an icon changer app (app names as plain text only, no logos).";
     case "spreadsheet": return "A one-page 'Quick start' PDF: how to open the .xlsx in Excel or Google Sheets (File > Import) on a computer or phone, where to type (the shaded cells), and how the totals and charts update (app names as plain text only).";
+    case "slides": return "A one-page 'How to play' host guide: open the .pptx in PowerPoint or Keynote, or upload it to Google Slides; start the slideshow, click a tile, then 'Show answer' and 'Back to board'; play on a TV, a projector or a video call (app names as plain text only); plus the full answer key and a printable score sheet.";
+    case "resume": return "A one-page 'Quick start' PDF: open the .docx in Word or Pages, or upload it to Google Docs (File > Open > Upload); type over the sample text, change the accent color, then save or download it as a PDF; tips to keep the resume to one page (app names as plain text only).";
     case "wallpaper": return "A one-page 'How to set your wallpaper' guide in plain words: unzip the size that fits your phone, save the image to your photos, then choose it in your phone's wallpaper settings (no brand names or logos).";
     default: return "A one-page 'How to print' guide: print at Actual size / 100% scale, paper weight suggestions, double-sided and print-shop tips.";
   }
@@ -459,6 +506,8 @@ function useSentence(kind: PrintableKind): string {
   if (kind === "wallpaper") return "ready to download and set as your phone's lock screen or home screen";
   if (kind === "app_icons") return "ready to download and set up on your phone's home screen";
   if (kind === "spreadsheet") return "ready to use in Excel or Google Sheets on your computer or phone";
+  if (kind === "slides") return "ready to play from your computer on a TV, a projector or a video call";
+  if (kind === "resume") return "ready to edit in Word, Google Docs or Pages and send as a PDF";
   return "designed to be printed at home and used right away";
 }
 
@@ -477,10 +526,26 @@ interface Prepared {
 }
 
 // Basılmayan ürünler: ilan, pin ve etiketler baskıdan söz etmez.
-const SCREEN_ONLY = new Set<PrintableKind>(["digital_planner", "wallpaper", "app_icons", "spreadsheet"]);
+const SCREEN_ONLY = new Set<PrintableKind>(["digital_planner", "wallpaper", "app_icons", "spreadsheet", "slides"]);
+// Düzenlenebilir program şablonları: "editable" bu türlerde gerçek bir özelliktir (yanıltıcı sayılmaz).
+export const EDITABLE_KINDS = new Set<PrintableKind>(["slides", "resume"]);
+// Alıcının kendi programında açtığı dosyalar (tablo, sunum, belge): yazı tipi gömülmez, programla gelen yazı tipi kullanılır.
+const PROGRAM_KINDS = new Set<PrintableKind>(["spreadsheet", "slides", "resume"]);
+// Baskı etiketi almayan türler: ekranda kullanılanlar ve .docx olarak teslim edilen özgeçmiş ("resume pdf" yanlış olur).
+const NO_PRINT_TAGS = new Set<PrintableKind>([...SCREEN_ONLY, "resume"]);
 
 // Yapay zekâ destekli yeni türler: özellik yalnız ürünün kendi kelimelerinden oluşuyorsa ("wall" takvim) özellik sayılmaz.
-const NEW_KINDS = new Set<PrintableKind>(["calendar", "stickers", "cards", "puzzles", "wallpaper", "labels", "app_icons", "spreadsheet"]);
+const NEW_KINDS = new Set<PrintableKind>(["calendar", "stickers", "cards", "puzzles", "wallpaper", "labels", "app_icons", "spreadsheet", "slides", "resume"]);
+
+// Yanıltıcı ifade kuralı türe göre: düzenlenebilir şablonlarda "editable" doğru bir bilgidir.
+// Programın kendi adı olan sıradan kelimeler: özgeçmişte "resume word" etiketi Microsoft Word demektir.
+function programBrandWord(kind: PrintableKind, text: string): boolean {
+  return kind === "resume" && /\b(word|docs|pages)\b/.test(text.toLowerCase());
+}
+
+function misleadingFor(kind: PrintableKind): RegExp {
+  return EDITABLE_KINDS.has(kind) ? MISLEADING_EXCEPT_EDITABLE : MISLEADING_FEATURE;
+}
 
 function prepare(raw: PrintablePlanInput): Prepared {
   const productWords = new Set(raw.productType.split(/\s+/).flatMap((word) => [word, singular(word)]));
@@ -490,10 +555,11 @@ function prepare(raw: PrintablePlanInput): Prepared {
   const unique = [...new Set((raw.trendFeatures || []).flatMap((feature) => feature.split(" ").every((word) => TIME_WORDS.test(word)) ? feature.split(" ") : [feature]).map((feature) => feature === "vintage" ? "vintage style" : vintageStyle(feature)))];
   const vocabulary = new Set(PRINTABLE_KINDS[raw.kind]?.vocabulary || []);
   const ownWordsOnly = (feature: string) => NEW_KINDS.has(raw.kind) && feature.split(" ").every((word) => vocabulary.has(word) || productWords.has(word));
-  const usable = unique.filter((feature) => !MISLEADING_FEATURE.test(feature) && !hasBrandName(feature) && !ownWordsOnly(feature) && !feature.split(" ").every((word) => META_WORDS.has(word) || productWords.has(word)));
+  const misleading = misleadingFor(raw.kind);
+  const usable = unique.filter((feature) => !misleading.test(feature) && !hasBrandName(feature) && !programBrandWord(raw.kind, feature) && !ownWordsOnly(feature) && !feature.split(" ").every((word) => META_WORDS.has(word) || productWords.has(word)));
   const harmony = harmonizeThemes(usable, themeFamilies(`${raw.keyword || ""} ${raw.productType}`));
   const dropped = [...unique.filter((feature) => !usable.includes(feature)), ...harmony.dropped];
-  const tags = (raw.trendTags || []).filter((tag) => !isIpRisky(tag) && !MISLEADING_FEATURE.test(tag) && fitsTheme(tag, harmony.families) && (!/\bvintage\b/.test(tag) || /\bvintage (style|inspired)\b/.test(tag)));
+  const tags = (raw.trendTags || []).filter((tag) => !isIpRisky(tag) && !misleading.test(tag) && !hasBrandName(tag) && !programBrandWord(raw.kind, tag) && fitsTheme(tag, harmony.families) && (!/\bvintage\b/.test(tag) || /\bvintage (style|inspired)\b/.test(tag)));
   const notes = cleanBriefNotes(raw.referenceNotes, dropped);
   return { input: { ...raw, trendFeatures: harmony.kept, trendTags: tags, referenceNotes: notes }, themes: harmony.families, dropped };
 }
@@ -903,15 +969,18 @@ function originalityPlan(prepared: Prepared, profile: KindProfile): { tr: string
     tr: [
       `Tek bir ürün kopyalanmadı; trend özellikleri${features ? ` (${features})` : ""} tek temada, özgün bir tasarımda birleştirilecek.`,
       ...(prepared.dropped.length ? [`Temayla çatışan veya yanıltıcı ifadeler ürüne alınmadı: ${prepared.dropped.join(", ")}.`] : []),
-      "Üst sıradaki ilanlarda olmayan imza bir öğe eklenecek ve kapakta vurgulanacak.",
-      "Yalnızca ticari kullanıma izin veren fontlar ve kendi üretilen görseller kullanılacak; başka satıcının ilan görseli veya telifli görsel referans olarak bile kullanılmayacak.",
+      `Üst sıradaki ilanlarda olmayan imza bir öğe eklenecek ve ${PROGRAM_KINDS.has(input.kind) ? "rehber sayfasında" : "kapakta"} vurgulanacak.`,
+      PROGRAM_KINDS.has(input.kind) ? "Alıcının programında (Excel, PowerPoint, Word, Google) hazır gelen yazı tipleri ve kendi üretilen görseller kullanılacak; başka satıcının ilan görseli veya telifli görsel referans olarak bile kullanılmayacak." : "Yalnızca ticari kullanıma izin veren fontlar ve kendi üretilen görseller kullanılacak; başka satıcının ilan görseli veya telifli görsel referans olarak bile kullanılmayacak.",
       input.colors?.length ? `Renk paleti: ${input.colors.join(", ")}.` : "Renk paletini yapay zekâ özgün olarak önerecek."
     ],
     en: [
       `Build ${features ? `the buyer-favored features (${features})` : "what these buyers want"} into one coherent, original product with a single theme, your own layout and your own wording.`,
       // Kapak olmayan ürünlerde imza öğesi rehber sayfasında adlandırılır (tablo, duvar kâğıdı, ikon paketi).
-      `Add ${profile.signatureEn}, and name it ${input.kind === "wall_art" ? "in the size guide" : input.kind === "spreadsheet" ? "on the 'Start here' tab" : input.kind === "wallpaper" || input.kind === "app_icons" ? "in the setup guide" : "on the cover"}.`,
-      "Use only fonts licensed for commercial use (for example Google Fonts) and list them; all text and artwork must be your own.",
+      `Add ${profile.signatureEn}, and name it ${input.kind === "wall_art" ? "in the size guide" : input.kind === "spreadsheet" ? "on the 'Start here' tab" : input.kind === "wallpaper" || input.kind === "app_icons" ? "in the setup guide" : input.kind === "slides" ? "on the how-to-play slide" : input.kind === "resume" ? "in the quick-start guide" : "on the cover"}.`,
+      // Alıcının programında açılan dosyada yazı tipi gömülemez: yalnız programla gelen yazı tipleri kullanılır.
+      PROGRAM_KINDS.has(input.kind)
+        ? "Use only fonts that come with the buyer's program (for example Arial or Georgia), so the file looks the same for every buyer; list them; all text and artwork must be your own."
+        : "Use only fonts licensed for commercial use (for example Google Fonts) and list them; all text and artwork must be your own.",
       "Never use another seller's Etsy listing, photos or Pinterest pins, or any copyrighted image, as a reference or input; describe a style in words only.",
       "Never use trademarked names, characters, celebrities, logos or brand styles.",
       input.colors?.length ? `Use this palette: ${input.colors.join(", ")}.` : "Propose a fresh palette with color names and hex codes."
@@ -945,8 +1014,8 @@ function deliverables(prepared: Prepared, name: string, formats: string[]): stri
   const { input } = prepared;
   const file = name.replace(/[^A-Za-z0-9]+/g, "-").replace(/^-|-$/g, "");
   // Dosya sınırı satırı türün dosya biçimine göre yazılır (tabloda JPG yok, duvar kâğıdı ve ikon PNG'dir).
-  const limit = input.kind === "spreadsheet"
-    ? "Etsy accepts at most 5 files of at most 20 MB each; the zip with the workbook and the guide stays far below that."
+  const limit = input.kind === "spreadsheet" || input.kind === "slides" || input.kind === "resume"
+    ? `Etsy accepts at most 5 files of at most 20 MB each; ${input.kind === "spreadsheet" ? "the zip with the workbook and the guide stays" : input.kind === "slides" ? "the zip with the game and the host guide stays" : "each zip with the templates and the guide stays"} far below that.`
     : input.kind === "wallpaper" || input.kind === "app_icons"
     ? "Etsy accepts at most 5 files of at most 20 MB each. If a zip is over 20 MB, compress the PNG files losslessly (for example Pillow with optimize=True) or split that group into Part-1 and Part-2 zips while the whole set stays at 5 files."
     : input.kind === "wall_art"
@@ -974,6 +1043,13 @@ function deliverables(prepared: Prepared, name: string, formats: string[]): stri
   }
   if (input.kind === "spreadsheet") {
     return [`Upload set: ${file}.zip (the .xlsx workbook and the quick-start PDF).`, limit];
+  }
+  if (input.kind === "slides") {
+    return [`Upload set: ${file}.zip (the .pptx game and the host guide PDF).`, limit];
+  }
+  if (input.kind === "resume") {
+    // Yüklemede ilanda yazan formatlar dosya adlarında aranır: her .docx adında ölçüsü geçer.
+    return [`Upload set: ${file}-US-Letter.zip (the four .docx templates in US Letter); ${file}-A4.zip (the same four templates in A4); put the quick-start PDF in both zips, and name every file with its size (for example ${file}-One-Page-Resume-US-Letter.docx).`, limit];
   }
   if (input.kind === "stickers") {
     const pdfs = formats.filter((format) => !/png/i.test(format)).map((format) => `${file}-${fileSlug(format)}.pdf (printable sticker sheets)`);
@@ -1004,7 +1080,11 @@ function themeLine(prepared: Prepared): string {
   const contains = (longer: string, shorter: string) => longer.length > shorter.length && new RegExp(`\\b${escapeRegex(shorter)}\\b`, "i").test(longer);
   const styleExtra = (longer: string, shorter: string) => longer.toLowerCase().replace(new RegExp(`\\b${escapeRegex(shorter.toLowerCase())}\\b`), "").trim().split(/\s+/).every((word) => STYLE_WORDS.has(word) || THEME_ADJECTIVES.has(word));
   const names = allNames.filter((name) => !allNames.some((other) => (contains(other, name) && styleExtra(other, name)) || (contains(name, other) && !styleExtra(name, other))));
-  const [main, ...details] = names;
+  // Ürün adındaki bayram veya mevsim ("christmas trivia game" → Christmas) temanın adıdır; özellikler onun ayrıntısı olur
+  // ("holiday party" özelliği Noel ürününde ayrı bir tema değil, Noel'in ayrıntısıdır).
+  const fromProduct = prepared.input.productType.split(" ").find((word) => [...themeFamilies(word)].some((family) => isHolidayFamily(family) || /^(winter|spring|summer|fall)$/.test(family)));
+  const leading = fromProduct && !names.some((name) => new RegExp(`\\b${escapeRegex(fromProduct)}\\b`, "i").test(name)) ? [proseCase(fromProduct), ...names] : names;
+  const [main, ...details] = leading;
   return main
     ? `- Theme: one theme for the whole product: ${main}${details.length ? `, with ${joinWords(details.slice(0, 2))} details that fit it` : ""}; add nothing from another season, holiday or mood`
     : "- Theme: one consistent visual style for the whole product; add no season, holiday or mood that is not listed above";
@@ -1024,6 +1104,10 @@ function buildPdfPrompt(prepared: Prepared, profile: KindProfile, name: string, 
       ? `You are a senior digital artist, copywriter and technical editor for Etsy ${profile.labelEn} products. Create an ORIGINAL, sellable ${productPhrase(input.productType)}${input.kind === "wallpaper" ? " set" : ""} and produce ready-to-use image files.`
       : input.kind === "spreadsheet"
       ? `You are a senior spreadsheet designer, copywriter and technical editor for Etsy ${profile.labelEn} products. Create an ORIGINAL, sellable ${productPhrase(input.productType)} and produce a ready-to-use .xlsx workbook.`
+      : input.kind === "slides"
+      ? `You are a senior game designer, trivia writer and technical editor for Etsy ${profile.labelEn} products. Create an ORIGINAL, sellable ${productPhrase(input.productType)} and produce a ready-to-play .pptx file that also opens in Google Slides and Keynote.`
+      : input.kind === "resume"
+      ? `You are a senior resume designer, US career copy editor and technical editor for Etsy ${profile.labelEn} products. Create an ORIGINAL, sellable ${productPhrase(input.productType)} set and produce editable .docx files.`
       : `You are a senior print designer, copywriter and technical editor for Etsy ${profile.labelEn} products. Create an ORIGINAL, sellable ${productPhrase(input.productType)} and produce print-ready files.`,
     "",
     "## Product name",
@@ -1042,6 +1126,10 @@ function buildPdfPrompt(prepared: Prepared, profile: KindProfile, name: string, 
       ? `- Size: ${Math.min(Math.max(pages, 16), 96)} app icons plus blank icons, 3 widget images and 2 matching wallpapers`
       : input.kind === "spreadsheet"
       ? `- Size: ${pages} tabs in the workbook, plus a one-page quick-start PDF`
+      : input.kind === "slides"
+      ? `- Size: ${slideQuestions(pages)} questions on a board of 5 categories with ${slideQuestions(pages) / 5} point values each, plus the bonus round; ${slideQuestions(pages) * 2 + 6} slides in all, plus a PDF host guide`
+      : input.kind === "resume"
+      ? "- Size: 4 editable templates (one-page resume, two-page resume, cover letter, references page) in US Letter and in A4, plus a PDF quick-start guide"
       : `- Size: ${pages} core pages; the cover, ${input.kind === "digital_planner" ? "import guide" : "how-to-print"}, thank-you and license pages come on top`,
     `- Formats (deliver each as its own file): ${formats.join(", ")}`,
     `- Palette: ${input.colors?.length ? input.colors.join(", ") : "propose one with hex codes"}`,
@@ -1068,16 +1156,28 @@ function buildPdfPrompt(prepared: Prepared, profile: KindProfile, name: string, 
     "## Work in three passes",
     input.kind === "spreadsheet"
       ? "PASS 1 - Tab plan: a table with one line per tab (name, purpose, input cells, formulas, charts)."
+      : input.kind === "slides"
+      ? "PASS 1 - Game plan: a table of the 5 categories with every question, its answer and its point value, the bonus question, the slide order, and every link (from which slide to which slide)."
+      : input.kind === "resume"
+      ? "PASS 1 - Template plan: a table with one line per template (name, sections in order, fonts and sizes, margins, page count)."
       : input.kind === "app_icons"
       ? "PASS 1 - File plan: a table with one line per file group (icon sheet, icon names and count, widget sizes, wallpaper sizes) that follows the page budget exactly."
       : `PASS 1 - Page plan: a table with one line per page (number, title, purpose, elements, format notes)${art.budget.length ? " that follows the page budget exactly" : ""}.`,
-    input.kind === "spreadsheet"
+    input.kind === "slides"
+      ? "PASS 2 - Check and report: every answer is correct and has one line on why it is right; no question repeats; question and answer text is at least 28 pt; no spelling errors; the slide count matches the game plan."
+      : input.kind === "resume"
+      ? "PASS 2 - Check and report: the one-page resume, the cover letter and the references page each fit one page and the two-page resume fits two; all sample text is fictional placeholder copy; no spelling errors."
+      : input.kind === "spreadsheet"
       ? "PASS 2 - Check and report: with sample numbers in a copy, every total and chart is right and no cell shows an error; input cells are shaded and formula cells locked; text readable at 100% zoom; no spelling errors."
       : `PASS 2 - Check and report: ${profile.art ? "all text and cut lines inside the safe margins (full-bleed art may reach the edge)" : "every page inside the safe margins"}, text readable at 100% ${input.kind === "digital_planner" ? "zoom on a tablet" : input.kind === "wallpaper" || input.kind === "app_icons" ? "zoom on a phone" : "print size"}, no spelling errors${textKind || input.kind === "paper_craft" ? ", every fill-in area large enough for handwriting" : ""}, totals in the page plan match the files.`,
     input.kind === "wall_art"
       ? "PASS 3 - Files: in code, crop and resize every print from its 2:3 master to each listed ratio or size (sRGB JPG, 300 dpi, exact pixel size), and build the size guide, how-to-print, thank-you and license pages as one PDF."
       : input.kind === "app_icons"
       ? "PASS 3 - Files: in code, cut every icon tile into its own 1024x1024 px PNG (gray background removed outside the rounded square), make the blank icons, crop the widgets and wallpapers to their exact sizes (PNG, no stretching), sort them into Icons, Widgets and Wallpapers folders, and build the setup guide, thank-you and license pages as one PDF."
+      : input.kind === "slides"
+      ? "PASS 3 - Files: build the .pptx in code (for example python-pptx) at 16:9 with vector shapes and text boxes in the palette, add every internal hyperlink (board tile to question, question to answer, answer back to the board), use no macros, media or links to websites, then build the host guide (rules, answer key, score sheet), thank-you and license pages as one PDF."
+      : input.kind === "resume"
+      ? "PASS 3 - Files: build every template in code (for example python-docx) with built-in styles and simple tables for the layout, no text boxes or floating shapes, once in US Letter and once in A4; convert each to PDF with LibreOffice headless to check the page fit; then build the quick-start, thank-you and license pages as one PDF."
       : input.kind === "spreadsheet"
       ? "PASS 3 - Files: build the .xlsx in code (for example Python openpyxl) with live formulas, data validation drop-downs, conditional formatting, frozen header rows and charts; protect the formula cells without a password; no macros, scripts, external links or pivot tables. Then build the quick-start, thank-you and license pages as one short PDF."
       : input.kind === "wallpaper"
@@ -1101,12 +1201,14 @@ function buildPdfPrompt(prepared: Prepared, profile: KindProfile, name: string, 
     "- A thank-you page from GXL Market Studio inviting the buyer to message for help and to leave a review.",
     `- A license page: "${printableLicense(input.kind, year)}"`,
     ...(healthNote(input) ? [`- A short gentle note on the first inside page: "${healthNote(input)}"`] : []),
-    `- A 'Product spec' JSON block: name, theme, ${input.kind === "spreadsheet" ? "tab names" : input.kind === "wallpaper" || input.kind === "app_icons" ? "file names" : "page titles"} in order, formats, palette (name + hex), fonts and the signature element. Mockups and listing photos will be made from it.`,
+    `- A 'Product spec' JSON block: name, theme, ${input.kind === "spreadsheet" ? "tab names" : input.kind === "wallpaper" || input.kind === "app_icons" || input.kind === "resume" ? "file names" : input.kind === "slides" ? "categories and slide order" : "page titles"} in order, formats, palette (name + hex), fonts and the signature element. Mockups and listing photos will be made from it.`,
     ...deliverables(prepared, name, formats).map((line) => `- ${line}`),
     "",
     "## Never",
     "- Never claim reviews, awards, bestseller status or sales numbers.",
-    "- Never offer or mention a commercial-use license, a video or an editable version; this product has none.",
+    EDITABLE_KINDS.has(input.kind)
+      ? "- Never offer or mention a commercial-use license or a video; this product has none. The files are editable templates for the buyer's own use."
+      : "- Never offer or mention a commercial-use license, a video or an editable version; this product has none.",
     "- Never use another seller's listing images or any copyrighted image as a reference.",
     "- Never use trademarked names, characters, celebrity names, logos or brand styles. App or tool names may appear only as plain-text compatibility notes (for example \"works with GoodNotes\"), never as logos or in the product name.",
     "- Never leave placeholder text such as Lorem ipsum."
@@ -1145,7 +1247,7 @@ function relevantTrendTags(prepared: Prepared, art?: ArtPlan): string[] {
   const features = input.trendFeatures || [];
   const rank = (tag: string) => { const index = features.findIndex((feature) => tag.includes(feature)); return index === -1 ? features.length : index; };
   return (input.trendTags || [])
-    .filter((tag) => !isIpRisky(tag) && !hasBrandName(tag) && !MISLEADING_FEATURE.test(tag) && fitsTheme(tag, themes) && !["instant download", "digital download", "printable", "pdf"].includes(tag)
+    .filter((tag) => !isIpRisky(tag) && !hasBrandName(tag) && !misleadingFor(input.kind).test(tag) && fitsTheme(tag, themes) && !["instant download", "digital download", "printable", "pdf"].includes(tag)
       && tag.split(/\s+/).every((word) => TAG_FILLERS.has(word) || vocabulary.has(word) || vocabulary.has(singular(word))))
     .map((tag, index) => ({ tag, index }))
     .sort((a, b) => rank(a.tag) - rank(b.tag) || a.index - b.index)
@@ -1183,6 +1285,8 @@ function formatsProse(formats: string[], kind: PrintableKind): string | undefine
   if (kind === "wallpaper") return `${formats.length} phone screen ${formats.length > 1 ? "sizes" : "size"}`;
   if (kind === "app_icons") return "PNG files for any phone";
   if (kind === "spreadsheet") return "an .xlsx workbook that works in Excel and Google Sheets";
+  if (kind === "slides") return "a .pptx file that opens in PowerPoint, Google Slides and Keynote";
+  if (kind === "resume") return "editable .docx files in US Letter and A4";
   if (kind === "digital_planner") return formats.some((format) => !/tablet|hyperlink/i.test(format)) ? "landscape and portrait tablet PDFs in light and dark themes, plus a printable US Letter version" : "landscape and portrait tablet PDFs in light and dark themes";
   const short = [...new Set(formats.map((format) => format.replace(/\s*\(.*\)/, "").replace(/\s+in\s+(sheets|cards)$/i, "").replace(/\s+binder pages$/i, "").replace(/^4x6 and 5x7$/, "4x6, 5x7").trim()).flatMap((format) => format.split(/,\s*/)).filter((format) => /^(us letter|half letter|a4|a5|4x6|5x7|12x12|8x10|11x14)$/i.test(format)))];
   return short.length ? `${joinWords(short.slice(0, 4))} ${short.length > 1 ? "sizes" : "size"}` : undefined;
@@ -1248,7 +1352,8 @@ function buildPins(prepared: Prepared, name: string, art: ArtPlan): PrintableBri
   const profile = PRINTABLE_KINDS[input.kind];
   const keyword = input.keyword || input.productType;
   const features = input.trendFeatures || [];
-  const phrases = [...new Set([keyword, ...relevantTrendTags(prepared, art)])];
+  // Trend etiketi azsa pinler türün alıcı ifadeleriyle farklılaşır; üç pin aynı başlıkla paylaşılmaz.
+  const phrases = [...new Set([keyword, ...relevantTrendTags(prepared, art), ...profile.tagStems.filter((stem) => !hasBrandName(stem) && fitsTheme(stem, prepared.themes) && stem !== keyword)])];
   const angles = [
     { phrase: phrases[0], feature: features[0] },
     { phrase: phrases[1] || input.productType, feature: features[1] || features[0] },
@@ -1257,7 +1362,7 @@ function buildPins(prepared: Prepared, name: string, art: ArtPlan): PrintableBri
   const formats = formatsProse(input.formats?.length ? input.formats : profile.defaultFormats, input.kind);
   const palette = input.colors?.length ? `${article(input.colors[0])} ${joinWords(input.colors.slice(0, 3))} palette` : "";
   const pages = input.pageCount || profile.defaultPages;
-  const included = art.includedEn.length && profile.art ? contentsSummary(art.includedEn) : `${pages} ${input.kind === "spreadsheet" ? "tabs" : "pages"}`;
+  const included = art.includedEn.length && profile.art ? contentsSummary(art.includedEn) : contentCount(input.kind, pages);
   const tablet = (input.formats || []).some((format) => /tablet|hyperlink/i.test(format)) || input.kind === "digital_planner";
   // Pinler aynı açıklamayı tekrar etmesin diye her açının kendi cümle kalıbı vardır.
   const lookingLines = [(phrase: string) => `A thoughtful pick for anyone looking for ${phrase}.`, (phrase: string) => `Perfect if you are looking for ${phrase}.`, (phrase: string) => `A fresh take on ${phrase}.`];
@@ -1287,8 +1392,8 @@ function buildPins(prepared: Prepared, name: string, art: ArtPlan): PrintableBri
       // "in a boho style in a rust ... palette" olmaz: stil cümlesinden sonra palet "and a ... palette" ile bağlanır.
       `${name} is ${proseCase(product)}${withPalette(featureClause(feature && !phrase.includes(feature) ? feature : undefined, profile, input.kind), palette)}.`,
       looking ? lookingLines[angle % lookingLines.length](proseCase(looking)) : "",
-      `${includeLines[angle % includeLines.length]} ${included}.${formats ? /^(an? |PNG)/.test(formats) ? ` Delivered as ${formats}.` : ` Available in ${formats}.` : ""}`,
-      input.kind === "digital_planner" ? "Instant digital download for your tablet." : input.kind === "wallpaper" || input.kind === "app_icons" ? "Instant digital download for your phone." : input.kind === "spreadsheet" ? "Instant digital download for your computer or phone." : `Instant digital download: ${input.kind === "wall_art" || input.kind === "paper_craft" ? "print at home or at a print shop" : "print at home"}${tablet ? " or use it on your tablet" : ""}.`,
+      `${includeLines[angle % includeLines.length]} ${included}.${formats ? /^(an? |PNG|editable )/.test(formats) ? ` Delivered as ${formats}.` : ` Available in ${formats}.` : ""}`,
+      input.kind === "digital_planner" ? "Instant digital download for your tablet." : input.kind === "wallpaper" || input.kind === "app_icons" ? "Instant digital download for your phone." : input.kind === "spreadsheet" ? "Instant digital download for your computer or phone." : input.kind === "slides" ? "Instant digital download: play it from your computer on a TV or a video call." : input.kind === "resume" ? "Instant digital download: edit it, save it as a PDF and apply." : `Instant digital download: ${input.kind === "wall_art" || input.kind === "paper_craft" ? "print at home or at a print shop" : "print at home"}${tablet ? " or use it on your tablet" : ""}.`,
       audienceLine,
       "Designed by GXL Market Studio."
     ];
@@ -1313,6 +1418,10 @@ function checklistFor(prepared: Prepared): string[] {
       ? "Every icon is a 1024x1024 px PNG with the same corner radius and padding, no icon looks like another company's logo, and the widgets and wallpapers have their exact sizes."
       : input.kind === "spreadsheet"
       ? "Every formula works with sample numbers and shows no error, and the workbook opens in Excel and Google Sheets with no macros."
+      : input.kind === "slides"
+      ? "Every board tile, question and answer link works in slideshow mode, every answer is correct, and the .pptx has no macros, media or links to websites."
+      : input.kind === "resume"
+      ? "Every template fits its page count in US Letter and A4, uses real Word styles with no text boxes, and holds only fictional sample text."
       : `Every page sits inside the safe margins and prints at 100% (Actual size) in every included size (${printSizes.join(", ")}) without clipping.`,
     textRule(prepared),
     input.kind === "calendar" ? "All 12 months share one style and palette, and each month's artwork fits its own month." : "The whole product follows one theme; nothing from another season, holiday or mood appears.",
@@ -1322,7 +1431,7 @@ function checklistFor(prepared: Prepared): string[] {
     "No brand, character or celebrity names; all artwork is original and no other seller's image was used as a reference.",
     "Etsy allows at most 5 files of at most 20 MB each per digital listing; the upload set follows the 'Upload set' line and every file name is clear.",
     "Listing images show the real pages from the files.",
-    `${input.kind === "digital_planner" ? "Import guide" : input.kind === "wall_art" ? "Size guide, how-to-print" : input.kind === "wallpaper" || input.kind === "app_icons" ? "Setup guide" : input.kind === "spreadsheet" ? "Quick-start guide" : "How-to-print"}, thank-you and license pages are included.`
+    `${input.kind === "digital_planner" ? "Import guide" : input.kind === "wall_art" ? "Size guide, how-to-print" : input.kind === "wallpaper" || input.kind === "app_icons" ? "Setup guide" : input.kind === "spreadsheet" || input.kind === "resume" ? "Quick-start guide" : input.kind === "slides" ? "Host guide" : "How-to-print"}, thank-you and license pages are included.`
   ];
 }
 
@@ -1387,14 +1496,15 @@ export function buildPrintableBrief(raw: PrintablePlanInput): PrintableBrief {
 function primaryPhrase(input: PrintablePlanInput): string {
   const head = productHead(input.productType);
   if (input.keyword && input.keyword.includes(head)) return titleCase(input.keyword);
-  return titleCase(`${input.productType} ${input.kind === "digital_planner" || input.kind === "wall_art" || /printable/.test(input.productType) ? "" : "printable"}`.trim());
+  return titleCase(`${input.productType} ${input.kind === "wall_art" || NO_PRINT_TAGS.has(input.kind) || /printable/.test(input.productType) ? "" : "printable"}`.trim());
 }
 
 // Başlıkta okunur format ifadesi ("12x12 in sheets, US Letter, A4" yerine "12x12, US Letter, A4").
 function formatPhrase(formats: string[], kind?: PrintableKind): string | undefined {
   if (kind === "wall_art") return "Sizes up to 18x24";
   if (kind === "digital_planner") return "Tablet PDF";
-  if (kind === "wallpaper" || kind === "app_icons" || kind === "spreadsheet") return undefined;
+  if (kind === "wallpaper" || kind === "app_icons" || kind === "spreadsheet" || kind === "slides") return undefined;
+  if (kind === "resume") return "US Letter, A4";
   const short = formats.map((format) => format.replace(/\s*\(.*\)/, "").replace(/\s+in\s+(sheets|cards)$/i, "").replace(/\s+binder pages$/i, "").trim())
     .filter((format) => /letter|a4|a5|4x6|5x7|12x12/i.test(format));
   const unique = [...new Set(short)];
@@ -1426,7 +1536,7 @@ function buildTitle(prepared: Prepared, art: ArtPlan, primary = primaryPhrase(pr
   const add = (phrase: string) => { count(phrase); phrases.push(phrase.toLowerCase()); };
   const trendTags = relevantTrendTags(prepared, art);
   // Her varyant kendi öne çıkan özelliğiyle başlar: önce o özelliği içeren alıcı ifadesi, yoksa "özellik + ürün".
-  const features = (input.trendFeatures || []).filter((feature, index, all) => !NO_CLAUSE.test(feature) && !MISLEADING_FEATURE.test(feature)
+  const features = (input.trendFeatures || []).filter((feature, index, all) => !NO_CLAUSE.test(feature) && !misleadingFor(prepared.input.kind).test(feature)
     && !all.some((other, otherIndex) => otherIndex !== index && other.length > feature.length && other.includes(feature)));
   for (const feature of features) {
     const candidates = [
@@ -1440,6 +1550,11 @@ function buildTitle(prepared: Prepared, art: ArtPlan, primary = primaryPhrase(pr
   for (const tag of trendTags) {
     if (phrases.length === 3) break;
     if (fits(tag)) add(tag);
+  }
+  // Trend verisi azsa (ürün elle yazıldıysa) başlık türün alıcı ifadeleriyle tamamlanır; ürünün temasına uymayan ifade girmez.
+  for (const stem of profile.tagStems) {
+    if (phrases.length === 3) break;
+    if (!hasBrandName(stem) && fitsTheme(stem, prepared.themes) && fits(stem)) add(stem);
   }
   const format = formatPhrase(input.formats?.length ? input.formats : profile.defaultFormats, input.kind);
   const segments = [primary, ...phrases.slice(1).map(titleCase), ...(format ? [format] : []), ...(!trend.length || trend.includes("instant download") ? ["Instant Download"] : [])];
@@ -1486,8 +1601,8 @@ function buildTags(prepared: Prepared, art: ArtPlan): string[] {
     ...featureTags,
     product,
     // Tablet planlayıcı ve telefon duvar kâğıdı basılmaz: "printable" ve "pdf" etiketi yanlış vaat olur.
-    ...(!SCREEN_ONLY.has(input.kind) ? [`printable ${tagHead}`, `${tagHead} printable`] : []),
-    ...(input.kind !== "wall_art" && !SCREEN_ONLY.has(input.kind) ? [`${tagHead} pdf`] : []),
+    ...(!NO_PRINT_TAGS.has(input.kind) ? [`printable ${tagHead}`, `${tagHead} printable`] : []),
+    ...(input.kind !== "wall_art" && !NO_PRINT_TAGS.has(input.kind) ? [`${tagHead} pdf`] : []),
     // Bütçe tablosu en çok bütçe ifadeleriyle aranır; başka tablolarda (alışkanlık, düğün) bu etiketler girmez.
     ...(input.kind === "spreadsheet" && /budget|finance|money|debt|saving|expense|bill/.test(product) ? ["budget spreadsheet", "budget template", "monthly budget", "expense tracker", "savings tracker", "debt tracker", "bill tracker", "budget tracker", "paycheck budget"] : []),
     ...sizeTags.map((size) => `${size} ${tagHead}`),
@@ -1502,8 +1617,8 @@ function buildTags(prepared: Prepared, art: ArtPlan): string[] {
     ...profile.tagStems,
     ...(input.kind === "digital_planner" || input.kind === "paper_craft" ? [`digital ${tagHead}`] : []),
     "instant download"
-  ].filter((tag) => !isIpRisky(tag) && !MISLEADING_FEATURE.test(tag) && fitsTheme(tag, prepared.themes)
-    && !(SCREEN_ONLY.has(input.kind) && /\b(printables?|pdf)\b/.test(tag))
+  ].filter((tag) => !isIpRisky(tag) && !hasBrandName(tag) && !programBrandWord(input.kind, tag) && !misleadingFor(input.kind).test(tag) && fitsTheme(tag, prepared.themes)
+    && !(NO_PRINT_TAGS.has(input.kind) && /\b(printables?|pdf)\b/.test(tag))
     && !(/\bkids?\b|toddler|preschool/.test(product) && /\b(relaxing|stress relief|mindful|adult)\b/.test(tag))
     && (!SEARCHED_SIZES.some(([pattern]) => pattern.test(tag)) || sizeTagBudget.take())));
 }
@@ -1517,7 +1632,7 @@ function buildDescription(prepared: Prepared, name: string, art: ArtPlan, hook?:
   // Açılış cümlesi pinlerle aynı dili kullanır: tema "with a Christmas theme", stil "in a boho style"; kâğıt isimleri atılır.
   const leadFeature = features.find((feature) => themeFamilies(feature).size || feature.split(" ").every((word) => STYLE_WORDS.has(word)));
   const lead = leadFeature ? featureClause(stripPaperNouns(leadFeature) || leadFeature, profile, input.kind) : "";
-  const included = profile.art ? art.includedEn : [`${pages} ${input.kind === "spreadsheet" ? "tabs" : "pages"}`, ...profile.includedEn];
+  const included = profile.art ? art.includedEn : [contentCount(input.kind, pages), ...profile.includedEn];
   const note = healthNote(input);
   const tablet = formats.some((format) => isTablet(format));
   const lastStep: Record<PrintableKind, string> = {
@@ -1537,7 +1652,9 @@ function buildDescription(prepared: Prepared, name: string, art: ArtPlan, hook?:
     wallpaper: "Set it as your lock screen or home screen.",
     labels: "Cut out the labels and organize your space.",
     app_icons: "Follow the setup guide to give your home screen a new look.",
-    spreadsheet: "Type your numbers in the shaded cells; the totals and charts update by themselves."
+    spreadsheet: "Type your numbers in the shaded cells; the totals and charts update by themselves.",
+    slides: "Start the slideshow, click a tile and play.",
+    resume: "Type over the sample text, save it as a PDF and apply."
   };
   const steps = input.kind === "digital_planner"
     ? ["1. Purchase and download the files from your Etsy Purchases page.", "2. Import the PDF into a note-taking app that supports PDF links.", `3. ${lastStep.digital_planner}`, ...(formats.some((format) => !isTablet(format)) ? ["4. To print, use the US Letter file at Actual size / 100% scale."] : [])]
@@ -1547,6 +1664,10 @@ function buildDescription(prepared: Prepared, name: string, art: ArtPlan, hook?:
     ? ["1. Purchase and download the files from your Etsy Purchases page.", "2. Unzip the files and save the icons, widgets and wallpapers to your phone's photos.", `3. ${lastStep.app_icons}`]
     : input.kind === "spreadsheet"
     ? ["1. Purchase and download the files from your Etsy Purchases page.", "2. Unzip the files and open the .xlsx in Excel, or upload it to Google Sheets; it also opens in phone spreadsheet apps.", `3. ${lastStep.spreadsheet}`]
+    : input.kind === "slides"
+    ? ["1. Purchase and download the files from your Etsy Purchases page.", "2. Unzip the files and open the .pptx in PowerPoint or Keynote, or upload it to Google Slides.", `3. ${lastStep.slides}`]
+    : input.kind === "resume"
+    ? ["1. Purchase and download the files from your Etsy Purchases page.", "2. Unzip the size you need and open the .docx in Word or Pages, or upload it to Google Docs.", `3. ${lastStep.resume}`]
     : [
       "1. Purchase and download the files from your Etsy Purchases page.",
       `2. ${input.kind === "wall_art" ? "Unzip the size you need and print it at home or at a print shop" : input.kind === "paper_craft" || input.kind === "stickers" ? "Unzip the files and print at home or at a print shop" : "Print at home or at a print shop"} at Actual size / 100% scale.`,
@@ -1561,7 +1682,7 @@ function buildDescription(prepared: Prepared, name: string, art: ArtPlan, hook?:
     "",
     "THIS IS A DIGITAL PRODUCT. NO PHYSICAL ITEM WILL BE SHIPPED.",
     "",
-    ...(highlights.length ? [`HIGHLIGHTS: ${highlights.map((feature) => titleCase(proseCase(feature)).replace(/\bAnd\b/g, "and")).join(" · ")}`, ""] : []),
+    ...(highlights.length ? [`HIGHLIGHTS: ${highlights.map((feature) => proseCase(titleCase(proseCase(feature))).replace(/\bAnd\b/g, "and")).join(" · ")}`, ""] : []),
     "WHAT'S INCLUDED",
     ...included.map((item) => `• ${item}`),
     `• Formats: ${formats.join(", ")}`,
@@ -1592,7 +1713,12 @@ export function buildPrintableListing(raw: PrintablePlanInput, name: string): Pr
   const { prepared, art } = listingParts(raw);
   const title = buildTitle(prepared, art);
   const tags = buildTags(prepared, art);
-  const materials = ["pdf file", "printable", "digital download"];
+  // Malzeme alanı teslim edilen dosya türünü söyler (tablo .xlsx, oyun .pptx, özgeçmiş .docx).
+  const materials = prepared.input.kind === "spreadsheet" ? ["xlsx file", "pdf guide", "digital download"]
+    : prepared.input.kind === "slides" ? ["pptx file", "pdf host guide", "digital download"]
+    : prepared.input.kind === "resume" ? ["docx file", "pdf guide", "digital download"]
+    : prepared.input.kind === "wallpaper" || prepared.input.kind === "app_icons" ? ["png files", "pdf guide", "digital download"]
+    : ["pdf file", "printable", "digital download"];
   return {
     title,
     description: buildDescription(prepared, name, art),
@@ -1622,9 +1748,9 @@ export async function createPrintableListing(raw: PrintablePlanInput, name: stri
       prompt: `You are an Etsy SEO specialist for digital printables bought by US shoppers.\nProduct: ${JSON.stringify({ name, kind: input.kind, item: input.productType, theme: input.trendFeatures?.[0], features: input.trendFeatures, includes: art.includedEn, colors: input.colors, formats: input.formats })}\nTags on top-ranking Etsy listings for this search: ${JSON.stringify(input.trendTags || [])}.\nWrite fresh wording for this specific product; do not reuse stock phrases. Describe only what the product includes; never mention another holiday, season or theme, a commercial license, an editable version or a video. Never use trademarked names or characters. Return: hook = one warm sentence (max 160 characters) about what makes it special, in correct US English with proper capitalization, without claiming reviews or bestseller status; tags = 13 unique lowercase multi-word buyer phrases, each 20 characters or fewer, only letters, numbers, spaces, hyphens and apostrophes.`,
       schema: { type: "object", additionalProperties: false, properties: { hook: { type: "string" }, tags: { type: "array", items: { type: "string" } } }, required: ["hook", "tags"] }
     }, env);
-    const tags = normalizeEtsyTags([...suggestion.tags.filter((tag) => !isIpRisky(tag) && !MISLEADING_FEATURE.test(tag) && fitsTheme(tag, prepared.themes)), ...draft.tags]);
+    const tags = normalizeEtsyTags([...suggestion.tags.filter((tag) => !isIpRisky(tag) && !hasBrandName(tag) && !misleadingFor(input.kind).test(tag) && fitsTheme(tag, prepared.themes)), ...draft.tags]);
     const hook = proseCase(cleanText(suggestion.hook, 160).replace(/\b(best ?seller|bestselling|top rated)\b/gi, "").replace(/\s{2,}/g, " ").trim());
-    const safeHook = hook && fitsTheme(hook, prepared.themes) && !MISLEADING_FEATURE.test(hook) ? hook : undefined;
+    const safeHook = hook && fitsTheme(hook, prepared.themes) && !misleadingFor(input.kind).test(hook) ? hook : undefined;
     return { ...draft, tags, description: buildDescription(prepared, name, art, safeHook), checks: validateEtsyListingText({ title: draft.title, tags, materials: draft.materials }), source: "ai" };
   } catch (error) {
     console.error("AI printable listing failed", error instanceof Error ? error.message : error);

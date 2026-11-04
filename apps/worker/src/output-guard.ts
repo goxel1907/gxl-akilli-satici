@@ -3,7 +3,7 @@ import type { PatternCraft, PrintableKind } from "./etsy-trends.js";
 import { isIpRisky } from "./ip-guard.js";
 import { validateEtsyListingText } from "./pattern-studio.js";
 import { splitMasterPrompt } from "./master-prompt.js";
-import { familiesConflict, MISLEADING_FEATURE, proseCase, themeFamilies, type ThemeFamily } from "./theme.js";
+import { familiesConflict, MISLEADING_EXCEPT_EDITABLE, MISLEADING_FEATURE, proseCase, themeFamilies, type ThemeFamily } from "./theme.js";
 
 // Otomatik denetleyici: uygulamanın ürettiği her metin (yapay zekâ talimat paketi, Etsy başlığı, etiketler, açıklama,
 // pinler, reklam metinleri) telefona gönderilmeden önce burada denetlenir. Küçük yazım hataları yerinde düzeltilir;
@@ -149,7 +149,8 @@ function lintPrompt(c: Collector, field: string, fullPrompt: string, context: Pr
   if (context.kind && !["planner", "digital_planner", "journal"].includes(context.kind)) {
     find(c, field, prompt, /AM\/PM/, "qa_misfit", "Kontrol listesinde bu ürüne uymayan saat (AM/PM) kontrolü var.");
   }
-  if (context.kind && context.kind !== "digital_planner" && !(context.formats || []).some((format) => /tablet|hyperlink/i.test(format))) {
+  // Sunum oyununda tıklanabilir slaytlar ürünün kendisidir; LINKS kontrolü ona uyar.
+  if (context.kind && context.kind !== "digital_planner" && context.kind !== "slides" && !(context.formats || []).some((format) => /tablet|hyperlink/i.test(format))) {
     find(c, field, prompt, /^\d+\. LINKS —/m, "qa_misfit", "Tablet sürümü olmayan üründe bağlantı (LINKS) kontrolü var.");
   }
   if (context.studio === "pattern" && context.craft && !["crochet", "knitting"].includes(context.craft)) {
@@ -197,7 +198,11 @@ export interface ListingLike {
 
 const TITLE_STOP = new Set(["with", "from", "your", "this", "that", "and", "for", "the", "gift"]);
 
-function lintListing(c: Collector, field: string, listing: ListingLike, digital: boolean) {
+// Düzenlenebilir program şablonlarında (sunum oyunu, özgeçmiş) "editable" etiketi doğrudur.
+const EDITABLE_TEMPLATE_KINDS = new Set<string>(["slides", "resume"]);
+
+function lintListing(c: Collector, field: string, listing: ListingLike, digital: boolean, options: { editable?: boolean } = {}) {
+  const misleading = options.editable ? MISLEADING_EXCEPT_EDITABLE : MISLEADING_FEATURE;
   const validation = validateEtsyListingText({ title: listing.title, tags: listing.tags, materials: listing.materials });
   c.checks += 1;
   for (const issue of validation.issues) c.issues.push({ code: "etsy_rules", field, severity: "error", messageTr: issue });
@@ -224,7 +229,7 @@ function lintListing(c: Collector, field: string, listing: ListingLike, digital:
     if (hasBrandName(value)) c.issues.push({ code: "brand_tag", field: `${field}.tags`, severity: "error", messageTr: `Başlıkta veya etikette marka adı var: "${value}". Uyumluluk yalnız açıklamada yazılır.` });
     // Yeni dijital üründe "vintage" Etsy'de 20 yaş üstü ürün demektir; yalnız "vintage style" yazılır.
     if (digital && /\bvintage\b(?![\s-]+(style|inspired))/i.test(value)) c.issues.push({ code: "vintage_new", field: `${field}.tags`, severity: "error", messageTr: `Yeni ürüne "vintage" denmiş: "${value}". "vintage style" yazılmalı.` });
-    if (MISLEADING_FEATURE.test(value)) c.issues.push({ code: "misleading", field: `${field}.tags`, severity: "error", messageTr: `Ürünün içermediği bir şeyi vaat ediyor: "${value}".` });
+    if (misleading.test(value)) c.issues.push({ code: "misleading", field: `${field}.tags`, severity: "error", messageTr: `Ürünün içermediği bir şeyi vaat ediyor: "${value}".` });
     if (isIpRisky(value)) c.issues.push({ code: "ip_risk", field: `${field}.tags`, severity: "error", messageTr: `Marka/telif riski olan kelime var: "${value}".` });
   }
   if (digital) {
@@ -293,7 +298,7 @@ export function guardPrintablePlan<B extends { masterPrompt: string; pdfPrompt: 
     c.checks += 1;
     if (!/[.!?)]$/.test(pin.description.trim())) c.issues.push({ code: "cut_text", field: `pin${index + 1}`, severity: "error", messageTr: "Pin açıklaması yarım cümleyle bitiyor (metin kesilmiş)." });
   });
-  lintListing(c, "listing", safeListing, true);
+  lintListing(c, "listing", safeListing, true, { editable: EDITABLE_TEMPLATE_KINDS.has(context.kind) });
   return { brief: { ...brief, masterPrompt, pdfPrompt, pins }, listing: safeListing, quality: report(c, fixed) };
 }
 

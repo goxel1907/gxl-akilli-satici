@@ -83,7 +83,7 @@ Etsy yapay zekâ kurallarını 22 Ekim 2026'da sıkılaştırdı. Uygulama bu ku
 
 ## Yapay zekâyla satılabilen ürün türleri
 
-Uygulamada 17 dijital ürün türü var. Her türün kendi sayfa bütçesi, görsel planı, dosya seti ve otomatik kontrol listesi vardır:
+Uygulamada 19 dijital ürün türü var. Her türün kendi sayfa bütçesi, görsel planı, dosya seti ve otomatik kontrol listesi vardır:
 
 - **Mevcut türler:** planlayıcı, dijital planlayıcı, günlük, boyama, duvar sanatı, parti oyunları, boş tarif kartı, çocuk etkinlik sayfaları, junk journal kiti / dijital kâğıt.
 - **Basılan yeni türler ve kontrolleri:**
@@ -98,9 +98,19 @@ Uygulamada 17 dijital ürün türü var. Her türün kendi sayfa bütçesi, gör
   - Bütçe tablosu: formüller, giriş hücreleri ve makrosuz dosya kontrol edilir; Excel ve Google Sheets'te açılır.
   - Ekranda kullanılan türlerin (dijital planlayıcı dahil) ilanında "printable", "PDF" veya baskı kelimesi geçmez.
 
+- **Programda açılıp düzenlenen şablonlar:**
+  - Bütçe tablosu (.xlsx): Excel ve Google Sheets.
+  - Sunum oyunu (.pptx): PowerPoint, Google Slides ve Keynote'ta tıklanabilir bilgi yarışması. Her kutu kendi sorusuna, her soru cevabına, her cevap tahtaya bağlıdır. Kalite betiği bağlantıları tek tek okur, cevapları ve slayt sayısını denetler. TV yarışması adları (ör. Jeopardy, Family Feud) marka olduğu için kullanılmaz.
+  - Özgeçmiş şablonu (.docx): tek ve iki sayfalık özgeçmiş, ön yazı ve referans sayfası; US Letter ve A4. ABD kurallarına uyar: fotoğraf, doğum tarihi, medeni durum ve maaş yoktur; örnek bilgiler kurgusaldır. Kalite betiği her şablonun sayfasına sığdığını ve özgeçmiş tarama yazılımlarının (ATS) metni doğru sırayla okuduğunu denetler.
+  - Bu türlerde "editable" (düzenlenebilir) doğru bir bilgidir; diğer türlerde yanıltıcı sayılır.
+  - Program adları (PowerPoint, Word, Google) yalnız açıklamada geçer; başlığa, etikete ve ürün adına girmez.
+
 Her tür trend verisi olmasa bile 13 etiketin tamamını doldurur.
 
-**Satılmayanlar ve nedeni:** Etsy dijital ürünlerde yazılım, uygulama erişimi ve abonelik satışını yasaklar. Bu yüzden APK veya telefon uygulaması satılmaz; telefona yüklenen ürünler duvar kâğıdı, ikon paketi, dijital planlayıcı ve tablo gibi dosyalardır. Lightroom preset gibi fotoğraf düzenleme ayarları da eklenmedi: yapay zekâ gerçek bir düzenleme ayarı dosyası üretemez ve denenmemiş preset iade ve kötü yorum getirir.
+**Eklenmeyenler ve nedeni:**
+- **Kurulan program (APK, .exe, tarayıcı eklentisi).** Etsy'nin kurallarında bunlar için açık bir izin bulunamadı. Alıcının cihazı bilinmeyen kaynaktan program kurarken güvenlik uyarısı verir; iade ve kötü yorum riski yüksektir. Telefona ve bilgisayara yüklenen ürünler bu yüzden dosya olarak satılır: duvar kâğıdı, ikon paketi, dijital planlayıcı ve program şablonları.
+- **Preset, yazı tipi, fırça.** Yapay zekâ bunları deneyip doğrulayamaz; denenmemiş dosya iade ve kötü yorum getirir.
+- **Canva ve Notion şablonları.** Bilgisayarda o programın içinde satıcının kurması gerekir; istenirse ayrıca eklenebilir.
 
 Paket, Stüdyo'da seçilen yapay zekâya göre yazılır:
 - **ChatGPT:** görselleri kendi görsel aracıyla üretir.

@@ -90,8 +90,8 @@ test("the package is written for the assistant the seller picked", () => {
 });
 
 test("every type fills all 13 Etsy tags even without trend data", () => {
-  const products: Record<string, string> = { planner: "daily planner", digital_planner: "digital planner", coloring: "adult coloring pages", wall_art: "wall art", party: "bridal shower games", recipe: "recipe card", journal: "gratitude journal", kids: "kids activity pages", paper_craft: "junk journal kit", calendar: "calendar", stickers: "planner stickers", cards: "christmas cards", puzzles: "word search", wallpaper: "phone wallpaper", labels: "pantry labels", app_icons: "app icons", spreadsheet: "budget spreadsheet" };
-  assert.equal(printableKindOptions().length, 17);
+  const products: Record<string, string> = { planner: "daily planner", digital_planner: "digital planner", coloring: "adult coloring pages", wall_art: "wall art", party: "bridal shower games", recipe: "recipe card", journal: "gratitude journal", kids: "kids activity pages", paper_craft: "junk journal kit", calendar: "calendar", stickers: "planner stickers", cards: "christmas cards", puzzles: "word search", wallpaper: "phone wallpaper", labels: "pantry labels", app_icons: "app icons", spreadsheet: "budget spreadsheet", slides: "christmas trivia game", resume: "resume template" };
+  assert.equal(printableKindOptions().length, 19);
   for (const option of printableKindOptions()) {
     const listing = buildPrintableListing(normalizePrintablePlanInput({ kind: option.id, productType: products[option.id], seed: "z" }), "Test Name");
     assert.equal(listing.tags.length, 13, `${option.id}: ${listing.tags.join(", ")}`);

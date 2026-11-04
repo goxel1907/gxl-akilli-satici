@@ -99,6 +99,8 @@ const BOARD_NAMES: Record<PrintableKind, string> & Record<PatternCraft, string> 
   labels: "Printable Labels & Organization",
   app_icons: "Phone Icons & Widgets",
   spreadsheet: "Budget Spreadsheets & Trackers",
+  slides: "Trivia & Slide Games",
+  resume: "Resume Templates",
   crochet: "Crochet Patterns",
   knitting: "Knitting Patterns",
   embroidery: "Embroidery Patterns",

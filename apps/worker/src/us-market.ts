@@ -5,7 +5,7 @@ import type { PrintableKind } from "./etsy-trends.js";
 // Eyaletten eyalete değişen konular (vergi, resmî tatil, okul yılı, iklim, müfredat) ürüne sabit bilgi olarak yazılmaz.
 // Her ürün yalnız kendisine uyan kuralları alır; ilgisiz kural paketi uzatır ve yapay zekânın dikkatini dağıtır.
 
-const SCREEN_ONLY = new Set<PrintableKind>(["digital_planner", "wallpaper", "app_icons", "spreadsheet"]);
+const SCREEN_ONLY = new Set<PrintableKind>(["digital_planner", "wallpaper", "app_icons", "spreadsheet", "slides"]);
 const DATED = new Set<PrintableKind>(["planner", "digital_planner", "calendar", "journal"]);
 const MONEY = /\b(budget|finance|financial|money|savings?|debt|expense|bill|bills|paycheck|income|spending|cash|sinking funds?)\b/i;
 const SCHOOL = /\b(academic|teacher|teachers|student|students|school|homeschool|college|classroom|semester)\b/i;
@@ -66,6 +66,15 @@ export function usMarketRulesTr(input: UsMarketInput): string[] {
   }
   if (kind === "wallpaper" || kind === "app_icons") {
     lines.push("ABD'de telefonların yarıdan fazlası iPhone'dur: önce iPhone ölçüleri, sonra yaygın Android ölçüleri gelir. Kurulum anlatımında uygulama ve telefon adları yalnız düz metin olarak geçer; logo kullanılmaz.");
+  }
+  if (kind === "slides") {
+    lines.push("Sorular ABD'deki aileler, sınıflar ve arkadaş grupları için genel kültür olsun; yalnız bir eyalette bilinen yerel konu (yerel spor takımı, eyalet yasası, yerel ünlü) sorulmaz. Her cevap doğrulanır; cevabı tartışmalı ya da zamanla değişen soru (ör. güncel rekorlar, \"en yüksek bina\") konmaz. Ölçü ve sıcaklık soruları ABD birimiyle sorulur.");
+    lines.push("Bilinen TV yarışmalarının adları marka olduğu için oyunda, dosya adında ve ilanda geçmez (\"Jeopardy\", \"Family Feud\" ve benzerleri; \"Jeopardy style\" de olmaz). Oyun \"quiz-show game\" ya da \"trivia game\" diye anlatılır.");
+  }
+  if (kind === "resume") {
+    lines.push("ABD özgeçmiş kuralları: fotoğraf, doğum tarihi, yaş, medeni durum, uyruk, din ve kimlik numarası yazılmaz; ABD'de işe alımda ayrımcılığı önlemek için bu bilgiler istenmez. Adres yalnız şehir ve eyalet kısaltmasıdır (\"City, ST\").");
+    lines.push("Maaş bilgisi yazılmaz: California ve New York gibi birçok eyalet ve şehir işverenin maaş geçmişini sormasını yasaklar. Belgenin adı \"resume\"dir; \"CV\" ABD'de akademik başvurular için kullanılır. Tarihler \"Jan 2024 – Present\" biçimindedir.");
+    lines.push("Örnek bilgiler kurgusaldır: telefon \"(555) 555-0123\", e-posta \"name@example.com\"; gerçek şirket, okul veya kişi adı geçmez. Ürün adı özgeçmiş sayfalarına yazılmaz, çünkü alıcı bu sayfaları kendi belgesi olarak kullanır.");
   }
   if (kind === "wall_art") {
     lines.push("Çerçeve ölçüleri ABD standardında inçle yazılır (5x7, 8x10, 11x14, 16x20, 18x24 in); ISO ölçüleri (A4, A3) ek bilgidir.");

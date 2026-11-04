@@ -112,7 +112,7 @@ const KIND_EN: Record<MarketingProductKind, string> = { pdf: "printable", patter
 // Türkçe ürün adı İngilizceye ürün stüdyosunun sözlüğüyle çevrilir ("925 gümüş tesbih" → "Sterling silver prayer beads").
 // PDF ve desen adları çoğunlukla İngilizcedir; Türkçe yazıldıysa sık kelimeler çevrilir ("Bütçe planlayıcı" → "Budget planner").
 const TR_EN_WORDS: Array<[RegExp, string]> = [
-  [/bütçe/, "budget"], [/planlayıcı|planlayici|ajanda/, "planner"], [/günlük|gunluk|defter/, "journal"], [/boyama/, "coloring pages"], [/tarif/, "recipe cards"],
+  [/özgeçmiş|ozgecmis/, "resume template"], [/bilgi yarışması|bilgi yarismasi|sunum oyunu|slayt/, "trivia game slides"], [/bütçe/, "budget"], [/planlayıcı|planlayici|ajanda/, "planner"], [/günlük|gunluk|defter/, "journal"], [/boyama/, "coloring pages"], [/tarif/, "recipe cards"],
   [/duvar k[âa]ğıdı|duvar kagidi/, "phone wallpaper"], [/duvar sanatı|duvar(?! k[âa]ğıdı| kagidi)/, "wall art"], [/çıkartma|cikartma/, "stickers"], [/bulmaca|kelime avı/, "puzzle book"], [/etiket/, "labels"], [/takvim/, "calendar"], [/oyun/, "games"], [/çocuk|cocuk/, "kids"], [/etkinlik/, "activity"], [/alışkanlık/, "habit tracker"],
   [/yemek|menü/, "meal"], [/düğün|dugun/, "wedding"], [/hırka|hirka/, "cardigan"], [/kazak/, "sweater"], [/çanta|canta/, "bag"], [/tığ işi|tig isi/, "crochet"],
   [/örgü|orgu/, "knitting"], [/desen|model/, "pattern"], [/noel|yılbaşı|yilbasi/, "Christmas"], [/kâğıt|kagit/, "paper"]
@@ -123,7 +123,7 @@ function translateDigitalName(name: string): string | undefined {
   const found = TR_EN_WORDS.map(([pattern, word]) => ({ index: lower.search(pattern), word })).filter((item) => item.index >= 0).sort((a, b) => a.index - b.index).map((item) => item.word);
   if (!found.length) return undefined;
   // "planner" ve "pattern" gibi baş isimler sona gelir ("Budget planner", "Crochet cardigan pattern").
-  const heads = found.filter((word) => /^(planner|journal|pattern|games|calendar|coloring pages|recipe cards|wall art|paper|phone wallpaper|stickers|puzzle book|labels)$/.test(word));
+  const heads = found.filter((word) => /^(planner|journal|pattern|games|calendar|coloring pages|recipe cards|wall art|paper|phone wallpaper|stickers|puzzle book|labels|resume template|trivia game slides)$/.test(word));
   const words = [...found.filter((word) => !heads.includes(word)), ...heads].join(" ");
   return words[0].toUpperCase() + words.slice(1);
 }
@@ -167,6 +167,8 @@ function hashtagsFor(input: MarketingPlanInput, lang: "tr" | "en", fallback: str
   if (input.kind !== "pdf") return fallback;
   const name = `${input.productName} ${input.productNameEn || ""}`.toLowerCase();
   const rows: Array<[RegExp, string[], string[]]> = [
+    [/resume|cover letter|özgeçmiş|ozgecmis/, ["#resumetemplate", "#jobsearch", "#resume", "#careergoals", "#etsyfinds"], ["#özgeçmiş", "#dijitalürün"]],
+    [/slides?|trivia|powerpoint|sunum|bilgi yarışması/, ["#triviagame", "#gamenight", "#partygames", "#trivianight", "#etsyfinds"], ["#bilgiyarışması", "#dijitalürün"]],
     [/app icons?|icon pack|widget|ikon/, ["#appicons", "#homescreen", "#aestheticphone", "#widgets", "#etsyfinds"], ["#telefonikonu", "#dijitalürün"]],
     [/spreadsheet|tablo/, ["#budgetspreadsheet", "#budgeting", "#personalfinance", "#moneytracker", "#etsyfinds"], ["#bütçe", "#dijitalürün"]],
     [/wallpaper|lock ?screen|duvar k[âa]ğıdı/, ["#phonewallpaper", "#lockscreen", "#aestheticwallpaper", "#digitaldownload", "#etsyfinds"], ["#telefonduvarkağıdı", "#dijitalürün"]],
@@ -188,7 +190,7 @@ function hashtagsFor(input: MarketingPlanInput, lang: "tr" | "en", fallback: str
 
 // İngilizce adlı ürünün Türkçe karşılığı: satıcı gönderinin ne dediğini anlasın diye sık kelimeler çevrilir.
 const EN_TR_WORDS: Array<[RegExp, string]> = [
-  [/\bjunk journal\b/, "kolaj defteri"], [/\bcoloring pages?\b|\bcoloring book\b/, "boyama sayfaları"], [/\bwall art\b/, "duvar sanatı"], [/\brecipe cards?\b/, "tarif kartları"],
+  [/\bresume\b/, "özgeçmiş"], [/\bcover letter\b/, "ön yazı"], [/\btrivia\b/, "bilgi yarışması"], [/\bslides?\b/, "slaytları"], [/\btemplates?\b/, "şablonu"], [/\bjunk journal\b/, "kolaj defteri"], [/\bcoloring pages?\b|\bcoloring book\b/, "boyama sayfaları"], [/\bwall art\b/, "duvar sanatı"], [/\brecipe cards?\b/, "tarif kartları"],
   [/\bprayer beads\b/, "tesbih"], [/\bsterling silver\b/, "gümüş"], [/\bdigital paper\b/, "dijital kâğıt"], [/\bhabit tracker\b/, "alışkanlık takibi"],
   [/\bbridal shower\b/, "gelin hamamı"], [/\bbaby shower\b/, "baby shower"], [/\bchristmas\b/, "Noel"], [/\bhalloween\b/, "Cadılar Bayramı"], [/\bcozy\b/, "sıcacık"],
   [/\bvintage\b/, "vintage"], [/\bbudget\b/, "bütçe"], [/\bweekly\b/, "haftalık"], [/\bdaily\b/, "günlük"], [/\bmeal\b/, "yemek"], [/\bwedding\b/, "düğün"],

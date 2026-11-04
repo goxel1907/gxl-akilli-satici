@@ -31,17 +31,17 @@ export interface MasterPromptInput {
 export const SPEC_DIVIDER = "---";
 
 function toolNotes(assistant: MasterPromptInput["assistant"], hasArt: boolean): string[] {
-  const chatgpt = "- ChatGPT: görselleri yerleşik görsel aracınla üret, dosyaları Python ile kur (ör. reportlab ya da HTML'den PDF) ve indirme bağlantısı ver.";
+  const chatgpt = "- ChatGPT: görselleri yerleşik görsel aracınla üret, dosyaları Python ile kur (ör. reportlab ya da HTML'den PDF; tablo için openpyxl, sunum için python-pptx, belge için python-docx) ve indirme bağlantısı ver.";
   if (assistant === "chatgpt") return [chatgpt];
   const claude = [
     hasArt
       ? "- Claude: fotoğraf ya da piksel tabanlı görsel üretemezsin. Brief B'deki her görseli kodla, spec paletinde temiz vektör SVG olarak çiz ve belirtilen ölçüde PNG'ye çevir. Dosyaları kendi kod ve dosya araçlarınla kur, indirme bağlantısı ver."
-      : "- Claude: fotoğraf ya da piksel tabanlı görsel üretemezsin. Dosyaları kendi kod ve dosya araçlarınla kur (HTML, SVG, PDF veya XLSX), çizimleri temiz vektör SVG olarak yap ve indirme bağlantısı ver.",
+      : "- Claude: fotoğraf ya da piksel tabanlı görsel üretemezsin. Dosyaları kendi kod ve dosya araçlarınla kur (HTML, SVG, PDF, XLSX, PPTX veya DOCX), çizimleri temiz vektör SVG olarak yap ve indirme bağlantısı ver.",
     ...(hasArt ? ["- Bir stil vektörle iyi çizilemiyorsa (ör. suluboya ya da fotoğraf gibi doku) bunu görsel adımında bana Türkçe söyle ve Brief B promptlarını spec değerleri doldurulmuş hâlde ver; görselleri bir görsel aracında yapıp bu sohbete yüklerim."] : []),
     "- İlan görselleri: önizleme, düz serim (flat lay) ve ölçü görsellerini gerçek sayfalardan kodla kendin kur. Fotoğraf gibi sahneler için her promptu spec değerleri doldurulmuş hâlde, İngilizce ver; ben bir görsel aracında çalıştırırım."
   ];
   if (assistant === "claude") return claude;
-  return [chatgpt, "- Claude: fotoğraf üretemezsin. Dosyaları dosya araçlarınla kur (HTML, SVG, PDF veya XLSX), çizimleri temiz vektör SVG olarak yap. Fotoğraf adımlarında promptları spec değerleri doldurulmuş hâlde, İngilizce ver; ben bir görsel aracında çalıştırırım."];
+  return [chatgpt, "- Claude: fotoğraf üretemezsin. Dosyaları dosya araçlarınla kur (HTML, SVG, PDF, XLSX, PPTX veya DOCX), çizimleri temiz vektör SVG olarak yap. Fotoğraf adımlarında promptları spec değerleri doldurulmuş hâlde, İngilizce ver; ben bir görsel aracında çalıştırırım."];
 }
 
 export function buildMasterPrompt(input: MasterPromptInput): string {

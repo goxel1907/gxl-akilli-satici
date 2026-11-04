@@ -16,7 +16,9 @@ const POINT_SIZES: Array<[RegExp, string]> = [
 ];
 // Her format için ilk eşleşen ölçü alınır ("US Letter (landscape)" dikey Letter sayılmaz).
 const pageSizes = (formats: string[]) => [...new Set(formats.flatMap((format) => { const found = POINT_SIZES.find(([pattern]) => pattern.test(format)); return found ? [found[1]] : []; }))].join(", ") || "the size of each format";
-const TEXT_KINDS = new Set<PrintableKind>(["planner", "digital_planner", "journal", "recipe", "party", "kids", "puzzles", "labels", "spreadsheet"]);
+const TEXT_KINDS = new Set<PrintableKind>(["planner", "digital_planner", "journal", "recipe", "party", "kids", "puzzles", "labels", "spreadsheet", "slides", "resume"]);
+// Kapak sayfası olmayan türler (baskı, ekran görüntüsü, tablo, oyun slaytı, özgeçmiş).
+const NO_COVER = new Set<PrintableKind>(["wall_art", "wallpaper", "app_icons", "spreadsheet", "slides", "resume"]);
 
 const KIND_CHECKS: Partial<Record<PrintableKind, string[]>> = {
   planner: ["CALENDAR — monthly grids have 6 rows × 7 columns; Monday-start and Sunday-start versions differ only in weekday order."],
@@ -47,6 +49,17 @@ const KIND_CHECKS: Partial<Record<PrintableKind, string[]>> = {
     "NO MACROS — the file is .xlsx (not .xlsm) with no macros, scripts, external links, pivot tables or hidden tabs, so it works in Excel, Google Sheets and phone spreadsheet apps.",
     "US FORMAT — currency cells use the $ format ($1,234.56), dates use MM/DD/YYYY, and no cell holds a fixed sales-tax or income-tax rate: tax rates differ by state, so any tax rate is a blank input cell."
   ],
+  slides: [
+    "LINKS — read every shape's click action with python-pptx: every board tile jumps to its own question slide, every question slide has a 'Show answer' link to its answer slide, every answer slide links back to the board, and no link points to a website or another file; print the number of working links.",
+    "ANSWERS — every question has exactly one answer slide, the answer key in the host guide matches the answer slides, and every answer has one line on why it is right; replace any question whose answer is disputed or changes over time.",
+    "SLIDES — the file is .pptx (not .pptm) with 16:9 slides (12192000 × 6858000 EMU) and no macros, embedded media, OLE objects or links to websites; render the slides with LibreOffice headless and confirm that no text overflows its box."
+  ],
+  resume: [
+    "DOCX — every template opens with python-docx, uses built-in styles and has no text boxes, floating shapes, columns or images that hold text; the page size is US Letter (8.5 × 11 in) or A4 (210 × 297 mm) as its file name says, with the margins from Brief A.",
+    "PAGE FIT — converted to PDF with LibreOffice headless, the one-page resume, the cover letter and the references page each stay on one page and the two-page resume on exactly two pages.",
+    "ATS ORDER — the text extracted from the converted PDF reads in the right order (name, contact line, summary, experience, education, skills), and every heading is real text.",
+    "US RESUME — no photo, date of birth, age, marital status or salary; the sample contact details are fictional ((555) 555-0123, name@example.com, City, ST); no real company, school or person name appears; the product name appears on no resume, cover letter or references page."
+  ],
   labels: ["LABELS — every label word is in an English dictionary with US spelling and uses the US grocery name (powdered sugar, all-purpose flour, cornstarch, baking soda; never \"icing sugar\", \"plain flour\", \"cornflour\" or \"bicarbonate of soda\"), no word repeats within a set, and the cut lines line up with the label boxes."],
   paper_craft: ["PATTERN TILES — for every tile, the left and right edge columns and the top and bottom edge rows match (mean difference under 3%), the 2×2 preview shows no seam, and every 12×12 paper is a 3600×3600 px JPG."]
 };
@@ -73,6 +86,11 @@ function filesCheck(input: Extract<QaInput, { type: "printable" }>): string {
     return `FILES — ${pdfs.length ? `the ${pdfs.join(" and ")} PDF editions exist, open and have the same page order and count (${count}); each page size matches its format within 1 pt (${pageSizes(pdfs)}); ` : ""}the 12×12 papers exist as JPG files; ${limit}.`;
   }
   if (input.kind === "app_icons") return `FILES — the Icons zip holds every icon as a 1024×1024 px PNG plus the blank icons; the second zip holds 3 widget images (1024×1024, 2048×1024 and 2048×2048 px) and 2 wallpapers (1290×2796 px); the PDF holds the setup guide, thank-you and license pages; ${limit}.`;
+  if (input.kind === "slides") {
+    const questions = Math.min(50, Math.max(15, Math.round(input.pages / 5) * 5));
+    return `FILES — the zip holds the .pptx game and the host guide PDF; the .pptx opens with python-pptx and has ${questions * 2 + 6} slides (title, how to play, board, ${questions} question and ${questions} answer slides, the bonus question and answer, and the scoreboard); ${limit}.`;
+  }
+  if (input.kind === "resume") return `FILES — the US Letter zip and the A4 zip each hold the one-page resume, the two-page resume, the cover letter and the references page as .docx files whose names include their size, plus the quick-start PDF; ${limit}.`;
   if (input.kind === "spreadsheet") return `FILES — the zip holds the .xlsx workbook and the quick-start PDF; the workbook opens with openpyxl and has the tabs in the tab plan (${input.pages} tabs); ${limit}.`;
   if (input.kind === "wallpaper") return `FILES — every wallpaper exists in every listed size (${input.formats.join(", ")}) as a PNG with that exact pixel size, and the PDF holds the setup guide, thank-you and license pages; ${limit}.`;
   if (input.kind === "stickers") return `FILES — the ${print.filter((format) => !/png/i.test(format)).map((format) => format.replace(/\s*\(.*\)/, "")).join(" and ")} sticker-sheet PDFs exist and open, have the same pages (${count}) and match ${pageSizes(print.filter((format) => !/png/i.test(format)))}; the PNG zip holds every sticker as a transparent PNG; ${limit}.`;
@@ -126,20 +144,28 @@ const PATTERN_CHECKS: Record<PatternCraft, (input: PatternQa) => string[]> = {
 
 export function qaProtocol(input: QaInput): string[] {
   const intro = [
-    "Write ONE Python script (pypdf or pdfplumber; PyMuPDF if available) that opens every delivered file and prints a PASS/FAIL table, one line per check below.",
+    `Write ONE Python script (${input.type === "printable" && input.kind === "slides" ? "python-pptx for the .pptx and pypdf or pdfplumber for the PDF" : input.type === "printable" && input.kind === "resume" ? "python-docx for the .docx files and pypdf or pdfplumber for the PDFs" : input.type === "printable" && input.kind === "spreadsheet" ? "openpyxl for the .xlsx and pypdf or pdfplumber for the PDF" : "pypdf or pdfplumber; PyMuPDF if available"}) that opens every delivered file and prints a PASS/FAIL table, one line per check below.`,
     "Paste the script output itself, not a summary. A step is not done while any line says FAIL: fix the files and run the script again.",
     "Saying \"checked\" without the script output does not count. Only if you cannot run code at all: give one PASS/FAIL line per check with the evidence you looked at."
   ];
   // Cilt payı yalnız deliği/cildi olan sayfalarda: planlayıcı, günlük, tarif dosyası sayfaları ve desen PDF'i (kartlarda yok).
   const binding = input.type === "printable" && ["planner", "journal"].includes(input.kind);
-  const nameWhere = input.type === "printable" && input.kind === "wall_art" ? "on the size guide and the license page" : input.type === "printable" && (input.kind === "wallpaper" || input.kind === "app_icons") ? "on the setup guide and the license page" : input.type === "printable" && input.kind === "spreadsheet" ? "on the 'Start here' tab and in the quick-start PDF" : "on the cover and on the thank-you or final page";
+  const nameWhere = input.type === "printable" && input.kind === "wall_art" ? "on the size guide and the license page" : input.type === "printable" && (input.kind === "wallpaper" || input.kind === "app_icons") ? "on the setup guide and the license page" : input.type === "printable" && input.kind === "spreadsheet" ? "on the 'Start here' tab and in the quick-start PDF" : input.type === "printable" && input.kind === "slides" ? "on the title slide and in the host guide" : input.type === "printable" && input.kind === "resume" ? "in the quick-start guide and in the file names only (never on the resume, cover letter or references pages, which the buyer uses as their own)" : "on the cover and on the thank-you or final page";
   const common = (name: string) => [
     `NAME — the product name "${name}" appears ${nameWhere}, spelled exactly like this, and no other product name or old working name appears anywhere.`,
     "PLACEHOLDERS — no \"Lorem\", \"TODO\", \"TBD\", \"XXX\", \"undefined\", \"NaN\", stray brackets or empty headings.",
     input.type === "printable" && input.kind === "spreadsheet"
       ? "FONTS — the quick-start PDF embeds every font, and the workbook uses only fonts that come with both Excel and Google Sheets (for example Arial or Georgia); print the font list."
+      : input.type === "printable" && input.kind === "slides"
+      ? "FONTS — the host guide PDF embeds every font, and the .pptx uses only fonts that come with PowerPoint, Google Slides and Keynote (for example Arial or Georgia); print the font list."
+      : input.type === "printable" && input.kind === "resume"
+      ? "FONTS — the quick-start PDF embeds every font, and the .docx files use only fonts that come with Word and Google Docs (for example Arial, Georgia or Garamond); print the font list."
       : "FONTS — every font is embedded; print the font list.",
-    input.type === "printable" && input.kind === "spreadsheet"
+    input.type === "printable" && input.kind === "slides"
+      ? "MARGINS — every text box sits at least 0.3 in inside the slide edge, and in the host guide PDF every word is at least 6 mm from each page edge."
+      : input.type === "printable" && input.kind === "resume"
+      ? "MARGINS — every .docx has the margins from Brief A (0.5 to 1 in), and nothing is clipped in the converted PDF."
+      : input.type === "printable" && input.kind === "spreadsheet"
       ? "MARGINS — in the quick-start PDF every word's bounding box is at least 6 mm from each page edge; in the workbook no text is cut off in its cell at 100% zoom."
       : `MARGINS — every word's bounding box is at least 6 mm from each page edge${binding ? " (19 mm on the binding side of print editions)" : input.type === "printable" && input.kind === "recipe" ? " (19 mm on the binding side of the binder pages)" : ""}; nothing is clipped.`,
     `AMERICAN ENGLISH — list every word in the files and file names that is not in an American English dictionary and fix the real typos (the product name "${input.name}" is a coined word: keep it); also list and fix any British spelling or word (\"colour\", \"favourite\", \"organise\", \"grey\", \"centre\", \"Mum\", \"maths\") and any Turkish word or Turkish-only letter (c-cedilla, g-breve, dotless i, o-umlaut, s-cedilla, u-umlaut).`,
@@ -151,15 +177,19 @@ export function qaProtocol(input: QaInput): string[] {
     const checks = [
       filesCheck(input),
       ...(["planner", "digital_planner", "journal"].includes(input.kind) ? ["SEQUENCES — extract the text of every page and test every numbered sequence: hour labels run in order with the right AM/PM (… 11 AM, 12 PM, 1 PM …), day numbers 1–31 have no gaps or repeats, weekday lists follow the page's Monday-start or Sunday-start order, and footer page numbers match the real page index."] : []),
-      ...(textKind && !["planner", "digital_planner", "journal", "labels", "spreadsheet"].includes(input.kind) ? ["PAGE NUMBERS — footer page numbers match the real page index and have no gaps or repeats."] : []),
+      ...(textKind && !["planner", "digital_planner", "journal", "labels", "spreadsheet", "slides", "resume"].includes(input.kind) ? ["PAGE NUMBERS — footer page numbers match the real page index and have no gaps or repeats."] : []),
       input.kind === "app_icons"
         ? "DUPLICATES — no two icons use the same symbol, and no two widgets or wallpapers share the same artwork."
+        : input.kind === "slides"
+        ? "DUPLICATES — no two questions are the same or ask for the same fact, and every answer slide matches its own question."
+        : input.kind === "resume"
+        ? "DUPLICATES — the US Letter and A4 editions are the same templates on purpose, and the one-page and two-page resumes share sample text on purpose; nothing else repeats."
         : input.kind === "spreadsheet"
         ? "DUPLICATES — repeated tabs (for example the 12 monthly tabs) are the same template on purpose; every other tab has its own purpose."
         : input.kind === "wall_art" || input.kind === "wallpaper"
         ? `DUPLICATES — no two ${input.kind === "wallpaper" ? "wallpapers" : "prints"} share the same artwork or composition (the size files of one ${input.kind === "wallpaper" ? "wallpaper" : "print"} are the same art on purpose).`
         : `DUPLICATES — no two pages share the same or nearly the same ${textKind ? "text (90% or more), except declared Monday/Sunday variants and declared repeated template pages (for example the daily page of an undated planner, or free-writing pages)" : "artwork or composition"}. Every page must earn its place.`,
-      ...(!["wall_art", "wallpaper", "app_icons", "spreadsheet"].includes(input.kind) ? ["COVER — page 1 is a real cover: no page number, running header or navigation label."] : []),
+      ...(!NO_COVER.has(input.kind) ? ["COVER — page 1 is a real cover: no page number, running header or navigation label."] : []),
       ...(tablet ? ["LINKS — the tablet edition has working internal links (count them) and every page links back to the index; print editions have no tab bars or buttons that only work on a tablet."] : []),
       ...(!textKind ? [ART_TEXT_CHECKS[input.kind] || (input.kind === "coloring"
         ? "TEXT-FREE ART — the line art itself contains no text or letters: run OCR (for example pytesseract) on every art image before it is placed; on the pages, text is allowed only in the bottom margin (the small page number and © line); if OCR is not available, list every image where letters or pseudo-letters are visible on the contact sheet."
@@ -171,6 +201,10 @@ export function qaProtocol(input: QaInput): string[] {
         ? `THEME — every ${input.kind === "app_icons" ? "icon, widget and wallpaper" : "wallpaper"} fits the theme in the Product spec; none adds a different holiday, season or mood.`
         : input.kind === "spreadsheet"
         ? "THEME — every tab uses the same palette, fonts and header style from the Product spec."
+        : input.kind === "slides"
+        ? "THEME — every slide uses the palette and fonts from the Product spec, and every question fits the game's theme; none adds a different holiday, season or mood."
+        : input.kind === "resume"
+        ? "THEME — every template uses the same fonts, accent color and heading style from the Product spec."
         : "THEME — list every page title; none names a different holiday, season or mood than the theme in the Product spec.",
       ...(textKind || input.kind === "calendar" || input.kind === "cards" ? ["LEGIBILITY — body text at least 9 pt, labels at least 7 pt, label color contrast at least 4.5:1 on white."] : []),
       ...(KIND_CHECKS[input.kind] || []),

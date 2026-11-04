@@ -1323,7 +1323,7 @@ const GROUP_LABELS: Record<string, string> = { patterns: "Hobi deseni", printabl
 
 // Her grup düğmesinin altında: içinde ne var, kim alır, nasıl teslim edilir. Hiç kullanmamış biri için.
 const GROUP_INTROS: Record<string, { title: string; text: string; icon: string }> = {
-  printables: { icon: "document-text-outline", title: "Dijital ürünler nedir?", text: "Alıcının satın alıp indirdiği dosyalar. Bir kısmı yazıcıda basılır: planlayıcı, takvim, boyama sayfası, duvar posteri, tarif kartı, tebrik kartı, çıkartma, etiket, bulmaca, parti oyunu. Bir kısmı telefona ve tablete yüklenir: telefon duvar kâğıdı, ikon ve widget paketi, dijital planlayıcı, bütçe tablosu. Kargo yok; bir kez hazırlanır, defalarca satılır. Etsy'de çoğu 2–15 USD." },
+  printables: { icon: "document-text-outline", title: "Dijital ürünler nedir?", text: "Alıcının satın alıp indirdiği dosyalar. Bir kısmı yazıcıda basılır: planlayıcı, takvim, boyama sayfası, duvar posteri, tarif kartı, tebrik kartı, çıkartma, etiket, bulmaca, parti oyunu. Bir kısmı telefona ve tablete yüklenir: telefon duvar kâğıdı, ikon ve widget paketi, dijital planlayıcı. Bir kısmı alıcının programında açılır: bütçe tablosu (Excel), sunum oyunu (PowerPoint) ve özgeçmiş şablonu (Word). Kargo yok; bir kez hazırlanır, defalarca satılır. Etsy'de çoğu 2–15 USD." },
   patterns: { icon: "color-palette-outline", title: "Hobi desenleri nedir?", text: "Örgü, tığ işi, nakış, kanaviçe, dikiş ve makrome için adım adım yapım tarifi (PDF). Alıcı ürünü kendisi yapar; siz yalnız tarifi satarsınız. Kargo yok. Etsy'de çoğu 2–12 USD. Dikkat: Etsy yapay zekâyla yazılmış deseni yasakladı; yalnız kendi yazıp denediğiniz deseni satabilirsiniz." },
   tesbih: { icon: "ellipse-outline", title: "Tesbih ve gümüş nedir?", text: "Elinizdeki gerçek tesbihler: 925 gümüş, kehribar, oltu, kuka ve İslami hediyeler. Fiziksel ürün: fotoğrafını çekip satarsınız, ABD'ye kargolarsınız. Etsy'de çoğu 15–250 USD." },
   vintage: { icon: "time-outline", title: "Vintage nedir?", text: "En az 20 yıllık eski eşyalar: gümüş takı, broş, halı, kilim, bakır. Etsy kuralı: 20 yıldan yeni ürün 'vintage' diye satılamaz, 100 yıldan yeni ürüne 'antika' denmez. Fiziksel ürün, kargo gerekir." },
@@ -1482,7 +1482,9 @@ const PRINTABLE_KIND_OPTIONS = [
   { id: "wallpaper", label: "Duvar kâğıdı" },
   { id: "labels", label: "Düzen etiketi" },
   { id: "app_icons", label: "Telefon ikonu" },
-  { id: "spreadsheet", label: "Bütçe tablosu" }
+  { id: "spreadsheet", label: "Bütçe tablosu" },
+  { id: "slides", label: "Sunum oyunu (PowerPoint)" },
+  { id: "resume", label: "Özgeçmiş (Word)" }
 ];
 
 // Her türün kısa açıklaması: ne olduğu, kime satıldığı, Etsy'deki fiyat aralığı ve dikkat edilecek kural.
@@ -1503,7 +1505,9 @@ const KIND_HELP: Record<string, string> = {
   wallpaper: "Telefon kilit ekranı ve ana ekran duvar kâğıtları; 3 ekran ölçüsü. Basılmaz, kargo yok. Etsy'de çoğu 2–6 USD.",
   labels: "Kiler, mutfak ve ev düzeni etiketleri; hazır yazılı ve boş etiketler, 3 ölçü. Etsy'de çoğu 3–8 USD.",
   app_icons: "Telefona yüklenir: ana ekran ikon paketi (64–96 ikon), widget görselleri ve eşleşen duvar kâğıtları. İkonlar sade semboldür; hiçbir şirket logosu kullanılmaz. Etsy'de çoğu 3–9 USD.",
-  spreadsheet: "Telefona ve bilgisayara yüklenir: formüllü bütçe/takip tablosu (.xlsx). Excel, Google Sheets ve telefon tablo uygulamalarında çalışır; makro yok. Etsy'de çok satar; 4–15 USD."
+  spreadsheet: "Telefona ve bilgisayara yüklenir: formüllü bütçe/takip tablosu (.xlsx). Excel, Google Sheets ve telefon tablo uygulamalarında çalışır; makro yok. Etsy'de çok satar; 4–15 USD.",
+  slides: "Bilgisayarda açılır, televizyona veya projeksiyona yansıtılır: tıklanabilir bilgi yarışması oyunu (.pptx). PowerPoint, Google Slides ve Keynote'ta çalışır; aileler, öğretmenler ve ofis partileri alır. Etsy'de çoğu 4–12 USD.",
+  resume: "Word, Google Docs ve Pages'te düzenlenir: tek ve iki sayfalık özgeçmiş, ön yazı ve referans sayfası (.docx), US Letter ve A4. ABD özgeçmiş kurallarına uyar. Etsy'de çok aranır; çoğu 5–15 USD."
 };
 
 // Satıcının kullandığı yapay zekâ: paket o araca göre yazılır. Seçim telefonda hatırlanır.
@@ -1963,7 +1967,7 @@ function DigitalUploadForm({ visible, prefill, onClose, onSaved }: any) {
   };
   const save = () => {
     if (!name.trim() || !productType.trim() || !title.trim() || !description.trim()) return Alert.alert("Eksik bilgi", "Ürün adı, ürün türü, başlık ve açıklama gerekli. Önce Stüdyo'da ilanı hazırlayın.");
-    if (!files.length) return Alert.alert("Dosya seçin", "Satılacak dosyaları seçin: PDF veya ZIP (duvar kâğıdı, ikon paketi ve tablo ZIP içinde gelir); en fazla 5.");
+    if (!files.length) return Alert.alert("Dosya seçin", "Satılacak dosyaları seçin: PDF veya ZIP (duvar kâğıdı, ikon paketi, tablo, sunum oyunu ve özgeçmiş ZIP içinde gelir); en fazla 5.");
     if (!priceUsd && !priceTry) return Alert.alert("Fiyat", "Etsy mağaza para birimine göre USD veya TL fiyatı girin.");
     if (kind === "pattern" && (!ownPattern || !testMade || photosAreRenders || aiAssisted)) return Alert.alert("Etsy kuralı", "Etsy yapay zekâyla yazılmış deseni yasakladı. Desen yalnız sizin veya mağaza üyenizin yazdığı, bizzat yapıp denediği ve bitmiş ürününün gerçek fotoğrafıyla yüklenebilir.");
     if (!images.length) return Alert.alert("Görsel ekleyin", kind === "pattern" ? "Bitmiş ürünün en az bir gerçek, düzenlenmemiş fotoğrafını ekleyin." : "En az bir görsel ekleyin; biri PDF sayfalarının düzenlenmemiş önizlemesi olsun (talimattaki C4).");
@@ -2248,7 +2252,7 @@ const ETSY_GUIDE: Array<{ id: string; title: string; icon: any; steps: string[] 
     "Pahalı fiziksel ürünlerde (gümüş tesbih vb.) favori sayısı doğal olarak düşüktür. Az satış da yüksek kazanç demektir."
   ] },
   { id: "printables", title: "Dijital ürün satışı adım adım (planlayıcı, duvar kâğıdı, ikon paketi…)", icon: "document-attach-outline", steps: [
-    "Trend → Dijital ürünler: planlayıcı, dijital planlayıcı, takvim, boyama, duvar sanatı, tarif kartı, tebrik kartı, çıkartma, etiket, bulmaca, parti oyunları, günlük, çocuk etkinlikleri, kâğıt işi, telefon duvar kâğıdı, ikon paketi ve bütçe tablosu nişleri puanlanır. 'İlgi sıralaması' alıcı ilgisini çubukla gösterir: talep, ortanca ilan ile öne çıkan çeyreğin aylık favorisinden birlikte hesaplanır. İlgisi yüksek ama puanı düşük nişte rekabet yoğundur; dar bir alt ifadeyle girin.",
+    "Trend → Dijital ürünler: planlayıcı, dijital planlayıcı, takvim, boyama, duvar sanatı, tarif kartı, tebrik kartı, çıkartma, etiket, bulmaca, parti oyunları, günlük, çocuk etkinlikleri, kâğıt işi, telefon duvar kâğıdı, ikon paketi, bütçe tablosu, sunum oyunu ve özgeçmiş şablonu nişleri puanlanır. 'İlgi sıralaması' alıcı ilgisini çubukla gösterir: talep, ortanca ilan ile öne çıkan çeyreğin aylık favorisinden birlikte hesaplanır. İlgisi yüksek ama puanı düşük nişte rekabet yoğundur; dar bir alt ifadeyle girin.",
     "Bir kartı açıp 'Öne geçmek için ne yapmalı?' önerilerini okuyun, sonra 'Bu nişte dijital ürün hazırla'ya basın.",
     "Stüdyo'yu açtığınızda veya bir ürün türüne bastığınızda sistem o türde en güçlü Etsy aramasını kendisi seçer ve tüm alanları doldurur: ürün, trend özellikleri, renkler (trend rengi yoksa trend stiline uygun palet), formatlar (rakiplerin az sunduğu formatlar eklenir), sayfa sayısı (rakip ortancasının %20 fazlası) ve hedef kitle. 'Başka arama seç' sıradaki güçlü aramayı getirir.",
     "'Rakipleri geçmek için' kartı rakip ortanca fiyatını, önerilen başlangıç ve set fiyatını, format boşluklarını ve geçilecek rakipleri gösterir; önerilen fiyat yükleme formuna otomatik gelir. Siz 'Prompt, görsel ve ilanı hazırla'ya basarsınız.",
@@ -2258,7 +2262,7 @@ const ETSY_GUIDE: Array<{ id: string; title: string; icon: any; steps: string[] 
     "Dosyalar gelince modelden 'Automated QA' betik çıktısını isteyin: tek satırda FAIL olmamalı (saat AM/PM, kopya sayfa, eksik format, ad, kapak, kenar boşluğu). Uygulama da yüklemede ilanda yazan formatın dosyalarda olmamasını ve aynı dosyanın iki kez yüklenmesini engeller.",
     "Reklam tadında 10 görselin her birinde nerede kullanılacağı (Etsy kapak, galeri, Pinterest, Instagram), ölçüsü ve üstüne yazılacak kısa metin yazar. Görseli üretirken kendi sayfalarınızı veya ekran görüntülerinizi referans olarak yükleyin, yazıyı Canva ile ekleyin.",
     "Pinterest pinlerini farklı günlerde paylaşın. Paket fikriyle aynı stilde bir set hazırlayın.",
-    "Dijital → tüm dosyaları tek seferde seçin (PDF veya ZIP, en fazla 5; duvar kâğıdı, ikon paketi ve tablo ZIP içinde gelir) ve görselleri ekleyin → 'Etsy taslağı oluştur'. Dosyaların hepsi ilana otomatik eklenir. Etsy'de yapay zekâ beyanını ve kategoriyi kontrol edip yayınlayın."
+    "Dijital → tüm dosyaları tek seferde seçin (PDF veya ZIP, en fazla 5; duvar kâğıdı, ikon paketi, tablo, sunum oyunu ve özgeçmiş ZIP içinde gelir) ve görselleri ekleyin → 'Etsy taslağı oluştur'. Dosyaların hepsi ilana otomatik eklenir. Etsy'de yapay zekâ beyanını ve kategoriyi kontrol edip yayınlayın."
   ] },
   { id: "pdf-win", title: "Dijital ürün satışında öne geçmek", icon: "trophy-outline", steps: [
     "Kapak görseli satışın yarısıdır: küçük görünümde okunan 3-5 kelimelik başlık ve sayfa sayısı ya da format rozeti ekleyin.",
@@ -2316,7 +2320,7 @@ const ETSY_GUIDE: Array<{ id: string; title: string; icon: any; steps: string[] 
   ] },
   { id: "categories", title: "Yapay zekâyla satabileceğimiz ürünler", icon: "sparkles-outline", steps: [
     "Etsy, yapay zekâ destekli dijital ürüne izin verir. İki şart var: satıcının gerçek bir yaratıcı payı olmalı ve açıklamada yapay zekâ beyanı yazmalı. Uygulamanın talimatları ve ilanları ikisini de karşılar.",
-    "Uygulamada hazır 17 tür var. Her biri Stüdyo → Dijital ürün → türü seçerek ya da Trend'de o türün aramasında 'Bu nişte dijital ürün hazırla' ile başlar:",
+    "Uygulamada hazır 19 tür var. Her biri Stüdyo → Dijital ürün → türü seçerek ya da Trend'de o türün aramasında 'Bu nişte dijital ürün hazırla' ile başlar:",
     "• Planlayıcı ve dijital (tablet) planlayıcı · • Günlük · • Boyama sayfaları · • Duvar sanatı · • Parti ve düğün oyunları · • Boş tarif kartı ve defteri · • Çocuk etkinlik sayfaları · • Junk journal kiti ve dijital kâğıt",
     "• Yıllık takvim · • Çıkartma (sticker) seti · • Tebrik kartı ve hediye etiketi · • Büyük puntolu bulmaca kitabı · • Kiler ve ev düzeni etiketleri",
     "Telefona yüklenip kullanılan ürünler (basılmaz, kargo yok):",
@@ -2325,14 +2329,19 @@ const ETSY_GUIDE: Array<{ id: string; title: string; icon: any; steps: string[] 
     "• Bütçe / takip tablosu: Excel, Google Sheets ve telefon tablo uygulamalarında çalışır.",
     "• Dijital planlayıcı: tablette ve telefonda not uygulamasıyla açılır.",
     "• Çıkartma setinin PNG dosyaları: dijital planlayıcıya eklenir.",
-    "Gerçek telefon uygulaması (APK) Etsy'de satılacak bir ürün değil. Uygulamalar Google Play ve App Store'dan dağıtılır; Etsy yazılım veya abonelik erişimi satmayı da yasaklar. Fotoğraf filtresi (preset) paketleri ise bir markanın uygulamasına bağlıdır ve özel dosya biçimi ister; bu yüzden şimdilik eklenmedi.",
+    "Programda açılıp düzenlenen şablonlar (alıcının zaten kullandığı programda çalışır):",
+    "• Bütçe / takip tablosu: Excel ve Google Sheets (.xlsx).",
+    "• Sunum oyunu: PowerPoint, Google Slides ve Keynote'ta tıklanabilir bilgi yarışması (.pptx). Televizyona veya projeksiyona yansıtılır.",
+    "• Özgeçmiş şablonu: Word, Google Docs ve Pages'te düzenlenen özgeçmiş, ön yazı ve referans sayfası (.docx).",
+    "Bu üç türde dosyayı yapay zekâ kodla kurar ve kendisi test eder: formüller, slaytlar arası bağlantılar, sayfaya sığma. Etsy'de satıcının kendi tasarladığı şablon olarak satılır; ilanda program adları yalnız açıklamada geçer, başlık ve etikette marka olmaz.",
+    "Kurulan program (APK, .exe, tarayıcı eklentisi) eklenmedi. Etsy'nin kurallarında bunlar için açık bir izin yok. Alıcının telefonu veya bilgisayarı bilinmeyen kaynaktan program kurarken güvenlik uyarısı verir; iade ve kötü yorum riski yüksektir. Fotoğraf filtresi (preset), yazı tipi ve fırça paketi de eklenmedi: yapay zekâ bunları deneyip doğrulayamaz.",
     "Yasak olanlar (yapay zekâyla üretilip satılamaz):",
     "• örgü, tığ, dikiş, nakış, kanaviçe, punch ve makrome desenleri;",
     "• yemek tarifleri ve talimat kılavuzları;",
     "• yapay zekâ prompt paketleri;",
     "• insan kontrolü olmadan açılan ilanlar.",
     "Kendi yazıp denediğiniz desen ise satılabilir (Stüdyo → El işi deseni).",
-    "Henüz uygulamada olmayan ama Etsy'de serbest olan türler: düzenlenebilir şablon (Canva/Word: davetiye, özgeçmiş) ve kişiye özel kart. Bunlar ayrı bir araç veya alıcıyla yazışma ister; isterseniz ekleriz.",
+    "Henüz uygulamada olmayan ama Etsy'de serbest olan türler: Canva ve Notion şablonları ile kişiye özel kart. Canva ve Notion şablonunu bilgisayarda o programın içinde sizin kurmanız gerekir; kişiye özel kart alıcıyla yazışma ister. İsterseniz ekleriz.",
     "Hangi türle başlamalı? Trend sekmesi her türün Etsy'deki talebini ve rekabetini puanlar. Mevsim fırsatları kartı o an en çok aranan türü gösterir. Kasım–aralıkta takvim, Noel kartı ve Noel duvar kâğıdı öne çıkar.",
     "Ürün ChatGPT'yle de Claude'la da üretilir; Stüdyo'da hangisini kullandığınızı seçin, paket ona göre yazılır."
   ] },

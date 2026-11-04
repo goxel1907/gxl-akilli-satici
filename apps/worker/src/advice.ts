@@ -26,6 +26,8 @@ export const RELEVANT_FORMATS: Record<PrintableKind | "pattern", string[]> = {
   labels: ["letter", "a4"],
   app_icons: [],
   spreadsheet: [],
+  slides: [],
+  resume: ["letter", "a4"],
   // Desen PDF'leri zaten Letter ve A4'e uygun hazırlanır; desende anlamlı boşluk video eğitimdir.
   pattern: ["video"]
 };
