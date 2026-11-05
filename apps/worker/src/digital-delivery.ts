@@ -2,6 +2,12 @@ import { etsyRequest, EtsyIntegrationError, getConnectedShop, type EtsyRuntimeEn
 import { isCraftSupply, patternPolicyMessage } from "./etsy-policy.js";
 import type { PatternCraft, PrintableKind } from "./etsy-trends.js";
 import { normalizeEtsyTags, normalizeEtsyTitle, validateEtsyListingText } from "./pattern-studio.js";
+import { getUsdTryRate } from "./product-studio.js";
+
+// USD fiyatın TL karşılığı, ",99" ile biter (6.99 USD × 45 = 314.55 → 314.99 TL).
+export function usdToTryPrice(usd: number, rate: number): number {
+  return Math.max(1, Math.ceil(usd * rate)) - 0.01;
+}
 
 type Fetcher = typeof fetch;
 
@@ -508,7 +514,14 @@ export async function createEtsyDigitalDraft(
   }
   const shop = await getConnectedShop(env, fetcher);
   const currency = (shop.currencyCode || "USD").toUpperCase();
-  const price = currency === "TRY" ? product.prices.try : currency === "USD" ? product.prices.usd : undefined;
+  let price = currency === "TRY" ? product.prices.try : currency === "USD" ? product.prices.usd : undefined;
+  // TL mağazada yalnız USD fiyat girildiyse güncel kurla TL'ye çevrilir: 6.99 USD → ör. 314.99 TL.
+  // Alıcı fiyatı kendi para biriminde görür; TL mağaza TL banka hesabına ödeme aldığı için çevirme ücreti de olmaz.
+  if (!price && currency === "TRY" && product.prices.usd) {
+    const rate = await getUsdTryRate(store, fetcher);
+    if (!rate) throw new DigitalDeliveryError("VALIDATION_FAILED", "Etsy mağazanızın para birimi TL ve dolar kuru şu an alınamadı. Bu ürüne TL fiyatı girin ya da biraz sonra tekrar deneyin.");
+    price = usdToTryPrice(product.prices.usd, rate);
+  }
   if (!price) throw new DigitalDeliveryError("VALIDATION_FAILED", `Etsy mağazanızın para birimi ${currency}. Bu ürüne ${currency === "TRY" ? "TL" : currency} fiyatı girin.`);
   const taxonomyId = product.kind
     ? await findKindTaxonomyId(env, product.kind, store, fetcher)
