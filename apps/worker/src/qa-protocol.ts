@@ -5,7 +5,7 @@ import type { PatternCraft, PrintableKind } from "./etsy-trends.js";
 // Bu protokol kontrolü göze değil koda bağlar: dosyaları açan bir betik yazılır, çıktısı yapıştırılır, FAIL kalmadan adım bitmez.
 // Her ürün türü yalnız kendisine uyan kontrolleri alır (boyama kitabına saat sırası, kâğıt kitine sekme bağlantısı sorulmaz).
 export type QaInput =
-  | { type: "printable"; name: string; kind: PrintableKind; formats: string[]; pages: number; pagesNote?: string; papersOnly?: boolean }
+  | { type: "printable"; name: string; kind: PrintableKind; formats: string[]; pages: number; pagesNote?: string; papersOnly?: boolean; escapeRoom?: boolean }
   | { type: "pattern"; name: string; craft?: PatternCraft; terms: string; unit: string; sizes?: string };
 
 // Sayfa ölçüsü tablosu yalnız ürünün gerçek formatlarından kurulur.
@@ -208,6 +208,11 @@ export function qaProtocol(input: QaInput): string[] {
         : "THEME — list every page title; none names a different holiday, season or mood than the theme in the Product spec.",
       ...(textKind || input.kind === "calendar" || input.kind === "cards" ? ["LEGIBILITY — body text at least 9 pt, labels at least 7 pt, label color contrast at least 4.5:1 on white."] : []),
       ...(KIND_CHECKS[input.kind] || []),
+      // Kaçış odası oyununda her bulmacanın tek cevabı kodla çözülerek doğrulanır; cevap oyuncu sayfasına sızmaz.
+      ...(input.kind === "party" && input.escapeRoom ? [
+        "PUZZLES — solve every puzzle in code from the same data used to draw it (decode the cipher with its key, walk the maze with a path search, compute the math path, brute-force the logic grid) and assert it has exactly one answer, that the answer matches the solutions page, and that it gives the right part of the final code; then assert the final code is the parts in order. Print one PASS/FAIL line per puzzle.",
+        "SPOILERS — search the text of every player page: no answer, solution word or part of the final code appears on a player page; answers are only on the host pages."
+      ] : []),
       ...common(input.name)
     ];
     return [...intro, ...checks.map((check, index) => `${index + 1}. ${check}`)];

@@ -88,6 +88,8 @@ export function buildMasterPrompt(input: MasterPromptInput): string {
     "- Her seferinde tek adım yap. Her adımı şu satırla bitir ve beni bekle: \"ADIM n TAMAM - devam etmek için 'devam' yaz\".",
     "- Bir adım tek yanıta sığmazsa temiz bir noktada dur; 'devam' yazınca kaldığın yerden sürdür. 'next' yazarsam da aynı anlama gelir.",
     "- Her adımın sonunda bana Türkçe kısa bir özet ver: ne yaptın, hangi dosyalar hazır ve varsa benim ne yapmam gerekiyor.",
+    "- Donmamak için işi küçük parçalara böl: bir yanıtta en fazla bir dosya ya da 3-4 sayfa kur ve her parçayı hemen diske kaydet; sonraki parçada üstüne ekle. Uzun bir betiği tek seferde çalıştırma; 1-2 dakikadan uzun sürecek bir çalıştırmayı ikiye böl. Yazı tiplerini ve görselleri bir kez hazırla, sonra yeniden kullan.",
+    "- Yanıt yarıda kesilir ya da sohbet donarsa ben 'kaldığın yerden devam et' yazarım: baştan başlama. Spec JSON'unu ve diske kaydettiğin dosyaları kullanıp eksik parçadan sürdür; dosyalar kaybolduysa bunu Türkçe söyle ve yalnız eksik olanları yeniden kur.",
     ...steps.map((step, index) => `- ADIM ${index + 1} - ${step.title}: ${step.body}`),
     "",
     "## Araç notları",

@@ -124,7 +124,7 @@ export function inferPrintableKind(keyword: string): PrintableKind | undefined {
   if (/\bwall art|poster|art print|digital print\b/.test(value)) return "wall_art";
   if (/\brecipe\b/.test(value)) return "recipe";
   if (/\bword search|word find|sudoku|crosswords?|puzzle book|large print puzzles?|brain games\b/.test(value)) return "puzzles";
-  if (/\bgames?|invitation|shower|party|bingo|scavenger hunt\b/.test(value)) return "party";
+  if (/\bgames?|invitation|shower|party|bingo|scavenger hunt|escape rooms?\b/.test(value)) return "party";
   if (/\bkids?|toddler|preschool|homeschool|worksheets?|activity|flash ?cards?|classroom\b/.test(value)) return "kids";
   if (/\bstickers?\b/.test(value)) return "stickers";
   if (/\b(greeting|birthday|christmas|holiday|thank you|valentines?|sympathy|anniversary|printable) cards?\b|\bgift tags?\b|\bfolded cards?\b/.test(value)) return "cards";
