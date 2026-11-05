@@ -1246,8 +1246,9 @@ function TrendPanel({ online, onUse }: any) {
   const [custom, setCustom] = useState<any[]>([]);
   const [group, setGroup] = useState("printables");
   const groups = [...(board?.groups || [{ id: "printables", labelTr: "Dijital ürünler" }, { id: "patterns", labelTr: "Hobi desenleri" }, { id: "tesbih", labelTr: "Tesbih ve gümüş" }, { id: "vintage", labelTr: "Vintage" }]), { id: "discovered", labelTr: "Keşfedilenler" }, { id: "season", labelTr: "Sezon fırsatları" }];
-  const topOverall = (board?.niches || []).filter((row: any) => row.result).sort((a: any, b: any) => b.result.score - a.result.score).slice(0, 5);
   const visibleNiches = (board?.niches || []).filter((row: any) => (row.group || "patterns") === group);
+  // En yüksek puanlar seçili grubun içinden gelir (Dijital ürünler seçiliyken örgü deseni gösterilmez).
+  const topOverall = visibleNiches.filter((row: any) => row.result).sort((a: any, b: any) => b.result.score - a.result.score).slice(0, 5);
   const sortNiches = (rows: any[]) => [...rows].sort((a, b) => (b.result?.score ?? -1) - (a.result?.score ?? -1));
   const load = async () => {
     setLoading(true);
@@ -1311,7 +1312,7 @@ function TrendPanel({ online, onUse }: any) {
     <GroupIntro group={group} />
     {group === "season" ? <SeasonalPanel online={online} onUse={use} /> : group === "discovered" ? <DiscoveryPanel online={online} onUse={use} /> : <>
     {!!topOverall.length && <View style={styles.analysisCard}>
-      <Text style={styles.cardTitle}>Taranmış ürün türlerinde en yüksek puanlar</Text>
+      <Text style={styles.cardTitle}>Bu gruptaki en yüksek puanlar</Text>
       {topOverall.map((row: any) => <Text style={styles.analysisLine} key={row.id}>{row.result.score} · {row.labelTr} ({row.result.verdict})</Text>)}
     </View>}
     <InterestRanking rows={visibleNiches} />
@@ -1910,6 +1911,25 @@ function Toggle({ label, value, onChange }: any) {
   return <Pressable style={styles.readinessRow} onPress={() => onChange(!value)}><Ionicons name={value ? "checkbox" : "square-outline"} size={21} color={value ? "#315B4C" : "#8A948F"} /><Text style={[styles.rowTitle, { flex: 1 }]}>{label}</Text></Pressable>;
 }
 
+// Satıştan önceki deneme ürün türüne göre değişir: basılan ürün yazdırılır, program şablonu programında açılır.
+function testLabel(kind: string): string {
+  if (kind === "slides") return "Dosya PowerPoint ve Google Slides'ta açılıp tıklanarak denendi";
+  if (kind === "resume") return "Belge Word ve Google Docs'ta açılıp denendi";
+  if (kind === "spreadsheet") return "Tablo Excel ve Google Sheets'te açılıp denendi";
+  if (kind === "wallpaper" || kind === "app_icons") return "Telefonda kurulup denendi";
+  if (kind === "digital_planner") return "Tablette (GoodNotes / Notability) açılıp bağlantılar denendi";
+  return "Test baskısı alındı (Letter ve A4)";
+}
+
+function testWarning(kind: string): string {
+  if (kind === "slides") return "Satıştan önce dosyayı PowerPoint'te ve Google Slides'ta açın; tahtadaki her kareye ve 'Back to board' düğmesine tıklayıp deneyin.";
+  if (kind === "resume") return "Satıştan önce belgeyi Word'de ve Google Docs'ta açın; sayfaların taşmadığını ve yazıların düzenlenebildiğini kontrol edin.";
+  if (kind === "spreadsheet") return "Satıştan önce tabloyu Excel'de ve Google Sheets'te açın; birkaç sayı girip formüllerin doğru hesapladığını kontrol edin.";
+  if (kind === "wallpaper" || kind === "app_icons") return "Satıştan önce bir telefona kurup kesilme ve bulanıklık olmadığını kontrol edin.";
+  if (kind === "digital_planner") return "Satıştan önce tablette açıp sekme ve sayfa bağlantılarına dokunarak deneyin.";
+  return "Satıştan önce her formattan bir sayfayı %100 ölçekte yazdırıp kenar boşluklarını kontrol edin.";
+}
+
 function DigitalUploadForm({ visible, prefill, onClose, onSaved }: any) {
   const [name, setName] = useState("");
   const [craft, setCraft] = useState("crochet");
@@ -1932,7 +1952,9 @@ function DigitalUploadForm({ visible, prefill, onClose, onSaved }: any) {
     if (!visible) return;
     setName(prefill?.name || "");
     setCraft(prefill?.craft || "crochet");
-    setKind(prefill?.kind || "pattern");
+    // Boş açılan form dijital ürünle başlar; el işi deseni yalnız desen stüdyosundan (craft ile) gelir.
+    const startKind = prefill?.kind || (prefill?.craft ? "pattern" : "planner");
+    setKind(startKind);
     setProductType(prefill?.productType || "");
     setTitle(prefill?.listing?.title || "");
     setTags((prefill?.listing?.tags || []).join(", "));
@@ -1940,7 +1962,7 @@ function DigitalUploadForm({ visible, prefill, onClose, onSaved }: any) {
     setMaterials(prefill?.listing?.materials || []);
     setPriceUsd(prefill?.priceUsd ? String(prefill.priceUsd) : "");
     // Desende varsayılan: kendi deseni, gerçek fotoğraf, yapay zekâ yok (Etsy başka türlüsünü kabul etmiyor).
-    const pattern = (prefill?.kind || "pattern") === "pattern";
+    const pattern = startKind === "pattern";
     setOwnPattern(Boolean(prefill?.ownPattern));
     setPhotosAreRenders(!pattern);
     setAiAssisted(!pattern);
@@ -2007,6 +2029,7 @@ function DigitalUploadForm({ visible, prefill, onClose, onSaved }: any) {
   return <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
     <SafeAreaView style={styles.formSafe}><StatusBar barStyle="dark-content" /><ScrollView contentContainerStyle={styles.formContent}>
       <View style={styles.formHeader}><Text style={styles.sectionTitle}>Dijital ürün yükle</Text><Pressable onPress={onClose}><Ionicons name="close" size={26} color="#315B4C" /></Pressable></View>
+      {!prefill && <Text style={styles.warningText}>Bu form Stüdyo'dan dolu gelir. Önce Etsy → Stüdyo'da ürünü hazırlayın; yapay zekâ dosyaları ve görselleri verince Stüdyo'daki 'Dosyalar hazırsa yükle'ye basın. Başlık, etiket, açıklama ve fiyat kendiliğinden dolar.</Text>}
       <Pressable style={styles.uploadRow} onPress={pickFiles}><Ionicons name="document-text-outline" size={22} color="#315B4C" /><Text style={[styles.rowTitle, { flex: 1 }]}>{files.length ? `${files.length}/5 dosya seçildi · eklemek için dokunun` : "Dosyaları seç: PDF veya ZIP (birden çok seçilebilir, en fazla 5)"}</Text></Pressable>
       {files.map((file) => <View key={file.name} style={styles.fileRow}><Ionicons name={/\.zip$/i.test(file.name || "") ? "archive-outline" : "document-outline"} size={18} color="#56615C" /><Text style={[styles.small, { flex: 1 }]} numberOfLines={1}>{file.name} · {Math.round((file.size || 0) / 1024)} KB</Text><Pressable onPress={() => setFiles(files.filter((item) => item.name !== file.name))}><Ionicons name="close-circle-outline" size={20} color="#B4483A" /></Pressable></View>)}
       {!!files.length && <Text style={styles.formHint}>Hepsi tek seferde Etsy ilanına eklenir. Etsy en fazla 5 dosya alır; fazla formatları tek bir ZIP'te birleştirin.</Text>}
@@ -2014,7 +2037,7 @@ function DigitalUploadForm({ visible, prefill, onClose, onSaved }: any) {
       {!!images.length && <ScrollView horizontal style={{ marginBottom: 12 }}>{images.map((image) => <Image key={image.uri} source={{ uri: image.uri }} style={styles.thumb} />)}</ScrollView>}
       <Field label="Ürün adı" value={name} onChangeText={setName} />
       <Text style={styles.fieldLabel}>Ürün tipi</Text>
-      <ChipGroup options={[{ id: "pattern", label: "El işi deseni" }, ...PRINTABLE_KIND_OPTIONS]} value={kind} onChange={setKind} />
+      <ChipGroup options={[...PRINTABLE_KIND_OPTIONS, { id: "pattern", label: "El işi deseni (kendi deseniniz)" }]} value={kind} onChange={setKind} />
       {kind === "pattern" && <><Text style={styles.fieldLabel}>El işi türü</Text><ChipGroup options={CRAFT_OPTIONS} value={craft} onChange={setCraft} /></>}
       <Field label="Ürün türü (İngilizce)" value={productType} onChangeText={setProductType} autoCapitalize="none" />
       <Field label="Etsy fiyatı (USD)" value={priceUsd} onChangeText={setPriceUsd} keyboardType="decimal-pad" placeholder="6.50" />
@@ -2024,14 +2047,14 @@ function DigitalUploadForm({ visible, prefill, onClose, onSaved }: any) {
       <Field label="Açıklama" value={description} onChangeText={setDescription} multiline style={[styles.input, { minHeight: 160, textAlignVertical: "top" }]} />
       <View style={styles.card}>
         {kind === "pattern" && <Toggle label="Deseni ben veya mağaza üyem yazdı (yapay zekâ yazmadı)" value={ownPattern} onChange={setOwnPattern} />}
-        <Toggle label={kind === "pattern" ? "Desen bizzat örülerek / yapılarak test edildi" : "Test baskısı alındı (Letter ve A4)"} value={testMade} onChange={setTestMade} />
+        <Toggle label={kind === "pattern" ? "Desen bizzat örülerek / yapılarak test edildi" : testLabel(kind)} value={testMade} onChange={setTestMade} />
         {kind === "pattern"
           ? <Toggle label="Fotoğraflar bitmiş ürünün gerçek fotoğrafı" value={!photosAreRenders} onChange={(value: boolean) => setPhotosAreRenders(!value)} />
           : <Toggle label="Görsellerin bir kısmı mockup (sayfalar gerçek)" value={photosAreRenders} onChange={setPhotosAreRenders} />}
         {kind !== "pattern" && <Toggle label="Ürün hazırlanırken yapay zekâ kullanıldı" value={aiAssisted} onChange={setAiAssisted} />}
       </View>
       {kind === "pattern" && <Text style={styles.warningText}>Etsy kuralı: yapay zekâyla yazılmış desen satılamaz. Yalnız kendi yazdığınız, bizzat yapıp denediğiniz ve bitmiş ürününün gerçek fotoğrafı olan deseni yükleyin.</Text>}
-      {!testMade && kind !== "pattern" && <Text style={styles.warningText}>Satıştan önce her formattan bir sayfayı %100 ölçekte yazdırıp kenar boşluklarını kontrol edin.</Text>}
+      {!testMade && kind !== "pattern" && <Text style={styles.warningText}>{testWarning(kind)}</Text>}
       <Pressable style={[styles.analyzeButton, { marginTop: 14 }, saving && styles.primaryDisabled]} disabled={saving} onPress={save}>{saving ? <ActivityIndicator color="white" /> : <Ionicons name="cloud-upload-outline" size={18} color="white" />}<Text style={styles.primaryText}>Güvenli depoya yükle</Text></Pressable>
     </ScrollView></SafeAreaView>
   </Modal>;
@@ -2115,7 +2138,7 @@ function DigitalPanel({ online, shopReady, prefill, onPrefillUsed }: any) {
   ]);
   return <>
     <View style={styles.guardrail}><Ionicons name="lock-closed-outline" size={20} color="#315B4C" /><Text style={[styles.guardrailText, { flex: 1 }]}>Dosyalar herkese açık değildir. Etsy'de dosyayı Etsy yalnızca ödeme yapan alıcıya verir. Shopier ve doğrudan satışlarda her sipariş için sınırlı indirmeli, süreli ve kapatılabilir özel bağlantı oluşturulur.</Text></View>
-    <View style={styles.sectionHeading}><Text style={styles.sectionTitle}>Dijital ürünler</Text><Pressable style={[styles.addButton, !online && styles.primaryDisabled]} disabled={!online} onPress={() => setFormVisible(true)}><Ionicons name="add" size={18} color="white" /><Text style={styles.addButtonText}>PDF yükle</Text></Pressable></View>
+    <View style={styles.sectionHeading}><Text style={styles.sectionTitle}>Dijital ürünler</Text><Pressable style={[styles.addButton, !online && styles.primaryDisabled]} disabled={!online} onPress={() => setFormVisible(true)}><Ionicons name="add" size={18} color="white" /><Text style={styles.addButtonText}>Dosya yükle</Text></Pressable></View>
     {loading && <ActivityIndicator color="#C88B47" />}
     {!loading && !products.length && <Empty icon="document-text-outline" title="Henüz dijital ürün yok" text="Stüdyo'da ilanı hazırlayın; yapay zekânın verdiği dosyaları ve ilan görsellerini buradan yükleyin." />}
     {products.map((product) => <View style={styles.card} key={product.id}>
