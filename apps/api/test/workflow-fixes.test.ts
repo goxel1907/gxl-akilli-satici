@@ -7,7 +7,7 @@ import { buildPrintableBrief, buildPrintableListing, normalizePrintablePlanInput
 import { researchPrintableMarket } from "../../worker/src/printable-research.js";
 import { claimedFormats, createDigitalProduct, validateDigitalPdf } from "../../worker/src/digital-delivery.js";
 import { validPdf } from "./fixtures/valid-pdf.js";
-import { approvals, leads, messages } from "../src/data.js";
+import { crmFixture } from "./fixtures/crm.js";
 import { listShopierProducts } from "../../worker/src/shopier.js";
 
 function memory() {
@@ -99,19 +99,23 @@ test("research uses the selected search and comparable digital products for pric
 });
 
 test("old approval cannot activate a blocked lead or claim an outbound delivery", async () => {
-  const id = "workflow-test-lead";
-  leads.push({ id, displayName: "Test", channel: "email", handle: "test@example.invalid", stage: "blocked", consent: false, interests: [], score: 0, autoReplyAllowed: false });
-  approvals.push({ id: "workflow-test-approval", leadId: id, channel: "email", draft: "Local only", productIds: [], status: "pending", createdAt: new Date().toISOString() });
-  const before = messages.length;
-  const request = () => new Request("https://local.invalid/api/approvals/workflow-test-approval/approve", { method: "POST", headers: { authorization: "Bearer local-test" } });
-  assert.equal((await handleRequest(request(), { APP_ACCESS_TOKEN: "local-test" })).status, 409);
-  const lead = leads.find(item => item.id === id)!;
-  assert.equal(lead.stage, "blocked");
-  lead.stage = "qualified"; lead.consent = true;
-  const result = await (await handleRequest(request(), { APP_ACCESS_TOKEN: "local-test" })).json() as { delivery: { accepted: boolean } };
-  assert.equal(result.delivery.accepted, false);
-  assert.equal(messages.length, before);
-  assert.equal(lead.autoReplyAllowed, false);
+  const fixture = crmFixture();
+  try {
+    const lead = { id: "workflow-test-lead", displayName: "Test", channel: "email", handle: "test@example.invalid", stage: "blocked", consent: false, interests: [], score: 0, autoReplyAllowed: false };
+    fixture.sql.exec("INSERT INTO crm_leads(id,channel,handle,data) VALUES(?,?,?,?)", lead.id, lead.channel, lead.handle, JSON.stringify(lead));
+    const approval = { id: "workflow-test-approval", leadId: lead.id, channel: "email", draft: "Local only", productIds: [], status: "pending", createdAt: new Date().toISOString() };
+    fixture.sql.exec("INSERT INTO crm_approvals(id,data) VALUES(?,?)", approval.id, JSON.stringify(approval));
+    const env = { APP_ACCESS_TOKEN: "local-test", CRM_STORE: fixture.namespace };
+    const request = () => new Request("https://local.invalid/api/approvals/workflow-test-approval/approve", { method: "POST", headers: { authorization: "Bearer local-test" } });
+    assert.equal((await handleRequest(request(), env)).status, 409);
+    lead.stage = "qualified"; lead.consent = true;
+    fixture.sql.exec("UPDATE crm_leads SET data=? WHERE id=?", JSON.stringify(lead), lead.id);
+    const result = await (await handleRequest(request(), env)).json() as { delivery: { accepted: boolean } };
+    assert.equal(result.delivery.accepted, false);
+    assert.equal(fixture.sql.exec<{ count: number }>("SELECT COUNT(*) AS count FROM crm_messages").toArray()[0].count, 0);
+    const saved = JSON.parse(fixture.sql.exec<{ data: string }>("SELECT data FROM crm_leads WHERE id=?", lead.id).toArray()[0].data);
+    assert.equal(saved.autoReplyAllowed, false);
+  } finally { fixture.close(); }
 });
 
 test("phone uploads stage files individually and finalize their metadata without reuploading binaries", async () => {

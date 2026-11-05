@@ -39,7 +39,7 @@ The app cannot download files from a ChatGPT or Claude account by itself. The se
 
 ## Remaining separate work
 
-- Customer, approval and message arrays in the production Worker still require a durable, concurrency-safe storage migration. Do not describe the CRM as a production database.
+- Customer, approval and inbound-message records now use the transactional SQLite-backed CRM object; see `CRM_STORAGE.md` for deployment and validation. The legacy development Node server remains separate.
 - Native Android and authenticated production end-to-end checks require the real device/service sessions. Unit tests and bundle builds do not establish those results.
 - Rate limiting, retry/resume of interrupted staging and full ZIP-content inspection are not implemented by this batch.
 
