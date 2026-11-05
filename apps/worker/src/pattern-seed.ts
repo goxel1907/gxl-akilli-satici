@@ -1,3 +1,5 @@
+import { canRankTrend, compareTrendEvidence } from "../../mobile/trend-priority.js";
+import { upcomingSeasons } from "./seasonal.js";
 import type { EtsyRuntimeEnv } from "./etsy.js";
 import { RELEVANT_FORMATS } from "./advice.js";
 import { listDiscoveries } from "./discovery.js";
@@ -728,7 +730,7 @@ function isPrintableKind(value: unknown): value is PrintableKind {
 
 // Arama verilmezse: seçilen türde (PDF türü veya el işi) önbellekteki en yüksek puanlı aramalardan,
 // son kullanılanları atlayarak birini seçer.
-export async function pickBestKeyword(store: TrendStore | undefined, input: { studio?: string; kind?: string; craft?: string }): Promise<{ keyword: string; reason: string; group: TrendGroup }> {
+export async function pickBestKeyword(store: TrendStore | undefined, input: { studio?: string; kind?: string; craft?: string }, now = Date.now()): Promise<{ keyword: string; reason: string; group: TrendGroup }> {
   const group: TrendGroup = input.studio === "printable" ? "printables" : "patterns";
   const kind = group === "printables" && isPrintableKind(input.kind) ? input.kind : undefined;
   const craft = group === "patterns" && CRAFT_PHRASES.some(([id]) => id === input.craft) ? input.craft as PatternCraft : undefined;
@@ -738,18 +740,20 @@ export async function pickBestKeyword(store: TrendStore | undefined, input: { st
   const discovered = await listDiscoveries(store);
   const candidates = [...new Set([
     ...TREND_NICHES.filter((niche) => niche.group === group && matches(niche.keyword, niche.kind, niche.craft)).map((niche) => niche.keyword),
-    ...discovered.filter((item) => item.group === group && matches(item.keyword)).map((item) => item.keyword)
-  ])].slice(0, 30);
+    ...discovered.filter((item) => item.group === group && matches(item.keyword)).map((item) => item.keyword),
+    ...upcomingSeasons(new Date(now)).flatMap(season => season.keywords).filter(item => item.group === group && matches(item.keyword)).map(item => item.keyword)
+  ])];
   if (!candidates.length) throw new Error("PATTERN_KEYWORD_REQUIRED");
   const scored = await Promise.all(candidates.map(async (keyword) => ({ keyword, result: await readCached(store, keyword) })));
-  const ranking = scored.sort((a, b) => (b.result?.score ?? -1) - (a.result?.score ?? -1));
+  const ranking = scored.sort((a, b) => compareTrendEvidence(a.result, b.result, now));
+  const fresh = ranking.filter(item => canRankTrend(item.result, now));
   const recentKey = `${AUTOPICK_PREFIX}${group}:${kind || craft || "all"}`;
   const recent = await readJson<string[]>(store, recentKey, []);
-  const choice = ranking.slice(0, 5).find((item) => item.result && !recent.includes(item.keyword)) || ranking.find((item) => item.result) || ranking[0];
+  const choice = fresh.slice(0, 5).find(item => !recent.includes(item.keyword)) || fresh[0] || ranking[0];
   if (store) await store.put(recentKey, JSON.stringify([choice.keyword, ...recent.filter((item) => item !== choice.keyword)].slice(0, 3)));
-  const reason = choice.result
+  const reason = choice.result && canRankTrend(choice.result, now)
     ? `Otomatik seçilen arama: "${choice.keyword}" (bu türde en güçlülerden; ${choice.result.score} puan, ${choice.result.verdict})`
-    : `Otomatik seçilen arama: "${choice.keyword}" (henüz puanlanmamıştı; şimdi Etsy'de tarandı)`;
+    : `Otomatik seçilen arama: "${choice.keyword}" (güncel karşılaştırma için Etsy’de taranacak)`;
   return { keyword: choice.keyword, reason, group };
 }
 
@@ -765,7 +769,7 @@ export async function createPatternSeed(
   let groupHint: TrendGroup | undefined = isTrendGroup(input.group) ? input.group : input.studio === "printable" ? "printables" : undefined;
   if (keyword.length < 3) {
     if (input.studio !== "printable" && input.studio !== "pattern") throw new Error("PATTERN_KEYWORD_REQUIRED");
-    const picked = await pickBestKeyword(store, input);
+    const picked = await pickBestKeyword(store, input, now);
     keyword = picked.keyword;
     pickedReason = picked.reason;
     groupHint = picked.group;
@@ -794,7 +798,8 @@ export async function createPatternSeed(
     };
     await store.put(historyKey(keyword), JSON.stringify(next));
   }
-  return pickedReason ? { ...seed, pickedReason, basis: [pickedReason, ...seed.basis] } : seed;
+  const freshnessNote = canRankTrend(result, now) ? [] : ["Güncel trend verisi doğrulanamadı; bu tasarım fikrini satış veya dikkat çekme tahmini olarak kullanmayın. Üretimden önce hedef aramayı yeniden tarayın."];
+  return { ...seed, ...(pickedReason ? { pickedReason } : {}), basis: [...freshnessNote, ...(pickedReason ? [pickedReason] : []), ...seed.basis] };
 }
 
 export async function readUsedNames(store: TrendStore | undefined): Promise<string[]> {

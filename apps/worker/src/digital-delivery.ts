@@ -297,6 +297,8 @@ export async function createDigitalProduct(store: DigitalStore, form: FormData, 
     throw new DigitalDeliveryError("VALIDATION_FAILED", "Ürün türü veya adı üretim kaydıyla uyuşmuyor ya da kayıt süresi dolmuş. Stüdyo’dan yeni paket hazırlayın.");
   }
   if (productType.length < 3) throw new DigitalDeliveryError("VALIDATION_FAILED", "Ürün türü gerekli.");
+  const prices = metadata.prices && typeof metadata.prices === "object" ? metadata.prices as Record<string, unknown> : {};
+  if (!positivePrice(prices.usd) && !positivePrice(prices.try)) throw new DigitalDeliveryError("VALIDATION_FAILED", "Pozitif bir USD veya TL fiyatı gerekli.");
 
   const listingInput = metadata.listing && typeof metadata.listing === "object" ? metadata.listing as Record<string, unknown> : {};
   const listing = {
@@ -382,7 +384,6 @@ export async function createDigitalProduct(store: DigitalStore, form: FormData, 
     .map((pin) => ({ title: String(pin.title || "").trim().slice(0, 100), description: String(pin.description || "").trim().slice(0, 700), ...(pin.overlay ? { overlay: String(pin.overlay).slice(0, 60) } : {}) }))
     .filter((pin) => pin.title && pin.description)
     .slice(0, 3);
-  const prices = metadata.prices && typeof metadata.prices === "object" ? metadata.prices as Record<string, unknown> : {};
   const flags = metadata.flags && typeof metadata.flags === "object" ? metadata.flags as Record<string, unknown> : {};
   const product: DigitalProduct = {
     id: crypto.randomUUID(),
@@ -593,7 +594,9 @@ export async function createEtsyDigitalDraft(
   fetcher: Fetcher = fetch
 ) {
   const product = await getDigitalProduct(store, productId);
-  if (product.etsy?.listingId && product.etsy.fileUploaded) {
+  if (product.etsy?.listingId && product.etsy.fileUploaded
+    && (product.etsy.filesUploaded ?? (productFiles(product).length === 1 ? 1 : 0)) >= productFiles(product).length
+    && product.etsy.imagesUploaded >= product.images.length) {
     return { product, listingId: product.etsy.listingId, editUrl: product.etsy.editUrl, alreadyCreated: true };
   }
   // Eski kayıtlardaki yapay zekâ desenleri de Etsy'ye gönderilmez.
@@ -638,7 +641,7 @@ export async function createEtsyDigitalDraft(
     if (!listingId) throw new EtsyIntegrationError("UPSTREAM_FAILED", "Etsy taslak ilan numarası döndürmedi.", 502);
   }
   const editUrl = `https://www.etsy.com/your/shops/me/listing-editor/edit/${listingId}`;
-  product.etsy = { listingId, editUrl, createdAt: product.etsy?.createdAt || new Date().toISOString(), imagesUploaded: product.etsy?.imagesUploaded || 0, fileUploaded: false, filesUploaded: product.etsy?.filesUploaded || 0 };
+  product.etsy = { listingId, editUrl, createdAt: product.etsy?.createdAt || new Date().toISOString(), imagesUploaded: product.etsy?.imagesUploaded || 0, fileUploaded: false, filesUploaded: product.etsy?.filesUploaded ?? (product.etsy?.fileUploaded && productFiles(product).length === 1 ? 1 : 0) };
   await store.put(`${PRODUCT_PREFIX}${product.id}`, JSON.stringify(product));
 
   try {
