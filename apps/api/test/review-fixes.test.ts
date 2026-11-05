@@ -108,5 +108,6 @@ test("phone-side review fixes stay in place", () => {
   assert.match(app, /const fresh = await rescore\(\);\n    if \(fresh && fresh\.score < 50\)/, "the low-score warning uses a fresh score");
   assert.match(app, /if \(!updateCheckRunning\) updateCheckRunning = runUpdateCheck\(\)/, "one update download at a time");
   assert.doesNotMatch(app, /paymentsReady/, "Etsy's payments flag is never shown as 'payments done' or 'shop open'");
-  assert.match(app, /Mağaza adı alındı\$\{name\} · henüz açılmadı/);
+  assert.match(app, /Mağaza kayıtlı\$\{name\} · yayında ilan yok/);
+  assert.doesNotMatch(app, /henüz açılmadı/, "the app never says the shop is closed: Etsy's API cannot tell");
 });

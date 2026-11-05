@@ -45,25 +45,34 @@ test("the readiness list shows what is done, what the app can do, and what only 
 
   const env = await connected("shops_r shops_w listings_w transactions_r transactions_w");
   // Etsy "Etsy Payments'a kayıtlı" dese bile (Türkiye mağazalarında baştan açık olabilir) ve mağaza kaydı olsa bile,
-  // yayında ilan yoksa mağaza açık sayılmaz ve ödeme/banka adımı "tamam" gösterilmez.
+  // yayında ilan yoksa "açık" denmez ve ödeme/banka adımı "tamam" gösterilmez. Etsy API'si açılışı vermediği için
+  // "kapalı" da denmez. Kargo ve iade yalnız fiziksel ürün için gerekir; dijital mağazada eksik sayılmaz.
   const fresh = await shopReadiness(env, etsy({ shop: { shop_id: 777, shop_name: "GXLMarketStudio", is_etsy_payments_onboarded: true, listing_active_count: 0 } }));
   const ids = Object.fromEntries(fresh.items.map((item) => [item.id, item]));
   assert.equal(fresh.shopOpen, false);
   assert.match(ids.shop.titleTr, /Mağaza adı alındı: GXLMarketStudio/);
-  assert.match(ids.shop.detailTr, /henüz açılmadı/);
+  assert.match(ids.shop.detailTr, /yayında ilan yok/);
+  assert.doesNotMatch(ids.shop.detailTr, /henüz açılmadı/);
   assert.equal(ids.permissions.state, "done");
   assert.equal(ids.payments.state, "manual", "the app cannot know that identity and bank steps are finished");
   assert.equal(ids.shipping.action, "create_shipping_profile");
+  assert.equal(ids.shipping.state, "optional", "a digital shop needs no shipping profile");
   assert.equal(ids.returns.action, "create_return_policy");
+  assert.equal(ids.returns.state, "optional", "a digital shop needs no return policy");
   assert.equal(ids.storefront.action, "shop_settings");
   assert.equal(ids.listings.action, "sell");
   assert.equal(ids.branding.state, "manual");
-  assert.equal(fresh.total, 7);
+  assert.match(ids.branding.detailTr, /Settings → Your shop/);
+  assert.equal(fresh.total, 5);
   assert.equal(fresh.done, 3);
 
   const ready = await shopReadiness(env, etsy({ shop: { shop_id: 777, shop_name: "GXLMarketStudio", title: "Handmade prayer beads", is_etsy_payments_onboarded: true, listing_active_count: 5 }, profiles: [{ shipping_profile_id: 55 }], policies: [{ return_policy_id: 66, accepts_returns: true, return_deadline: 30 }] }));
   assert.equal(ready.done, ready.total, "every checkable step is done");
   assert.equal(ready.shopOpen, true, "the shop is open only when a listing is live");
+  assert.equal(ready.total, 7, "shipping and returns count once they exist");
+
+  const withLogo = await shopReadiness(env, etsy({ shop: { shop_id: 777, shop_name: "GXLMarketStudio", icon_url_fullxfull: "https://i.etsystatic.com/icon.jpg", listing_active_count: 0 } }));
+  assert.match(withLogo.items.find((item) => item.id === "branding")!.titleTr, /^Logo yüklü/);
 });
 
 test("the shipping profile is free US shipping from Türkiye and is never created twice", async () => {

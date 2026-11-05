@@ -497,15 +497,15 @@ function plainText(html?: string): string {
 }
 
 // Etsy mağaza kaydı açılışın ilk adımında oluşur; ödeme kurulumu ve aktif ilan sayısı mağazanın gerçekten açılıp açılmadığını gösterir.
-// Etsy mağaza kaydı mağaza adı seçilince oluşur; mağaza ancak ilk ilan yayına girince açılır. "Açık" yalnız
-// yayında ilan varken söylenir. Etsy'nin ödeme sistemi bilgisi açılışın bittiğini göstermediği için kullanılmaz.
+// Etsy mağaza kaydı mağaza adı seçilince oluşur. Etsy API'si "Open your shop" adımının bittiğini vermez; bu yüzden
+// "açık" yalnız yayında ilan varken söylenir, ilan yokken "kapalı" denmez. Etsy'nin ödeme bilgisi de kullanılmaz.
 function etsyShopOpen(etsy: any): boolean {
   return typeof etsy?.activeListings === "number" && etsy.activeListings > 0;
 }
 
 function etsyShopLine(etsy: any): string {
   const name = etsy?.shopName ? ` (${etsy.shopName})` : "";
-  return etsyShopOpen(etsy) ? `Mağaza açık${name} · ${etsy.activeListings} ilan yayında` : `Mağaza adı alındı${name} · henüz açılmadı`;
+  return etsyShopOpen(etsy) ? `Mağaza açık${name} · ${etsy.activeListings} ilan yayında` : `Mağaza kayıtlı${name} · yayında ilan yok`;
 }
 
 function Overview({ data, setTab, online, channels, onSimple }: any) {
@@ -545,7 +545,7 @@ function Overview({ data, setTab, online, channels, onSimple }: any) {
       <Channel name="Instagram / Facebook" status="Meta gelen kutusunu aç" icon="logo-instagram" onPress={() => openUrl("https://business.facebook.com/latest/inbox/all/", "Meta Business Suite")} />
       <Channel name="Shopier" status={shopierStatus} icon="bag-handle" connected={Boolean(shopier?.connected)} onPress={() => openUrl("https://www.shopier.com/goxsel/49555980", "Shopier")} />
       <Channel name="Letgo" status="İlanı aç · manuel devralma" icon="open-outline" onPress={() => openUrl("https://www.letgo.com/ad/1732503836", "Letgo")} />
-      <Channel name="Etsy" status={etsyStatus} icon="storefront-outline" connected={etsyAuthorized} onPress={() => etsyShopReady ? Alert.alert("Etsy mağazası", "Mağaza henüz açılmadıysa kuruluma devam edin; açıldıysa mağaza yöneticisine gidin.", [
+      <Channel name="Etsy" status={etsyStatus} icon="storefront-outline" connected={etsyAuthorized} onPress={() => etsyShopReady ? Alert.alert("Etsy mağazası", "Etsy'de 'Open your shop' adımını bitirmediyseniz kuruluma devam edin; bitirdiyseniz mağaza yöneticisine gidin.", [
         { text: "Vazgeç", style: "cancel" },
         { text: "Kuruluma devam et", onPress: () => openUrl("https://www.etsy.com/sell", "Etsy mağaza kurulumu") },
         { text: "Mağaza yöneticisi", onPress: () => openUrl("https://www.etsy.com/your/shops/me/dashboard", "Etsy mağaza yöneticisi") }
@@ -2381,7 +2381,7 @@ const ETSY_GUIDE: Array<{ id: string; title: string; icon: any; steps: string[] 
     "Kimlik, banka, kart ve şifre bilgileri yalnız Etsy'nin kendi sayfasına girilir; uygulamaya, sohbete veya ekran görüntüsüne yazılmaz.",
     "1) etsy.com/sell → 'Get started'. Kendi adınızla, kendi e-postanızla tek bir hesap kullanın.",
     "2) Shop preferences (Mağaza tercihleri): dil English, ülke Türkiye, para birimi USD önerilir (ABD'li alıcı fiyatı olduğu gibi görür; TL seçerseniz uygulamada TL fiyat girin).",
-    "3) Shop name (Mağaza adı): GXLMarketStudio. Ad alındığında Durum kartında 'Mağaza adı alındı · henüz açılmadı' yazar.",
+    "3) Shop name (Mağaza adı): GXLMarketStudio. Ad alındığında Durum kartında 'Mağaza kayıtlı · yayında ilan yok' yazar.",
     "4) Stock your shop (İlk ilan): uygulamada ürünü hazırlayıp Dijital → 'Etsy taslağı oluştur' deyin; taslak Etsy'de görünür. Etsy formu ilanı kendisi istiyorsa uygulamadaki 'İlan metnini kopyala' ile başlık, etiket ve açıklamayı yapıştırın.",
     "5) How you'll get paid (Ödeme alma): banka hesabı kimliğinizdeki adla aynı olmalı. Bu adım sizindir.",
     "6) Set up billing (Faturalama): Etsy ücretleri için kart. İlan ücreti ilan başına 0,20 USD; Etsy açılış ücreti isterse ekranda yazar. Bu adım sizindir.",
@@ -2886,17 +2886,17 @@ function ShopReadinessCard({ online, onSell }: any) {
     } catch (err) { Alert.alert("Oluşturulamadı", errorText(err)); }
     finally { setBusy(false); }
   };
-  const icon = (state: string) => state === "done" ? "checkmark-circle" : state === "manual" ? "hand-left-outline" : "ellipse-outline";
-  const color = (state: string) => state === "done" ? "#2E8B57" : state === "manual" ? "#8A521F" : "#748079";
+  const icon = (state: string) => state === "done" ? "checkmark-circle" : state === "manual" ? "hand-left-outline" : state === "optional" ? "remove-circle-outline" : "ellipse-outline";
+  const color = (state: string) => state === "done" ? "#2E8B57" : state === "manual" ? "#8A521F" : state === "optional" ? "#A8B0AB" : "#748079";
   return <View style={styles.analysisCard}>
     <View style={styles.shopierProductTop}>
       <Ionicons name="storefront-outline" size={22} color="#315B4C" />
       <Text style={[styles.cardTitle, { flex: 1 }]}>Mağaza hazırlığı{data ? ` · ${data.done}/${data.total}` : ""}</Text>
       <Pressable style={[styles.secondaryButton, (!online || loading) && styles.primaryDisabled]} disabled={!online || loading} onPress={load}><Text style={styles.secondaryButtonText}>{loading ? "…" : "Yenile"}</Text></Pressable>
     </View>
-    {!!data && <View style={styles.stepBar}>{data.items.filter((item: any) => item.state !== "manual").map((item: any) => <View key={item.id} style={[styles.stepDot, item.state === "done" && styles.stepDotActive]} />)}</View>}
-    {!!data && data.shopOpen !== undefined && <Text style={[styles.nextAction, { marginBottom: 6 }]}>Mağaza durumu: {data.shopOpen ? "açık (yayında ilan var)" : "henüz açılmadı — alıcılar mağazayı göremez"}</Text>}
-    <Text style={styles.evidence}>Etsy mağazasını açmadan önce bu listenin hepsi tamamlanmalı. El simgeli adımları yalnız siz Etsy'de yaparsınız (kimlik, banka, logo); diğerlerini uygulama gösterir ya da sizin yerinize yapar.</Text>
+    {!!data && <View style={styles.stepBar}>{data.items.filter((item: any) => item.state !== "manual" && item.state !== "optional").map((item: any) => <View key={item.id} style={[styles.stepDot, item.state === "done" && styles.stepDotActive]} />)}</View>}
+    {!!data && data.shopOpen !== undefined && <Text style={[styles.nextAction, { marginBottom: 6 }]}>Mağaza durumu: {data.shopOpen ? "açık (yayında ilan var)" : "yayında ilan yok — alıcılar aramada ürün göremez"}</Text>}
+    <Text style={styles.evidence}>Satışa başlamak için gereken adımlar. El simgeli adımları yalnız siz Etsy'de yaparsınız (kimlik, banka, logo); gri çizgili adımlar yalnız fiziksel ürün satarsanız gerekir; diğerlerini uygulama gösterir ya da sizin yerinize yapar.</Text>
     {!!error && <Text style={styles.shopierBlocker}>{error}</Text>}
     {(data?.items || []).map((item: any) => <View key={item.id}>
       <Pressable style={styles.readinessRow} disabled={!item.action || item.state === "done"} onPress={() => act(item)}>
@@ -3110,7 +3110,7 @@ function HomeScreen({ online, channels, setTab, openSell }: any) {
   const nextStep = !online
     ? "Önce internete bağlanın; üstteki 'Yeniden bağlan' düğmesine basın."
     : !etsyShopOpen(etsy)
-      ? "Etsy mağazası henüz açılmadı. Ürünlerinizi şimdiden hazırlayabilirsiniz. Açılış için eksik adımlar: Yardım → Mağaza hazırlığı."
+      ? "Etsy'de yayında ilanınız yok. İlk ilanı hazırlayın: 'Ürün sat' ya da uzman mod → Dijital ürünler. Eksik adımlar: Yardım → Mağaza hazırlığı."
       : "İlanlarınızı alıcılara göstermek için 'Müşteri bul' planını hazırlayın.";
   return <>
     <Text style={styles.homeHello}>Ne yapmak istiyorsunuz?</Text>

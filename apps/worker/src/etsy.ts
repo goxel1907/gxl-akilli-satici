@@ -229,7 +229,7 @@ export async function etsyRequest<T>(env: EtsyRuntimeEnv, path: string, options:
 }
 
 // Mağaza kaydı Etsy açılışının ilk adımında (ad seçimi) oluşur. Açılışın bitip bitmediğini ödeme kurulumu ve aktif ilan sayısı gösterir.
-function safeShopSummary(payload: unknown): { shopId?: number; shopName?: string; title?: string; currencyCode?: string; paymentsReady?: boolean; activeListings?: number } {
+function safeShopSummary(payload: unknown): { shopId?: number; shopName?: string; title?: string; currencyCode?: string; paymentsReady?: boolean; activeListings?: number; hasIcon?: boolean } {
   const root = payload && typeof payload === "object" ? payload as Record<string, unknown> : {};
   const rows = Array.isArray(root.results) ? root.results : [];
   const shop = rows[0] && typeof rows[0] === "object" ? rows[0] as Record<string, unknown> : root;
@@ -239,11 +239,12 @@ function safeShopSummary(payload: unknown): { shopId?: number; shopName?: string
     title: shop.title ? String(shop.title) : undefined,
     currencyCode: shop.currency_code ? String(shop.currency_code) : undefined,
     ...(typeof shop.is_etsy_payments_onboarded === "boolean" ? { paymentsReady: shop.is_etsy_payments_onboarded } : {}),
-    ...(typeof shop.listing_active_count === "number" ? { activeListings: shop.listing_active_count } : {})
+    ...(typeof shop.listing_active_count === "number" ? { activeListings: shop.listing_active_count } : {}),
+    ...(typeof shop.icon_url_fullxfull === "string" && shop.icon_url_fullxfull ? { hasIcon: true } : {})
   };
 }
 
-export async function getConnectedShop(env: EtsyRuntimeEnv, fetcher: Fetcher = fetch): Promise<{ shopId: number; shopName?: string; currencyCode?: string; title?: string; paymentsReady?: boolean; activeListings?: number }> {
+export async function getConnectedShop(env: EtsyRuntimeEnv, fetcher: Fetcher = fetch): Promise<{ shopId: number; shopName?: string; currencyCode?: string; title?: string; paymentsReady?: boolean; activeListings?: number; hasIcon?: boolean }> {
   const { userId } = await validAccessToken(env);
   let shop: ReturnType<typeof safeShopSummary>;
   try {
@@ -253,7 +254,7 @@ export async function getConnectedShop(env: EtsyRuntimeEnv, fetcher: Fetcher = f
     else throw error;
   }
   if (!shop.shopId) throw new EtsyIntegrationError("NOT_CONNECTED", "Etsy mağazası henüz açılmadı.", 409);
-  return { shopId: shop.shopId, shopName: shop.shopName, currencyCode: shop.currencyCode, title: shop.title, paymentsReady: shop.paymentsReady, activeListings: shop.activeListings };
+  return { shopId: shop.shopId, shopName: shop.shopName, currencyCode: shop.currencyCode, title: shop.title, paymentsReady: shop.paymentsReady, activeListings: shop.activeListings, hasIcon: shop.hasIcon };
 }
 
 export async function getEtsyStatus(env: EtsyRuntimeEnv) {
