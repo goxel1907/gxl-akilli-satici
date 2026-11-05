@@ -1,3 +1,4 @@
+import { validPdf } from "./fixtures/valid-pdf.js";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { buildAdvice } from "../../worker/src/advice.js";
@@ -91,11 +92,11 @@ test("printable brief gives a kind-specific print prompt, artwork prompts and ad
   assert.ok(planner.pins.every((pin) => !/disney/i.test(`${pin.title} ${pin.description}`)));
   assert.ok(planner.bundleIdea.items.includes("budget planner"));
 
-  // 30 sayfalık boyama kitabı: 8 açık konu + kalan 22 sayfa için aynı kurallı şablon (sayfa sayısı ile görsel sayısı tutar).
+  // Every coloring page has its own explicit artwork prompt.
   const coloring = buildPrintableBrief({ kind: "coloring", productType: "adult coloring pages", trendFeatures: ["mushroom", "cottagecore"], pageCount: 30, seed: "b" });
-  assert.equal(coloring.artPrompts.length, 9);
+  assert.equal(coloring.artPrompts.length, 30);
   assert.match(coloring.artPrompts[0], /fully closed/);
-  assert.match(coloring.artPrompts[8], /^Coloring pages 9-30: /);
+  assert.match(coloring.artPrompts[8], /^Coloring page 9: /);
   assert.match(coloring.pdfPrompt, /## Artwork prompts/);
   const wallArt = buildPrintableBrief({ kind: "wall_art", productType: "wall art", trendFeatures: ["boho"], pageCount: 3, seed: "c" });
   assert.equal(wallArt.artPrompts.length, 3);
@@ -146,7 +147,7 @@ test("printable plan endpoint and kind-aware digital products", async () => {
 
   const form = new FormData();
   form.set("metadata", JSON.stringify({ name: "Muthine Budget Planner", kind: "planner", productType: "budget planner", listing: { title: "Budget Planner Printable", description: "A printable budget planner.", tags: ["budget planner"], materials: ["pdf file"] }, prices: { usd: 6.5 } }));
-  form.set("pdf", new File([Buffer.concat([Buffer.from("%PDF-1.4\n"), Buffer.alloc(4_000, 32)])], "Budget.pdf", { type: "application/pdf" }));
+  form.set("pdf", new File([validPdf("Budget.pdf")], "Budget.pdf", { type: "application/pdf" }));
   const product = await createDigitalProduct(store, form, "https://gxl.example", async () => undefined);
   assert.equal(product.kind, "planner");
   assert.equal(product.craft, undefined);

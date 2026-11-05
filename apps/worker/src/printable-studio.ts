@@ -30,6 +30,7 @@ export interface PrintablePlanInput {
   seed?: string;
   avoidNames?: string[];
   aiAssisted?: boolean;
+  priceUsd?: number;
   // Satıcının kullandığı yapay zekâ (ChatGPT veya Claude); paket ona göre yazılır.
   assistant?: "chatgpt" | "claude";
 }
@@ -48,6 +49,7 @@ export interface PrintableBrief {
   qualityGate: string[];
   // Tüm parçalar tek sohbette sırayla yapılsın diye birleştirilmiş paket (tek paylaşım).
   masterPrompt: string;
+  priceUsd?: number;
 }
 
 export interface PrintableListingDraft {
@@ -443,6 +445,7 @@ export function normalizePrintablePlanInput(raw: Record<string, unknown>): Print
     audience: cleanText(raw.audience, 60) || undefined,
     seed: cleanText(raw.seed, 60) || undefined,
     aiAssisted: raw.aiAssisted !== false,
+    ...(Number(raw.priceUsd) > 0 ? { priceUsd: Math.round(Number(raw.priceUsd) * 100) / 100 } : {}),
     ...(raw.assistant === "chatgpt" || raw.assistant === "claude" ? { assistant: raw.assistant } : {})
   };
 }
@@ -548,7 +551,30 @@ function misleadingFor(kind: PrintableKind): RegExp {
   return EDITABLE_KINDS.has(kind) ? MISLEADING_EXCEPT_EDITABLE : MISLEADING_FEATURE;
 }
 
+export function requestedCalendarYear(input: Pick<PrintablePlanInput, "productType" | "keyword">): number {
+  const years = [...new Set(`${input.productType} ${input.keyword || ""}`.match(/\b20\d{2}\b/g) || [])];
+  if (years.length > 1) throw new Error("CALENDAR_YEAR_CONFLICT");
+  return years.length ? Number(years[0]) : calendarYear();
+}
+
+const ABC_ANIMALS = ["alligator", "bear", "cat", "dog", "elephant", "fox", "goat", "hippo", "iguana", "jellyfish", "koala", "lion", "monkey", "narwhal", "owl", "penguin", "quail", "rabbit", "seal", "turtle", "umbrellabird", "vulture", "whale", "X-ray fish", "yak", "zebra"];
+const isAlphabet = (input: PrintablePlanInput) => input.kind === "coloring" && /\b(abc|alphabet)\b/i.test(input.productType);
+function profileFor(input: PrintablePlanInput): KindProfile {
+  const base = PRINTABLE_KINDS[input.kind];
+  if (input.kind !== "calendar") return base;
+  const year = String(requestedCalendarYear(input));
+  const adapt = (items: string[]) => items.map(item => item.replaceAll(String(CAL_YEAR), year));
+  return { ...base, contentEn: adapt(base.contentEn), tagStems: adapt(base.tagStems), vocabulary: adapt(base.vocabulary) };
+}
+function validateFormats(input: PrintablePlanInput) {
+  const known = /^(us letter|letter\b|a[2-6]\b|half letter|\d{1,2}x\d{1,2}\b|[234]:[345] ratio|iso a|landscape tablet|portrait tablet|tablet|hyperlinked|black.and.white|phone \d+x\d+|transparent png|png\b|pptx\b|docx\b|xlsx\b|pdf\b)/i;
+  if ((input.formats || []).some(format => !known.test(format.trim()))) throw new Error("PRINTABLE_FORMAT_INVALID");
+}
+
 function prepare(raw: PrintablePlanInput): Prepared {
+  validateFormats(raw);
+  if (isAlphabet(raw)) raw = { ...raw, pageCount: 26 };
+  if (raw.kind === "party" && ESCAPE_ROOM.test(raw.productType) && !raw.formats?.length) raw = { ...raw, formats: ["US Letter", "A4"] };
   const productWords = new Set(raw.productType.split(/\s+/).flatMap((word) => [word, singular(word)]));
   // "vintage" yeni bir dijital ürün için "vintage style" demektir (Etsy'de "vintage" 20 yaş üstü ürünlerdir);
   // "daily weekly" iki ayrı özelliktir.
@@ -814,16 +840,16 @@ function buildArtPlan(prepared: Prepared, profile: KindProfile, pages: number): 
   if (!profile.art) return { prompts: [], notes: [], budget: [], includedEn: profile.includedEn, components, subjects: [], style, pagesNote: `${pages} core pages plus the cover, ${input.kind === "digital_planner" ? "import guide" : "how-to-print"}, thank-you and license pages` };
 
   if (input.kind === "coloring") {
-    const explicit = Math.min(pages, 8);
-    const prompts = Array.from({ length: explicit }, (_, index) => `Coloring page ${index + 1}: ${variedAt(index, explicit)}, ${style}, original composition, clean black outline line art on pure white, uniform line weight, every shape fully closed, no grayscale, no shading, no text, no signature, portrait page; keep the art inside a centered 7.5x10 in area so it fits both US Letter and A4.`);
-    if (pages > explicit) prompts.push(`Coloring pages ${explicit + 1}-${pages}: the same rules as above, one new subject per page taken from the PASS 1 page plan, all within the theme; no subject or composition is repeated.`);
+    const explicit = pages;
+    const prompts = Array.from({ length: explicit }, (_, index) => `Coloring page ${index + 1}: ${isAlphabet(input) ? ABC_ANIMALS[index] : variedAt(index, explicit)}, ${style}, original composition, clean black outline line art on pure white, uniform line weight, every shape fully closed, no grayscale, no shading, no text, no signature, portrait page; keep the art inside a centered 7.5x10 in area so it fits both US Letter and A4.`);
+
     return {
       prompts,
       notes: [...sharedNotes, "Image tools give about 1024-1536 px. Upscale or vectorize every page to 300 dpi at the page size (2550x3300 px for US Letter) and keep the lines pure black (threshold, no gray)."],
-      budget: [`${pages} coloring pages, each a different subject, ordered from simpler to more detailed`, `Plus the cover, a color test page, a color palette ideas page and ${textPages}`],
-      includedEn: [`${pages} coloring pages`, "Color test page", "Color palette ideas page"],
-      components, subjects: used(explicit), style,
-      pagesNote: `${pages} coloring pages plus the cover, color test, color palette ideas, how-to-print, thank-you and license pages`
+      budget: [`${pages} coloring pages, each a different subject, ${isAlphabet(input) ? "ordered A-Z, plus one matching activity sign page made in code" : "ordered from simpler to more detailed"}`, `Plus the cover, a color test page, a color palette ideas page and ${textPages}`],
+      includedEn: [`${pages} coloring pages`, ...(isAlphabet(input) ? ["A-Z animal pages with guest signature lines", "Matching activity sign"] : []), "Color test page", "Color palette ideas page"],
+      components, subjects: isAlphabet(input) ? [...ABC_ANIMALS] : used(explicit), style,
+      pagesNote: `${pages} coloring pages${isAlphabet(input) ? " plus one matching activity sign page" : ""} plus the cover, color test, color palette ideas, how-to-print, thank-you and license pages`
     };
   }
 
@@ -849,8 +875,8 @@ function buildArtPlan(prepared: Prepared, profile: KindProfile, pages: number): 
         `Cover artwork: one hero illustration that combines a few of the month subjects${featured}; ${palette}, ${style}, landscape composition with the top third kept plain for the title and the year, which are added later in code; no text or letters.`
       ],
       notes: [...sharedNotes, "Image tools give about 1024-1536 px. Upscale each month artwork to 3300x1650 px (11x5.5 in at 300 dpi) with the best method available and check it at 100% zoom. Generate every date grid in code from the calendar module; never type or draw dates by hand.", "Each month's artwork follows its own season, in one shared style and palette across all 12 months."],
-      budget: [`12 month pages for ${CAL_YEAR}: the Brief B month artwork on top and the date grid generated in code below`, `Plus the cover (cover artwork from Brief B with the title and ${CAL_YEAR} added in code), a year-at-a-glance page generated in code, and ${textPages}`],
-      includedEn: [`12 month pages for ${CAL_YEAR}`, "Year-at-a-glance page", "Sunday-start weeks"],
+      budget: [`12 month pages for ${requestedCalendarYear(input)}: the Brief B month artwork on top and the date grid generated in code below`, `Plus the cover (cover artwork from Brief B with the title and ${requestedCalendarYear(input)} added in code), a year-at-a-glance page generated in code, and ${textPages}`],
+      includedEn: [`12 month pages for ${requestedCalendarYear(input)}`, "Year-at-a-glance page", "Sunday-start weeks"],
       components, subjects: [], style,
       pagesNote: `12 month pages plus the cover, year-at-a-glance, how-to-print, thank-you and license pages`
     };
@@ -1018,6 +1044,13 @@ function contentLines(prepared: Prepared, profile: KindProfile): string[] {
     const print = (prepared.input.formats || []).filter((format) => !isTablet(format));
     return [...profile.contentEn, ...(print.length ? [`${print.join(" and ")}: a printable version of the same pages without tabs, links or buttons`] : []), ...money];
   }
+  if (isAlphabet(prepared.input)) return [
+    "Exactly 26 animal alphabet coloring pages, in A-Z order, one letter and one animal per page",
+    `Letter-to-animal mapping: ${ABC_ANIMALS.map((animal, index) => `${String.fromCharCode(65 + index)} = ${animal}`).join("; ")}`,
+    "Add the uppercase letter and animal name in code as real text; the artwork itself has no text",
+    "A guest signature line labeled 'Colored by' on every alphabet page, plus a matching baby shower activity sign",
+    "Check that A-Z each appears exactly once, with the correct animal name; never claim this is a phonics curriculum"
+  ];
   if (kind !== "paper_craft") return [...profile.contentEn, ...money];
   const mode = paperMode(prepared.input.productType);
   return mode === "papers"
@@ -1140,7 +1173,7 @@ function buildPdfPrompt(prepared: Prepared, profile: KindProfile, name: string, 
       : input.kind === "wallpaper"
       ? `- Size: ${Math.min(Math.max(pages, 1), 12)} wallpapers, each delivered in every listed screen size`
       : input.kind === "calendar"
-      ? `- Size: 12 month pages for ${CAL_YEAR}; the cover, year-at-a-glance, how-to-print, thank-you and license pages come on top`
+      ? `- Size: 12 month pages for ${requestedCalendarYear(input)}; the cover, year-at-a-glance, how-to-print, thank-you and license pages come on top`
       : input.kind === "app_icons"
       ? `- Size: ${Math.min(Math.max(pages, 16), 96)} app icons plus blank icons, 3 widget images and 2 matching wallpapers`
       : input.kind === "spreadsheet"
@@ -1239,7 +1272,7 @@ function buildPdfPrompt(prepared: Prepared, profile: KindProfile, name: string, 
 // formatlar, kitle ve (renkli ürünlerde) renkler kapsanır.
 function coveredVocabulary(prepared: Prepared, art?: ArtPlan): Set<string> {
   const { input } = prepared;
-  const profile = PRINTABLE_KINDS[input.kind];
+  const profile = profileFor(input);
   const formats = input.formats?.length ? input.formats : profile.defaultFormats;
   const colorful = input.kind === "paper_craft" || input.kind === "wall_art";
   const words = [
@@ -1368,7 +1401,7 @@ function fitSentences(sentences: string[], max: number): string {
 // Pin başlıkları alıcı ifadelerinden; açıklama her zaman ürünün kendi adıyla kurulan düzgün cümlelerdir.
 function buildPins(prepared: Prepared, name: string, art: ArtPlan): PrintableBrief["pins"] {
   const { input } = prepared;
-  const profile = PRINTABLE_KINDS[input.kind];
+  const profile = profileFor(input);
   const keyword = input.keyword || input.productType;
   const features = input.trendFeatures || [];
   // Trend etiketi azsa pinler türün alıcı ifadeleriyle farklılaşır; üç pin aynı başlıkla paylaşılmaz.
@@ -1444,7 +1477,7 @@ function checklistFor(prepared: Prepared): string[] {
       : `Every page sits inside the safe margins and prints at 100% (Actual size) in every included size (${printSizes.join(", ")}) without clipping.`,
     textRule(prepared),
     input.kind === "calendar" ? "All 12 months share one style and palette, and each month's artwork fits its own month." : "The whole product follows one theme; nothing from another season, holiday or mood appears.",
-    ...(input.kind === "calendar" ? [`Every date in the ${CAL_YEAR} grids was generated in code and checked against the real calendar.`] : []),
+    ...(input.kind === "calendar" ? [`Every date in the ${requestedCalendarYear(input)} grids was generated in code and checked against the real calendar.`] : []),
     "Every word in the files, the file names and the Product spec is American English: no Turkish letters or words and no British spellings.",
     "All fonts are licensed for commercial use; list them.",
     "No brand, character or celebrity names; all artwork is original and no other seller's image was used as a reference.",
@@ -1457,7 +1490,7 @@ function checklistFor(prepared: Prepared): string[] {
 export function buildPrintableBrief(raw: PrintablePlanInput): PrintableBrief {
   const prepared = prepare(raw);
   const { input } = prepared;
-  const profile = PRINTABLE_KINDS[input.kind];
+  const profile = profileFor(input);
   const pages = input.pageCount || profile.defaultPages;
   // Ada yalnız tek kelimelik renk/stil girer; "Library Ephemera Govery Junk Journal Kit" gibi uzun adlar oluşmaz.
   const accents = [...(input.trendFeatures || []), ...(input.colors || [])].filter((accent) => !accent.includes(" ") && !/^(black|charcoal|gray|grey|brown|chocolate)$/.test(accent));
@@ -1473,6 +1506,7 @@ export function buildPrintableBrief(raw: PrintablePlanInput): PrintableBrief {
   return {
     name,
     kind: input.kind,
+    ...(input.priceUsd ? { priceUsd: input.priceUsd } : {}),
     originalityPlan: rules.tr,
     pdfPrompt,
     artPrompts: art.prompts,
@@ -1493,7 +1527,7 @@ export function buildPrintableBrief(raw: PrintablePlanInput): PrintableBrief {
       adVisuals,
       pins,
       assistant: input.assistant,
-      qa: qaProtocol({ type: "printable", name, kind: input.kind, formats, pages, pagesNote: art.pagesNote, papersOnly: input.kind === "paper_craft" && paperMode(input.productType) === "papers", escapeRoom: input.kind === "party" && ESCAPE_ROOM.test(input.productType) }),
+      qa: qaProtocol({ type: "printable", name, kind: input.kind, formats, pages, pagesNote: art.pagesNote, papersOnly: input.kind === "paper_craft" && paperMode(input.productType) === "papers", escapeRoom: input.kind === "party" && ESCAPE_ROOM.test(input.productType), year: input.kind === "calendar" ? requestedCalendarYear(input) : undefined, alphabet: isAlphabet(input) }),
       checklist: checklistFor(prepared)
     }),
     bundleIdea: bundleIdea(prepared, profile, name),
@@ -1535,7 +1569,7 @@ const wordsOf = (value: string) => value.toLowerCase().match(/[a-z0-9']+/g) || [
 
 function buildTitle(prepared: Prepared, art: ArtPlan, primary = primaryPhrase(prepared.input)): string {
   const { input } = prepared;
-  const profile = PRINTABLE_KINDS[input.kind];
+  const profile = profileFor(input);
   const trend = input.trendTags || [];
   const counts = new Map<string, number>();
   const count = (phrase: string) => wordsOf(phrase).forEach((word) => counts.set(word, (counts.get(word) || 0) + 1));
@@ -1572,9 +1606,9 @@ function buildTitle(prepared: Prepared, art: ArtPlan, primary = primaryPhrase(pr
     if (fits(tag)) add(tag);
   }
   // Trend verisi azsa (ürün elle yazıldıysa) başlık türün alıcı ifadeleriyle tamamlanır; ürünün temasına uymayan ifade girmez.
-  for (const stem of profile.tagStems) {
+  for (const stem of input.kind === "party" && ESCAPE_ROOM.test(input.productType) ? ESCAPE_ROOM_TAGS : profile.tagStems) {
     if (phrases.length === 3) break;
-    if (!hasBrandName(stem) && fitsTheme(stem, prepared.themes) && fits(stem)) add(stem);
+    if (!(input.kind === "party" && !/\bshower\b/.test(input.productType) && /\bshower\b/.test(stem)) && !hasBrandName(stem) && fitsTheme(stem, prepared.themes) && fits(stem)) add(stem);
   }
   const format = formatPhrase(input.formats?.length ? input.formats : profile.defaultFormats, input.kind);
   const segments = [primary, ...phrases.slice(1).map(titleCase), ...(format ? [format] : []), ...(!trend.length || trend.includes("instant download") ? ["Instant Download"] : [])];
@@ -1615,7 +1649,7 @@ export function fittingTagPhrases(phrase: string): string[] {
 function buildTags(prepared: Prepared, art: ArtPlan): string[] {
   const { input } = prepared;
   const product = input.productType;
-  const profile = PRINTABLE_KINDS[input.kind];
+  const profile = profileFor(input);
   const words = product.split(/\s+/);
   // Kaçış odasında ürünün başı "escape room"dur ("printable room" ya da "room pdf" etiketi olmaz).
   const tagHead = input.kind === "party" && ESCAPE_ROOM.test(product) ? "escape room" : words.length > 1 && GENERIC_HEADS.test(words.at(-1)!) ? words.slice(-2).join(" ") : words.at(-1)!;
@@ -1688,7 +1722,7 @@ function buildTags(prepared: Prepared, art: ArtPlan): string[] {
 
 function buildDescription(prepared: Prepared, name: string, art: ArtPlan, hook?: string): string {
   const { input } = prepared;
-  const profile = PRINTABLE_KINDS[input.kind];
+  const profile = profileFor(input);
   const formats = input.formats?.length ? input.formats : profile.defaultFormats;
   const pages = input.pageCount || profile.defaultPages;
   const features = input.trendFeatures || [];
@@ -1757,7 +1791,7 @@ function buildDescription(prepared: Prepared, name: string, art: ArtPlan, hook?:
     ...(note ? [`• ${note}`] : []),
     `• Colors may look slightly different depending on your ${SCREEN_ONLY.has(input.kind) ? "screen" : "screen and printer"}.`,
     "• The listing images show the real pages: one is an unedited preview of the files, and the others are mockups made from them.",
-    ...(input.aiAssisted !== false ? ["• Designed with the help of AI tools and checked with automated file tests."] : []),
+    ...(input.aiAssisted !== false ? ["• Designed with the help of AI tools."] : []),
     "• Because this is a digital file, all sales are final, but message us with any question and we will help.",
     "",
     "LICENSE",
@@ -1767,7 +1801,7 @@ function buildDescription(prepared: Prepared, name: string, art: ArtPlan, hook?:
 
 function listingParts(raw: PrintablePlanInput) {
   const prepared = prepare(raw);
-  const profile = PRINTABLE_KINDS[prepared.input.kind];
+  const profile = profileFor(prepared.input);
   const art = buildArtPlan(prepared, profile, prepared.input.pageCount || profile.defaultPages);
   return { prepared, art };
 }

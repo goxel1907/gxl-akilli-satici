@@ -393,6 +393,7 @@ export function buildPinPayload(job: PinJob, listing: EtsyListing, boardId: stri
 export async function processPinQueue(env: PinterestRuntimeEnv, store: PinterestStore | undefined, fetcher: Fetcher = fetch, now = Date.now(), options: { jobId?: string } = {}) {
   if (!store || !env.PINTEREST_APP_ID || !env.PINTEREST_APP_SECRET || !env.ETSY_API_KEY) return { skipped: "not_configured" as const };
   if (!(await store.get(TOKEN_KEY))) return { skipped: "not_connected" as const };
+  if (!options.jobId && !(await readPinterestSettings(store)).auto) return { skipped: "automation_disabled" as const };
   const jobs = await listPinJobs(store);
   const job = options.jobId
     ? jobs.find((item) => item.id === options.jobId && item.status !== "posted")
