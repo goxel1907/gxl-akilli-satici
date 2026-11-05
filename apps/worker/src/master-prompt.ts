@@ -25,6 +25,8 @@ export interface MasterPromptInput {
   // Türün Türkçe adı (giriş cümlesi) ve ABD pazarı kuralları (us-market.ts, Türkçe).
   productLabelTr?: string;
   usRules?: string[];
+  // Ürünün temasına uyan ilan görseli süsü (decor.ts); kodla, kenarlara çizilir.
+  decor?: string;
 }
 
 // Teknik şartnamenin başladığı çizgi; otomatik denetim Türkçe ve İngilizce kısmı buradan ayırır.
@@ -114,6 +116,11 @@ export function buildMasterPrompt(input: MasterPromptInput): string {
     "- Never draw a software or brand logo or an app icon (for example the PowerPoint, Word, Excel or PDF reader icons); program names appear only as plain text.",
     "- Every number in a headline or badge matches the files exactly (questions, bonus questions, slides, pages); count them in the files before writing it.",
     "- After adding it, read the headline back with OCR and fix any spelling difference.");
+  if (input.decor) lines.push(
+    "Decorations (every listing image, drawn in code with Pillow after the headline is placed):",
+    `- Draw ${input.decor} as simple flat shapes in the spec palette, only along the edges and in the corners; the cover (C1) gets the fullest set, the other images small corner accents.`,
+    "- Decorations never cover the product, the headline, a badge or any text; they take at most about 15% of the image, and the real product stays the hero, unchanged.",
+    "- No characters, mascots, animals, logos, app icons or words in the decorations; check the finished image at thumbnail size and remove any decoration that touches the product or the text.");
   for (const visual of input.adVisuals) {
     lines.push(`### C${visual.slot}. ${visual.titleEn} - ${aspectEn(visual.aspect)}`, `Used for: ${visual.useEn}${visual.overlay ? `. Headline (add in code): "${visual.overlay}"` : ""}`, visual.prompt, "");
   }

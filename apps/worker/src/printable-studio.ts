@@ -6,6 +6,7 @@ import { hasBrandName, isIpRisky } from "./ip-guard.js";
 import { buildMasterPrompt } from "./master-prompt.js";
 import { usMarketRulesTr } from "./us-market.js";
 import { qaProtocol } from "./qa-protocol.js";
+import { decorFor } from "./decor.js";
 import { coinProductName, normalizeEtsyTags, normalizeEtsyTitle, titleCase, validateEtsyListingText } from "./pattern-studio.js";
 import { cleanBriefNotes, fitsTheme, harmonizeThemes, isHolidayFamily, META_WORDS, MISLEADING_EXCEPT_EDITABLE, MISLEADING_FEATURE, proseCase, THEME_ADJECTIVES, themeFamilies, type ThemeFamily, vintageStyle } from "./theme.js";
 
@@ -1469,6 +1470,7 @@ export function buildPrintableBrief(raw: PrintablePlanInput): PrintableBrief {
       productLabel: input.productType,
       productLabelTr: profile.labelTr,
       usRules: usMarketRulesTr({ kind: input.kind, productType: input.productType, keyword: input.keyword }),
+      decor: decorFor(prepared.themes),
       specName: "Product spec",
       // Sanat promptları PDF briefinin içinde de geçer; pakette Brief B olarak bir kez verilir.
       filesBrief: pdfPrompt.replace(/## Artwork prompts[\s\S]*?\n\n(?=## )/, "## Artwork\nUse the artworks from Brief B.\n\n"),
