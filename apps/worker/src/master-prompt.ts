@@ -110,6 +110,9 @@ export function buildMasterPrompt(input: MasterPromptInput): string {
     "- Use the bold heading font from the spec, exactly the words given, in capital letters; the headline height is at least 7% of the image height so it reads on a phone thumbnail.",
     "- Use a palette color with at least 4.5:1 contrast, or place it on a soft rounded band in a palette color; at most one small badge (for example a page or question count) besides it.",
     "- Keep the composition uncluttered: one clear hero, real product visible, no stickers, arrows or extra words. The best-selling Etsy covers read in one second.",
+    "- If the headline needs two lines, break it at the separator (\"·\" or \"|\") and drop the separator; no line starts or ends with a separator.",
+    "- Never draw a software or brand logo or an app icon (for example the PowerPoint, Word, Excel or PDF reader icons); program names appear only as plain text.",
+    "- Every number in a headline or badge matches the files exactly (questions, bonus questions, slides, pages); count them in the files before writing it.",
     "- After adding it, read the headline back with OCR and fix any spelling difference.");
   for (const visual of input.adVisuals) {
     lines.push(`### C${visual.slot}. ${visual.titleEn} - ${aspectEn(visual.aspect)}`, `Used for: ${visual.useEn}${visual.overlay ? `. Headline (add in code): "${visual.overlay}"` : ""}`, visual.prompt, "");
