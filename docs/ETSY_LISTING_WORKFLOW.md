@@ -70,3 +70,7 @@ The owner agent receives measured product ideas and timestamps from the same can
 The opportunity score uses 40% age-adjusted favorite interest, 25% competition, 20% share of recently created listings and 15% price. It is not a probability of sales or attention. Favorites/month is a lifetime age-adjusted average, not observed growth during the last month; new listings are not necessarily new shops. Recently created listings' tags are separately marked, while a tag discovered in the full sample is not advertised as a confirmed rising search. Google Trends links do not provide an integrated search-volume dataset.
 
 The automatic scanner still attempts only one query per 30-minute cron run. Failed attempts now rotate away instead of blocking later queries; the displayed run count is labeled attempts. API configuration is required before the status reports automatic scanning enabled. The ranking covers measured candidates, not all of Etsy. Visual appeal, actual search volume, conversion and product-market fit require separate evidence or real listing experiments.
+
+## Navigation and assistant return
+
+See `NESTED_TABS_QA.md` for screen-level transition checks and current limits. Prepared printable packages now have a versioned on-phone resume snapshot, available through **Son çalışmayı aç**. Tab switches retain the current workspace; restarting still discards edits made after the last successful preparation. Downloaded assistant files are selected separately and must match the restored handoff.
