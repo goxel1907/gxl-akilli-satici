@@ -1,15 +1,16 @@
+import { crmRequest, CrmStorageError, isCrmRoute, readCrmSnapshot, type CrmEnv } from "./crm-store.js";
+export { CrmStore } from "./crm-store.js";
 import { registerProductHandoff } from "./product-handoff.js";
 import { researchPrintableMarket } from "./printable-research.js";
-import { approvals, leads, messages, products } from "../../api/src/data.js";
+import { products } from "../../api/src/data.js";
 import { patternPolicyIssues, patternPolicyMessage } from "./etsy-policy.js";
 import { generateListingPack } from "../../api/src/listing-agent.js";
 import { evaluateMarketplacePolicies, type ProductOrigin, type RiskFlag } from "../../api/src/marketplace-policy.js";
 import { buildOpportunityCenter, replyToAgent, type OpportunityContext } from "../../api/src/opportunity-agent.js";
-import { canStartConversation } from "../../api/src/policy.js";
 import { analyzeProductImages } from "../../api/src/product-analyzer.js";
 import { scoreProspect, type ProspectSignal } from "../../api/src/prospecting.js";
 import type { AiRuntimeEnv } from "../../api/src/structured-ai.js";
-import type { Channel, Lead } from "../../api/src/types.js";
+import type { Channel } from "../../api/src/types.js";
 import {
   createShopierProduct,
   createShopierWebhookSubscription,
@@ -77,7 +78,7 @@ import {
   type DigitalStore
 } from "./digital-delivery.js";
 
-interface Env extends AiRuntimeEnv, ShopierRuntimeEnv, EtsyRuntimeEnv, PinterestRuntimeEnv {
+interface Env extends CrmEnv, AiRuntimeEnv, ShopierRuntimeEnv, EtsyRuntimeEnv, PinterestRuntimeEnv {
   APP_ACCESS_TOKEN?: string;
   PRODUCT_MEDIA?: {
     get(key: string): Promise<{ body: ReadableStream; httpEtag?: string } | null>;
@@ -309,23 +310,6 @@ async function shopierCenter(env: Env) {
   };
 }
 
-function dashboard() {
-  return {
-    metrics: {
-      activeLeads: leads.filter((lead) => lead.stage === "active").length,
-      pendingApprovals: approvals.filter((approval) => approval.status === "pending").length,
-      catalogProducts: products.length,
-      conversations: new Set(messages.map((message) => message.leadId)).size
-    },
-    leads,
-    approvals,
-    products,
-    messages: messages.slice(-20)
-  };
-}
-
-const channels = new Set<Channel>(["whatsapp", "instagram", "facebook", "shopier", "letgo", "etsy", "email"]);
-
 function sourceName(channel: Channel): string {
   const names: Record<Channel, string> = {
     whatsapp: "WhatsApp",
@@ -340,6 +324,7 @@ function sourceName(channel: Channel): string {
 }
 
 async function opportunityContext(env: Env): Promise<OpportunityContext> {
+  const { leads } = await readCrmSnapshot(env);
   let shopier: OpportunityContext["shopier"];
   try {
     const snapshot = await getShopierSnapshot(env);
@@ -373,7 +358,7 @@ async function opportunityContext(env: Env): Promise<OpportunityContext> {
         ? `Müşteri ${new Date(lead.lastInboundAt).toLocaleDateString("tr-TR")} tarihinde görüşmeyi kendisi başlattı.`
         : "Açık iletişim izni ve doğrulanmış ürün ilgisi mevcut.",
       score: lead.score,
-      contactAllowed: lead.consent
+      contactAllowed: lead.consent && lead.stage !== "blocked"
     }))
   };
 }
@@ -830,10 +815,11 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
       return json(200, await shopierCenter(env));
     }
 
-    if (request.method === "GET" && url.pathname === "/api/dashboard") return json(200, dashboard());
+    if (isCrmRoute(request)) {
+      const response = await crmRequest(env, request);
+      return json(response.status, await response.json());
+    }
     if (request.method === "GET" && url.pathname === "/api/products") return json(200, products);
-    if (request.method === "GET" && url.pathname === "/api/leads") return json(200, leads);
-    if (request.method === "GET" && url.pathname === "/api/approvals") return json(200, approvals);
 
     if (request.method === "GET" && url.pathname === "/api/opportunities") {
       return json(200, buildOpportunityCenter(await opportunityContext(env)));
@@ -850,97 +836,6 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
         return row.role === "owner" || row.role === "agent" ? [{ role: String(row.role), text: String(row.text || "").slice(0, 1500) }] : [];
       });
       return json(200, await replyToAgent(message, await opportunityContext(env), env, history));
-    }
-
-    if (request.method === "POST" && url.pathname === "/api/prospects/intake") {
-      const input = await readBody(request);
-      const channel = String(input.channel || "") as Channel;
-      const displayName = String(input.displayName || "").trim();
-      const handle = String(input.handle || "").trim();
-      const signals = Array.isArray(input.signals) ? input.signals as ProspectSignal[] : [];
-      if (!channels.has(channel) || !displayName || !handle || !signals.length) {
-        return json(400, { error: "Kaynak, görünen ad, kanal kimliği ve gerçek etkileşim sinyali gerekli." });
-      }
-      const scored = scoreProspect(signals, products.flatMap((product) => product.tags));
-      if (!scored.canDraftFirstContact) {
-        return json(202, { stored: false, classification: "market_signal", scored, reason: "Açık iletişim izni veya müşterinin başlattığı talep yok." });
-      }
-      const lastInboundAt = signals
-        .filter((signal) => signal.type === "inbound_message")
-        .map((signal) => signal.occurredAt)
-        .sort()
-        .at(-1);
-      let lead = leads.find((item) => item.channel === channel && item.handle === handle);
-      if (lead) {
-        lead.displayName = displayName;
-        lead.consent = true;
-        lead.interests = scored.matchedInterests;
-        lead.score = scored.score;
-        lead.stage = "qualified";
-        lead.lastInboundAt = lastInboundAt || lead.lastInboundAt;
-      } else {
-        lead = {
-          id: crypto.randomUUID(),
-          displayName,
-          channel,
-          handle,
-          stage: "qualified",
-          consent: true,
-          interests: scored.matchedInterests,
-          score: scored.score,
-          lastInboundAt,
-          autoReplyAllowed: false
-        } satisfies Lead;
-        leads.push(lead);
-      }
-      return json(201, { stored: true, classification: lastInboundAt ? "real_customer" : "permissioned_prospect", lead, scored });
-    }
-
-    if (request.method === "POST" && url.pathname === "/api/approvals") {
-      const input = await readBody(request);
-      const lead = leads.find((item) => item.id === String(input.leadId || ""));
-      if (!lead) return json(404, { error: "Müşteri adayı bulunamadı." });
-      if (!canStartConversation(lead)) return json(409, { error: "İzin/engelleme kuralı nedeniyle ilk temas oluşturulamaz." });
-      const approval = {
-        id: crypto.randomUUID(),
-        leadId: lead.id,
-        channel: lead.channel,
-        draft: String(input.draft || "").trim(),
-        productIds: Array.isArray(input.productIds) ? input.productIds.map(String) : [],
-        status: "pending" as const,
-        createdAt: new Date().toISOString()
-      };
-      if (!approval.draft) return json(400, { error: "Onaya sunulacak mesaj taslağı gerekli." });
-      approvals.push(approval);
-      lead.stage = "contact_pending";
-      return json(201, approval);
-    }
-
-    const approvalMatch = url.pathname.match(/^\/api\/approvals\/([^/]+)\/(approve|reject)$/);
-    if (request.method === "POST" && approvalMatch) {
-      const approval = approvals.find((item) => item.id === approvalMatch[1]);
-      if (!approval) return json(404, { error: "Onay kaydı bulunamadı." });
-      if (approval.status !== "pending") return json(409, { error: "Bu kayıt daha önce sonuçlandırıldı." });
-      const currentLead = leads.find((item) => item.id === approval.leadId);
-      if (approvalMatch[2] === "approve" && (!currentLead || !canStartConversation(currentLead))) {
-        return json(409, { error: "Müşterinin iletişim izni kaldırılmış veya müşteri engellenmiş. Mesaj onaylanamaz." });
-      }
-      approval.status = approvalMatch[2] === "approve" ? "approved" : "rejected";
-      approval.decidedAt = new Date().toISOString();
-      const lead = leads.find((item) => item.id === approval.leadId);
-      if (lead && approval.status === "approved") {
-        lead.stage = "active";
-        // Approval authorizes manual handoff; no transport has delivered a message yet.
-        lead.autoReplyAllowed = false;
-      }
-      return json(200, {
-        approval,
-        delivery: {
-          accepted: false,
-          mode: "manual_handoff",
-          reason: approval.status === "approved" ? "Kanal gönderim anahtarı bağlı değil; onaylı taslak uygulamada paylaşılmalı." : "Taslak reddedildi."
-        }
-      });
     }
 
     if (request.method === "POST" && url.pathname === "/api/products/analyze-images") {
@@ -1000,6 +895,7 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
     return json(404, { error: "Endpoint bulunamadı." });
   } catch (error) {
     console.error(error);
+    if (error instanceof CrmStorageError) return json(503, { error: error.message, code: "CRM_STORAGE_UNAVAILABLE" });
     const code = error instanceof Error ? error.message : "";
     if (code === "PAYLOAD_TOO_LARGE") return json(413, { error: "İstek çok büyük; her dosya (PDF veya ZIP) en fazla 20 MB olmalı ve görseller sıkıştırılmış olmalıdır." });
     if (code === "AI_PROVIDER_NOT_CONFIGURED") return json(503, { error: "Gemini anahtarı henüz sunucuya eklenmedi." });

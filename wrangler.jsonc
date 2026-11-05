@@ -4,6 +4,8 @@
   "main": "apps/worker/src/index.ts",
   "compatibility_date": "2026-08-12",
   "compatibility_flags": ["nodejs_compat"],
+  "durable_objects": { "bindings": [{ "name": "CRM_STORE", "class_name": "CrmStore" }] },
+  "migrations": [{ "tag": "crm-sqlite-v1", "new_sqlite_classes": ["CrmStore"] }],
   "observability": { "enabled": true },
   "triggers": { "crons": ["*/30 * * * *"] },
   "kv_namespaces": [
