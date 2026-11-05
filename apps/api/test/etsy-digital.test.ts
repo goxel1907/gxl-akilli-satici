@@ -499,3 +499,30 @@ test("uploads are blocked when the listing promises a format that no file contai
   const ok = await post(form([pdf("Planner-US-Letter.pdf"), pdf("Planner-A4.pdf"), new File([makeZip(["Planner-A5.pdf", "Planner-Tablet.pdf"])], "Extras.zip", { type: "application/zip" })]));
   assert.equal(ok.status, 201);
 });
+
+test("a TL shop gets the USD price converted at today's rate when no TL price was entered", async () => {
+  const kv = memoryKv();
+  await kv.store.put("etsy:tokens", JSON.stringify({ accessToken: "123.token", refreshToken: "refresh", expiresAt: Date.now() + 3_600_000, scope: "listings_w", userId: "123" }));
+  const env = { APP_ACCESS_TOKEN: "app-token", ETSY_API_KEY: "key", ETSY_SHARED_SECRET: "secret", ETSY_OAUTH: kv.store };
+  const created = await handleRequest(new Request("https://gxl.example/api/digital/products", { method: "POST", headers: { authorization: "Bearer app-token" }, body: uploadForm() }), env);
+  const { product } = await created.json() as { product: { id: string } };
+  // Satıcı yalnız USD fiyat girmiş.
+  const key = `digital:product:${product.id}`;
+  const stored = JSON.parse(String(await kv.store.get(key)));
+  stored.prices = { usd: 6.99 };
+  await kv.store.put(key, JSON.stringify(stored));
+  let listingForm: URLSearchParams | undefined;
+  const fetcher = (async (input: string | URL | Request, init?: RequestInit) => {
+    const url = new URL(String(input));
+    if (url.hostname === "api.frankfurter.app") return Response.json({ rates: { TRY: 45 } });
+    if (url.pathname === "/v3/application/users/123/shops") return Response.json({ shop_id: 777, shop_name: "GXLMarketStudio", currency_code: "TRY" });
+    if (url.pathname === "/v3/application/seller-taxonomy/nodes") return Response.json({ results: [{ id: 2, name: "Patterns & How To", children: [{ id: 3, name: "Crochet", children: [] }] }] });
+    if (url.pathname === "/v3/application/shops/777/listings") { listingForm = init?.body as URLSearchParams; return Response.json({ listing_id: 556 }, { status: 201 }); }
+    if (url.pathname.endsWith("/images")) return Response.json({ listing_image_id: 1 }, { status: 201 });
+    if (url.pathname.endsWith("/files")) return Response.json({ listing_file_id: 9 }, { status: 201 });
+    return Response.json({ error: "unexpected" }, { status: 500 });
+  }) as typeof fetch;
+  await createEtsyDigitalDraft(env, kv.store, product.id, async (k) => await kv.store.get(k, "arrayBuffer"), fetcher);
+  // 6.99 × 45 = 314.55 → 314.99 TL
+  assert.equal(listingForm?.get("price"), "314.99");
+});
