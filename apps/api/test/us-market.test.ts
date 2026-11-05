@@ -118,3 +118,15 @@ test("listing image headlines are added in code by the assistant, so no Canva st
     assert.match(prompt, /read the headline back with OCR/);
   }
 });
+
+test("every package decorates its listing images in code with the product's own theme, never with logos", () => {
+  const spec = (kind: string, productType: string) => buildPrintableBrief(normalizePrintablePlanInput({ kind, productType, keyword: productType, seed: "d" })).masterPrompt.split("\n---\n")[1];
+  const christmas = spec("slides", "christmas trivia game");
+  assert.match(christmas, /Decorations \(every listing image, drawn in code with Pillow/);
+  assert.match(christmas, /snowflakes, holly sprigs with red berries and small wrapped gift boxes/);
+  assert.match(christmas, /No characters, mascots, animals, logos, app icons or words in the decorations/);
+  assert.match(spec("party", "halloween party games"), /small pumpkins, bats/);
+  assert.match(spec("planner", "daily planner"), /soft confetti dots, small stars and a thin border/);
+  // Başka bir bayramın süsü girmez.
+  assert.doesNotMatch(christmas, /pumpkins|shamrocks|pastel eggs/);
+});

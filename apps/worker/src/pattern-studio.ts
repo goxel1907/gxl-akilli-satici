@@ -7,6 +7,7 @@ import { qaProtocol } from "./qa-protocol.js";
 import { buildAdVisuals, type AdVisual } from "./ad-visuals.js";
 import type { PatternCraft } from "./etsy-trends.js";
 import { isIpRisky } from "./ip-guard.js";
+import { decorFor } from "./decor.js";
 import { patternPolicyMessage } from "./etsy-policy.js";
 import { cleanBriefNotes, fitsTheme, harmonizeThemes, MISLEADING_FEATURE, proseCase, themeFamilies } from "./theme.js";
 
@@ -672,6 +673,7 @@ export function buildPatternBrief(input: PatternPlanInput): PatternBrief {
       // "tote bag sewing pattern", "crochet cardigan pattern": alıcının okuduğu sıra.
       productLabel: CRAFTS[input.craft].order === "craft-first" ? `${CRAFTS[input.craft].label.toLowerCase()} ${input.productType} pattern` : `${input.productType} ${CRAFTS[input.craft].label.toLowerCase()} pattern`,
       usRules: usMarketRulesTr({ productType: input.productType }),
+      decor: decorFor(`${input.productType} ${(input.trendFeatures || []).join(" ")}`),
       specName: "Design spec",
       filesBrief: patternPrompt,
       renderPrompt,
