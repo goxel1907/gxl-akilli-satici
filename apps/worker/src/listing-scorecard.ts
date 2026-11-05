@@ -141,6 +141,19 @@ export async function scoreShopListings(env: EtsyRuntimeEnv, fetcher: Fetcher = 
     return (payload.results || []).map((row) => ({ ...row, _state: state }));
   }));
   const listings: Array<Record<string, unknown>> = pages.flat();
+  // İlan başına satış: mağazanın son 100 satış kaleminden sayılır (izin yoksa ya da hata olursa gösterilmez).
+  const sales = new Map<number, number>();
+  let salesKnown = false;
+  try {
+    const sold = await etsyRequest<{ results?: Array<Record<string, unknown>> }>(env, `/application/shops/${shop.shopId}/transactions`, { query: { limit: 100 } }, fetcher);
+    for (const row of sold.results || []) {
+      const id = Number(row.listing_id);
+      if (id > 0) sales.set(id, (sales.get(id) || 0) + (Number(row.quantity) || 1));
+    }
+    salesKnown = true;
+  } catch {
+    salesKnown = false;
+  }
   const items = listings.map((row) => {
     const price = row.price && typeof row.price === "object" ? row.price as Record<string, unknown> : {};
     const card = scoreListing({
@@ -151,10 +164,18 @@ export async function scoreShopListings(env: EtsyRuntimeEnv, fetcher: Fetcher = 
       priceUsd: price.currency_code === "USD" && Number(price.amount) ? Number(price.amount) / (Number(price.divisor) || 100) : undefined,
       digital: row.type === "download"
     });
+    const image = Array.isArray(row.images) && row.images[0] && typeof row.images[0] === "object" ? row.images[0] as Record<string, unknown> : {};
+    const amount = Number(price.amount) / (Number(price.divisor) || 100);
     return {
       listingId: Number(row.listing_id),
       title: String(row.title || "").slice(0, 140),
       state: String(row._state),
+      // Ürünler sekmesindeki Etsy ilan kartı için: ilk görsel, fiyat, görüntülenme ve favori.
+      ...(image.url_570xN ? { imageUrl: String(image.url_570xN) } : {}),
+      ...(Number.isFinite(amount) && amount > 0 && price.currency_code ? { price: `${amount.toFixed(2)} ${String(price.currency_code) === "TRY" ? "TL" : String(price.currency_code)}` } : {}),
+      ...(typeof row.views === "number" ? { views: row.views } : {}),
+      ...(typeof row.num_favorers === "number" ? { favorites: row.num_favorers } : {}),
+      ...(salesKnown ? { sales: sales.get(Number(row.listing_id)) || 0 } : {}),
       url: row.url ? String(row.url) : undefined,
       editUrl: `https://www.etsy.com/your/shops/me/listing-editor/edit/${row.listing_id}`,
       ...card

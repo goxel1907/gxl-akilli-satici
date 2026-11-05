@@ -37,6 +37,8 @@ export interface PinJob {
   pinUrl?: string;
   // API onayı olmadan satıcının telefonundan elle paylaşılan pin.
   manual?: boolean;
+  // Otomatik paylaşım kapalıyken hazırlanan pin: yalnız elle paylaşılır, kuyruk kendiliğinden göndermez.
+  manualOnly?: boolean;
   error?: string;
   createdAt: string;
   updatedAt: string;
@@ -290,7 +292,7 @@ export function parseListingId(value: unknown): number | undefined {
   return Number.isInteger(id) && id > 0 ? id : undefined;
 }
 
-export async function enqueueListingPins(store: PinterestStore, input: { listingId: number; boardName: string; pins?: unknown[]; link?: string; aiAssisted?: boolean; listingTitle?: string }, now = Date.now()): Promise<PinJob[]> {
+export async function enqueueListingPins(store: PinterestStore, input: { listingId: number; boardName: string; pins?: unknown[]; link?: string; aiAssisted?: boolean; listingTitle?: string; manualOnly?: boolean }, now = Date.now()): Promise<PinJob[]> {
   const jobs = await listPinJobs(store);
   if (jobs.some((job) => job.listingId === input.listingId && job.status !== "failed")) return [];
   const texts = (input.pins || []).map(cleanPinText).filter((pin): pin is PinText => Boolean(pin));
@@ -307,6 +309,7 @@ export async function enqueueListingPins(store: PinterestStore, input: { listing
     ...(texts[index] ? { pin: texts[index] } : {}),
     ...(input.aiAssisted ? { aiAssisted: true } : {}),
     ...(input.listingTitle ? { listingTitle: input.listingTitle.slice(0, 140) } : {}),
+    ...(input.manualOnly ? { manualOnly: true } : {}),
     createdAt: new Date(now).toISOString(),
     updatedAt: new Date(now).toISOString()
   }));
@@ -318,7 +321,12 @@ export async function enqueueListingPins(store: PinterestStore, input: { listing
 export async function autoEnqueuePins(store: PinterestStore | undefined, input: Parameters<typeof enqueueListingPins>[1]): Promise<number> {
   if (!store) return 0;
   try {
-    if (!(await readPinterestSettings(store)).auto) return 0;
+    // Otomatik paylaşım kapalıysa (ör. Pinterest API onayı yok) pinler yine hazırlanır ama yalnız "Elle paylaş"
+    // listesinde görünür; satıcı telefonundan tek dokunuşla paylaşır.
+    if (!(await readPinterestSettings(store)).auto) {
+      await enqueueListingPins(store, { ...input, manualOnly: true });
+      return 0;
+    }
     return (await enqueueListingPins(store, input)).length;
   } catch (error) {
     console.error("Pinterest queue failed", error instanceof Error ? error.message : error);
@@ -388,7 +396,7 @@ export async function processPinQueue(env: PinterestRuntimeEnv, store: Pinterest
   const jobs = await listPinJobs(store);
   const job = options.jobId
     ? jobs.find((item) => item.id === options.jobId && item.status !== "posted")
-    : jobs.filter((item) => (item.status === "scheduled" || item.status === "waiting_listing") && Date.parse(item.dueAt) <= now).sort((a, b) => a.dueAt.localeCompare(b.dueAt))[0];
+    : jobs.filter((item) => !item.manualOnly && (item.status === "scheduled" || item.status === "waiting_listing") && Date.parse(item.dueAt) <= now).sort((a, b) => a.dueAt.localeCompare(b.dueAt))[0];
   if (!job) return { skipped: "nothing_due" as const };
   job.attempts += 1;
   job.updatedAt = new Date(now).toISOString();
