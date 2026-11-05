@@ -77,3 +77,20 @@ test("competitor tags with program brands never reach the listing or the product
     assert.equal(guardPrintablePlan(row.brief, row.listing, { kind: row.kind }).quality.ok, true, row.id);
   }
 });
+
+test("a main search over 20 characters stays in the tags as the parts that fit", () => {
+  const trivia = plan("slides", "christmas trivia game");
+  assert.ok(trivia.listing.tags.includes("christmas trivia"), trivia.listing.tags.join(", "));
+  assert.ok(trivia.listing.tags.includes("trivia game"), trivia.listing.tags.join(", "));
+  const coloring = plan("coloring", "christmas coloring pages");
+  assert.ok(coloring.listing.tags.includes("christmas coloring"), coloring.listing.tags.join(", "));
+  assert.ok(plan("resume", "nurse resume template").listing.tags.includes("nurse resume"));
+  for (const row of [trivia, coloring]) assert.ok(row.listing.tags.every((tag) => tag.length <= 20));
+});
+
+test("shower tags go only on shower games", () => {
+  const bachelorette = plan("party", "bachelorette party games");
+  assert.equal(bachelorette.listing.tags.length, 13);
+  assert.ok(!bachelorette.listing.tags.some((tag) => /shower/.test(tag)), bachelorette.listing.tags.join(", "));
+  assert.ok(plan("party", "baby shower games").listing.tags.some((tag) => /shower/.test(tag)));
+});

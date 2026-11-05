@@ -177,7 +177,7 @@ export const PRINTABLE_KINDS: Record<PrintableKind, KindProfile> = {
     textRuleEn: TEXT_PAGES,
     signatureEn: "one original game or twist that most competing bundles do not offer",
     includedEn: ["Answer keys", "Cut lines", "Matching sign + tags"],
-    tagStems: ["party games", "printable games", "party printable", "shower games", "game cards", "party activities", "game bundle", "fun party games", "party game cards", "shower activities", "game printable", "party bundle", "group games"],
+    tagStems: ["party games", "printable games", "party printable", "shower games", "game cards", "party activities", "game bundle", "fun party games", "party game cards", "shower activities", "game printable", "party bundle", "group games", "icebreaker games", "party game night", "games for groups"],
     vocabulary: ["games", "game", "party", "cards", "activities", "signs", "sign", "invitation"],
     pageWord: "pages"
   },
@@ -1575,6 +1575,23 @@ function buildTitle(prepared: Prepared, art: ArtPlan, primary = primaryPhrase(pr
 const GENERIC_HEADS = /^(pages?|art|cards?|games?|sheets?|kit|pack|paper|printables?|templates?|worksheets?|activities|prints?|search)$/;
 const SEARCHED_SIZES: Array<[RegExp, string]> = [[/^us letter/i, "us letter"], [/^a4/i, "a4"], [/^a5/i, "a5"], [/^half letter/i, "half letter"], [/^4x6/i, "4x6"], [/^5x7/i, "5x7"], [/^8x10/i, "8x10"], [/^11x14/i, "11x14"], [/^12x12/i, "12x12"]];
 
+// Etsy etiketi en fazla 20 karakterdir. Uzun ürün adı ("christmas trivia game", 21) atılırsa ilanın ana araması
+// hiçbir etikette kalmaz; bunun yerine adın sığan iki parçası yazılır: "christmas trivia" ve "trivia game".
+export function fittingTagPhrases(phrase: string): string[] {
+  const clean = phrase.trim().toLowerCase().replace(/\s+/g, " ");
+  if (!clean) return [];
+  if (clean.length <= 20) return [clean];
+  const words = clean.split(" ");
+  const out: string[] = [];
+  for (let size = words.length - 1; size >= 2 && out.length < 2; size--) {
+    for (const start of [0, words.length - size]) {
+      const part = words.slice(start, start + size).join(" ");
+      if (part.length <= 20 && !out.includes(part)) out.push(part);
+    }
+  }
+  return out.slice(0, 2);
+}
+
 function buildTags(prepared: Prepared, art: ArtPlan): string[] {
   const { input } = prepared;
   const product = input.productType;
@@ -1600,10 +1617,10 @@ function buildTags(prepared: Prepared, art: ArtPlan): string[] {
   let sizeTagsLeft = ["planner", "journal", "recipe", "wall_art"].includes(input.kind) ? 2 : 0;
   const sizeTagBudget = { take: () => sizeTagsLeft-- > 0 };
   return normalizeEtsyTags([
-    ...(input.keyword ? [input.keyword] : []),
+    ...(input.keyword ? fittingTagPhrases(input.keyword) : []),
     ...relevantTrendTags(prepared, art),
     ...featureTags,
-    product,
+    ...fittingTagPhrases(product),
     // Tablet planlayıcı ve telefon duvar kâğıdı basılmaz: "printable" ve "pdf" etiketi yanlış vaat olur.
     ...(!NO_PRINT_TAGS.has(input.kind) ? [`printable ${tagHead}`, `${tagHead} printable`] : []),
     ...(input.kind !== "wall_art" && !NO_PRINT_TAGS.has(input.kind) ? [`${tagHead} pdf`] : []),
@@ -1624,6 +1641,8 @@ function buildTags(prepared: Prepared, art: ArtPlan): string[] {
   ].filter((tag) => !isIpRisky(tag) && !hasBrandName(tag) && !programBrandWord(input.kind, tag) && !misleadingFor(input.kind).test(tag) && fitsTheme(tag, prepared.themes)
     && !(NO_PRINT_TAGS.has(input.kind) && /\b(printables?|pdf)\b/.test(tag))
     && !(/\bkids?\b|toddler|preschool/.test(product) && /\b(relaxing|stress relief|mindful|adult)\b/.test(tag))
+    // "shower" etiketi yalnız bebek ve gelin partisi (shower) oyunlarındadır; bekârlığa veda ya da Noel oyununa girmez.
+    && !(input.kind === "party" && !/\bshower\b/.test(product) && /\bshower\b/.test(tag))
     && (!SEARCHED_SIZES.some(([pattern]) => pattern.test(tag)) || sizeTagBudget.take())));
 }
 
