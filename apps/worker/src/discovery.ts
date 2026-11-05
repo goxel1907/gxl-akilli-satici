@@ -1,3 +1,4 @@
+import { compareTrendEvidence } from "../../mobile/trend-priority.js";
 import type { EtsyRuntimeEnv } from "./etsy.js";
 import { inferTrendGroup, normalizeKeyword, scanTrend, TREND_NICHES, type TrendGroup, type TrendResult, type TrendStore } from "./etsy-trends.js";
 import { isIpRisky } from "./ip-guard.js";
@@ -26,6 +27,7 @@ export interface DiscoveredPhrase {
 
 interface AutopilotState {
   lastScanned: Record<string, string>;
+  lastAttempted?: Record<string, string>;
   lastRunAt?: string;
   lastKeyword?: string;
   lastError?: string;
@@ -97,16 +99,16 @@ async function readJson<T>(store: TrendStore, key: string, fallback: T): Promise
   }
 }
 
-export async function listDiscoveries(store: TrendStore | undefined): Promise<DiscoveredPhrase[]> {
+export async function listDiscoveries(store: TrendStore | undefined, now = Date.now()): Promise<DiscoveredPhrase[]> {
   if (!store) return [];
-  return await readJson<DiscoveredPhrase[]>(store, DISCOVERY_KEY, []);
+  return (await readJson<DiscoveredPhrase[]>(store, DISCOVERY_KEY, [])).sort((a, b) => compareTrendEvidence(a.summary, b.summary, now) || b.discoveredAt.localeCompare(a.discoveredAt));
 }
 
 // Her tarama sonrası: keşfedilen ifadenin özetini günceller ve sonuçtan yeni ifadeler çıkarır.
 // track: kullanıcının elle taradığı ifade (ör. Google Trends'te gördüğü) otopilot listesine de eklenir.
 export async function recordScan(store: TrendStore | undefined, result: TrendResult, now = Date.now(), options: { track?: boolean } = {}): Promise<DiscoveredPhrase[]> {
   if (!store) return [];
-  const list = await listDiscoveries(store);
+  const list = await listDiscoveries(store, now);
   const seeds = new Set(TREND_NICHES.map((niche) => niche.keyword));
   const existing = new Map(list.map((item) => [item.keyword, item]));
   const current = existing.get(result.keyword);
@@ -123,16 +125,17 @@ export async function recordScan(store: TrendStore | undefined, result: TrendRes
     added.push(entry);
   }
   const ranked = [...existing.values()]
-    .sort((a, b) => (b.summary?.score ?? 40) - (a.summary?.score ?? 40) || b.discoveredAt.localeCompare(a.discoveredAt))
+    .sort((a, b) => compareTrendEvidence(a.summary, b.summary, now) || b.discoveredAt.localeCompare(a.discoveredAt))
     .slice(0, MAX_DISCOVERIES);
   await store.put(DISCOVERY_KEY, JSON.stringify(ranked));
   return added;
 }
 
-export async function autopilotStatus(store: TrendStore | undefined) {
+export async function autopilotStatus(store: TrendStore | undefined, configured = true) {
   const state = store ? await readJson<AutopilotState>(store, AUTOPILOT_KEY, { lastScanned: {}, runs: 0 }) : { lastScanned: {}, runs: 0 };
   return {
-    enabled: Boolean(store),
+    enabled: Boolean(store && configured),
+    disabledReason: !store ? "Otomatik keşif deposu bağlı değil." : !configured ? "Otomatik keşif için Etsy API bağlantısı yapılandırılmalı." : undefined,
     lastRunAt: state.lastRunAt,
     lastKeyword: state.lastKeyword,
     lastError: state.lastError,
@@ -161,11 +164,12 @@ export async function runAutopilot(env: EtsyRuntimeEnv, store: TrendStore | unde
   if (!store || !env.ETSY_API_KEY || !env.ETSY_SHARED_SECRET) return { skipped: true as const };
   const state = await readJson<AutopilotState>(store, AUTOPILOT_KEY, { lastScanned: {}, runs: 0 });
   const queue = autopilotQueue(await listDiscoveries(store), now);
-  const next = [...queue].sort((a, b) => (state.lastScanned[a.keyword] || "").localeCompare(state.lastScanned[b.keyword] || ""))[0];
+  const next = [...queue].sort((a, b) => (state.lastAttempted?.[a.keyword] || state.lastScanned[a.keyword] || "").localeCompare(state.lastAttempted?.[b.keyword] || state.lastScanned[b.keyword] || ""))[0];
   const keyword = next.keyword;
   state.lastRunAt = now.toISOString();
   state.runs += 1;
   state.lastKeyword = keyword;
+  state.lastAttempted = { ...state.lastAttempted, [keyword]: now.toISOString() };
   let added: DiscoveredPhrase[] = [];
   try {
     const result = await scanTrend(env, { keyword, group: next.group }, store, fetcher, now.getTime());
@@ -177,6 +181,7 @@ export async function runAutopilot(env: EtsyRuntimeEnv, store: TrendStore | unde
   }
   const keep = new Set(queue.map((item) => item.keyword));
   state.lastScanned = Object.fromEntries(Object.entries(state.lastScanned).filter(([key]) => keep.has(key)));
+  state.lastAttempted = Object.fromEntries(Object.entries(state.lastAttempted).filter(([key]) => keep.has(key)));
   await store.put(AUTOPILOT_KEY, JSON.stringify(state));
   return { skipped: false as const, keyword, added: added.map((item) => item.keyword), error: state.lastError };
 }

@@ -1,3 +1,5 @@
+import { readProductIdeas } from "./product-ideas.js";
+import { readEtsyListingStatus } from "./etsy-listing-status.js";
 import { crmRequest, CrmStorageError, isCrmRoute, readCrmSnapshot, type CrmEnv } from "./crm-store.js";
 export { CrmStore } from "./crm-store.js";
 import { registerProductHandoff } from "./product-handoff.js";
@@ -341,6 +343,7 @@ async function opportunityContext(env: Env): Promise<OpportunityContext> {
 
   return {
     shopier,
+    productIdeas: await readProductIdeas(env.ETSY_OAUTH as unknown as TrendStore | undefined),
     etsy: await getEtsyStatus(env),
     catalogProducts: products.map((product) => ({
       id: product.id,
@@ -509,7 +512,7 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
       const manual = (from: string) => from === "elle arandı";
       const tr = await turkishForPhrases([...items.map((item) => item.keyword), ...items.filter((item) => !manual(item.from)).map((item) => item.from)], env, store);
       return json(200, {
-        autopilot: await autopilotStatus(store),
+        autopilot: await autopilotStatus(store, Boolean(env.ETSY_API_KEY && env.ETSY_SHARED_SECRET)),
         items: items.map((item) => ({ ...item, keywordTr: turkishFor(tr, item.keyword), fromTr: manual(item.from) ? undefined : turkishFor(tr, item.from) }))
       });
     }
@@ -734,12 +737,17 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
       const store = digitalStore(env);
       return json(201, { product: await createDigitalProduct(store, form, url.origin, (key, bytes, mimeType) => putProductMedia(env, key, bytes, mimeType)) });
     }
-    const digitalProductMatch = url.pathname.match(/^\/api\/digital\/products\/([a-f0-9-]{36})(?:\/(grants|etsy-draft))?$/);
+    const digitalProductMatch = url.pathname.match(/^\/api\/digital\/products\/([a-f0-9-]{36})(?:\/(grants|etsy-draft|etsy-status))?$/);
     if (digitalProductMatch && request.method === "GET" && !digitalProductMatch[2]) {
       const store = digitalStore(env);
       const product = await getDigitalProduct(store, digitalProductMatch[1]);
       const grants = (await listGrants(store, product.id)).map((grant) => ({ ...grant, url: `${url.origin}/d/${grant.id}` }));
       return json(200, { product, grants });
+    }
+    if (digitalProductMatch && request.method === "GET" && digitalProductMatch[2] === "etsy-status") {
+      const product = await getDigitalProduct(digitalStore(env), digitalProductMatch[1]);
+      if (!product.etsy?.listingId) return json(409, { error: "Önce Etsy taslağını oluşturun." });
+      return json(200, await readEtsyListingStatus(env, product.etsy.listingId));
     }
     if (digitalProductMatch && request.method === "POST" && digitalProductMatch[2] === "grants") {
       const input = await readBody(request);

@@ -167,7 +167,7 @@ test("studio auto-picks the strongest search for a kind and fills a competitive 
     listing("Halloween Junk Journal Kit 40 pages", ["junk journal kit", "halloween ephemera"], 62, 80, 373)
   ] };
   const junk = { ...scoreTrend("junk journal kit", junkPayload, Date.now(), "printables"), nicheId: "junk-journal", kind: "paper_craft" };
-  const paper = { ...scoreTrend("digital paper pack", { count: 90_000, results: [listing("Digital Paper Pack", ["digital paper"], 5, 900, 300)] }, Date.now(), "printables"), kind: "paper_craft" };
+  const paper = { ...scoreTrend("digital paper pack", { count: 90_000, results: [listing("Digital Paper Pack", ["digital paper"], 5, 900, 300), listing("Digital Paper Pack Blue", ["digital paper"], 4, 900, 300), listing("Digital Paper Pack Green", ["digital paper"], 3, 900, 300)] }, Date.now(), "printables"), kind: "paper_craft" };
   values.set("etsy:trend:junk-journal-kit", JSON.stringify(junk));
   values.set("etsy:trend:digital-paper-pack", JSON.stringify(paper));
 

@@ -1,3 +1,4 @@
+import { readEtsyListingStatus } from "./etsy-listing-status.js";
 import { evaluateMarketplacePolicies, type ProductOrigin, type RiskFlag } from "../../api/src/marketplace-policy.js";
 import { generateStructuredObject, hasAiProvider, type AiRuntimeEnv } from "../../api/src/structured-ai.js";
 import { etsyRequest, EtsyIntegrationError, getConnectedShop, type EtsyRuntimeEnv } from "./etsy.js";
@@ -944,5 +945,7 @@ export async function publishEtsyListing(env: EtsyRuntimeEnv, listingId: number,
     method: "PATCH",
     form: new URLSearchParams({ state: "active" })
   }, fetcher);
-  return { listingId, state: updated.state || "active", url: updated.url || `https://www.etsy.com/listing/${listingId}` };
+  const state = updated.state === "active" ? updated.state : (await readEtsyListingStatus(env, listingId, fetcher, shop.shopId)).state;
+  if (state !== "active") throw new EtsyIntegrationError("UPSTREAM_FAILED", "Etsy ilanı aktif olarak doğrulamadı. Tekrar yayınlamadan önce Etsy’de ilan durumunu kontrol edin.", 502);
+  return { listingId, state, url: updated.url || `https://www.etsy.com/listing/${listingId}` };
 }
