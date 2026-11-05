@@ -962,9 +962,42 @@ function Leads({ items }: any) {
   return <><Text style={styles.sectionTitle}>Müşteri adayları</Text>{items.map((lead: any) => <View style={styles.card} key={lead.id}><View style={styles.leadTop}><View style={styles.avatar}><Text style={styles.avatarText}>{lead.displayName[0]}</Text></View><View style={{ flex: 1 }}><Text style={styles.cardTitle}>{lead.displayName}</Text><Text style={styles.small}>{lead.channel} · {lead.stage}</Text></View><View style={styles.score}><Text style={styles.scoreText}>{lead.score}</Text></View></View><Text style={styles.muted}>İlgi: {lead.interests.join(", ")}</Text></View>)}</>;
 }
 
+// Etsy'deki yayında ve taslak ilanlar: Ürünler sekmesinde Shopier kataloğunun üstünde gösterilir.
+function EtsyListingsSection() {
+  const [data, setData] = useState<any>();
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+  const load = async () => {
+    setLoading(true);
+    try { setData(await apiJson("/api/etsy/listings/scorecard", { headers: apiHeaders() })); setError(""); }
+    catch (err) { setError(errorCode(err) === "NOT_CONNECTED" ? "Etsy mağazası bağlanınca ilanlarınız burada görünür." : errorText(err)); }
+    finally { setLoading(false); }
+  };
+  useEffect(() => { load(); }, []);
+  const items = [...(data?.items || [])].sort((a: any, b: any) => (a.state === b.state ? 0 : a.state === "active" ? -1 : 1));
+  return <>
+    <View style={styles.sectionHeading}><Text style={styles.sectionTitle}>Etsy ilanlarım</Text><Pressable style={[styles.secondaryButton, loading && styles.primaryDisabled]} disabled={loading} onPress={load}><Text style={styles.secondaryButtonText}>{loading ? "…" : "Yenile"}</Text></Pressable></View>
+    {!!error && <Text style={styles.shopierBlocker}>{error}</Text>}
+    {!!data && !items.length && <Text style={styles.small}>Etsy'de henüz ilan yok. Etsy → Stüdyo'dan ilk ilanı hazırlayın.</Text>}
+    {items.map((item: any) => <View style={styles.product} key={item.listingId}>
+      {item.imageUrl ? <Image source={{ uri: item.imageUrl }} style={styles.productImagePhoto} /> : <View style={styles.productImage}><Ionicons name="storefront-outline" size={26} color="#C88B47" /></View>}
+      <View style={{ flex: 1 }}>
+        <Text style={styles.cardTitle} numberOfLines={2}>{item.title}</Text>
+        <Text style={styles.small}>{item.state === "active" ? "Yayında" : "Taslak"}{typeof item.views === "number" ? ` · ${item.views} görüntülenme` : ""}{typeof item.favorites === "number" ? ` · ${item.favorites} favori` : ""}{typeof item.sales === "number" ? ` · ${item.sales} satış` : ""}</Text>
+        {!!item.price && <Text style={styles.price}>{item.price}</Text>}
+        <Text style={styles.stockNote}>İlan karnesi: {item.score} · {item.gradeTr}</Text>
+        <View style={{ flexDirection: "row", gap: 16, marginTop: 4 }}>
+          {!!item.url && item.state === "active" && <Pressable onPress={() => openUrl(item.url, "Etsy ilanı")}><Text style={styles.linkNote}>Etsy'de aç →</Text></Pressable>}
+          <Pressable onPress={() => openUrl(item.editUrl, "Etsy ilan düzenleme")}><Text style={styles.linkNote}>Düzenle →</Text></Pressable>
+        </View>
+      </View>
+    </View>)}
+  </>;
+}
+
 function Products({ items, addProduct }: any) {
   const [showForm, setShowForm] = useState(false);
-  return <><View style={styles.sectionHeading}><Text style={styles.sectionTitle}>GXL ürün kataloğu</Text><Pressable style={styles.addButton} onPress={() => setShowForm(true)}><Ionicons name="add" size={18} color="white" /><Text style={styles.addButtonText}>Ürün ekle</Text></Pressable></View>{items.map((product: any) => { const url = product.shopierUrl || product.letgoUrl || product.etsyUrl; const imageSource = product.localImageUri ? { uri: product.localImageUri } : productImages[product.id]; return <Pressable accessibilityRole="button" style={({ pressed }) => [styles.product, pressed && styles.rowPressed]} onPress={() => url && openUrl(url, product.name)} key={product.id}>{imageSource ? <Image source={imageSource} style={styles.productImagePhoto} /> : <View style={styles.productImage}><Ionicons name="diamond-outline" size={28} color="#C88B47" /></View>}<View style={{ flex: 1 }}><Text style={styles.cardTitle}>{product.name}</Text><Text style={styles.small}>{product.category}{product.weightGrams ? ` · ${product.weightGrams} g` : ""}</Text><Text style={styles.price}>{product.priceTry ? `${Number(product.priceTry).toLocaleString("tr-TR")} TL` : "Güncel fiyat satış sayfasında"}</Text><Text style={styles.stockNote}>{product.stockVerified ? `${product.stock} stok` : "Stok sipariş öncesi doğrulanır"}</Text>{url && <Text style={styles.linkNote}>Satış sayfasını aç →</Text>}</View></Pressable>; })}<ProductForm visible={showForm} onClose={() => setShowForm(false)} onSave={async (product: any) => { await addProduct(product); setShowForm(false); Alert.alert("Ürün eklendi", "Ürün GXL yerel kataloğuna kaydedildi."); }} /></>;
+  return <><EtsyListingsSection /><View style={styles.sectionHeading}><Text style={styles.sectionTitle}>GXL ürün kataloğu</Text><Pressable style={styles.addButton} onPress={() => setShowForm(true)}><Ionicons name="add" size={18} color="white" /><Text style={styles.addButtonText}>Ürün ekle</Text></Pressable></View>{items.map((product: any) => { const url = product.shopierUrl || product.letgoUrl || product.etsyUrl; const imageSource = product.localImageUri ? { uri: product.localImageUri } : productImages[product.id]; return <Pressable accessibilityRole="button" style={({ pressed }) => [styles.product, pressed && styles.rowPressed]} onPress={() => url && openUrl(url, product.name)} key={product.id}>{imageSource ? <Image source={imageSource} style={styles.productImagePhoto} /> : <View style={styles.productImage}><Ionicons name="diamond-outline" size={28} color="#C88B47" /></View>}<View style={{ flex: 1 }}><Text style={styles.cardTitle}>{product.name}</Text><Text style={styles.small}>{product.category}{product.weightGrams ? ` · ${product.weightGrams} g` : ""}</Text><Text style={styles.price}>{product.priceTry ? `${Number(product.priceTry).toLocaleString("tr-TR")} TL` : "Güncel fiyat satış sayfasında"}</Text><Text style={styles.stockNote}>{product.stockVerified ? `${product.stock} stok` : "Stok sipariş öncesi doğrulanır"}</Text>{url && <Text style={styles.linkNote}>Satış sayfasını aç →</Text>}</View></Pressable>; })}<ProductForm visible={showForm} onClose={() => setShowForm(false)} onSave={async (product: any) => { await addProduct(product); setShowForm(false); Alert.alert("Ürün eklendi", "Ürün GXL yerel kataloğuna kaydedildi."); }} /></>;
 }
 
 function ProductForm({ visible, onClose, onSave }: any) {

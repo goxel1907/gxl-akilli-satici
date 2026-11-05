@@ -214,3 +214,16 @@ test("without API approval every pin can be shared by hand with its image, sale 
   assert.equal(after.items.length, 2);
   assert.equal((await listPinJobs(kv.store)).find((job) => job.id === first.jobId)?.manual, true);
 });
+
+test("with auto posting off, pins are still prepared for manual sharing and never posted by the queue", async () => {
+  const kv = memoryKv();
+  await writePinterestSettings(kv.store, { auto: false });
+  assert.equal(await autoEnqueuePins(kv.store, { listingId: 4610454145, boardName: "Party Games", listingTitle: "Christmas Trivia Game" }), 0);
+  const jobs = await listPinJobs(kv.store);
+  assert.equal(jobs.length, 3);
+  assert.ok(jobs.every((job) => job.manualOnly === true));
+  // Pinterest bağlı olsa bile kuyruk bu pinleri kendiliğinden göndermez.
+  await kv.store.put("pinterest:tokens", JSON.stringify({ accessToken: "p", refreshToken: "r", expiresAt: NOW + DAY }));
+  const result = await processPinQueue(env(kv.store), kv.store, (async () => Response.json({})) as typeof fetch, NOW + 10 * DAY);
+  assert.ok("skipped" in result && (result.skipped === "nothing_due" || result.skipped === "not_connected"), JSON.stringify(result));
+});

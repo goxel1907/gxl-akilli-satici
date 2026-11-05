@@ -588,6 +588,21 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
       return json(201, { jobs, alreadyQueued: jobs.length === 0 });
     }
     if (request.method === "GET" && url.pathname === "/api/pinterest/manual") {
+      // Pin hazırlanmadan önce Etsy'ye gönderilmiş dijital ürünlerin pinleri burada bir kez hazırlanır.
+      if (env.ETSY_OAUTH) {
+        const store = env.ETSY_OAUTH as unknown as PinterestStore;
+        for (const product of await listDigitalProducts(digitalStore(env)).catch(() => [])) {
+          if (!product.etsy?.listingId) continue;
+          await enqueueListingPins(store, {
+            listingId: product.etsy.listingId,
+            boardName: boardNameFor({ kind: product.kind, craft: product.craft }),
+            pins: product.pins,
+            aiAssisted: product.flags.aiAssisted && product.flags.photosAreRenders,
+            listingTitle: product.listing.title,
+            manualOnly: true
+          }).catch(() => []);
+        }
+      }
       return json(200, await manualPinShares(env, env.ETSY_OAUTH as unknown as PinterestStore | undefined));
     }
     const pinSharedMatch = url.pathname.match(/^\/api\/pinterest\/queue\/([A-Za-z0-9_-]{8,32})\/shared$/);
