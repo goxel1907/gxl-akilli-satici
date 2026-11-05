@@ -6,7 +6,8 @@ type Fetcher = typeof fetch;
 // Kargo profili ve iade politikası Etsy API'siyle uygulamadan oluşturulur; ödeme, kimlik ve banka adımları
 // yalnız satıcının kendisi tarafından Etsy'de yapılır (uygulama bunlara dokunmaz).
 
-export type ReadinessState = "done" | "todo" | "manual";
+// "optional": yalnız fiziksel ürün satılırsa gereken adım; dijital mağazada eksik sayılmaz.
+export type ReadinessState = "done" | "todo" | "manual" | "optional";
 export type ReadinessAction = "connect" | "reauth" | "create_shipping_profile" | "create_return_policy" | "open_url" | "shop_settings" | "sell";
 
 export interface ReadinessItem {
@@ -36,8 +37,9 @@ export async function returnPolicies(env: EtsyRuntimeEnv, shopId: number, fetche
   return rows(await etsyRequest(env, `/application/shops/${shopId}/policies/return`, {}, fetcher)).filter((row) => row.return_policy_id);
 }
 
-// Etsy mağaza kaydı, açılışın ilk adımında (mağaza adı seçilince) oluşur; mağaza ancak ilk ilan yayına girince
-// alıcılara açılır. Bu yüzden "açık" yalnız yayında ilan varken söylenir. Etsy'nin "Etsy Payments'a kayıtlı"
+// Etsy mağaza kaydı, açılışın ilk adımında (mağaza adı seçilince) oluşur. Etsy API'si mağazanın "Open your shop"
+// adımının bitip bitmediğini vermez; mağaza sayfası ilansız da açık olabilir. Bu yüzden "açık" yalnız yayında ilan
+// varken söylenir, ilan yokken "kapalı" denmez: yalnız "yayında ilan yok" denir. Etsy'nin "Etsy Payments'a kayıtlı"
 // bilgisi (is_etsy_payments_onboarded) Türkiye mağazalarında baştan açık olabilir; kimlik/banka adımlarının
 // bittiğini göstermez, o adım her zaman satıcının kendi adımı olarak gösterilir.
 export async function shopReadiness(env: EtsyRuntimeEnv, fetcher: Fetcher = fetch): Promise<{ items: ReadinessItem[]; done: number; total: number; shopOpen?: boolean }> {
@@ -70,19 +72,19 @@ export async function shopReadiness(env: EtsyRuntimeEnv, fetcher: Fetcher = fetc
   }
   const shopOpen = shop ? (shop.activeListings ?? 0) > 0 : undefined;
   items.push(shop
-    ? { id: "shop", titleTr: `Mağaza adı alındı: ${shop.shopName || "—"}`, state: "done", detailTr: shopOpen ? `Mağaza açık: ${shop.activeListings} ilan yayında.` : "Etsy'de mağaza kaydı var ama mağaza henüz açılmadı; alıcılar göremez. İlk ilan yayına girince açılır." }
+    ? { id: "shop", titleTr: `Mağaza adı alındı: ${shop.shopName || "—"}`, state: "done", detailTr: shopOpen ? `Mağaza açık: ${shop.activeListings} ilan yayında.` : "Etsy'de mağaza kaydı var; yayında ilan yok. Mağaza sayfası açık olsa da alıcı aramada ürün bulamaz. İlk ilan yayına girince burada 'Mağaza açık' yazar." }
     : { id: "shop", titleTr: "Etsy'de mağaza adını seç", state: "todo", detailTr: "Etsy → Sell on Etsy: mağaza dili, ülke, para birimi (USD önerilir) ve mağaza adı. Bu adımı Etsy'de siz yaparsınız.", action: "open_url", url: "https://www.etsy.com/sell" });
 
-  items.push({ id: "payments", titleTr: "Ödeme, kimlik ve banka bilgileri (sizin adımınız)", state: "manual", detailTr: "Etsy'de kimlik doğrulama, banka hesabı (TL), fatura kartı ve iki adımlı doğrulama. Kişisel bilgiler olduğu için bu adımı yalnız siz Etsy'de yaparsınız; uygulama bunun bittiğini Etsy'den kesin okuyamaz. Etsy açılış ekranında bu adımlar tamamlandı görünmeli.", action: "open_url", url: "https://www.etsy.com/your/shops/me/dashboard" });
+  items.push({ id: "payments", titleTr: "Ödeme, kimlik ve banka bilgileri (sizin adımınız)", state: "manual", detailTr: "Etsy'de kimlik doğrulama, banka hesabı (TL), fatura kartı ve iki adımlı doğrulama. Kişisel bilgiler olduğu için bu adımı yalnız siz Etsy'de yaparsınız; uygulama bunun bittiğini Etsy'den kesin okuyamaz. Etsy'de 'Open your shop' adımını bitirdiyseniz bu adım tamamdır.", action: "open_url", url: "https://www.etsy.com/your/shops/me/dashboard" });
 
   if (shop) {
     const [profiles, policies] = await Promise.all([shippingProfiles(env, shop.shopId, fetcher), returnPolicies(env, shop.shopId, fetcher)]);
     items.push(profiles.length
       ? { id: "shipping", titleTr: "Kargo profili var", state: "done", detailTr: `${profiles.length} kargo profili tanımlı.` }
-      : { id: "shipping", titleTr: "Kargo profili oluştur", state: "todo", detailTr: "Fiziksel ürün (tesbih, vintage, örgü) için gerekli. Uygulama Türkiye'den ABD'ye ücretsiz kargolu profili sizin yerinize oluşturur; kargo bedeli fiyata zaten eklenir. Başka ülkelere göndermek isterseniz Etsy'de profile ülke ekleyebilirsiniz.", action: "create_shipping_profile" });
+      : { id: "shipping", titleTr: "Kargo profili (yalnız fiziksel ürün)", state: "optional", detailTr: "Dijital ürün satıyorsanız gerekmez. Fiziksel ürün (tesbih, vintage, örgü) satacaksanız uygulama Türkiye'den ABD'ye ücretsiz kargolu profili sizin yerinize oluşturur; kargo bedeli fiyata zaten eklenir. Başka ülkelere göndermek isterseniz Etsy'de profile ülke ekleyebilirsiniz.", action: "create_shipping_profile" });
     items.push(policies.length
       ? { id: "returns", titleTr: "İade politikası var", state: "done", detailTr: policies[0].accepts_returns ? `İade kabul: ${policies[0].return_deadline || "?"} gün.` : "İade kabul edilmiyor." }
-      : { id: "returns", titleTr: "İade politikası oluştur", state: "todo", detailTr: "Fiziksel ilanın yayına girmesi için gerekir. Önerilen: 30 gün içinde iade ve değişim (iade kargosunu alıcı öder).", action: "create_return_policy" });
+      : { id: "returns", titleTr: "İade politikası (yalnız fiziksel ürün)", state: "optional", detailTr: "Dijital ürün satıyorsanız gerekmez. Fiziksel ilanın yayına girmesi için gerekir; önerilen: 30 gün içinde iade ve değişim (iade kargosunu alıcı öder).", action: "create_return_policy" });
     items.push(shop.title
       ? { id: "storefront", titleTr: "Mağaza vitrini yazıldı", state: "done", detailTr: `Başlık: ${shop.title}` }
       : { id: "storefront", titleTr: "Mağaza başlığı ve duyurusu", state: "todo", detailTr: "Uzman mod → Etsy → Kılavuz → Mağaza vitrini kartından tek dokunuşla yazılır.", action: "shop_settings" });
@@ -91,9 +93,12 @@ export async function shopReadiness(env: EtsyRuntimeEnv, fetcher: Fetcher = fetc
       : { id: "listings", titleTr: "İlk ilanı hazırla", state: "todo", detailTr: "Mağaza açılışı için en az bir ilan gerekir. 'Ürün sat' ile hazırlayın; 5+ ilan alıcıya daha güven verir.", action: "sell" });
   }
 
-  items.push({ id: "branding", titleTr: "Logo, kapak görseli ve 'Hakkında'", state: "manual", detailTr: "Etsy bunları programlara açmaz. Shop Manager → Settings → Info & Appearance bölümünden yükleyin.", action: "open_url", url: "https://www.etsy.com/your/shops/me/dashboard" });
+  const branding = "Etsy bunların hepsini programlara açmaz. Logo, kapak görseli, Tagline ve About: Shop Manager → Settings → Your shop. Duyuru, sipariş fişi bannerı ve alıcı mesajları: Settings → Info & Appearance.";
+  items.push(shop?.hasIcon
+    ? { id: "branding", titleTr: "Logo yüklü · kapak görseli ve 'Hakkında'", state: "manual", detailTr: `Logo Etsy'de görünüyor. ${branding}`, action: "open_url", url: "https://www.etsy.com/your/shops/me/dashboard" }
+    : { id: "branding", titleTr: "Logo, kapak görseli ve 'Hakkında'", state: "manual", detailTr: branding, action: "open_url", url: "https://www.etsy.com/your/shops/me/dashboard" });
 
-  const counted = items.filter((item) => item.state !== "manual");
+  const counted = items.filter((item) => item.state !== "manual" && item.state !== "optional");
   return { items, done: counted.filter((item) => item.state === "done").length, total: counted.length, shopOpen };
 }
 
