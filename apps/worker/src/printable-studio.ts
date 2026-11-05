@@ -1577,6 +1577,9 @@ const SEARCHED_SIZES: Array<[RegExp, string]> = [[/^us letter/i, "us letter"], [
 
 // Etsy etiketi en fazla 20 karakterdir. Uzun ürün adı ("christmas trivia game", 21) atılırsa ilanın ana araması
 // hiçbir etikette kalmaz; bunun yerine adın sığan iki parçası yazılır: "christmas trivia" ve "trivia game".
+const DANGLING_END = /\b(junk|word|wall|phone|app|cell|lock|home|large|print|thank|you|bucket|to|do|and|of|for|with|the|a)$/;
+const DANGLING_START = /^(you|search|print|art|screen|list|of|and|for|with|the|a|to)\b/;
+
 export function fittingTagPhrases(phrase: string): string[] {
   const clean = phrase.trim().toLowerCase().replace(/\s+/g, " ");
   if (!clean) return [];
@@ -1586,7 +1589,8 @@ export function fittingTagPhrases(phrase: string): string[] {
   for (let size = words.length - 1; size >= 2 && out.length < 2; size--) {
     for (const start of [0, words.length - size]) {
       const part = words.slice(start, start + size).join(" ");
-      if (part.length <= 20 && !out.includes(part)) out.push(part);
+      // Yarım kalan ifade etiket olmaz: "christmas junk" (junk journal), "christmas word" (word search).
+      if (part.length <= 20 && !DANGLING_END.test(part) && !DANGLING_START.test(part) && !out.includes(part)) out.push(part);
     }
   }
   return out.slice(0, 2);
@@ -1616,8 +1620,24 @@ function buildTags(prepared: Prepared, art: ArtPlan): string[] {
   // Ölçü etiketi ("a5 planner", "us letter planner") en fazla iki tane: 13 etiket hakkı alıcı ifadelerine kalır.
   let sizeTagsLeft = ["planner", "journal", "recipe", "wall_art"].includes(input.kind) ? 2 : 0;
   const sizeTagBudget = { take: () => sizeTagsLeft-- > 0 };
+  // Bayram ürününde alıcı bayram adıyla arar ("christmas quiz game"). Ürün adındaki bayram kelimesi türün en çok
+  // aranan ifadelerinin önüne eklenir; yalnız 20 karaktere sığanlar ve en fazla 3 tane.
+  const holidayWord = words.find((word) => [...themeFamilies(word)].some((family) => isHolidayFamily(family) && prepared.themes.has(family)));
+  const holidayTags = holidayWord
+    ? [
+      ...profile.tagStems.filter((stem) => !stem.includes(holidayWord) && !/\b(printables?|pdf|bundle|template|set)\b/.test(stem)).map((stem) => `${holidayWord} ${stem}`).filter((tag) => tag.length <= 20).slice(0, 3),
+      // Türün ifadeleri sığmazsa ürün adının bir kelimesiyle: "christmas junk journal kit" → "christmas journal".
+      ...words.filter((word) => word !== holidayWord && word.length > 3 && !DANGLING_END.test(word) && !DANGLING_START.test(word) && !/^(kit|set|pack|bundle|pdf|pages?|printables?)$/.test(word)).map((word) => `${holidayWord} ${word}`).filter((tag) => tag.length <= 20).slice(0, 1)
+    ]
+    : [];
+  // ABD'de Noel ürünü "holiday" diye de aranır ("holiday trivia game", "holiday cards").
+  const holidaySynonym = holidayWord === "christmas"
+    ? fittingTagPhrases((input.keyword || product).toLowerCase().replace(/\bchristmas\b/, "holiday")).find((tag) => /\bholiday\b/.test(tag) && tag.split(" ").length > 1)
+    : undefined;
   return normalizeEtsyTags([
     ...(input.keyword ? fittingTagPhrases(input.keyword) : []),
+    ...(holidaySynonym ? [holidaySynonym] : []),
+    ...holidayTags,
     ...relevantTrendTags(prepared, art),
     ...featureTags,
     ...fittingTagPhrases(product),

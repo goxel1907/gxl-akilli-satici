@@ -94,3 +94,16 @@ test("shower tags go only on shower games", () => {
   assert.ok(!bachelorette.listing.tags.some((tag) => /shower/.test(tag)), bachelorette.listing.tags.join(", "));
   assert.ok(plan("party", "baby shower games").listing.tags.some((tag) => /shower/.test(tag)));
 });
+
+test("a holiday product carries the holiday in several tags, never as a cut-off phrase", () => {
+  const trivia = plan("slides", "christmas trivia game").listing.tags;
+  assert.ok(trivia.filter((tag) => /christmas|holiday/.test(tag)).length >= 4, trivia.join(", "));
+  assert.ok(trivia.includes("holiday trivia game"), trivia.join(", "));
+  const kit = plan("paper_craft", "christmas junk journal kit").listing.tags;
+  assert.ok(!kit.includes("christmas junk"), kit.join(", "));
+  assert.ok(kit.some((tag) => /christmas/.test(tag)), kit.join(", "));
+  const words = plan("puzzles", "christmas word search").listing.tags;
+  assert.ok(!words.some((tag) => /^christmas (word|search)$/.test(tag)), words.join(", "));
+  // Bayramsız üründe bayram etiketi olmaz.
+  assert.ok(!plan("planner", "daily planner").listing.tags.some((tag) => /christmas|holiday/.test(tag)));
+});
