@@ -188,7 +188,7 @@ export function claimedFormats(description: string): FormatId[] {
   const line = description.split("\n").find((item) => /^\W*formats?\s*:/i.test(item.trim()));
   if (!line) return [];
   const items = line.replace(/^\W*formats?\s*:/i, "").split(/,(?![^()]*\))/);
-  return [...new Set(items.flatMap((item) => formatsOfText(item)))];
+  return [...new Set(items.flatMap((item) => formatsOfText(item.replace(/\([^)]*\)/g, ""))))];
 }
 
 // ZIP'in merkez dizininden dosya adları okunur (açmadan, yalnız dosya sonundaki dizin).
