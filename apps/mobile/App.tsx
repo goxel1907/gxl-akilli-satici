@@ -1,3 +1,4 @@
+import { sameProduct } from "./product-identity";
 import { mergeLocalProducts, generationKey, uploadPrices } from "./workflow-state";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, Alert, AppState, Image, Linking, Modal, Pressable, ScrollView, Share, StatusBar, StyleSheet, Text, TextInput, View } from "react-native";
@@ -1695,7 +1696,7 @@ function PrintableStudio({ online, seed, seeding, onReseed, onPickKind, onUpload
       {listing.warnings.map((warning: string) => <Text style={styles.warningText} key={warning}>• {warning}</Text>)}
       <View style={styles.inlineActions}>
         <Pressable style={styles.secondaryButton} onPress={() => shareChecked(plan?.quality, `${listing.title}\n\n${listing.description}\n\nTags: ${listing.tags.join(", ")}`)}><Text style={styles.secondaryButtonText}>İlan metnini kopyala</Text></Pressable>
-        <Pressable style={styles.secondaryButton} onPress={() => onUpload({ name: brief?.name, kind, productType, listing, pins: brief?.pins, priceUsd: brief?.priceUsd, research: currentPlan?.research, handoffName: brief?.name, assistant })}><Text style={styles.secondaryButtonText}>Dosyalar hazırsa yükle →</Text></Pressable>
+        <Pressable style={styles.secondaryButton} onPress={() => onUpload({ name: currentPlan?.handoff?.name || brief?.name, kind: currentPlan?.handoff?.kind || kind, productType: currentPlan?.handoff?.productType || productType, listing, pins: brief?.pins, priceUsd: brief?.priceUsd, research: currentPlan?.research, handoffName: brief?.name, handoff: currentPlan?.handoff, assistant })}><Text style={styles.secondaryButtonText}>Dosyalar hazırsa yükle →</Text></Pressable>
       </View>
     </View>}
   </>;
@@ -2044,7 +2045,7 @@ function DigitalUploadForm({ visible, prefill, onClose, onSaved }: any) {
   };
   const save = () => {
     if (!name.trim() || !productType.trim() || !title.trim() || !description.trim()) return Alert.alert("Eksik bilgi", "Ürün adı, ürün türü, başlık ve açıklama gerekli. Önce Stüdyo'da ilanı hazırlayın.");
-    if (prefill?.handoffName && name.trim() !== prefill.handoffName) return Alert.alert("Ürün kaydı değişti", "Dosyaları üreten ürün adıyla ilan adı aynı olmalı. Stüdyo’dan yeni paket hazırlayın.");
+    if (prefill?.handoffName && !sameProduct(prefill.handoff || { name: prefill.handoffName, kind: prefill.kind, productType: prefill.productType }, { name, kind, productType })) return Alert.alert("Ürün kaydı değişti", "Ürün adı ve türü üretim kaydıyla aynı olmalı. Stüdyo’dan yeni paket hazırlayın.");
     if (!files.length) return Alert.alert("Dosya seçin", "Satılacak dosyaları seçin: PDF veya ZIP (duvar kâğıdı, ikon paketi, tablo, sunum oyunu ve özgeçmiş ZIP içinde gelir); en fazla 5.");
     if (!priceUsd && !priceTry) return Alert.alert("Fiyat", "Etsy mağaza para birimine göre USD veya TL fiyatı girin.");
     if (kind === "pattern" && (!ownPattern || !testMade || photosAreRenders || aiAssisted)) return Alert.alert("Etsy kuralı", "Etsy yapay zekâyla yazılmış deseni yasakladı. Desen yalnız sizin veya mağaza üyenizin yazdığı, bizzat yapıp denediği ve bitmiş ürününün gerçek fotoğrafıyla yüklenebilir.");
@@ -2067,6 +2068,7 @@ function DigitalUploadForm({ visible, prefill, onClose, onSaved }: any) {
             listing: { title: title.trim(), description: description.trim(), tags: tags.split(",").map((tag) => tag.trim()).filter(Boolean), materials },
             pins: prefill?.pins || [],
             handoffName: prefill?.handoffName,
+            handoffId: prefill?.handoff?.id,
             assistant: prefill?.assistant,
             research: prefill?.research ? { keyword: prefill.research.keyword, scannedAt: prefill.research.scannedAt, sampleSize: prefill.research.sampleSize } : undefined
           }));
@@ -2102,11 +2104,11 @@ function DigitalUploadForm({ visible, prefill, onClose, onSaved }: any) {
       {!!files.length && <Text style={styles.formHint}>Hepsi tek seferde Etsy ilanına eklenir. Etsy en fazla 5 dosya alır; fazla formatları tek bir ZIP'te birleştirin.</Text>}
       <Pressable style={styles.uploadRow} onPress={pickImages}><Ionicons name="images-outline" size={22} color="#315B4C" /><Text style={[styles.rowTitle, { flex: 1 }]}>{images.length ? `${images.length} görsel seçildi` : kind === "pattern" ? "Bitmiş ürünün gerçek fotoğrafları (en fazla 10; ilki düzenlenmemiş)" : "İlan görselleri (en fazla 10; biri sayfaların önizlemesi)"}</Text></Pressable>
       {!!images.length && <ScrollView horizontal style={{ marginBottom: 12 }}>{images.map((image) => <Image key={image.uri} source={{ uri: image.uri }} style={styles.thumb} />)}</ScrollView>}
-      <Field label="Ürün adı" value={name} onChangeText={setName} />
+      <Field label="Ürün adı" value={name} onChangeText={setName} editable={!prefill?.handoffName} />
       <Text style={styles.fieldLabel}>Ürün tipi</Text>
-      <ChipGroup options={[...PRINTABLE_KIND_OPTIONS, { id: "pattern", label: "El işi deseni (kendi deseniniz)" }]} value={kind} onChange={setKind} />
+      {prefill?.handoffName ? <Text style={styles.formHint}>{PRINTABLE_KIND_OPTIONS.find(item => item.id === kind)?.label || kind} · Ürün türünü değiştirmek için Stüdyo’dan yeniden hazırlayın.</Text> : <ChipGroup options={[...PRINTABLE_KIND_OPTIONS, { id: "pattern", label: "El işi deseni (kendi deseniniz)" }]} value={kind} onChange={setKind} />}
       {kind === "pattern" && <><Text style={styles.fieldLabel}>El işi türü</Text><ChipGroup options={CRAFT_OPTIONS} value={craft} onChange={setCraft} /></>}
-      <Field label="Ürün türü (İngilizce)" value={productType} onChangeText={setProductType} autoCapitalize="none" />
+      <Field label="Ürün türü (İngilizce)" value={productType} onChangeText={setProductType} editable={!prefill?.handoffName} autoCapitalize="none" />
       <Field label="Etsy fiyatı (USD)" value={priceUsd} onChangeText={setPriceUsd} keyboardType="decimal-pad" placeholder="6.50" />
       <Field label="Etsy fiyatı (TL; boş kalırsa USD fiyat güncel kurla TL'ye çevrilir)" value={priceTry} onChangeText={setPriceTry} keyboardType="decimal-pad" placeholder="249" />
       <Field label={`Başlık (${title.length}/140)`} value={title} onChangeText={setTitle} multiline />

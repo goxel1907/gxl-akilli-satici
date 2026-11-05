@@ -1,3 +1,4 @@
+import { matchesStoredHandoff } from "./product-handoff.js";
 import { PDFDocument } from "pdf-lib";
 import { etsyRequest, EtsyIntegrationError, getConnectedShop, type EtsyRuntimeEnv } from "./etsy.js";
 import { isCraftSupply, patternPolicyMessage } from "./etsy-policy.js";
@@ -41,7 +42,7 @@ export interface DigitalProduct {
   craft?: PatternCraft;
   kind?: PrintableKind;
   productType: string;
-  handoff?: { name: string; assistant?: "claude" | "chatgpt"; researchKeyword?: string; researchedAt?: string };
+  handoff?: { id?: string; name: string; assistant?: "claude" | "chatgpt"; researchKeyword?: string; researchedAt?: string };
   // İlk dosya (geriye uyum için ayrıca fileName/fileSize olarak da tutulur).
   fileName: string;
   fileSize: number;
@@ -139,8 +140,12 @@ function imageType(bytes: Uint8Array): { mimeType: string; extension: string } |
   return undefined;
 }
 
-function safeFileName(value: string, fallback: string, extension = "pdf"): string {
-  const base = value.replace(/\.(pdf|zip)$/i, "").normalize("NFKD").replace(/[^\w\s-]/g, "").replace(/\s+/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "").slice(0, 60);
+export function safeFileName(value: string, fallback: string, extension = "pdf"): string {
+  let base = value.replace(/\.(pdf|zip)$/i, "").normalize("NFKD").replace(/[^\w\s-]/g, "").replace(/\s+/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "");
+  if (base.length > 64) {
+    const tail = base.slice(-32).replace(/^-+/, "");
+    base = `${base.slice(0, 64 - tail.length - 1).replace(/-+$/, "")}-${tail}`;
+  }
   return `${base || fallback}.${extension}`;
 }
 
@@ -280,6 +285,7 @@ export async function createDigitalProduct(store: DigitalStore, form: FormData, 
   } catch {
     throw new DigitalDeliveryError("VALIDATION_FAILED", "Ürün bilgileri okunamadı.");
   }
+  const hasHandoff = Boolean(metadata.handoffName || metadata.handoffId);
   const name = String(metadata.name || "").replace(/\s+/g, " ").trim().slice(0, 80);
   const kind = KIND_TAXONOMY_WORDS[String(metadata.kind || "") as PrintableKind] ? String(metadata.kind) as PrintableKind : undefined;
   const craft = kind ? undefined : String(metadata.craft || "") as PatternCraft;
@@ -287,6 +293,9 @@ export async function createDigitalProduct(store: DigitalStore, form: FormData, 
   if (!name) throw new DigitalDeliveryError("VALIDATION_FAILED", "Ürün adı gerekli.");
   if (!kind && !CRAFTS.has(craft!)) throw new DigitalDeliveryError("VALIDATION_FAILED", "El işi veya ürün türü geçersiz.");
   if (metadata.handoffName && String(metadata.handoffName) !== name) throw new DigitalDeliveryError("VALIDATION_FAILED", "Ürün adı üretim kaydıyla uyuşmuyor.");
+  if (metadata.handoffId && !(await matchesStoredHandoff(store, String(metadata.handoffId), { name, kind: kind || "pattern", productType }))) {
+    throw new DigitalDeliveryError("VALIDATION_FAILED", "Ürün türü veya adı üretim kaydıyla uyuşmuyor ya da kayıt süresi dolmuş. Stüdyo’dan yeni paket hazırlayın.");
+  }
   if (productType.length < 3) throw new DigitalDeliveryError("VALIDATION_FAILED", "Ürün türü gerekli.");
 
   const listingInput = metadata.listing && typeof metadata.listing === "object" ? metadata.listing as Record<string, unknown> : {};
@@ -303,7 +312,7 @@ export async function createDigitalProduct(store: DigitalStore, form: FormData, 
 
   let parts: { files?: unknown; images?: unknown } = {};
   try { parts = JSON.parse(String(form.get("parts") || "{}")); if (!parts || typeof parts !== "object" || Array.isArray(parts)) throw new Error(); } catch { throw new DigitalDeliveryError("VALIDATION_FAILED", "Yükleme listesi okunamadı."); }
-  if (metadata.handoffName) {
+  if (hasHandoff) {
     const flags = metadata.flags && typeof metadata.flags === "object" ? metadata.flags as Record<string, unknown> : {};
     const check = validateEtsyListingText(listing);
     if (listing.tags.length !== 13 || !check.ok) throw new DigitalDeliveryError("VALIDATION_FAILED", "Üretim kaydının başlığı ve 13 etiketi geçerli olmalı. Stüdyo’dan yeniden hazırlayın.");
@@ -320,8 +329,8 @@ export async function createDigitalProduct(store: DigitalStore, form: FormData, 
   const usedNames = new Set<string>();
   for (const upload of uploads) {
     if (upload.size < 1_024 || upload.size > MAX_PDF_BYTES) throw new DigitalDeliveryError("VALIDATION_FAILED", `${upload.name || "Dosya"}: her dosya 1 KB ile 20 MB arasında olmalıdır.`);
-    if (metadata.handoffName) {
-      const stem = String(metadata.handoffName).toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 24);
+    if (hasHandoff) {
+      const stem = name.toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 24);
       const uploaded = upload.name.toLowerCase().replace(/[^a-z0-9]/g, "");
       if (!uploaded.startsWith(stem)) throw new DigitalDeliveryError("VALIDATION_FAILED", `${upload.name}: dosya adı bu ürünün üretim kaydıyla uyuşmuyor. Doğru ürünün PDF/ZIP dosyasını seçin.`);
     }
@@ -354,7 +363,7 @@ export async function createDigitalProduct(store: DigitalStore, form: FormData, 
   }
 
   const imageFiles = form.getAll("images").filter((item): item is File => typeof item !== "string").concat(await stagedFiles(store, parts.images, "image"));
-  if (metadata.handoffName && !imageFiles.length) throw new DigitalDeliveryError("VALIDATION_FAILED", "Ürün önizleme görselini ekleyin.");
+  if (hasHandoff && !imageFiles.length) throw new DigitalDeliveryError("VALIDATION_FAILED", "Ürün önizleme görselini ekleyin.");
   if (imageFiles.length > MAX_IMAGES) throw new DigitalDeliveryError("VALIDATION_FAILED", "En fazla 10 görsel yüklenebilir.");
   const images: DigitalImage[] = [];
   for (const file of imageFiles) {
@@ -380,7 +389,7 @@ export async function createDigitalProduct(store: DigitalStore, form: FormData, 
     name,
     ...(kind ? { kind } : { craft }),
     productType,
-    ...(metadata.handoffName ? { handoff: { name, ...(metadata.assistant === "claude" || metadata.assistant === "chatgpt" ? { assistant: metadata.assistant } : {}), ...(metadata.research && typeof metadata.research === "object" ? { researchKeyword: String((metadata.research as Record<string, unknown>).keyword || "").slice(0, 60), researchedAt: String((metadata.research as Record<string, unknown>).scannedAt || "").slice(0, 40) } : {}) } } : {}),
+    ...(hasHandoff ? { handoff: { name, ...(metadata.handoffId ? { id: String(metadata.handoffId) } : {}), ...(metadata.assistant === "claude" || metadata.assistant === "chatgpt" ? { assistant: metadata.assistant } : {}), ...(metadata.research && typeof metadata.research === "object" ? { researchKeyword: String((metadata.research as Record<string, unknown>).keyword || "").slice(0, 60), researchedAt: String((metadata.research as Record<string, unknown>).scannedAt || "").slice(0, 40) } : {}) } } : {}),
     fileName: files[0].name,
     fileSize: files[0].size,
     files,

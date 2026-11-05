@@ -1,3 +1,4 @@
+import { registerProductHandoff } from "./product-handoff.js";
 import { researchPrintableMarket } from "./printable-research.js";
 import { approvals, leads, messages, products } from "../../api/src/data.js";
 import { patternPolicyIssues, patternPolicyMessage } from "./etsy-policy.js";
@@ -558,7 +559,8 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
       const brief = buildPrintableBrief({ ...input, avoidNames: usedNames });
       await rememberName(store, brief.name, usedNames);
       const listing = await createPrintableListing(input, brief.name, env);
-      return json(200, { ...guardPrintablePlan(brief, listing, { kind: input.kind, formats: input.formats }), ...(research ? { research } : {}) });
+      const handoff = store ? await registerProductHandoff(store, { name: brief.name, kind: input.kind, productType: input.productType }) : undefined;
+      return json(200, { ...guardPrintablePlan(brief, listing, { kind: input.kind, formats: input.formats }), ...(research ? { research } : {}), ...(handoff ? { handoff } : {}) });
     }
 
     if (request.method === "GET" && url.pathname === "/api/pinterest/status") return json(200, await getPinterestStatus(env));
