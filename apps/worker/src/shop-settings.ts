@@ -26,7 +26,7 @@ export interface ShopPreset extends ShopSettings {
 
 // Fiziksel ürün satan mağazada dijital teşekkür mesajı yalnız sipariş dijital dosya içeriyorsa geçerlidir.
 const DIGITAL_THANKS_IF = "Thank you for your purchase! If your order includes a digital file, it is ready on your Etsy Purchases page (You > Purchases and reviews > Download files). Questions? Just reply to this message; we're happy to help.";
-const DIGITAL_THANKS = "Thank you for your purchase! Your files are ready on your Etsy Purchases page (You > Purchases and reviews > Download files). Print at Actual size / 100% scale. Questions? Just reply to this message; we're happy to help.";
+const DIGITAL_THANKS = "Thank you for your purchase! Your files are ready on your Etsy Purchases page (You > Purchases and reviews > Download files). Printables print best at Actual size / 100% scale. Questions? Just reply to this message; we're happy to help.";
 
 export const SHOP_PRESETS: Record<ShopAudience, ShopPreset> = {
   planners: {
