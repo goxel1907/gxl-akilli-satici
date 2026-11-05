@@ -993,8 +993,22 @@ function originalityPlan(prepared: Prepared, profile: KindProfile): { tr: string
   };
 }
 
+// Kaçış odası oyunu (printable escape room): hikâyeli, birbirine bağlı bulmacalar ve son şifre. Parti türünün özel hâli.
+export const ESCAPE_ROOM = /\bescape (room|game)s?\b/i;
+const ESCAPE_ROOM_CONTENT = [
+  "A story-led printable escape room game for families and kids ages 8 and up: a one-page intro story the host reads aloud sets the mission, then the players solve 6 linked puzzles in order",
+  "Each puzzle gives one part of the final code (a digit or a letter); the last player page is a final lock where the players write the full code to escape",
+  "Vary the puzzle types: a letter cipher with its printed key, a maze, a math path, a picture or logic grid, a word search that hides a code word, and a cut-out jigsaw message; every puzzle is solvable with paper and pencil, needs no internet or app, and has exactly one answer",
+  "Hint cards: two cut-out hint cards per puzzle, from a gentle nudge to almost the answer",
+  "Host pages kept apart from player pages: a setup guide (ready in 10 minutes, which page to hide where) and a solutions page with every answer and the final code; no answer appears on any player page",
+  "Extras: a team name and timer sheet, and an \"Escape Certificate\" to fill in for each player",
+  "Difficulty fits ages 8 and up: short words, US spelling and simple math with no fractions; the cover states the age range, the number of players and a playing time of about 45 to 60 minutes"
+];
+const ESCAPE_ROOM_TAGS = ["escape room", "escape room game", "escape room kit", "kids escape room", "family escape room", "escape room for kids", "puzzle game", "mystery game", "family game night"];
+
 function contentLines(prepared: Prepared, profile: KindProfile): string[] {
   const { kind, productType } = prepared.input;
+  if (kind === "party" && ESCAPE_ROOM.test(productType)) return ESCAPE_ROOM_CONTENT;
   // Bütçe planlayıcısında vergi oranı eyalete göre değişir: sabit oran yazılmaz, alıcı kendi oranını yazar.
   const money = (kind === "planner" || kind === "digital_planner") && /\b(budget|finance|financial|money|savings?|debt|expense|bills?|paycheck|income|spending)\b/i.test(productType)
     ? ["Tax fields are blank for the buyer to fill in, with no fixed tax rate, because sales-tax and income-tax rates differ by US state"]
@@ -1479,7 +1493,7 @@ export function buildPrintableBrief(raw: PrintablePlanInput): PrintableBrief {
       adVisuals,
       pins,
       assistant: input.assistant,
-      qa: qaProtocol({ type: "printable", name, kind: input.kind, formats, pages, pagesNote: art.pagesNote, papersOnly: input.kind === "paper_craft" && paperMode(input.productType) === "papers" }),
+      qa: qaProtocol({ type: "printable", name, kind: input.kind, formats, pages, pagesNote: art.pagesNote, papersOnly: input.kind === "paper_craft" && paperMode(input.productType) === "papers", escapeRoom: input.kind === "party" && ESCAPE_ROOM.test(input.productType) }),
       checklist: checklistFor(prepared)
     }),
     bundleIdea: bundleIdea(prepared, profile, name),
@@ -1580,7 +1594,7 @@ const SEARCHED_SIZES: Array<[RegExp, string]> = [[/^us letter/i, "us letter"], [
 // Etsy etiketi en fazla 20 karakterdir. Uzun ürün adı ("christmas trivia game", 21) atılırsa ilanın ana araması
 // hiçbir etikette kalmaz; bunun yerine adın sığan iki parçası yazılır: "christmas trivia" ve "trivia game".
 const DANGLING_END = /\b(junk|word|wall|phone|app|cell|lock|home|large|print|thank|you|bucket|to|do|and|of|for|with|the|a)$/;
-const DANGLING_START = /^(you|search|print|art|screen|list|of|and|for|with|the|a|to)\b/;
+const DANGLING_START = /^(you|search|print|art|screen|list|room|of|and|for|with|the|a|to)\b/;
 
 export function fittingTagPhrases(phrase: string): string[] {
   const clean = phrase.trim().toLowerCase().replace(/\s+/g, " ");
@@ -1603,7 +1617,8 @@ function buildTags(prepared: Prepared, art: ArtPlan): string[] {
   const product = input.productType;
   const profile = PRINTABLE_KINDS[input.kind];
   const words = product.split(/\s+/);
-  const tagHead = words.length > 1 && GENERIC_HEADS.test(words.at(-1)!) ? words.slice(-2).join(" ") : words.at(-1)!;
+  // Kaçış odasında ürünün başı "escape room"dur ("printable room" ya da "room pdf" etiketi olmaz).
+  const tagHead = input.kind === "party" && ESCAPE_ROOM.test(product) ? "escape room" : words.length > 1 && GENERIC_HEADS.test(words.at(-1)!) ? words.slice(-2).join(" ") : words.at(-1)!;
   const sizes = (input.formats?.length ? input.formats : profile.defaultFormats)
     .map((format) => SEARCHED_SIZES.find(([pattern]) => pattern.test(format))?.[1])
     .filter((size): size is string => Boolean(size));
@@ -1625,9 +1640,11 @@ function buildTags(prepared: Prepared, art: ArtPlan): string[] {
   // Bayram ürününde alıcı bayram adıyla arar ("christmas quiz game"). Ürün adındaki bayram kelimesi türün en çok
   // aranan ifadelerinin önüne eklenir; yalnız 20 karaktere sığanlar ve en fazla 3 tane.
   const holidayWord = words.find((word) => [...themeFamilies(word)].some((family) => isHolidayFamily(family) && prepared.themes.has(family)));
+  const escapeRoom = input.kind === "party" && ESCAPE_ROOM.test(product);
+  const stems = escapeRoom ? ESCAPE_ROOM_TAGS : profile.tagStems;
   const holidayTags = holidayWord
     ? [
-      ...profile.tagStems.filter((stem) => !stem.includes(holidayWord) && !/\b(printables?|pdf|bundle|template|set)\b/.test(stem)).map((stem) => `${holidayWord} ${stem}`).filter((tag) => tag.length <= 20).slice(0, 3),
+      ...stems.filter((stem) => !stem.includes(holidayWord) && !/\b(printables?|pdf|bundle|template|set)\b/.test(stem)).map((stem) => `${holidayWord} ${stem}`).filter((tag) => tag.length <= 20).slice(0, 3),
       // Türün ifadeleri sığmazsa ürün adının bir kelimesiyle: "christmas junk journal kit" → "christmas journal".
       ...words.filter((word) => word !== holidayWord && word.length > 3 && !DANGLING_END.test(word) && !DANGLING_START.test(word) && !/^(kit|set|pack|bundle|pdf|pages?|printables?)$/.test(word)).map((word) => `${holidayWord} ${word}`).filter((tag) => tag.length <= 20).slice(0, 1)
     ]
@@ -1640,6 +1657,7 @@ function buildTags(prepared: Prepared, art: ArtPlan): string[] {
     ...(input.keyword ? fittingTagPhrases(input.keyword) : []),
     ...(holidaySynonym ? [holidaySynonym] : []),
     ...holidayTags,
+    ...(escapeRoom ? ESCAPE_ROOM_TAGS : []),
     ...relevantTrendTags(prepared, art),
     ...featureTags,
     ...fittingTagPhrases(product),
@@ -1677,7 +1695,7 @@ function buildDescription(prepared: Prepared, name: string, art: ArtPlan, hook?:
   // Açılış cümlesi pinlerle aynı dili kullanır: tema "with a Christmas theme", stil "in a boho style"; kâğıt isimleri atılır.
   const leadFeature = features.find((feature) => themeFamilies(feature).size || feature.split(" ").every((word) => STYLE_WORDS.has(word)));
   const lead = leadFeature ? featureClause(stripPaperNouns(leadFeature) || leadFeature, profile, input.kind) : "";
-  const included = profile.art ? art.includedEn : [contentCount(input.kind, pages), ...profile.includedEn];
+  const included = profile.art ? art.includedEn : [contentCount(input.kind, pages), ...(input.kind === "party" && ESCAPE_ROOM.test(input.productType) ? ["6 linked puzzles and a final lock", "2 hint cards per puzzle and a host solutions page", "Escape certificate for every player"] : profile.includedEn)];
   const note = healthNote(input);
   const tablet = formats.some((format) => isTablet(format));
   const lastStep: Record<PrintableKind, string> = {

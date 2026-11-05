@@ -107,3 +107,24 @@ test("a holiday product carries the holiday in several tags, never as a cut-off 
   // Bayramsız üründe bayram etiketi olmaz.
   assert.ok(!plan("planner", "daily planner").listing.tags.some((tag) => /christmas|holiday/.test(tag)));
 });
+
+test("a printable escape room gets linked puzzles, checked single answers and no spoilers", () => {
+  assert.equal(inferPrintableKind("christmas escape room"), "party");
+  const { brief, listing, guarded } = plan("party", "christmas escape room", { pageCount: 16 });
+  assert.equal(guarded.quality.ok, true, JSON.stringify(guarded.quality.issues));
+  const spec = brief.masterPrompt.split("\n---\n")[1];
+  assert.match(spec, /6 linked puzzles in order/);
+  assert.match(spec, /exactly one answer/);
+  assert.match(spec, /PUZZLES — solve every puzzle in code/);
+  assert.match(spec, /SPOILERS — /);
+  assert.doesNotMatch(spec, /welcome sign/);
+  assert.match(listing.description, /• 6 linked puzzles and a final lock/);
+  assert.ok(listing.tags.includes("holiday escape room"), listing.tags.join(", "));
+  assert.ok(!listing.tags.some((tag) => /^(printable room|room\b)/.test(tag)), listing.tags.join(", "));
+});
+
+test("every package tells the assistant how to work in small saved parts and resume without starting over", () => {
+  const tr = plan("planner", "daily planner").brief.masterPrompt.split("\n---\n")[0];
+  assert.match(tr, /Donmamak için işi küçük parçalara böl/);
+  assert.match(tr, /'kaldığın yerden devam et'/);
+});
