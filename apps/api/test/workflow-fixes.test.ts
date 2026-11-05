@@ -167,3 +167,10 @@ test("returning assistant files must match the product handoff and completed QA 
   assert.equal(product.listing.title, listing.title);
   assert.deepEqual(product.listing.tags, listing.tags);
 });
+
+
+test("folded-card and wall-art size notes do not become extra delivery-format claims", () => {
+  assert.deepEqual(claimedFormats("Formats: US Letter (folds to 5x7 in), A4 (folds to 5x7 in)"), ["letter", "a4"]);
+  assert.deepEqual(claimedFormats("Formats: 2:3 ratio (4x6 to 16x24 in), 3:4 ratio (6x8 to 18x24 in)"), []);
+  assert.deepEqual(claimedFormats("Formats: 4x6 in cards, 5x7 in cards"), ["4x6", "5x7"]);
+});
