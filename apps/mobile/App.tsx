@@ -1,7 +1,7 @@
 import { canRankTrend, compareTrendEvidence, trendFreshness } from "./trend-priority";
 import { listingProgress, etsyTransferComplete, type ListingProgressInput } from "./listing-progress";
 import { sameProduct } from "./product-identity";
-import { mergeLocalProducts, generationKey, uploadPrices } from "./workflow-state";
+import { mergeLocalProducts, generationKey, uploadPrices, PRINTABLE_WORKSPACE_KEY, parsePrintableWorkspace, type PrintableWorkspace } from "./workflow-state";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, Alert, AppState, Image, Linking, Modal, Pressable, ScrollView, Share, StatusBar, StyleSheet, Text, TextInput, View } from "react-native";
 import { SafeAreaProvider, SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
@@ -429,7 +429,7 @@ function App() {
           {tab === "Yardım" && <HelpScreen online={online} channels={channels} onExpert={() => changeMode("expert")} onSell={() => openSell("choose")} />}
           {tab === "Özet" && <Overview data={data} setTab={setTab} online={online} channels={channels} onSimple={() => changeMode("simple")} />}
           {tab === "Shopier" && <ShopierScreen center={shopierCenter} online={online} onRefresh={refresh} etsyReady={Boolean(channels?.etsy?.shopReady || channels?.etsy?.shopId)} />}
-          {tab === "Etsy" && <EtsyScreen online={online} channels={channels} />}
+          <View style={tab === "Etsy" ? undefined : styles.hidden}><EtsyScreen online={online} active={tab === "Etsy"} channels={channels} /></View>
           {tab === "Ajan" && <AgentScreen center={opportunityCenter} online={online} onRefresh={refresh} shopierProducts={shopierCenter?.products} etsyActiveListings={channels?.etsy?.activeListings} />}
           {tab === "Onaylar" && <Approvals items={pending} decide={decide} />}
           {tab === "Müşteriler" && <Leads items={data.leads} />}
@@ -1142,7 +1142,7 @@ function errorText(error: unknown) {
 
 type EtsySection = "Trend" | "Stüdyo" | "Dijital" | "Pinterest" | "Kılavuz";
 
-function EtsyScreen({ online, channels, initialSection = "Trend" }: any) {
+function EtsyScreen({ online, channels, active = true, initialSection = "Trend" }: any) {
   const [section, setSection] = useState<EtsySection>(initialSection);
   const [studioSeed, setStudioSeed] = useState<any>();
   const [uploadPrefill, setUploadPrefill] = useState<any>();
@@ -1151,16 +1151,16 @@ function EtsyScreen({ online, channels, initialSection = "Trend" }: any) {
   const authorized = Boolean(etsy.authorized || etsy.connected);
   return <>
     <View style={styles.agentHero}>
-      <View style={styles.agentHeroTop}><View style={styles.shopierLogo}><Ionicons name="color-palette" size={22} color="white" /></View><View style={{ flex: 1 }}><Text style={styles.agentHeroTitle}>Etsy Merkezi</Text><Text style={styles.agentHeroText}>{shopReady ? `${etsyShopLine(etsy)} · otomatik keşif açık` : "Trend, otomatik keşif ve stüdyo mağaza açılmadan da çalışır. Taslak ve yayınlama mağaza açılınca etkinleşir."}</Text></View></View>
+      <View style={styles.agentHeroTop}><View style={styles.shopierLogo}><Ionicons name="color-palette" size={22} color="white" /></View><View style={{ flex: 1 }}><Text style={styles.agentHeroTitle}>Etsy Merkezi</Text><Text style={styles.agentHeroText}>{shopReady ? `${etsyShopLine(etsy)} · Trend, Stüdyo ve Dijital ürünler` : "Trend, otomatik keşif ve stüdyo mağaza açılmadan da çalışır. Taslak ve yayınlama mağaza açılınca etkinleşir."}</Text></View></View>
     </View>
     {!shopReady && online && section !== "Kılavuz" && <Pressable style={styles.guardrail} onPress={() => setSection("Kılavuz")}><Ionicons name="storefront-outline" size={20} color="#315B4C" /><Text style={[styles.guardrailText, { flex: 1 }]}>{authorized ? "Etsy hesabı yetkili, mağaza açılışı bekleniyor. Adımlar için dokunun: Kılavuz → Mağaza açılışı." : "Etsy mağazası henüz bağlı değil. Adımlar için dokunun: Kılavuz → Mağaza açılışı."}</Text><Ionicons name="chevron-forward" size={18} color="#315B4C" /></Pressable>}
     <View style={styles.segment}>
       {(["Trend", "Stüdyo", "Dijital", "Pinterest", "Kılavuz"] as const).map((item) => <Pressable key={item} style={[styles.segmentItem, section === item && styles.segmentActive]} onPress={() => setSection(item)}><Text style={[styles.segmentText, section === item && styles.segmentTextActive]}>{item}</Text></Pressable>)}
     </View>
     {!online && section !== "Kılavuz" && <Text style={styles.shopierBlocker}>Sunucu bağlantısı yok. Trend tarama, prompt üretimi, mağaza durumu ve dosya yükleme için sunucuya bağlanmak gerekir; üstteki "Yeniden bağlan" düğmesine basın.</Text>}
-    {section === "Trend" && <TrendPanel online={online} onUse={(seed: any) => { setStudioSeed(seed); setSection("Stüdyo"); }} />}
-    <View style={section === "Stüdyo" ? undefined : styles.hidden}><StudioPanel online={online} active={section === "Stüdyo"} etsyReady={shopReady} seed={studioSeed} onUpload={(prefill: any) => { setUploadPrefill(prefill); setSection("Dijital"); }} /></View>
-    {section === "Dijital" && <DigitalPanel online={online} shopReady={shopReady} prefill={uploadPrefill} onPrefillUsed={() => setUploadPrefill(undefined)} />}
+    <View testID="etsy-section-trend" style={section === "Trend" ? undefined : styles.hidden}><TrendPanel online={online} active={active && section === "Trend"} onUse={(seed: any) => { setStudioSeed(seed); setSection("Stüdyo"); }} /></View>
+    <View style={section === "Stüdyo" ? undefined : styles.hidden}><StudioPanel online={online} active={active && section === "Stüdyo"} etsyReady={shopReady} seed={studioSeed} onUpload={(prefill: any) => { setUploadPrefill(prefill); setSection("Dijital"); }} /></View>
+    <View testID="etsy-section-digital" style={section === "Dijital" ? undefined : styles.hidden}><DigitalPanel online={online} active={active && section === "Dijital"} shopReady={shopReady} prefill={uploadPrefill} onPrefillUsed={() => setUploadPrefill(undefined)} /></View>
     {section === "Pinterest" && <PinterestPanel online={online} />}
     {section === "Kılavuz" && <><ShopReadinessCard online={online} onSell={() => setSection("Stüdyo")} /><ShopSettingsCard online={online} shopReady={shopReady} /><ShopListingsScorecard online={online} /><EtsyGuide shopReady={shopReady} authorized={authorized} /></>}
   </>;
@@ -1180,7 +1180,7 @@ function scanAgeText(scannedAt?: string): string {
 }
 
 // Başlık Türkçe ad, altında Etsy'de aranan İngilizce ifade. Puanlanmamış kart dokununca taranır.
-function TrendCard({ title, keyword: plannedKeyword, result, expanded, onToggle, onUse, onScan, scanning, group, trendsRange = "today 12-m" }: any) {
+function TrendCard({ title, keyword: plannedKeyword, result, expanded, onToggle, onUse, onScan, scanning, group, canScan = true, trendsRange = "today 12-m" }: any) {
   const activeGroup = result?.group || group || "patterns";
   const isPattern = activeGroup === "patterns";
   const isPrintable = activeGroup === "printables";
@@ -1217,18 +1217,19 @@ function TrendCard({ title, keyword: plannedKeyword, result, expanded, onToggle,
           <View style={styles.chips}>{result.risingTags.slice(0, 10).map((tag: any) => <View style={[styles.chip, styles.risingChip]} key={tag.tag}><Text style={styles.chipText}>↑ {tag.tag}</Text></View>)}</View>
         </>}
         {!!result.discovered?.length && <Text style={styles.evidence}>Keşif listesine eklenen yeni aramalar: {result.discovered.join(", ")}</Text>}
+        {!!onScan && <Pressable style={[styles.secondaryButton, (scanning || !canScan) && styles.primaryDisabled]} disabled={scanning || !canScan} onPress={onScan}><Text style={styles.secondaryButtonText}>Bu aramayı yeniden tara</Text></Pressable>}
         <Text style={styles.warningTitle}>Öne çıkan rakip ilanlar</Text>
         {result.examples.map((example: any, index: number) => <Pressable key={`${example.url}-${index}`} onPress={() => example.url && openUrl(example.url, "Etsy ilanı")}><Text style={styles.linkNote} numberOfLines={2}>{example.favorites} favori · {example.ageDays} gün · {example.priceUsd ? `${example.priceUsd.toFixed(2)} USD · ` : ""}{example.title}</Text></Pressable>)}
         <Pressable style={[styles.secondaryButton, { marginTop: 12 }]} onPress={() => openUrl(`https://trends.google.com/trends/explore?geo=US&date=${encodeURIComponent(trendsRange)}&q=${encodeURIComponent(keyword)}`, "Google Trends")}><Text style={styles.secondaryButtonText}>{trendsRange === "today 5-y" ? "ABD eyaletleri ve sezon zirveleri (Google Trends)" : "ABD'de hangi eyaletlerde aranıyor? (Google Trends)"}</Text></Pressable>
         {isPattern || isPrintable
           ? <Pressable style={[styles.primary, { marginTop: 14, marginBottom: 0 }]} onPress={onUse}><Text style={styles.primaryText}>{isPrintable ? "Bu nişte dijital ürün hazırla" : "Bu nişte kendi desenimi listele"}</Text><Ionicons name="arrow-forward" size={18} color="white" /></Pressable>
-          : <Pressable style={[styles.primary, { marginTop: 14, marginBottom: 0 }]} onPress={() => Share.share({ message: result.topTags.map((tag: any) => tag.tag).slice(0, 13).join(", "), title: `${keyword} etiketleri` })}><Text style={styles.primaryText}>Üst etiketleri kopyala</Text><Ionicons name="copy-outline" size={18} color="white" /></Pressable>}
+          : <>{!!onUse && <Pressable style={[styles.primary, { marginTop: 14, marginBottom: 0 }]} onPress={onUse}><Text style={styles.primaryText}>Kendi fiziksel ürünümle devam et</Text><Ionicons name="camera-outline" size={18} color="white" /></Pressable>}<Pressable style={[styles.secondaryButton, { marginTop: 12 }]} onPress={() => Share.share({ message: result.topTags.map((tag: any) => tag.tag).slice(0, 13).join(", "), title: `${keyword} etiketleri` })}><Text style={styles.secondaryButtonText}>Üst etiketleri kopyala</Text></Pressable></>}
       </>}
     </>}
   </View>;
 }
 
-function SeasonalPanel({ online, onUse }: any) {
+function SeasonalPanel({ online, active = true, onUse }: any) {
   const [board, setBoard] = useState<any>();
   const [loading, setLoading] = useState(false);
   const [scanning, setScanning] = useState<string>();
@@ -1239,12 +1240,12 @@ function SeasonalPanel({ online, onUse }: any) {
     catch (error) { Alert.alert("Sezonlar alınamadı", errorText(error)); }
     finally { setLoading(false); }
   };
-  useEffect(() => { if (online) load(); }, [online]);
+  useEffect(() => { if (online && active) load(); }, [online, active]);
   const scanSeason = async (event: any) => {
     for (const item of event.keywords) {
       setScanning(`${event.id}:${item.keyword}`);
       try {
-        const result = await apiJson("/api/etsy/trends/scan", { method: "POST", headers: apiHeaders(true), body: JSON.stringify({ keyword: item.keyword }) });
+        const result = await apiJson("/api/etsy/trends/scan", { method: "POST", headers: apiHeaders(true), body: JSON.stringify({ keyword: item.keyword, group: item.group, force: true }) });
         setBoard((current: any) => ({ ...current, events: current.events.map((row: any) => row.id === event.id ? { ...row, keywords: row.keywords.map((entry: any) => entry.keyword === item.keyword ? { ...entry, result } : entry) } : row) }));
       } catch (error) {
         Alert.alert("Tarama durdu", errorText(error));
@@ -1258,7 +1259,7 @@ function SeasonalPanel({ online, onUse }: any) {
     if (!online || scanning) return;
     setScanning(key);
     try {
-      const result = await apiJson("/api/etsy/trends/scan", { method: "POST", headers: apiHeaders(true), body: JSON.stringify({ keyword: item.keyword }) });
+      const result = await apiJson("/api/etsy/trends/scan", { method: "POST", headers: apiHeaders(true), body: JSON.stringify({ keyword: item.keyword, group: item.group, force: true }) });
       setBoard((current: any) => ({ ...current, events: current.events.map((row: any) => row.id === event.id ? { ...row, keywords: row.keywords.map((entry: any) => entry.keyword === item.keyword ? { ...entry, result } : entry) } : row) }));
       setExpanded(key);
     } catch (error) { Alert.alert("Tarama yapılamadı", errorText(error)); }
@@ -1270,7 +1271,7 @@ function SeasonalPanel({ online, onUse }: any) {
     {loading && <ActivityIndicator color="#C88B47" />}
     {(board?.events || []).map((event: any) => {
       const scanned = event.keywords.filter((item: any) => item.result);
-      const best = [...scanned].filter((row: any) => trendFreshness(row.result) === "fresh").sort((a: any, b: any) => compareTrendEvidence(a.result, b.result))[0];
+      const best = [...scanned].filter((row: any) => canRankTrend(row.result)).sort((a: any, b: any) => compareTrendEvidence(a.result, b.result))[0];
       return <View style={styles.card} key={event.id}>
         <View style={styles.shopierProductTop}>
           <View style={{ flex: 1 }}><Text style={styles.cardTitle}>{event.nameTr}</Text><Text style={styles.small}>{dateText(event.date)}{event.approximate ? " (yaklaşık)" : ""} · {event.daysUntil} gün kaldı</Text></View>
@@ -1279,14 +1280,14 @@ function SeasonalPanel({ online, onUse }: any) {
         <Text style={styles.evidence}>{event.tipTr}</Text>
         <Text style={styles.analysisLine}>Fiziksel ürün son listeleme: {dateText(event.listByProducts)} · Desen son listeleme: {dateText(event.listByPatterns)}</Text>
         {best && <Text style={styles.trendVerdict}>En güçlü arama: {best.keywordTr || best.keyword} ({best.result.score} puan)</Text>}
-        {event.keywords.map((item: any) => <TrendCard key={item.keyword} title={item.keywordTr || item.keyword} keyword={item.keyword} onScan={() => scanOne(event, item)} group={item.group} result={item.result} trendsRange="today 5-y" scanning={scanning === `${event.id}:${item.keyword}`} expanded={expanded === `${event.id}:${item.keyword}`} onToggle={() => setExpanded(expanded === `${event.id}:${item.keyword}` ? undefined : `${event.id}:${item.keyword}`)} onUse={() => onUse({ keyword: item.keyword, group: item.group }, item.result)} />)}
+        {event.keywords.map((item: any) => <TrendCard key={item.keyword} title={item.keywordTr || item.keyword} keyword={item.keyword} onScan={() => scanOne(event, item)} group={item.group} result={item.result} trendsRange="today 5-y" canScan={online && !scanning} scanning={scanning === `${event.id}:${item.keyword}`} expanded={expanded === `${event.id}:${item.keyword}`} onToggle={() => setExpanded(expanded === `${event.id}:${item.keyword}` ? undefined : `${event.id}:${item.keyword}`)} onUse={() => onUse({ keyword: item.keyword, group: item.group }, item.result)} />)}
         <Pressable style={[styles.addButton, { alignSelf: "flex-start" }, (!online || Boolean(scanning)) && styles.primaryDisabled]} disabled={!online || Boolean(scanning)} onPress={() => scanSeason(event)}><Ionicons name="pulse" size={16} color="white" /><Text style={styles.addButtonText}>{scanned.length ? "Yeniden tara" : "Bu sezonu tara"}</Text></Pressable>
       </View>;
     })}
   </>;
 }
 
-function TrendPanel({ online, onUse }: any) {
+function TrendPanel({ online, active = true, onUse }: any) {
   const [board, setBoard] = useState<any>();
   const [loading, setLoading] = useState(false);
   const [scanning, setScanning] = useState<string>();
@@ -1305,13 +1306,13 @@ function TrendPanel({ online, onUse }: any) {
     catch (error) { Alert.alert("Trendler alınamadı", errorText(error)); }
     finally { setLoading(false); }
   };
-  useEffect(() => { if (online) load(); }, [online]);
+  useEffect(() => { if (online && active) load(); }, [online, active]);
   const scan = (body: any) => apiJson("/api/etsy/trends/scan", { method: "POST", headers: apiHeaders(true), body: JSON.stringify(body) });
   const scanAll = async () => {
     for (const niche of visibleNiches) {
       setScanning(niche.id);
       try {
-        const result = await scan({ nicheId: niche.id });
+        const result = await scan({ nicheId: niche.id, force: true });
         setBoard((current: any) => ({ ...current, niches: sortNiches(current.niches.map((row: any) => row.id === niche.id ? { ...row, result } : row)) }));
       } catch (error) {
         Alert.alert("Tarama durdu", errorText(error));
@@ -1324,24 +1325,28 @@ function TrendPanel({ online, onUse }: any) {
     if (!online || !board?.configured || scanning) return;
     setScanning(niche.id);
     try {
-      const result = await scan({ nicheId: niche.id });
+      const result = await scan({ nicheId: niche.id, force: true });
       setBoard((current: any) => ({ ...current, niches: sortNiches(current.niches.map((row: any) => row.id === niche.id ? { ...row, result } : row)) }));
       setExpanded(niche.id);
     } catch (error) { Alert.alert("Tarama yapılamadı", errorText(error)); }
     finally { setScanning(undefined); }
   };
-  const scanKeyword = async () => {
-    if (keyword.trim().length < 3) return Alert.alert("Anahtar kelime", "İngilizce bir arama yazın (ör. crochet bag pattern).");
-    setScanning("custom");
+  const scanKeyword = async (target?: { keyword: string; group?: string }) => {
+    const query = target?.keyword || keyword.trim();
+    if (query.length < 3) return Alert.alert("Anahtar kelime", "İngilizce bir arama yazın (ör. crochet bag pattern).");
+    setScanning(`custom:${query}`);
     try {
-      const result = await scan({ keyword: keyword.trim(), track: true });
+      const result = await scan({ keyword: query, group: target?.group, track: true, force: true });
       setCustom((current) => [result, ...current.filter((item) => item.keyword !== result.keyword)].slice(0, 5));
       setExpanded(`custom:${result.keyword}`);
     } catch (error) { Alert.alert("Tarama yapılamadı", errorText(error)); }
     finally { setScanning(undefined); }
   };
   const inferCraft = (keyword: string) => /cross stitch/i.test(keyword) ? "cross_stitch" : /knit/i.test(keyword) ? "knitting" : /embroider/i.test(keyword) ? "embroidery" : /sewing/i.test(keyword) ? "sewing" : /macrame/i.test(keyword) ? "macrame" : /punch needle/i.test(keyword) ? "punch_needle" : "crochet";
-  const use = (row: any, result: any) => onUse({
+  const use = (row: any, result: any) => {
+    const group = result?.group || row.group;
+    if (group !== "printables" && group !== "patterns") return onUse({ studio: "physical", keyword: result?.keyword || row.keyword, group });
+    return onUse({
     craft: row.craft || result?.craft || inferCraft(String(result?.keyword || row.keyword || "")),
     keyword: result?.keyword || row.keyword,
     productType: String(result?.keyword || row.keyword).replace(CRAFT_WORDS, " ").replace(/\s+/g, " ").trim(),
@@ -1349,17 +1354,20 @@ function TrendPanel({ online, onUse }: any) {
     group: result?.group || row.group,
     kind: row.kind || result?.kind
   });
+  };
   return <>
     <View style={styles.guardrail}><Ionicons name="information-circle-outline" size={20} color="#315B4C" /><Text style={[styles.guardrailText, { flex: 1 }]}>{board?.method || "Etsy resmî aramasındaki üst ilanlar puanlanır. Etsy satış adedini paylaşmadığı için puan tahmindir."}</Text></View>
     {board && !board.configured && <Text style={styles.shopierBlocker}>Etsy API anahtarı (keystring ve shared secret) sunucuya eklenince tarama başlar.</Text>}
     <View style={styles.chatInputRow}>
       <TextInput style={styles.chatInput} value={keyword} onChangeText={setKeyword} placeholder="Arama tara (Google Trends ifadesi de olur): crochet bag pattern, misbaha" placeholderTextColor="#9AA39F" spellCheck={false} autoCorrect={false} autoCapitalize="none" />
-      <Pressable style={styles.sendButton} onPress={scanKeyword} disabled={!online || Boolean(scanning)}><Ionicons name="search" size={19} color="white" /></Pressable>
+      <Pressable style={styles.sendButton} onPress={() => scanKeyword()} disabled={!online || Boolean(scanning)}><Ionicons name="search" size={19} color="white" /></Pressable>
     </View>
-    {custom.map((result) => <TrendCard key={`custom:${result.keyword}`} title={result.keywordTr || `Arama: ${result.keyword}`} result={result} expanded={expanded === `custom:${result.keyword}`} onToggle={() => setExpanded(expanded === `custom:${result.keyword}` ? undefined : `custom:${result.keyword}`)} onUse={() => use({ keyword: result.keyword }, result)} />)}
+    {custom.map((result) => <TrendCard key={`custom:${result.keyword}`} title={result.keywordTr || `Arama: ${result.keyword}`} result={result} canScan={online && !scanning} scanning={scanning === `custom:${result.keyword}`} onScan={() => scanKeyword({ keyword: result.keyword, group: result.group })} expanded={expanded === `custom:${result.keyword}`} onToggle={() => setExpanded(expanded === `custom:${result.keyword}` ? undefined : `custom:${result.keyword}`)} onUse={() => use({ keyword: result.keyword }, result)} />)}
     <View style={[styles.chips, { marginTop: 14 }]}>{groups.map((item: any) => <Pressable key={item.id} style={[styles.chip, group === item.id && styles.chipActive]} onPress={() => setGroup(item.id)}><Text style={[styles.chipText, group === item.id && styles.chipTextActive]}>{item.labelTr}</Text></Pressable>)}</View>
     <GroupIntro group={group} />
-    {group === "season" ? <SeasonalPanel online={online} onUse={use} /> : group === "discovered" ? <DiscoveryPanel online={online} onUse={use} /> : <>
+    <View style={group === "season" ? undefined : styles.hidden}><SeasonalPanel online={online} active={active && group === "season"} onUse={use} /></View>
+    <View style={group === "discovered" ? undefined : styles.hidden}><DiscoveryPanel online={online} active={active && group === "discovered"} onUse={use} /></View>
+    <View style={group !== "season" && group !== "discovered" ? undefined : styles.hidden}>
     {!!topOverall.length && <View style={styles.analysisCard}>
       <Text style={styles.cardTitle}>Güncel taramalarda en yüksek puanlar</Text><Text style={styles.small}>Son 6 saatlik örneklem içindir; satış veya dikkat çekme olasılığı değildir.</Text>
       {topOverall.map((row: any) => <Text style={styles.analysisLine} key={row.id}>{row.result.score} · {row.labelTr} ({row.result.verdict})</Text>)}
@@ -1367,8 +1375,8 @@ function TrendPanel({ online, onUse }: any) {
     <InterestRanking rows={visibleNiches} />
     <View style={styles.sectionHeading}><Text style={styles.sectionTitle}>{groups.find((item: any) => item.id === group)?.labelTr || "Nişler"}</Text><Pressable style={[styles.addButton, (!online || !board?.configured || Boolean(scanning)) && styles.primaryDisabled]} disabled={!online || !board?.configured || Boolean(scanning)} onPress={scanAll}><Ionicons name="pulse" size={16} color="white" /><Text style={styles.addButtonText}>{scanning ? "Taranıyor…" : "Tümünü tara"}</Text></Pressable></View>
     {loading && <ActivityIndicator color="#C88B47" />}
-    {visibleNiches.map((row: any) => <TrendCard key={row.id} title={row.labelTr} keyword={row.keyword} onScan={() => scanOne(row)} group={row.group} result={row.result} scanning={scanning === row.id} expanded={expanded === row.id} onToggle={() => setExpanded(expanded === row.id ? undefined : row.id)} onUse={() => use(row, row.result)} />)}
-    </>}
+    {visibleNiches.map((row: any) => <TrendCard key={row.id} title={row.labelTr} keyword={row.keyword} onScan={() => scanOne(row)} canScan={online && !scanning} group={row.group} result={row.result} scanning={scanning === row.id} expanded={expanded === row.id} onToggle={() => setExpanded(expanded === row.id ? undefined : row.id)} onUse={() => use(row, row.result)} />)}
+    </View>
   </>;
 }
 
@@ -1411,7 +1419,7 @@ function timeAgo(value?: string) {
   return hours < 48 ? `${hours} saat önce` : `${Math.round(hours / 24)} gün önce`;
 }
 
-function DiscoveryPanel({ online, onUse }: any) {
+function DiscoveryPanel({ online, active = true, onUse }: any) {
   const [data, setData] = useState<any>();
   const [loading, setLoading] = useState(false);
   const [filter, setFilter] = useState("all");
@@ -1424,17 +1432,22 @@ function DiscoveryPanel({ online, onUse }: any) {
     catch (error) { Alert.alert("Keşifler alınamadı", errorText(error)); }
     finally { setLoading(false); }
   };
-  useEffect(() => { if (online) load(); }, [online]);
+  useEffect(() => { if (online && active) load(); }, [online, active]);
   const all = data?.items || [];
-  const items = [...all].filter((item: any) => filter === "all" || item.group === filter).sort((a: any, b: any) => compareTrendEvidence(results[a.keyword] || a.summary, results[b.keyword] || b.summary));
+  useEffect(() => { if (data && filter !== "all" && !all.some((item: any) => item.group === filter)) setFilter("all"); }, [data, filter]);
+  const currentResults = Object.fromEntries(Object.entries(results).filter(([keyword, result]) => {
+    const summary = all.find((row: any) => row.keyword === keyword)?.summary;
+    return !summary?.scannedAt || Date.parse(result.scannedAt) >= Date.parse(summary.scannedAt);
+  }));
+  const items = [...all].filter((item: any) => filter === "all" || item.group === filter).sort((a: any, b: any) => compareTrendEvidence(currentResults[a.keyword] || a.summary, currentResults[b.keyword] || b.summary));
   const filters = [{ id: "all", label: "Tümü" }, ...["printables", "patterns", "tesbih", "vintage", "other"].filter((id) => all.some((item: any) => item.group === id)).map((id) => ({ id, label: GROUP_LABELS[id] }))];
   const autopilot = data?.autopilot;
   const toggle = (key: string) => setExpanded(expanded === key ? undefined : key);
-  const open = async (item: any) => {
-    if (results[item.keyword]) return toggle(item.keyword);
+  const open = async (item: any, refresh = false) => {
+    if (currentResults[item.keyword] && !refresh) return toggle(item.keyword);
     setScanning(item.keyword);
     try {
-      const result = await apiJson("/api/etsy/trends/scan", { method: "POST", headers: apiHeaders(true), body: JSON.stringify({ keyword: item.keyword, group: item.group }) });
+      const result = await apiJson("/api/etsy/trends/scan", { method: "POST", headers: apiHeaders(true), body: JSON.stringify({ keyword: item.keyword, group: item.group, force: true }) });
       setResults((current) => ({ ...current, [item.keyword]: result }));
       setExpanded(item.keyword);
     } catch (error) { Alert.alert("Tarama yapılamadı", errorText(error)); }
@@ -1451,8 +1464,8 @@ function DiscoveryPanel({ online, onUse }: any) {
     {filters.length > 2 && <ChipGroup options={filters} value={filter} onChange={setFilter} />}
     {loading && <ActivityIndicator color="#C88B47" />}
     {!loading && !items.length && <Empty icon="compass-outline" title="Henüz keşif yok" text="İlk keşifler otomatik taramalarla birkaç saat içinde gelir. Hızlandırmak için diğer gruplarda 'Tümünü tara' düğmesine basın." />}
-    {items.map((item: any) => results[item.keyword]
-      ? <TrendCard key={item.keyword} title={item.keywordTr || item.keyword} group={item.group} result={results[item.keyword]} expanded={expanded === item.keyword} onToggle={() => toggle(item.keyword)} onUse={() => onUse({ keyword: item.keyword, group: item.group }, results[item.keyword])} />
+    {items.map((item: any) => currentResults[item.keyword]
+      ? <TrendCard key={item.keyword} title={item.keywordTr || item.keyword} group={item.group} result={currentResults[item.keyword]} canScan={online && !scanning} scanning={scanning === item.keyword} onScan={() => open(item, true)} expanded={expanded === item.keyword} onToggle={() => toggle(item.keyword)} onUse={() => onUse({ keyword: item.keyword, group: item.group }, currentResults[item.keyword])} />
       : <Pressable key={item.keyword} style={styles.card} disabled={!online || Boolean(scanning)} onPress={() => open(item)}>
         <View style={styles.shopierProductTop}>
           <View style={{ flex: 1 }}>
@@ -1586,11 +1599,12 @@ function CompetitionCard({ competition }: any) {
   </View>;
 }
 
-function PrintableStudio({ online, seed, seeding, onReseed, onPickKind, onUpload }: any) {
+function PrintableStudio({ online, seed, seeding, resumeWorkspace, onPrepared, onReseed, onPickKind, onUpload }: any) {
   const [kind, setKind] = useState("planner");
   const [assistant, setAssistant] = useState("chatgpt");
-  useEffect(() => { AsyncStorage.getItem(ASSISTANT_KEY).then((value) => { if (value === "claude" || value === "chatgpt") setAssistant(value); }).catch(() => undefined); }, []);
-  const chooseAssistant = (next: string) => { setAssistant(next); setPlan(undefined); AsyncStorage.setItem(ASSISTANT_KEY, next).catch(() => undefined); };
+  const assistantPreferenceChanged = useRef(false);
+  useEffect(() => { AsyncStorage.getItem(ASSISTANT_KEY).then((value) => { if (!assistantPreferenceChanged.current && (value === "claude" || value === "chatgpt")) setAssistant(value); }).catch(() => undefined); }, []);
+  const chooseAssistant = (next: string) => { generationRequest.current += 1; setWorking(false); assistantPreferenceChanged.current = true; setAssistant(next); setPlan(undefined); AsyncStorage.setItem(ASSISTANT_KEY, next).catch(() => undefined); };
   const [productType, setProductType] = useState("");
   const [referenceNotes, setReferenceNotes] = useState("");
   const [colors, setColors] = useState("");
@@ -1603,8 +1617,10 @@ function PrintableStudio({ online, seed, seeding, onReseed, onPickKind, onUpload
   const [basis, setBasis] = useState<string[]>([]);
   const [plan, setPlan] = useState<any>();
   const [working, setWorking] = useState(false);
+  const generationRequest = useRef(0);
   useEffect(() => {
     if (!seed) return;
+    generationRequest.current += 1; setWorking(false);
     setKind(seed.kind || "planner");
     setProductType(seed.productType || "");
     setReferenceNotes(seed.referenceNotes || "");
@@ -1618,15 +1634,34 @@ function PrintableStudio({ online, seed, seeding, onReseed, onPickKind, onUpload
     setAudience(seed.audience || "");
     setPlan(undefined);
   }, [seed]);
-  const inputKey = generationKey({ kind, productType, referenceNotes, colors, formats, pageCount, audience, keyword, trendTags, trendFeatures, assistant });
+  useEffect(() => {
+    if (!resumeWorkspace) return;
+    generationRequest.current += 1; setWorking(false);
+    const input = resumeWorkspace.input;
+    assistantPreferenceChanged.current = true;
+    setKind(input.kind); setProductType(input.productType); setReferenceNotes(input.referenceNotes || "");
+    setColors(input.colors || ""); setFormats(input.formats || ""); setPageCount(input.pageCount || ""); setAudience(input.audience || "");
+    setKeyword(input.keyword || ""); setTrendTags(input.trendTags || []); setTrendFeatures(input.trendFeatures || []); setAssistant(input.assistant);
+    setBasis([]); setPlan(resumeWorkspace.plan);
+  }, [resumeWorkspace]);
+  const workspaceInput = { kind, productType, referenceNotes, colors, formats, pageCount, audience, keyword, trendTags, trendFeatures, assistant };
+  const inputKey = generationKey(workspaceInput);
   const generate = async () => {
     if (productType.trim().length < 3) return Alert.alert("Ürün", "Ürünü İngilizce yazın (ör. budget planner, adult coloring pages).");
+    const requestId = ++generationRequest.current;
     setWorking(true);
     try {
       const result = await apiJson("/api/printables/plan", { method: "POST", headers: apiHeaders(true), body: JSON.stringify({ kind, productType, referenceNotes, colors, formats, pageCount: pageCount ? Number(pageCount) : undefined, audience, keyword, trendTags, trendFeatures, assistant, research: true, seed: String(Date.now()) }) });
-      setPlan({ ...result, inputKey });
-    } catch (error) { Alert.alert("Hazırlanamadı", errorText(error)); }
-    finally { setWorking(false); }
+      if (requestId !== generationRequest.current) return;
+      const prepared = { ...result, inputKey };
+      setPlan(prepared);
+      if (result.quality?.ok) {
+        const workspace: PrintableWorkspace = { version: 1, savedAt: new Date().toISOString(), input: workspaceInput, plan: prepared };
+        try { await AsyncStorage.setItem(PRINTABLE_WORKSPACE_KEY, JSON.stringify(workspace)); if (requestId === generationRequest.current) onPrepared?.(workspace); }
+        catch { Alert.alert("Paket hazır", "Bu çalışma telefonda saklanamadı. Uygulamayı kapatmadan paketi paylaşın ve dosyaları yükleyin."); }
+      }
+    } catch (error) { if (requestId === generationRequest.current) Alert.alert("Hazırlanamadı", errorText(error)); }
+    finally { if (requestId === generationRequest.current) setWorking(false); }
   };
   const currentPlan = plan?.inputKey === inputKey ? plan : undefined;
   const brief = currentPlan?.brief;
@@ -1789,6 +1824,17 @@ function StudioPanel({ online, active, seed, onUpload, etsyReady }: any) {
   const [plan, setPlan] = useState<any>();
   const [working, setWorking] = useState(false);
   const [initialized, setInitialized] = useState(false);
+  const [savedWorkspace, setSavedWorkspace] = useState<PrintableWorkspace>();
+  const [resumeWorkspace, setResumeWorkspace] = useState<PrintableWorkspace>();
+  useEffect(() => { let mounted = true; AsyncStorage.getItem(PRINTABLE_WORKSPACE_KEY).then(raw => { if (mounted) setSavedWorkspace(parsePrintableWorkspace(raw)); }).catch(() => undefined); return () => { mounted = false; }; }, []);
+  const resumeSaved = () => {
+    if (!savedWorkspace) return;
+    seedRequest.current += 1; setSeeding(false); setInitialized(true); setMode("printable");
+    const input = savedWorkspace.input;
+    setPrintableSeed({ ...input, colors: String(input.colors || "").split(",").filter(Boolean), formats: String(input.formats || "").split(",").filter(Boolean), basis: [] });
+    setResumeWorkspace({ ...savedWorkspace });
+    AsyncStorage.setItem(PRINTABLE_WORKSPACE_KEY, JSON.stringify(savedWorkspace)).catch(() => Alert.alert("Çalışma açıldı", "Çalışma bu oturumda açık, ancak telefona yeniden kaydedilemedi."));
+  };
   // Etsy 22 Ekim 2026: yapay zekâ deseni yasak. Desen ilanı yalnız kendi yazılmış, denenmiş ve gerçek fotoğraflı desen içindir.
   const [patternName, setPatternName] = useState("");
   const [ownPattern, setOwnPattern] = useState(false);
@@ -1802,7 +1848,7 @@ function StudioPanel({ online, active, seed, onUpload, etsyReady }: any) {
     if (!source?.keyword && !source?.studio) return;
     const requestId = ++seedRequest.current;
     setSeeding(true);
-    setPlan(undefined);
+    if (source.studio === "pattern" || source.group === "patterns") { setPlan(undefined); setOwnPattern(false); setPatternTested(false); setRealPhotos(false); setCompetition(undefined); }
     try {
       const filled = await apiJson("/api/patterns/seed", { method: "POST", headers: apiHeaders(true), body: JSON.stringify({ keyword: source.keyword, craft: source.craft, group: source.group, kind: source.kind, studio: source.studio }) });
       if (requestId !== seedRequest.current) return;
@@ -1843,7 +1889,18 @@ function StudioPanel({ online, active, seed, onUpload, etsyReady }: any) {
       Alert.alert("Trend verisi alınamadı", `${errorText(error)}\nAlanları elle tamamlayabilirsiniz.`);
     } finally { if (requestId === seedRequest.current) setSeeding(false); }
   };
-  useEffect(() => { if (seed) { setInitialized(true); fillFromTrend(seed); } }, [seed]);
+  useEffect(() => () => { seedRequest.current += 1; }, []);
+  useEffect(() => {
+    if (!seed) return;
+    setInitialized(true);
+    if (seed.studio === "physical" || ["tesbih", "vintage", "other"].includes(seed.group)) {
+      seedRequest.current += 1;
+      setSeeding(false);
+      setMode("physical");
+      return;
+    }
+    fillFromTrend(seed);
+  }, [seed]);
   // Stüdyo ilk kez açıldığında boş kalmasın: seçili modda en güçlü trend otomatik doldurulur.
   useEffect(() => {
     if (!active || initialized || seed || !online) return;
@@ -1851,42 +1908,59 @@ function StudioPanel({ online, active, seed, onUpload, etsyReady }: any) {
     fillFromTrend({ studio: mode });
   }, [active, online]);
   const changeMode = (next: "pattern" | "printable" | "physical") => {
+    seedRequest.current += 1;
+    setSeeding(false);
     setMode(next);
     if (next === "printable" && !printableSeed) fillFromTrend({ studio: "printable" });
     if (next === "pattern" && !fromTrend && !productType) fillFromTrend({ studio: "pattern" });
   };
   // Kendi modelinizle çalışırken el işi türünü değiştirmek girdiklerinizi trend verisiyle ezmez.
   const changeCraft = (next: string) => {
+    seedRequest.current += 1; setSeeding(false); setPlan(undefined); setCompetition(undefined); setOwnPattern(false); setPatternTested(false); setRealPhotos(false);
     setCraft(next);
     if (fromTrend || !productType.trim()) fillFromTrend({ studio: "pattern", craft: next });
   };
+  const changePatternType = (value: string) => {
+    seedRequest.current += 1; setSeeding(false); setProductType(value); setPlan(undefined); setCompetition(undefined);
+    setKeyword(""); setTrendTags([]); setTrendFeatures([]); setTrendBasis([]); setFromTrend(false);
+    setOwnPattern(false); setPatternTested(false); setRealPhotos(false);
+  };
   const useOwnModel = () => {
+    seedRequest.current += 1;
+    setSeeding(false);
     setFromTrend(false);
+    setCompetition(undefined); setPlan(undefined); setOwnPattern(false); setPatternTested(false); setRealPhotos(false);
     setTrendFeatures([]);
     setTrendBasis([]);
     setReferenceNotes("");
     setReferenceColors("");
   };
+  const patternInputKey = generationKey({ craft, productType, referenceNotes, referenceRepeatCount, referenceColors, skillLevel, sizeNote, yarnNote, colors, keyword, trendTags, trendFeatures, patternName, ownPattern, patternTested, realPhotos, fromTrend });
   const generate = async () => {
     if (productType.trim().length < 3) return Alert.alert("Ürün türü", "Ürün türünü İngilizce yazın (ör. doily, ballet slippers, tote bag).");
     if (!ownPattern || !patternTested || !realPhotos) return Alert.alert("Etsy kuralı", "Etsy yapay zekâyla yazılmış deseni yasakladı. İlan yalnız kendi yazdığınız, bizzat yapıp denediğiniz ve bitmiş ürününün gerçek fotoğrafı olan desen için hazırlanır. Üç onayı da işaretleyin.");
     setWorking(true);
     try {
-      setPlan(await apiJson("/api/patterns/plan", {
+      const result = await apiJson("/api/patterns/plan", {
         method: "POST",
         headers: apiHeaders(true),
         body: JSON.stringify({ craft, productType, name: patternName.trim() || undefined, referenceNotes, referenceRepeatCount: referenceRepeatCount ? Number(referenceRepeatCount) : undefined, referenceColors, skillLevel, sizeNote, yarnNote, colors, keyword, trendTags, seed: String(Date.now()), ownPattern, testMade: patternTested, photosAreRenders: !realPhotos, aiAssisted: false, ...(fromTrend ? { referenceSource: "trend", trendFeatures } : {}) })
-      }));
+      });
+      setPlan({ ...result, inputKey: patternInputKey });
     } catch (error) { Alert.alert("Hazırlanamadı", errorText(error)); }
     finally { setWorking(false); }
   };
-  const brief = plan?.brief;
-  const listing = plan?.listing;
+  const currentPatternPlan = plan?.inputKey === patternInputKey ? plan : undefined;
+  const brief = currentPatternPlan?.brief;
+  const listing = currentPatternPlan?.listing;
   return <>
     <Text style={styles.sectionTitle}>{mode === "physical" ? "Elimdeki ürünü sat" : "Yeni ürün fikri"}</Text>
     <ChipGroup options={STUDIO_MODES} value={mode} onChange={changeMode} />
+    {!!savedWorkspace && <View style={styles.analysisCard}><Text style={styles.cardTitle}>Son kaydedilen çalışma</Text><Text style={styles.rowTitle}>{savedWorkspace.plan.brief.name}</Text><Text style={styles.small}>{new Date(savedWorkspace.savedAt).toLocaleString("tr-TR")} · {savedWorkspace.input.assistant === "claude" ? "Claude" : "ChatGPT"}</Text><Text style={styles.evidence}>Yapay zekâdan döndüğünde bu çalışmayı aç. Başlık, açıklama, etiketler, fiyat ve ürün kaydı birlikte geri gelir; indirdiğin dosyaları sen seçersin.</Text><Pressable style={styles.secondaryButton} onPress={resumeSaved}><Text style={styles.secondaryButtonText}>Son çalışmayı aç</Text></Pressable></View>}
     {seeding && <View style={styles.guardrail}><ActivityIndicator color="#315B4C" /><Text style={[styles.guardrailText, { flex: 1 }]}>Etsy trend verisi okunuyor; tüm alanlar otomatik dolduruluyor…</Text></View>}
-    {mode === "physical" ? <PhotoListingStudio online={online} etsyReady={etsyReady} /> : mode === "printable" ? <PrintableStudio online={online} seed={printableSeed} seeding={seeding} onReseed={() => printableSeed?.keyword && fillFromTrend({ keyword: printableSeed.keyword, studio: "printable" })} onPickKind={(kind: string) => fillFromTrend({ studio: "printable", kind })} onUpload={onUpload} /> : <>
+    <View testID="studio-mode-physical" style={mode === "physical" ? undefined : styles.hidden}>{seed?.studio === "physical" && <Text style={styles.formHint}>Seçilen pazar araması: {seed.keyword}. Kendi ürününüzün gerçek fotoğrafları ve doğruladığınız bilgilerle ilerleyin; rakibin özellikleri ürününüze aktarılmaz.</Text>}<PhotoListingStudio online={online} etsyReady={etsyReady} /></View>
+    <View testID="studio-mode-printable" style={mode === "printable" ? undefined : styles.hidden}><PrintableStudio online={online} seed={printableSeed} resumeWorkspace={resumeWorkspace} onPrepared={setSavedWorkspace} seeding={seeding} onReseed={() => printableSeed?.keyword && fillFromTrend({ keyword: printableSeed.keyword, studio: "printable" })} onPickKind={(kind: string) => fillFromTrend({ studio: "printable", kind })} onUpload={onUpload} /></View>
+    <View testID="studio-mode-pattern" style={mode === "pattern" ? undefined : styles.hidden}>
     <View style={[styles.qualityNote, styles.qualityBad]}>
       <Ionicons name="alert-circle-outline" size={18} color="#9B2C2C" />
       <View style={{ flex: 1 }}>
@@ -1907,7 +1981,7 @@ function StudioPanel({ online, active, seed, onUpload, etsyReady }: any) {
     {fromTrend && !seeding && <CompetitionCard competition={competition} />}
     <Text style={styles.fieldLabel}>El işi türü</Text>
     <ChipGroup options={CRAFT_OPTIONS} value={craft} onChange={changeCraft} />
-    <Field label="Ürün türü (İngilizce)" value={productType} onChangeText={setProductType} placeholder="doily, ballet slippers, tote bag" autoCapitalize="none" />
+    <Field label="Ürün türü (İngilizce)" value={productType} onChangeText={changePatternType} placeholder="doily, ballet slippers, tote bag" autoCapitalize="none" />
     <Field label={fromTrend ? "Trend özeti (Etsy üst ilanlarından)" : "Seçtiğin modelde neyi beğendin?"} value={referenceNotes} onChangeText={setReferenceNotes} placeholder="8 yeşil yaprak, turuncu küçük çiçekler, beyaz dantel yelpazeler" multiline />
     {!fromTrend && <Field label="Modeldeki tekrar sayısı (varsa)" value={referenceRepeatCount} onChangeText={setReferenceRepeatCount} placeholder="8" keyboardType="number-pad" />}
     <Field label={fromTrend ? "Trendde görülen renkler" : "Modelin renkleri"} value={referenceColors} onChangeText={setReferenceColors} placeholder={fromTrend ? "Trendde renk sinyali yok" : "white, green, orange"} autoCapitalize="none" />
@@ -1916,7 +1990,7 @@ function StudioPanel({ online, active, seed, onUpload, etsyReady }: any) {
     <Field label="Hedef ölçü / beden" value={sizeNote} onChangeText={setSizeNote} placeholder={fromTrend ? "Trendde ölçü yok; promptta yapay zekâ standart ölçüyü seçer" : "16 in / 41 cm veya EU 36-41"} />
     <Field label="İplik / malzeme" value={yarnNote} onChangeText={setYarnNote} placeholder="Size 10 cotton crochet thread" />
     <Field label="İstediğin renkler (boşsa sistem önerir)" value={colors} onChangeText={setColors} placeholder="sage, honey, cream" autoCapitalize="none" />
-    <Field label="Hedef Etsy araması" value={keyword} onChangeText={setKeyword} placeholder="crochet doily pattern" autoCapitalize="none" />
+    <Field label="Hedef Etsy araması" value={keyword} onChangeText={(value: string) => { setKeyword(value); setCompetition(undefined); setPlan(undefined); }} placeholder="crochet doily pattern" autoCapitalize="none" />
     {!!trendTags.length && <Text style={styles.formHint}>Trendden {trendTags.length} etiket sinyali eklendi.</Text>}
     <Field label="Desenin adı (sizin verdiğiniz)" value={patternName} onChangeText={setPatternName} placeholder="Sunday Market Cardigan" />
     <View style={styles.card}>
@@ -1932,9 +2006,9 @@ function StudioPanel({ online, active, seed, onUpload, etsyReady }: any) {
         <Text style={styles.warningTitle}>Modelden farklılaştırma planı</Text>
         {brief.originalityPlan.map((line: string) => <Text style={styles.analysisLine} key={line}>• {line}</Text>)}
       </View>
-      <MasterPromptCard brief={brief} quality={plan?.quality} />
-      <PromptBox quality={plan?.quality} title="1) PDF desen promptu (Claude / ChatGPT)" text={brief.patternPrompt} shareTitle={`${brief.name} pattern prompt`} />
-      <PromptBox quality={plan?.quality} title="2) 3D render promptu" text={brief.renderPrompt} shareTitle={`${brief.name} render prompt`} />
+      <MasterPromptCard brief={brief} quality={currentPatternPlan?.quality} />
+      <PromptBox quality={currentPatternPlan?.quality} title="1) PDF desen promptu (Claude / ChatGPT)" text={brief.patternPrompt} shareTitle={`${brief.name} pattern prompt`} />
+      <PromptBox quality={currentPatternPlan?.quality} title="2) 3D render promptu" text={brief.renderPrompt} shareTitle={`${brief.name} render prompt`} />
       <AdVisualsPanel visuals={brief.adVisuals} />
       <View style={styles.analysisCard}>
         <Text style={styles.cardTitle}>Etsy fotoğraf planı (10 görsel)</Text>
@@ -1954,11 +2028,11 @@ function StudioPanel({ online, active, seed, onUpload, etsyReady }: any) {
       <TurkishGloss title={listing.title} tags={listing.tags} />
       {listing.warnings.map((warning: string) => <Text style={styles.warningText} key={warning}>• {warning}</Text>)}
       <View style={styles.inlineActions}>
-        <Pressable style={styles.secondaryButton} onPress={() => shareChecked(plan?.quality, `${listing.title}\n\n${listing.description}\n\nTags: ${listing.tags.join(", ")}`)}><Text style={styles.secondaryButtonText}>İlan metnini kopyala</Text></Pressable>
-        <Pressable style={styles.secondaryButton} onPress={() => onUpload({ name: brief?.name || patternName.trim() || listing.title.split(",")[0], craft, productType, listing, priceUsd: competition?.launchPriceUsd, ownPattern: true })}><Text style={styles.secondaryButtonText}>Dosyalar hazırsa yükle →</Text></Pressable>
+        <Pressable style={styles.secondaryButton} onPress={() => shareChecked(currentPatternPlan?.quality, `${listing.title}\n\n${listing.description}\n\nTags: ${listing.tags.join(", ")}`)}><Text style={styles.secondaryButtonText}>İlan metnini kopyala</Text></Pressable>
+        <Pressable style={[styles.secondaryButton, !currentPatternPlan?.quality?.ok && styles.primaryDisabled]} disabled={!currentPatternPlan?.quality?.ok} onPress={() => onUpload({ name: brief?.name || patternName.trim() || listing.title.split(",")[0], craft, productType, listing, priceUsd: competition?.launchPriceUsd, ownPattern: true })}><Text style={styles.secondaryButtonText}>Dosyalar hazırsa yükle →</Text></Pressable>
       </View>
     </View>}
-    </>}
+    </View>
   </>;
 }
 
@@ -1993,7 +2067,7 @@ function testWarning(kind: string): string {
   return "Satıştan önce her formattan bir sayfayı %100 ölçekte yazdırıp kenar boşluklarını kontrol edin.";
 }
 
-function DigitalUploadForm({ visible, prefill, onClose, onSaved }: any) {
+function DigitalUploadForm({ visible, suspended = false, prefill, onClose, onSaved }: any) {
   const [name, setName] = useState("");
   const [craft, setCraft] = useState("crochet");
   const [kind, setKind] = useState("pattern");
@@ -2111,7 +2185,7 @@ function DigitalUploadForm({ visible, prefill, onClose, onSaved }: any) {
       } }
     ]);
   };
-  return <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
+  return <Modal visible={visible && !suspended} animationType="slide" onRequestClose={onClose}>
     <SafeAreaView style={styles.formSafe}><StatusBar barStyle="dark-content" /><ScrollView contentContainerStyle={styles.formContent}>
       <View style={styles.formHeader}><Text style={styles.sectionTitle}>Dijital ürün yükle</Text><Pressable onPress={onClose}><Ionicons name="close" size={26} color="#315B4C" /></Pressable></View>
       <ListingGuide input={{ phase: "upload", files: files.length, images: images.length, tested: testMade, title, description, tags: tags.split(",").map(tag => tag.trim()).filter(Boolean), priceUsd, priceTry }} />
@@ -2181,7 +2255,7 @@ function GrantForm({ product, onClose }: any) {
   </Modal>;
 }
 
-function DigitalPanel({ online, shopReady, prefill, onPrefillUsed }: any) {
+function DigitalPanel({ online, active = true, shopReady, prefill, onPrefillUsed }: any) {
   const [products, setProducts] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [formVisible, setFormVisible] = useState(false);
@@ -2202,7 +2276,7 @@ function DigitalPanel({ online, shopReady, prefill, onPrefillUsed }: any) {
     catch (error) { Alert.alert("Dijital ürünler alınamadı", errorText(error)); }
     finally { setLoading(false); }
   };
-  useEffect(() => { if (online) load(); }, [online]);
+  useEffect(() => { if (online && active) load(); }, [online, active]);
   useEffect(() => { if (prefill) setFormVisible(true); }, [prefill]);
   const loadDetail = async (id: string) => {
     try { const detail = await apiJson(`/api/digital/products/${id}`, { headers: apiHeaders() }); setDetails((current) => ({ ...current, [id]: detail })); }
@@ -2261,7 +2335,7 @@ function DigitalPanel({ online, shopReady, prefill, onPrefillUsed }: any) {
         {!grant.revoked && <Pressable onPress={() => revoke(grant, product.id)}><Ionicons name="close-circle-outline" size={21} color="#A84A3A" /></Pressable>}
       </View>)}
     </View>)}
-    <DigitalUploadForm visible={formVisible} prefill={prefill} onClose={() => { setFormVisible(false); onPrefillUsed(); }} onSaved={async () => { setFormVisible(false); onPrefillUsed(); await load(); Alert.alert("Yüklendi", "PDF güvenli depoya alındı. Etsy mağazası hazırsa 'Etsy taslağı oluştur' ile ilana dönüştürebilirsiniz."); }} />
+    <DigitalUploadForm visible={formVisible} suspended={!active} prefill={prefill} onClose={() => { setFormVisible(false); onPrefillUsed(); }} onSaved={async () => { setFormVisible(false); onPrefillUsed(); await load(); Alert.alert("Yüklendi", "PDF güvenli depoya alındı. Etsy mağazası hazırsa 'Etsy taslağı oluştur' ile ilana dönüştürebilirsiniz."); }} />
     <GrantForm product={grantProduct} onClose={async (created: boolean) => { const id = grantProduct?.id; setGrantProduct(undefined); if (created && id) await loadDetail(id); }} />
   </>;
 }
