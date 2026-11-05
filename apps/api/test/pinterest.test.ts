@@ -225,5 +225,5 @@ test("with auto posting off, pins are still prepared for manual sharing and neve
   // Pinterest bağlı olsa bile kuyruk bu pinleri kendiliğinden göndermez.
   await kv.store.put("pinterest:tokens", JSON.stringify({ accessToken: "p", refreshToken: "r", expiresAt: NOW + DAY }));
   const result = await processPinQueue(env(kv.store), kv.store, (async () => Response.json({})) as typeof fetch, NOW + 10 * DAY);
-  assert.ok("skipped" in result && (result.skipped === "nothing_due" || result.skipped === "not_connected"), JSON.stringify(result));
+  assert.ok("skipped" in result && (result.skipped === "automation_disabled" || result.skipped === "nothing_due" || result.skipped === "not_connected"), JSON.stringify(result));
 });

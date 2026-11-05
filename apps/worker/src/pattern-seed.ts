@@ -493,7 +493,7 @@ function joinEn(items: string[]): string {
   return items.length <= 1 ? items.join("") : `${items.slice(0, -1).join(", ")} and ${items[items.length - 1]}`;
 }
 
-function buildCompetition(result: TrendResult | undefined, kind: PrintableKind | undefined, ourPages: number | undefined, risingFeatures: string[]): CompetitionPlan {
+export function buildCompetition(result: TrendResult | undefined, kind: PrintableKind | undefined, ourPages: number | undefined, risingFeatures: string[]): CompetitionPlan {
   const median = result?.metrics.medianPriceUsd;
   const signals = result?.signals;
   const relevant = RELEVANT_FORMATS[kind || "pattern"];
@@ -513,7 +513,7 @@ function buildCompetition(result: TrendResult | undefined, kind: PrintableKind |
     planTr.push(`İçerik: rakipler ortanca ${competitorPages} sayfa → bizde ${ourPages} sayfa.`);
     // Birim türe göre: duvar kâğıdında "wallpapers", çıkartmada "sticker sheets", takvimde "month pages".
     const unit = kind === "wallpaper" ? "wallpapers" : kind === "stickers" ? "sticker sheets" : kind === "calendar" ? "month pages" : kind === "app_icons" ? "icons" : kind === "spreadsheet" ? "tabs" : kind === "slides" ? "questions" : kind === "resume" ? "templates" : "pages";
-    planEn.push(`include about ${ourPages} ${unit} (the top listings' median is ${competitorPages})`);
+    planEn.push(`include about ${ourPages} ${unit} (the sampled listings' median is ${competitorPages})`);
   }
   // Yapay zekânın tek sohbette üretebileceği ve ilanda dürüstçe yazılabilecek formatlar talimata girer.
   // Ticari lisans (ürün kişisel kullanım lisanslı), video (yapay zekâ çekemez) ve düzenlenebilir şablon (PDF düzenlenemez)
@@ -536,7 +536,7 @@ function buildCompetition(result: TrendResult | undefined, kind: PrintableKind |
       planTr.push(`Paket boşluğu: rakiplerin yalnızca ${percent(signals.bundleShare)}'i set sunuyor → aynı stilde set de hazırla.`);
       planEn.push("design it so it can be sold as part of a matching set");
     } else if (signals.bundleShare >= 0.3) {
-      planTr.push(`Setler satıyor (rakiplerin ${percent(signals.bundleShare)}'i) → tekli ürünle birlikte set ilanı da aç.`);
+      planTr.push(`Set olarak listeleniyor (rakiplerin ${percent(signals.bundleShare)}'i) → tekli ürünle birlikte set ilanı da aç.`);
       planEn.push("plan it as part of a coordinated bundle");
     }
   }

@@ -372,6 +372,7 @@ export async function replyToAgent(
   message: string,
   context: OpportunityContext,
   env?: AiRuntimeEnv,
+  history: Array<{ role: string; text: string }> = [],
 ): Promise<AgentReply> {
   if (!env || !hasAiProvider(env)) return fallbackReply(message, context);
 
@@ -384,7 +385,7 @@ export async function replyToAgent(
         "Kişisel veri kazıma, izinsiz toplu mesaj, sahte etkileşim veya platform kuralı ihlali önerme.",
         "İlk dış temas her zaman işletme sahibi onayı gerektirir.",
         "Kısa, açık ve Türkçe cevap ver.",
-        JSON.stringify({ message, context, opportunityCenter: buildOpportunityCenter(context) }),
+        JSON.stringify({ message, history, context, opportunityCenter: buildOpportunityCenter(context) }),
       ].join("\n"),
       schemaName: "gxl_owner_agent_reply",
       schema: {

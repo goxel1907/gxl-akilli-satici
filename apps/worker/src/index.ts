@@ -1,3 +1,4 @@
+import { researchPrintableMarket } from "./printable-research.js";
 import { approvals, leads, messages, products } from "../../api/src/data.js";
 import { patternPolicyIssues, patternPolicyMessage } from "./etsy-policy.js";
 import { generateListingPack } from "../../api/src/listing-agent.js";
@@ -61,6 +62,7 @@ import {
   type PinterestStore
 } from "./pinterest.js";
 import {
+  stageDigitalUpload,
   createDigitalProduct,
   createEtsyDigitalDraft,
   createGrant,
@@ -167,7 +169,7 @@ function digitalStore(env: Env): DigitalStore {
 
 async function readMultipart(request: Request): Promise<FormData> {
   const contentLength = Number(request.headers.get("content-length") || 0);
-  if (contentLength > 45_000_000) throw new Error("PAYLOAD_TOO_LARGE");
+  if (contentLength > 120_000_000) throw new Error("PAYLOAD_TOO_LARGE");
   if (!(request.headers.get("content-type") || "").includes("multipart/form-data")) {
     throw new DigitalDeliveryError("VALIDATION_FAILED", "Dosya yüklemesi multipart/form-data olarak gönderilmelidir.");
   }
@@ -393,7 +395,7 @@ async function storeListingPhoto(env: Env, form: FormData, origin: string): Prom
 }
 
 function authorized(request: Request, env: Env): boolean {
-  if (!env.APP_ACCESS_TOKEN) return true;
+  if (!env.APP_ACCESS_TOKEN?.trim()) return false;
   return request.headers.get("authorization") === `Bearer ${env.APP_ACCESS_TOKEN}`;
 }
 
@@ -547,13 +549,16 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
     }
 
     if (request.method === "POST" && url.pathname === "/api/printables/plan") {
-      const input = normalizePrintablePlanInput(await readBody(request));
+      const raw = await readBody(request);
+      let input = normalizePrintablePlanInput(raw);
+      const research = raw.research === true ? await researchPrintableMarket(env, input) : undefined;
+      if (research) input = { ...input, priceUsd: research.competition.launchPriceUsd, trendTags: research.trendTags, referenceNotes: `${input.referenceNotes || ""}\nResearch query: ${research.keyword}; checked ${research.scannedAt}; ${research.sampleSize} comparable digital listings. Prices and favorites are observations, not sales.` };
       const store = env.ETSY_OAUTH as unknown as TrendStore | undefined;
       const usedNames = await readUsedNames(store);
       const brief = buildPrintableBrief({ ...input, avoidNames: usedNames });
       await rememberName(store, brief.name, usedNames);
       const listing = await createPrintableListing(input, brief.name, env);
-      return json(200, guardPrintablePlan(brief, listing, { kind: input.kind, formats: input.formats }));
+      return json(200, { ...guardPrintablePlan(brief, listing, { kind: input.kind, formats: input.formats }), ...(research ? { research } : {}) });
     }
 
     if (request.method === "GET" && url.pathname === "/api/pinterest/status") return json(200, await getPinterestStatus(env));
@@ -724,6 +729,15 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
     if (request.method === "GET" && url.pathname === "/api/digital/products") {
       return json(200, { products: await listDigitalProducts(digitalStore(env)) });
     }
+    if (request.method === "POST" && url.pathname === "/api/digital/upload-part") {
+      const form = await readMultipart(request);
+      const blocked = requireConfirmedWrite(env, { confirm: form.get("confirm") === "true" }, "Dosya yükleme");
+      if (blocked) return blocked;
+      const asset = form.get("asset");
+      const role = form.get("role");
+      if (!asset || typeof asset === "string" || (role !== "file" && role !== "image")) return json(400, { error: "Dosya ve tür gerekli." });
+      return json(201, await stageDigitalUpload(digitalStore(env), asset, role));
+    }
     if (request.method === "POST" && url.pathname === "/api/digital/products") {
       const form = await readMultipart(request);
       let metadata: Record<string, unknown> = {};
@@ -828,7 +842,12 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
       const message = String(input.message || "").trim();
       if (!message) return json(400, { error: "Ajana sorulacak mesaj gerekli." });
       if (message.length > 2_000) return json(400, { error: "Mesaj en fazla 2.000 karakter olabilir." });
-      return json(200, await replyToAgent(message, await opportunityContext(env), env));
+      const history = (Array.isArray(input.history) ? input.history : []).slice(-10).flatMap(item => {
+        if (!item || typeof item !== "object") return [];
+        const row = item as Record<string, unknown>;
+        return row.role === "owner" || row.role === "agent" ? [{ role: String(row.role), text: String(row.text || "").slice(0, 1500) }] : [];
+      });
+      return json(200, await replyToAgent(message, await opportunityContext(env), env, history));
     }
 
     if (request.method === "POST" && url.pathname === "/api/prospects/intake") {
@@ -900,22 +919,17 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
       const approval = approvals.find((item) => item.id === approvalMatch[1]);
       if (!approval) return json(404, { error: "Onay kaydı bulunamadı." });
       if (approval.status !== "pending") return json(409, { error: "Bu kayıt daha önce sonuçlandırıldı." });
+      const currentLead = leads.find((item) => item.id === approval.leadId);
+      if (approvalMatch[2] === "approve" && (!currentLead || !canStartConversation(currentLead))) {
+        return json(409, { error: "Müşterinin iletişim izni kaldırılmış veya müşteri engellenmiş. Mesaj onaylanamaz." });
+      }
       approval.status = approvalMatch[2] === "approve" ? "approved" : "rejected";
       approval.decidedAt = new Date().toISOString();
       const lead = leads.find((item) => item.id === approval.leadId);
       if (lead && approval.status === "approved") {
         lead.stage = "active";
-        lead.autoReplyAllowed = true;
-        messages.push({
-          id: crypto.randomUUID(),
-          leadId: lead.id,
-          channel: lead.channel,
-          direction: "outbound",
-          text: approval.draft,
-          mediaUrls: [],
-          createdAt: new Date().toISOString(),
-          automated: false
-        });
+        // Approval authorizes manual handoff; no transport has delivered a message yet.
+        lead.autoReplyAllowed = false;
       }
       return json(200, {
         approval,
@@ -992,6 +1006,8 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
     if (code === "INVALID_IMAGE_INPUT") return json(400, { error: "Görsel biçimi veya boyutu uygun değil." });
     if (code === "PATTERN_CRAFT_INVALID") return json(400, { error: "El işi türünü seçin." });
     if (code === "PRODUCT_TITLE_REQUIRED") return json(400, { error: "Ürün adı gerekli." });
+    if (code === "CALENDAR_YEAR_CONFLICT") return json(400, { error: "Ürün ve arama farklı takvim yılları içeriyor. Tek bir yıl seçin." });
+    if (code === "PRINTABLE_FORMAT_INVALID") return json(400, { error: "Format tanınmadı. US Letter, A4, A5 veya ürünün desteklenen dosya formatlarını kullanın." });
     if (code === "PRINTABLE_KIND_INVALID") return json(400, { error: "Ürün türünü seçin." });
     if (code === "PATTERN_KEYWORD_REQUIRED") return json(400, { error: "Desen için bir Etsy araması seçin." });
     if (code === "PATTERN_PRODUCT_REQUIRED") return json(400, { error: "Ürün türünü yazın (ör. doily, slippers)." });

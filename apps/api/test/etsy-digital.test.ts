@@ -1,3 +1,4 @@
+import { validPdf } from "./fixtures/valid-pdf.js";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { getEtsyStatus } from "../../worker/src/etsy.js";
@@ -221,7 +222,7 @@ test("pattern plan endpoint refuses AI-written patterns and lists only the selle
 });
 
 function pdfFile(name = "Juniper Crown.pdf") {
-  return new File([Buffer.concat([Buffer.from("%PDF-1.4\n"), Buffer.alloc(4_000, 32)])], name, { type: "application/pdf" });
+  return new File([validPdf(name)], name, { type: "application/pdf" });
 }
 
 // Sıkıştırmasız, geçerli merkez dizinli küçük bir ZIP (yalnız dosya adları kontrol edilir).
@@ -403,7 +404,7 @@ test("a digital product carries up to 5 files (PDFs and a ZIP) to Etsy and to pr
   const kv = memoryKv();
   await kv.store.put("etsy:tokens", JSON.stringify({ accessToken: "123.token", refreshToken: "refresh", expiresAt: Date.now() + 3_600_000, scope: "listings_w", userId: "123" }));
   const env = { APP_ACCESS_TOKEN: "app-token", ETSY_API_KEY: "key", ETSY_SHARED_SECRET: "secret", ETSY_OAUTH: kv.store };
-  const pdf = (name: string) => new File([Buffer.concat([Buffer.from(`%PDF-1.7\n% ${name}\n`), Buffer.alloc(2_000, 32)])], name, { type: "application/pdf" });
+  const pdf = (name: string) => new File([validPdf(name)], name, { type: "application/pdf" });
   const zip = new File([makeZip(["Planner-Half-Letter.pdf", "Planner-BW-US-Letter.pdf"])], "Planner Extras.zip", { type: "application/zip" });
   const form = (files: File[]) => {
     const value = new FormData();
@@ -477,7 +478,7 @@ test("uploads are blocked when the listing promises a format that no file contai
 
   const kv = memoryKv();
   const env = { APP_ACCESS_TOKEN: "app-token", ETSY_OAUTH: kv.store };
-  const pdf = (name: string) => new File([Buffer.concat([Buffer.from(`%PDF-1.7\n% ${name}\n`), Buffer.alloc(2_000, 32)])], name, { type: "application/pdf" });
+  const pdf = (name: string) => new File([validPdf(name)], name, { type: "application/pdf" });
   const form = (files: File[]) => {
     const value = new FormData();
     value.set("metadata", JSON.stringify({
