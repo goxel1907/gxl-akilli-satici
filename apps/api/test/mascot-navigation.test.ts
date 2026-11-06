@@ -24,8 +24,8 @@ test("Goxi leads from Trend into Studio and disables online preparation while di
   try {
     assert.ok(shown(renderer, "Yeni ilanını birlikte hazırlayalım"));
     await tap(renderer, /^Ürünümü seçmek istiyorum$/);
-    assert.ok(shown(renderer, "Araştır ve ilanı hazırla"));
-    assert.equal(buttons(renderer, /^Goxi ile rakipleri araştır$/).length, 0);
+    assert.ok(shown(renderer, "Ne hazırlayalım?"));
+    assert.equal(buttons(renderer, /^Araştır ve önerileri getir$/).length, 0);
     await tap(renderer, /^El işi deseni$/);
     assert.ok(renderer.root.findAllByType("Text" as any).some((node: any) => visible(node) && text(node).includes("Yazarlık, bizzat uygulama")));
     assert.equal(buttons(renderer, /^Goxi ile üretim paketini paylaş$/).length, 0);

@@ -1,5 +1,6 @@
 import { canRankTrend, compareTrendEvidence, trendFreshness } from "../../mobile/trend-priority.js";
 import { printableSearches } from "./printable-searches.js";
+import { contentBudget } from "./content-budget.js";
 import { ideaKey, readProductMemory, topicKey } from "./product-memory.js";
 import type { MarketStrategy } from "./market-strategy.js";
 import { upcomingSeasons } from "./seasonal.js";
@@ -665,7 +666,7 @@ export function buildPatternSeed(keywordInput: string, result: TrendResult | und
   const trendTags = [...new Set([...(result?.risingTags || []).map((item) => item.tag), ...(result?.topTags || []).map((item) => item.tag)].map((tag) => clean(tag)).filter((tag) => tag && !isIpRisky(tag) && !MISLEADING_FEATURE.test(tag) && fitsTheme(tag, themeSet)))].slice(0, 20);
   const printable = kind ? printableFormats(kind, [...texts, ...titleTexts]) : undefined;
   const competitorPages = result?.signals?.pageCountMedian;
-  const rawPages = kind ? (competitorPages ? Math.ceil(competitorPages * 1.2) : defaultPrintablePages(kind)) : undefined;
+  const rawPages = kind === "party" ? contentBudget({kind,productType:product.product,keyword},defaultPrintablePages(kind),competitorPages).suggested : kind ? (competitorPages ? Math.ceil(competitorPages * 1.2) : defaultPrintablePages(kind)) : undefined;
   const range = kind ? PAGE_RANGE[kind] : undefined;
   const pageCount = rawPages && range ? Math.min(range[1], Math.max(range[0], rawPages)) : rawPages;
   const competition = buildCompetition(result, kind, pageCount, risingFeatures);
@@ -698,7 +699,7 @@ export function buildPatternSeed(keywordInput: string, result: TrendResult | und
     `Renkler: ${palette.colors.join(", ")} (${palette.source})`,
     `Formatlar: ${printable!.formats.join(", ")}${competition.gapFormats.length ? " (örneklemde az belirtilenler tasarım seçeneği olarak eklendi; dosyalar doğrulanmadı)" : printable!.mined.length ? ` (rakiplerde geçen: ${printable!.mined.slice(0, 3).join(", ")})` : " (türün standart formatları)"}`,
     ...(audience ? [`Hedef kitle: ${audience} (etiket ve başlıklardan)`] : []),
-    competitorPages ? `${unitTr(kind)}: ${pageCount} (rakiplerin ortancası ${competitorPages}; daha fazla değer için %20 fazlası)` : `${unitTr(kind)}: ${pageCount} (trendde bu sayı için sinyal yok; türün tipik değeri)`,
+    competitorPages ? `${unitTr(kind)}: ${pageCount} (rakiplerin belirttiği ortanca ${competitorPages}; ${kind === "party" ? "oyun içerik planıyla birlikte değerlendirilen tasarım denemesi" : "daha fazla değer için %20 fazlası"})` : `${unitTr(kind)}: ${pageCount} (trendde bu sayı için sinyal yok; ${kind === "party" ? "oyun içerik planından gelen tasarım önerisi" : "türün tipik değeri"})`,
     chosen.fresh ? "Bu özellik kombinasyonu bu arama için ilk kez kullanılıyor." : "Bu aramadaki tüm özellik kombinasyonları denendi; palet ve ad yine yeni seçildi.",
     ...themeNotes
   ] : [
@@ -757,12 +758,15 @@ export async function pickBestKeyword(store: TrendStore | undefined, input: { st
     ? !kind || (nicheKind || inferPrintableKind(keyword)) === kind
     : !craft || (nicheCraft || detectCraft(keyword, [])) === craft;
   const discovered = await listDiscoveries(store);
-  const candidates = [...new Set([
+  const catalog = [...new Set([
     ...(kind ? printableSearches(now)[kind] : []),
     ...TREND_NICHES.filter((niche) => niche.group === group && matches(niche.keyword, niche.kind, niche.craft)).map((niche) => niche.keyword),
-    ...discovered.filter((item) => item.group === group && matches(item.keyword)).map((item) => item.keyword),
     ...upcomingSeasons(new Date(now)).flatMap(season => season.keywords).filter(item => item.group === group && matches(item.keyword)).map(item => item.keyword)
   ])];
+  // Etsy tags can stop in the middle of a word at their character limit.
+  // Do not promote those fragments to new topics, including old discoveries.
+  const completeQuery = (query:string) => (query.split(" ").at(-1)?.length || 0)>=3 && !catalog.some(full=>full.startsWith(query) && /[a-z0-9]/i.test(full.charAt(query.length)));
+  const candidates = [...new Set([...catalog,...discovered.filter(item=>item.group===group && matches(item.keyword) && completeQuery(item.keyword)).map(item=>item.keyword)])];
   if (!candidates.length) throw new Error("PATTERN_KEYWORD_REQUIRED");
   const scored = await Promise.all(candidates.map(async (keyword) => ({ keyword, result: await readCached(store, keyword) })));
   const recentKey = `${AUTOPICK_PREFIX}${group}:${kind || craft || "all"}`;
@@ -773,7 +777,7 @@ export async function pickBestKeyword(store: TrendStore | undefined, input: { st
   const used = (query:string) => previousKeys.has(ideaKey(queryKind(query),query)) || recent.some(previous => ideaKey(queryKind(previous),previous)===ideaKey(queryKind(query),query));
   // Expand from observed tags, not invented trends, when the starting catalog is used.
   const expanded = [...new Set(scored.flatMap(row => row.result?.topTags?.map(item=>normalizeKeyword(item.tag)) || []))]
-    .filter(query => query.length >= 6 && query.length <= 60 && !isIpRisky(query) && !candidates.includes(query) && (kind ? inferPrintableKind(query)===kind : inferTrendGroup(query)===group)).slice(0,20);
+    .filter(query => query.length >= 6 && query.length <= 60 && completeQuery(query) && !isIpRisky(query) && !candidates.includes(query) && (kind ? inferPrintableKind(query)===kind : inferTrendGroup(query)===group)).slice(0,20);
   for(const keyword of expanded) scored.push({keyword,result:await readCached(store,keyword)});
   const avoid = normalizeKeyword(input.avoidKeyword || "");
   const available = scored.filter(item=>!used(item.keyword) && (!avoid || ideaKey(queryKind(item.keyword),item.keyword)!==ideaKey(queryKind(avoid),avoid)));

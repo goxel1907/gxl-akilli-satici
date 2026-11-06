@@ -17,10 +17,13 @@ export function contentBudget(input: {kind: PrintableKind; productType: string; 
   const observed=Number.isFinite(median)&&median!>0 ? Math.round(median!) : undefined;
   // Title/label counts may include support pages. Match the observed scope first;
   // do not multiply it just to claim more value or more sales.
-  const proposed=observed || defaultCount;
+  const party=input.kind === "party";
+  const subject=`${input.productType} ${input.keyword || ""}`;
+  const structuredCount=party ? /escape room/i.test(subject) ? 12 : /bingo/i.test(subject) ? 24 : /trivia|quiz/i.test(subject) ? 15 : 18 : defaultCount;
+  const proposed=party?Math.max(observed || 0,structuredCount):observed || structuredCount;
   const suggested=effectiveContentCount(input.kind,Math.min(proposed, input.kind === "party" ? 60 : 200),alphabet);
   return { suggested, effective: effectiveContentCount(input.kind,input.pageCount || suggested,alphabet), requested: input.pageCount, limits,
     ...(observed ? { competitorMedian: observed } : {}),
-    basisTr: observed ? `Örnek ilanların belirttiği içerik sayısı ortancası ${observed}. Destek sayfaları dahil olabilir; öneri ürünün yapısına göre sınırlandı.` : `Örneklemde güvenilir içerik sayısı yok; türün başlangıç kapsamı ${defaultCount} kullanıldı.`,
+    basisTr: observed ? `Örnek ilanların belirttiği içerik sayısı ortancası ${observed}. Destek sayfaları dahil olabilir. ${suggested} sayfalık öneri, gözlenen kapsam ve bu ürünün içerik planı birlikte değerlendirilerek oluşturulmuş bir tasarım denemesidir.` : party ? `Rakiplerde içerik sayısı doğrulanmadı. ${structuredCount} sayfa, bu ürünün oyun yapısına göre tasarım önerisidir; satış verisi değildir.` : `Örneklemde güvenilir içerik sayısı yok; türün başlangıç kapsamı ${defaultCount} kullanıldı.`,
     noteTr: "Daha fazla sayfa daha fazla satış kanıtı değildir. Tekrarsız ana içerik ile kapak, cevap, rehber ve diğer destek sayfaları ayrı sayılmalı; bütün formatlar aynı kapsamı taşımalı." };
 }
