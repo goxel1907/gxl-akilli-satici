@@ -526,10 +526,10 @@ export function buildCompetition(result: TrendResult | undefined, kind: Printabl
   if (gapFiles.length) {
     planTr.push(`Rakiplerin azının başlık/etiketinde belirttiği, bizim sunup ilanda açıkça yazacağımız: ${gapFiles.map((item) => `${FORMAT_OFFERS[item.id].tr} (rakiplerin ${percent(item.share)}'i)`).join(", ")}.`);
     const plural = gapFiles.length > 1 || /\b(sizes|versions|files|sheets)\b/.test(FORMAT_OFFERS[gapFiles[0].id].en);
-    planEn.push(`include ${joinEn(gapFiles.map((item) => FORMAT_OFFERS[item.id].en))} and name ${plural ? "them" : "it"} on the cover, because few competitors offer ${plural ? "them" : "it"}`);
+    planEn.push(`include ${joinEn(gapFiles.map((item) => FORMAT_OFFERS[item.id].en))} and name ${plural ? "them" : "it"} on the cover, because few sampled titles or tags mention ${plural ? "them" : "it"}; actual file availability is unverified`);
   }
   if (standardFiles.length) {
-    planTr.push(`Mutlaka olacak (rakiplerin çoğunda var): ${standardFiles.map((item) => `${FORMAT_OFFERS[item.id].tr} (${percent(item.share)})`).join(", ")}.`);
+    planTr.push(`Örneklemdeki başlık/etiketlerin çoğunda belirtiliyor: ${standardFiles.map((item) => `${FORMAT_OFFERS[item.id].tr} (${percent(item.share)})`).join(", ")}.`);
     planEn.push(`always include ${joinEn(standardFiles.map((item) => FORMAT_OFFERS[item.id].en))}`);
   }
   for (const item of [...gaps, ...standard].filter((entry) => !deliverable(entry))) planTr.push(MANUAL_OFFER_TR[item.id](percent(item.share)));
@@ -543,10 +543,10 @@ export function buildCompetition(result: TrendResult | undefined, kind: Printabl
     }
   }
   if (risingFeatures.length) {
-    planTr.push(`Yeni ilanlarda yükselen özellikleri ilk sen kullan: ${risingFeatures.join(", ")}.`);
-    planEn.push(`work in the rising ${risingFeatures.length > 1 ? "features" : "feature"} ${joinEn(risingFeatures.map(proseCase))} where ${risingFeatures.length > 1 ? "they fit" : "it fits"} the theme`);
+    planTr.push(`Yeni ilan örnekleminde görülen özellikler (gerçek zamanlı artış ölçülmedi): ${risingFeatures.join(", ")}.`);
+    planEn.push(`consider the newer-listing ${risingFeatures.length > 1 ? "features" : "feature"} ${joinEn(risingFeatures.map(proseCase))} where ${risingFeatures.length > 1 ? "they fit" : "it fits"} the theme`);
   }
-  if (result && result.metrics.newcomerShare >= 0.4) planTr.push(`Üst ilanların ${percent(result.metrics.newcomerShare)}'i son 6 ayda açılmış → yeni mağaza için açık niş, hızlı listele.`);
+  if (result && result.metrics.newcomerShare >= 0.4) planTr.push(`Üst ilanların ${percent(result.metrics.newcomerShare)}'i son 6 ayda açılmış → bu, yeni ilan payıdır; mağaza yaşı ve satış başarısı ölçülmedi.`);
   if (signals?.ipRisks.length) planTr.push(`Telif riski olan kelimeler kullanılmayacak: ${signals.ipRisks.join(", ")}.`);
   return {
     medianPriceUsd: median,
@@ -660,12 +660,12 @@ export function buildPatternSeed(keywordInput: string, result: TrendResult | und
   const notes = [
     `Etsy market brief for "${keyword}"${metrics ? ` (${metrics.activeListings.toLocaleString("en-US")} live listings${metrics.medianPriceUsd ? `, median price ${metrics.medianPriceUsd} USD` : ""})` : ""}`,
     // "moody botanical and botanical" tekrar etmez: başka bir özelliğin içinde geçen özellik ayrıca yazılmaz.
-    chosen.features.length ? `: buyers favor ${joinEn(chosen.features.filter((feature, index) => !chosen.features.some((other, otherIndex) => otherIndex !== index && other.length > feature.length && ` ${other} `.includes(` ${feature} `))).map(proseCase))}` : "",
-    risingFeatures.length ? `; the newest fast-selling listings add ${joinEn(risingFeatures.map(proseCase))}` : "",
+    chosen.features.length ? `: sampled titles and tags mention ${joinEn(chosen.features.filter((feature, index) => !chosen.features.some((other, otherIndex) => otherIndex !== index && other.length > feature.length && ` ${other} `.includes(` ${feature} `))).map(proseCase))}` : "",
+    risingFeatures.length ? `; newer sampled listings mention ${joinEn(risingFeatures.map(proseCase))}` : "",
     trendColors.length || descriptors.length ? `; colors seen in top listings: ${joinEn([...trendColors, ...descriptors].slice(0, 5))}` : "",
-    audience ? `; main buyers: ${audience}` : "",
+    audience ? `; possible audience inferred from titles and tags: ${audience}` : "",
     ". ",
-    competition.planEn.length ? `To outsell the top listings: ${competition.planEn.join("; ")}.` : ""
+    competition.planEn.length ? `Design options to evaluate (no sales guarantee): ${competition.planEn.join("; ")}.` : ""
   ].join("").trim().slice(0, 1000);
   const keywordTiming = holidayOutOfWindow(keyword, studio, now);
   const themeNotes = [
@@ -675,7 +675,7 @@ export function buildPatternSeed(keywordInput: string, result: TrendResult | und
   ];
   const basis = kind ? [
     `Ürün türü: ${PRINTABLE_KINDS[kind].labelTr} · Ürün: ${product.product} (${product.source})`,
-    chosen.features.length ? `Bu seferki trend özellikleri: ${chosen.features.join(", ")}${risingFeatures.length ? ` · yeni ilanlarda yükselen: ${risingFeatures.join(", ")}` : ""}` : "Trendde belirgin özellik sinyali yok; özgün tasarım yapay zekâya bırakıldı.",
+    chosen.features.length ? `Bu seferki trend özellikleri: ${chosen.features.join(", ")}${risingFeatures.length ? ` · yeni ilanlarda görülen: ${risingFeatures.join(", ")}` : ""}` : "Trendde belirgin özellik sinyali yok; ürününüzün özgün özelliklerini siz belirleyin.",
     `Renkler: ${palette.colors.join(", ")} (${palette.source})`,
     `Formatlar: ${printable!.formats.join(", ")}${competition.gapFormats.length ? " (rakiplerde az olanlar eklendi)" : printable!.mined.length ? ` (rakiplerde geçen: ${printable!.mined.slice(0, 3).join(", ")})` : " (türün standart formatları)"}`,
     ...(audience ? [`Hedef kitle: ${audience} (etiket ve başlıklardan)`] : []),
@@ -684,11 +684,11 @@ export function buildPatternSeed(keywordInput: string, result: TrendResult | und
     ...themeNotes
   ] : [
     `Ürün: ${product.product} (${product.source})`,
-    chosen.features.length ? `Bu seferki trend özellikleri: ${chosen.features.join(", ")}${risingFeatures.length ? ` · yeni ilanlarda yükselen: ${risingFeatures.join(", ")}` : ""}` : "Trendde belirgin özellik sinyali yok; özgün tasarım yapay zekâya bırakıldı.",
+    chosen.features.length ? `Bu seferki trend özellikleri: ${chosen.features.join(", ")}${risingFeatures.length ? ` · yeni ilanlarda görülen: ${risingFeatures.join(", ")}` : ""}` : "Trendde belirgin özellik sinyali yok; ürününüzün özgün özelliklerini siz belirleyin.",
     `Renkler: ${palette.colors.join(", ")} (${palette.source})`,
     `Zorluk: ${SKILL_TR[skill.level]} (${skill.evidence})`,
     `Malzeme: ${material.note} (${material.source})`,
-    sizeNote ? `Ölçü: ${sizeNote} (üst ilanlarda geçen ölçü)` : "Ölçü: trendde ölçü sinyali yok; promptta yapay zekâ standart ölçüyü seçer, PDF bitince gerçek ölçüyü girin.",
+    sizeNote ? `Ölçü: ${sizeNote} (üst ilanlarda geçen ölçü)` : "Ölçü: trendde ölçü bilgisi yok; kendi yazıp yaparak denediğiniz desenin gerçek ölçüsünü girin.",
     chosen.fresh ? "Bu özellik kombinasyonu bu arama için ilk kez kullanılıyor." : "Bu aramadaki tüm özellik kombinasyonları denendi; palet ve desen adı yine yeni seçildi.",
     ...themeNotes
   ];
