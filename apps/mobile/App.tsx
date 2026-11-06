@@ -3,6 +3,8 @@ import { photoAssistantPrompt, parsePhotoAssistant } from "./photo-assistant";
 import { canRankTrend, compareTrendEvidence, trendFreshness } from "./trend-priority";
 import { listingProgress, listingTasks, physicalListingProgress, etsyTransferComplete, type ListingProgressInput } from "./listing-progress";
 import ListingMascot, { type ListingMascotProps } from "./ListingMascot";
+import LiveCheckPanel from "./LiveCheckPanel";
+import { isLiveReadPath } from "./live-check";
 import { sameProduct } from "./product-identity";
 import { mergeLocalProducts, generationKey, uploadPrices, PRINTABLE_WORKSPACE_KEY, parsePrintableWorkspace, type PrintableWorkspace } from "./workflow-state";
 import React, { useEffect, useMemo, useRef, useState } from "react";
@@ -540,6 +542,7 @@ function Overview({ data, setTab, online, channels, onSimple }: any) {
           : "Bağlanmak için dokun");
   return <>
     <ListingMascot title="İlan açmak mı istiyorsun?" instruction="Ürününü seç, rakiplerini incele ve ilanını hazırla. Stüdyo, dosya yükleme ve Etsy taslağı aşamalarında sana ne yapacağını göstereceğim." actionLabel="Goxi ile yeni ilana başla" onAction={() => setTab("Etsy")} />
+    <LiveDeviceCheck />
     <EtsyOrdersPanel online={online} compact />
     <Text style={styles.sectionTitle}>Bugünün görünümü</Text>
     <View style={styles.metrics}>
@@ -1141,6 +1144,21 @@ async function apiJson(path: string, init: RequestInit = {}) {
   return body;
 }
 
+// Diagnostics reuse the existing app credential, with a bounded same-origin GET only.
+async function liveCheckRequest(path: string, signal?: AbortSignal) {
+  if (!isLiveReadPath(path)) throw new Error("Bu işlem canlı okuma kapsamında değil.");
+  const controller = new AbortController();
+  const abort = () => controller.abort();
+  signal?.addEventListener("abort", abort, { once: true });
+  if (signal?.aborted) controller.abort();
+  const timer = setTimeout(abort, 18000);
+  try { return await apiJson(path, { method: "GET", headers: apiHeaders(), signal: controller.signal }); }
+  finally { clearTimeout(timer); signal?.removeEventListener("abort", abort); }
+}
+function LiveDeviceCheck() {
+  return <LiveCheckPanel request={liveCheckRequest} environment={{ appVersion: Constants.expoConfig?.version || "unknown", runtimeVersion: String(Updates.runtimeVersion || "unknown"), channel: Updates.channel || "unknown", embedded: Updates.isEmbeddedLaunch, updateId: Updates.updateId || undefined, updateCreatedAt: Updates.createdAt?.toISOString() }} />;
+}
+
 function errorCode(error: unknown): string | undefined {
   return error && typeof error === "object" && "code" in error ? (error as any).code : undefined;
 }
@@ -1173,7 +1191,7 @@ function EtsyScreen({ online, channels, active = true, initialSection = "Trend" 
     <View style={section === "Stüdyo" ? undefined : styles.hidden}><StudioPanel online={online} active={active && section === "Stüdyo"} etsyReady={shopReady} seed={studioSeed} onUpload={(prefill: any) => { setUploadPrefill(prefill); setSection("Dijital"); }} /></View>
     <View testID="etsy-section-digital" style={section === "Dijital" ? undefined : styles.hidden}><DigitalPanel online={online} active={active && section === "Dijital"} shopReady={shopReady} prefill={uploadPrefill} onPrefillUsed={() => setUploadPrefill(undefined)} onPrepare={() => setSection("Stüdyo")} /></View>
     {section === "Pinterest" && <PinterestPanel online={online} />}
-    {section === "Kılavuz" && <><ShopReadinessCard online={online} onSell={() => setSection("Stüdyo")} /><ShopSettingsCard online={online} shopReady={shopReady} /><ShopListingsScorecard online={online} /><EtsyGuide shopReady={shopReady} authorized={authorized} /></>}
+    {section === "Kılavuz" && <><LiveDeviceCheck /><ShopReadinessCard online={online} onSell={() => setSection("Stüdyo")} /><ShopSettingsCard online={online} shopReady={shopReady} /><ShopListingsScorecard online={online} /><EtsyGuide shopReady={shopReady} authorized={authorized} /></>}
   </>;
 }
 
@@ -3471,6 +3489,7 @@ function HelpScreen({ online, channels, onExpert, onSell }: any) {
   const etsy = channels?.etsy || {};
   const shopReady = Boolean(etsy.shopReady || etsy.shopId);
   return <>
+    <LiveDeviceCheck />
     <ShopReadinessCard online={online} onSell={onSell} />
     <ShopSettingsCard online={online} shopReady={shopReady} />
     <EtsyGuide shopReady={shopReady} authorized={Boolean(etsy.authorized || etsy.connected)} />
