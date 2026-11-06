@@ -29,15 +29,22 @@ document.getElementById("refresh-log")!.onclick=logs;
 document.getElementById("export-log")!.onclick=()=>{download(new Blob([JSON.stringify({scope:"synthetic-web-test-only",note:"Gerçek Etsy veya Android cihaz testi değildir.",events:sandbox.events},null,2)],{type:"application/json"}),"GXL-WEB-TEST-LOG.json");};
 document.getElementById("reset-test")!.onclick=async()=>{if(confirm("Yalnız bu web sürümünün test kayıtları silinsin mi? Telefona veya Etsy'ye dokunulmaz.")){await store.clear();localStorage.clear();location.reload();}};
 function download(blob:Blob,name:string){const url=URL.createObjectURL(blob),a=document.createElement("a");a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),3000);}
-document.getElementById("sample-files")!.onclick=async()=>{
-  for(const [name,size] of [["WEB-TEST-Planner-US-Letter.pdf",[612,792]],["WEB-TEST-Planner-A4.pdf",[595.28,841.89]]] as const){
-    const pdf=await PDFDocument.create(),font=await pdf.embedFont(StandardFonts.Helvetica),page=pdf.addPage([...size]);
-    page.drawText("WEB TEST ONLY - NOT FOR SALE",{x:40,y:size[1]-60,size:17,font,color:rgb(0.15,0.3,0.23)});
-    page.drawText("Sample file for upload and draft testing.",{x:40,y:size[1]-90,size:12,font});
-    page.drawText("This is not an AI-generated finished product.",{x:40,y:size[1]-115,size:12,font});
-    for(let row=0;row<15;row++){const y=size[1]-160-row*30;page.drawLine({start:{x:40,y},end:{x:size[0]-40,y},thickness:0.4,color:rgb(0.6,0.7,0.6)});}
-    download(new Blob([await pdf.save() as BlobPart],{type:"application/pdf"}),name);
-  }
+async function samplePdf(name:string,size:readonly [number,number]){
+  const pdf=await PDFDocument.create(),font=await pdf.embedFont(StandardFonts.Helvetica),page=pdf.addPage([...size]);
+  page.drawText("WEB TEST ONLY - NOT FOR SALE",{x:40,y:size[1]-60,size:17,font,color:rgb(0.15,0.3,0.23)});
+  page.drawText("Sample file for upload and draft testing.",{x:40,y:size[1]-90,size:12,font});
+  page.drawText("This is not an AI-generated finished product.",{x:40,y:size[1]-115,size:12,font});
+  for(let row=0;row<15;row++){const y=size[1]-160-row*30;page.drawLine({start:{x:40,y},end:{x:size[0]-40,y},thickness:0.4,color:rgb(0.6,0.7,0.6)});}
+  download(new Blob([await pdf.save() as BlobPart],{type:"application/pdf"}),name);
+}
+document.getElementById("sample-files")!.onclick=()=>samplePdf("WEB-TEST-Journal-US-Letter.pdf",[612,792]);
+document.getElementById("sample-a4")!.onclick=()=>samplePdf("WEB-TEST-Journal-A4.pdf",[595.28,841.89]);
+document.getElementById("sample-image")!.onclick=()=>{
+  const canvas=document.createElement("canvas");canvas.width=3000;canvas.height=2250;const ctx=canvas.getContext("2d")!;
+  ctx.fillStyle="#f7f3e8";ctx.fillRect(0,0,3000,2250);ctx.fillStyle="#193c31";ctx.font="bold 110px Arial";ctx.fillText("WEB TEST ONLY",220,230);ctx.font="60px Arial";ctx.fillText("Sample preview for upload testing - NOT FOR SALE",220,340);
+  ctx.fillStyle="#fff";ctx.fillRect(500,520,2000,1400);ctx.strokeStyle="#9fae9d";ctx.lineWidth=4;for(let i=0;i<14;i++){ctx.beginPath();ctx.moveTo(650,700+i*75);ctx.lineTo(2350,700+i*75);ctx.stroke();}
+  ctx.fillStyle="#193c31";ctx.font="bold 70px Arial";ctx.fillText("SYNTHETIC TEST FILE",760,2080);
+  canvas.toBlob(blob=>{if(blob)download(blob,"WEB-TEST-Journal-Preview.png");},"image/png");
 };
 const errorBox=document.getElementById("fatal-error")!;
 window.addEventListener("error",event=>{errorBox.hidden=false;errorBox.textContent=`Web test hatası: ${String(event.error?.message||event.message).slice(0,300)}`;});

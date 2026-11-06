@@ -719,6 +719,8 @@ function enforceOnce(value: string, characters: string[]): string {
 export function normalizeEtsyTitle(value: string): string {
   let title = value.replace(TITLE_DISALLOWED, "").replace(/\s+/g, " ").trim();
   title = enforceOnce(title, ["%", ":", "&", "+"]).replace(/\s+/g, " ").trim();
+  const phrases = new Set<string>();
+  title = title.split(",").map(part => part.trim()).filter(part => { const key=part.toLowerCase();if(!key || phrases.has(key))return false;phrases.add(key);return true; }).join(", ");
   if (title.length > 140) title = title.slice(0, 140).replace(/[\s,|-]+\S*$/, "").trim();
   return title.replace(/[\s,|-]+$/, "");
 }

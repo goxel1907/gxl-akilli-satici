@@ -4,6 +4,8 @@ import { createSandbox, SANDBOX_TOKEN, SANDBOX_PREFIX } from "../../web-test/san
 import { appendLocalFile } from "../../mobile/upload-file.js";
 import { runLiveReads, liveReportText } from "../../mobile/live-check.js";
 import { validPdf } from "./fixtures/valid-pdf.js";
+import { findKindTaxonomyId } from "../../worker/src/digital-delivery.js";
+import type { PrintableKind } from "../../worker/src/etsy-trends.js";
 
 function fixture(context:any){
   const values=new Map<string,string|ArrayBuffer>();
@@ -48,20 +50,29 @@ test("real PDF parsing, storage, structural audit and local Etsy draft creation 
   const id=body.product.id;
   const audit=await(await api(`/api/digital/products/${id}/qa`)).json() as any;assert.equal(audit.ok,true);assert.equal(audit.files[0].ok,true);
   const draft=await api(`/api/digital/products/${id}/etsy-draft`,{confirm:true});const result=await draft.json() as any;assert.equal(draft.status,201,JSON.stringify(result));assert.equal(result.product.etsy.fileUploaded,true);
+  const statusResponse=await api(`/api/digital/products/${id}/etsy-status`);assert.equal(statusResponse.status,200);assert.equal((await statusResponse.json() as any).state,"draft");
   assert.equal(sandbox.drafts.size,1);assert.equal([...sandbox.drafts.values()][0].state,"draft");assert.deepEqual([...sandbox.drafts.values()][0].fileNames,["WEB-TEST-US-Letter.pdf"]);
 });
 test("web diagnostics cannot turn synthetic service responses into live phone verification",async()=>{
   const report=await runLiveReads({appVersion:"0.8.6",runtimeVersion:"0.8.6",channel:"web-test",embedded:true,testMode:"synthetic-web"},async path=>path==="/health"?{ok:true,service:"gxl-akilli-satici"}:path==="/api/dashboard"?{metrics:{},products:[]}:{});
   assert.equal(report.environment.testMode,"synthetic-web");assert.equal(report.checks.find(row=>row.id==="health")?.status,"warning");assert.ok(report.checks.filter(row=>row.source==="seller").every(row=>row.status==="pending"));assert.match(liveReportText(report),/synthetic-web/);
 });
+test("the synthetic taxonomy supports every app digital category, including journals",async context=>{
+  const {store,sandbox}=fixture(context),env={ETSY_API_KEY:"SANDBOX",ETSY_SHARED_SECRET:"SANDBOX"};
+  for(const kind of ["planner","digital_planner","coloring","wall_art","party","recipe","journal","kids","paper_craft","calendar","stickers","cards","puzzles","wallpaper","labels","app_icons","spreadsheet","slides","resume"] as PrintableKind[]){
+    const id=await findKindTaxonomyId(env,kind,store as any,async(input:any,init?:RequestInit)=>sandbox.upstream(new Request(input,init)));
+    assert.ok(id>0,kind);
+  }
+});
 test("synthetic Etsy drafts survive a sandbox restart alongside the stored product metadata",async context=>{
   const {sandbox,store}=fixture(context);
   const form=new URLSearchParams({title:"Restart test draft",price:"4.99"});
   const created=await(await sandbox.upstream(new Request("https://openapi.etsy.com/v3/application/shops/777/listings",{method:"POST",body:form}))).json() as any;
+  const legacy=JSON.parse(await store.get("web-test:etsy-drafts") as string);delete legacy[0].shop_id;await store.put("web-test:etsy-drafts",JSON.stringify(legacy));
   const restarted=createSandbox(store,"https://sandbox.example");
   const restored=await restarted.upstream(new Request(`https://openapi.etsy.com/v3/application/listings/${created.listing_id}`));
   assert.equal(restored.status,200);assert.equal((await restored.json() as any).title,"Restart test draft");
-  assert.equal(restarted.drafts.get(created.listing_id)?.state,"draft");
+  assert.equal(restarted.drafts.get(created.listing_id)?.state,"draft");assert.equal(restarted.drafts.get(created.listing_id)?.shop_id,777);
 });
 test("browser multipart uploads contain actual file bytes and reject empty or unreadable files",async context=>{
   const descriptor=Object.getOwnPropertyDescriptor(globalThis,"document");Object.defineProperty(globalThis,"document",{value:{},configurable:true});

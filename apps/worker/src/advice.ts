@@ -49,21 +49,21 @@ export function buildAdvice(result: TrendResult): TrendAdvice[] {
   }
 
   if (result.score >= 65) {
-    advice.push({ priority: "high", titleTr: "Hemen gir", detailTr: `Talep yüksek ve rekabet makul (${result.score} puan). İlk hafta aynı nişte birbirinden farklı 3-5 ürün listele; Etsy aynı alıcıya mağazandan birden fazla seçenek gösterebilir.` });
+    advice.push({ priority: "high", titleTr: "Küçük bir ürün testi planla", detailTr: `Örneklem göstergeleri ${result.score} puan verdi. Bu, satış veya dönüşüm tahmini değildir. Ürüne uygun tek bir özgün tasarımla başlayıp ziyaret, favori ve gerçek sipariş sonuçlarını ayrı izle.` });
   } else if (result.parts.demand >= 50 && result.parts.openness < 30) {
-    advice.push({ priority: "high", titleTr: "Genel aramayla değil, dar ifadeyle gir", detailTr: `Talep var ama ${result.metrics.activeListings.toLocaleString("tr-TR")} ilanla rekabet çok yüksek. Başlığı daha dar ve yükselen bir ifadeyle başlat${freshRising.length ? `: ${freshRising.slice(0, 3).join(", ")}` : ""}.` });
+    advice.push({ priority: "high", titleTr: "Genel aramayla değil, dar ifadeyle gir", detailTr: `Örneklemde ilgi göstergesi var; ${result.metrics.activeListings.toLocaleString("tr-TR")} aktif ilan görünüyor. Ürüne uyan daha dar bir arama ifadesini dene${freshRising.length ? `: ${freshRising.slice(0, 3).join(", ")}` : ""}.` });
   } else if (result.parts.demand < 25) {
-    advice.push({ priority: "medium", titleTr: "Tek başına değil, paketin parçası olarak sun", detailTr: "Bu aramada talep zayıf. Ürünü güçlü bir nişteki paketin bonus sayfası olarak kullanmak daha verimli." });
+    advice.push({ priority: "medium", titleTr: "Tek başına değil, paketin parçası olarak sun", detailTr: "Bu örneklemde favori göstergesi zayıf; gerçek talep veya satış ölçülmedi. Ürünü tek başına veya uyumlu bir set içinde denemeden önce kapsamı ve maliyeti değerlendir." });
   }
 
   if (result.metrics.newcomerShare >= 0.4) {
-    advice.push({ priority: "medium", titleTr: "Yeni mağazaya açık niş", detailTr: `Üst ilanların ${percent(result.metrics.newcomerShare)} kadarı son 6 ayda açılmış. Erken giren ve düzenli yeni ürün ekleyen mağaza öne çıkıyor.` });
+    advice.push({ priority: "medium", titleTr: "Örneklemde yeni ilan payı", detailTr: `Üst ilanların ${percent(result.metrics.newcomerShare)} kadarı son 6 ayda açılmış. İlan yaşı mağaza yaşı değildir; yeni mağazaların satış başarısı ölçülmedi.` });
   } else if (result.metrics.newcomerShare <= 0.15 && result.metrics.sampleSize > 10) {
-    advice.push({ priority: "medium", titleTr: "Eski ve yorumlu ilanlar hâkim", detailTr: `Üst ilanların yalnızca ${percent(result.metrics.newcomerShare)} kadarı yeni. Yüzlerce yorumlu rakibi genel aramada geçmek zor; ürününü yükselen bir alt ifadeye yönlendir.` });
+    advice.push({ priority: "medium", titleTr: "Örneklemde eski ilanlar ağırlıkta", detailTr: `Üst ilanların ${percent(result.metrics.newcomerShare)} kadarı son 6 ayda açılmış. Bu oran mağaza yaşı, yorum sayısı veya satış üstünlüğü göstermez. Ürüne uygun daha dar bir aramayı ayrıca incele.` });
   }
 
   if (freshRising.length) {
-    advice.push({ priority: "medium", titleTr: "Yükselen özellikleri ilk sen kullan", detailTr: `Son 4 ayda açılıp hızla favori toplayan ilanlarda öne çıkanlar: ${freshRising.join(", ")}. Bunları tasarıma ve ilk 40 karakterlik başlığa taşı.` });
+    advice.push({ priority: "medium", titleTr: "Yeni ilanlarda görülen etiketler", detailTr: `Son 4 ayda açılmış örnek ilanlarda görülenler: ${freshRising.join(", ")}. Zaman içindeki artış veya alıcı tercihi ölçülmedi; yalnız ürününe uyan ifadeleri değerlendir.` });
   }
 
   if (digital && signals) {
@@ -72,7 +72,7 @@ export function buildAdvice(result: TrendResult): TrendAdvice[] {
     const standard = formats.filter((item) => item.share >= 0.5);
     const gaps = formats.filter((item) => item.share < 0.25).slice(0, 2);
     if (standard.length) {
-      advice.push({ priority: "high", titleTr: "Bu formatlar artık standart", detailTr: `${standard.map((item) => `${item.labelTr} (${percent(item.share)})`).join(", ")}: üst ilanların çoğu sunuyor. Ürününde mutlaka bulunsun ve başlıkta/görselde yazsın.${standard.some((item) => ["commercial", "video", "editable"].includes(item.id)) ? " Ticari lisans, video ve düzenlenebilir sürüm uygulamanın paketinde yoktur; bunları ayrıca hazırlamadan ilanda yazma." : ""}` });
+      advice.push({ priority: "high", titleTr: "Örneklemde sık belirtilen formatlar", detailTr: `${standard.map((item) => `${item.labelTr} (${percent(item.share)})`).join(", ")}: örneklemdeki başlık veya etiketlerde belirtiliyor. Gerçek dosyalar incelenmedi; yalnız ürününe uygun ve hazırladığın formatları ilanda yaz.${standard.some((item) => ["commercial", "video", "editable"].includes(item.id)) ? " Ticari lisans, video ve düzenlenebilir sürüm uygulamanın paketinde yoktur; bunları ayrıca hazırlamadan ilanda yazma." : ""}` });
     }
     for (const gap of gaps) {
       // Uygulamanın talimatı bu üçünü üretmez; ilanda yazılırsa alıcı yanıltılır. Satıcıya ayrı iş olarak anlatılır.
@@ -83,24 +83,25 @@ export function buildAdvice(result: TrendResult): TrendAdvice[] {
           : gap.id === "editable"
             ? `Rakiplerin yalnızca ${percent(gap.share)} kadarı düzenlenebilir sürüm belirtiyor. Uygulamanın paketi düzenlenemez PDF üretir; düzenlenebilir sürüm (Canva şablonu) hazırlamadan ilanda "editable" yazma.`
             : undefined;
-      advice.push({ priority: "medium", titleTr: `Boşluk: ${gap.labelTr}`, detailTr: manual || `Rakiplerin yalnızca ${percent(gap.share)} kadarı başlık veya etiketinde ${gap.labelTr} belirtiyor. Sen bu formatı sunup başlıkta, etikette ve kapak görselinde açıkça yazarsan bu formatla arayan alıcıda öne çıkarsın.` });
+      advice.push({ priority: "medium", titleTr: `Tasarım seçeneği: ${gap.labelTr}`, detailTr: manual || `Rakiplerin yalnızca ${percent(gap.share)} kadarı başlık veya etiketinde ${gap.labelTr} belirtiyor. Bu, rakibin dosyasında olmadığı anlamına gelmez. Uygunsa hazırlayıp dene; dosya hazır olmadan ilanda vaat etme.` });
     }
     if (signals.bundleShare >= 0.3) {
-      advice.push({ priority: "medium", titleTr: "Paketler satıyor", detailTr: `Üst ilanların ${percent(signals.bundleShare)} kadarı paket/set. Tekli ürün yerine uyumlu 3-5'li set hazırla; set fiyatı tekli fiyatın yaklaşık 2-2,5 katı olsun.` });
+      advice.push({ priority: "medium", titleTr: "Örneklemde set ilanları", detailTr: `Üst ilanların ${percent(signals.bundleShare)} kadarı başlık/etiketinde paket veya set belirtiyor. Satış performansı bilinmiyor. Uyumlu bir seti ayrı ürün olarak hazırlarsan fiyatını maliyet ve karşılaştırılabilir örneklerle ayrıca dene.` });
     } else if (signals.bundleShare < 0.1 && result.metrics.sampleSize > 10) {
-      advice.push({ priority: "medium", titleTr: "Paket boşluğu", detailTr: `Rakiplerin yalnızca ${percent(signals.bundleShare)} kadarı set sunuyor. Aynı stilde bir set ile hem öne çıkar hem sepet tutarını büyüt.` });
+      advice.push({ priority: "medium", titleTr: "Set seçeneğini değerlendir", detailTr: `Örneklem başlık/etiketlerinin ${percent(signals.bundleShare)} kadarı set belirtiyor; gerçek dosya içerikleri bilinmiyor. Uyumlu bir set hazırlamak bir deneme seçeneğidir, daha fazla satış kanıtı değildir.` });
     }
     if (signals.pageCountMedian) {
-      advice.push({ priority: "low", titleTr: "Daha fazla değer ver", detailTr: `Rakipler ortanca ${signals.pageCountMedian} sayfa/tasarım sunuyor. ${Math.ceil(signals.pageCountMedian * 1.2)} civarı sayfa veya bonus sayfalarla daha fazla değer ver ve sayıyı kapak görseline yaz.` });
+      advice.push({ priority: "low", titleTr: "Daha fazla değer ver", detailTr: `Sayfa/tasarım sayısı belirten örnek ilanların ortancası ${signals.pageCountMedian}. ${Math.ceil(signals.pageCountMedian * 1.2)} yalnız tasarım adayıdır; daha fazla sayfanın daha iyi sattığı ölçülmedi. İlanda yalnız gerçek teslimat sayısını yaz.` });
     }
   }
 
-  if (result.metrics.medianPriceUsd) {
-    const median = result.metrics.medianPriceUsd;
+  const comparableMedian = result.strategy ? result.strategy.pricing?.medianUsd : result.metrics.medianPriceUsd;
+  if (comparableMedian) {
+    const median = comparableMedian;
     const launch = Math.max(1.5, Math.round(median * 0.88 * 100) / 100);
-    advice.push({ priority: "low", titleTr: "Fiyat stratejisi", detailTr: digital
-      ? `Üst ilanların ortanca fiyatı ${median.toFixed(2)} USD. İlk yorumlar gelene kadar ${launch.toFixed(2)} USD civarında başla; yorumlar geldikçe ortancaya çık. Etsy'nin indirim kampanyalarını (Sales and discounts) sezon başlarında kullan.`
-      : `Üst ilanların ortanca fiyatı ${median.toFixed(2)} USD. ABD alıcısı ücretsiz kargo filtresini sık kullanır; kargoyu fiyata dahil et.` });
+    advice.push({ priority: "low", titleTr: "Fiyat denemesi", detailTr: digital
+      ? `Örneklem ortancası ${median.toFixed(2)} USD; yüzde 12 indirimle ${launch.toFixed(2)} USD yalnız bir deneme adayıdır. En iyi fiyat veya satış etkisi kanıtlanmadı; ürün kapsamını, maliyeti ve ücretleri kontrol et.`
+      : `Örneklem ortancası ${median.toFixed(2)} USD. Benzer ürün, kondisyon, malzeme ve kargo kapsamını karşılaştır; net kazanç hesabında kargoyu ve ücretleri birlikte değerlendir.` });
   }
 
   return advice.sort((a, b) => ORDER[a.priority] - ORDER[b.priority]).slice(0, 8);

@@ -1,4 +1,9 @@
 export * from "react-native-web";
+import React from "react";
+import { Pressable as WebPressable } from "react-native-web";
+// Preserve explicit tab/link roles; otherwise expose native pressables as
+// keyboard-operable buttons to browser users and assistive technology.
+export const Pressable=React.forwardRef<any,any>((props,ref)=>React.createElement(WebPressable,{accessibilityRole:"button",...props,ref}));
 
 function dialog(title:string,message:string,buttons?:Array<{text:string;style?:string;onPress?:()=>unknown}>){
   const modal=document.createElement("dialog");modal.className="gxl-dialog";modal.setAttribute("aria-label",title);

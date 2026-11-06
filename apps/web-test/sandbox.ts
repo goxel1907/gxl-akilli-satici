@@ -29,7 +29,7 @@ export function createSandbox(store: SandboxStore, origin: string) {
   const ready = (async()=>{
     await store.put("etsy:tokens",JSON.stringify({accessToken:"123.SANDBOX",refreshToken:"SANDBOX",userId:"123",expiresAt:Date.now()+86400000,scope:"shops_r shops_w listings_r listings_w transactions_r transactions_w"}));
     const raw=await store.get("web-test:etsy-drafts");
-    if(raw){const rows=JSON.parse(raw);if(!Array.isArray(rows))throw Error("Web test taslak kaydı geçersiz.");for(const row of rows){if(row?.state!=="draft" || !Number.isSafeInteger(row.listing_id))throw Error("Web test taslak kaydı geçersiz.");drafts.set(row.listing_id,row);sequence=Math.max(sequence,row.listing_id+100);}}
+    if(raw){const rows=JSON.parse(raw);if(!Array.isArray(rows))throw Error("Web test taslak kaydı geçersiz.");for(const row of rows){if(row?.state!=="draft" || !Number.isSafeInteger(row.listing_id))throw Error("Web test taslak kaydı geçersiz.");if(row.shop_id===undefined)row.shop_id=777;if(row.shop_id!==777)throw Error("Web test mağaza kaydı geçersiz.");drafts.set(row.listing_id,row);sequence=Math.max(sequence,row.listing_id+100);}}
   })();
   async function api(request: Request): Promise<Response> {
     await ready;
@@ -75,7 +75,12 @@ export function createSandbox(store: SandboxStore, origin: string) {
       const rows=Array.from({length:30},(_,index)=>({listing_id:810000+index,title:`${query} — TEST SAMPLE ${index+1}`,state:"active",listing_type:digital?"download":"physical",type:digital?"download":"physical",url:`${origin}/?sample=${index+1}`,num_favorers:20+index*13,original_creation_timestamp:Math.floor((Date.now()-(20+index*5)*86400000)/1000),creation_timestamp:Math.floor((Date.now()-30*86400000)/1000),price:{amount:499+index*10,divisor:100,currency_code:"USD"},tags:[query.slice(0,20),"printable pdf","instant download","US Letter","A4"],description:"SYNTHETIC WEB TEST DATA. NOT AN ACTUAL PRODUCT OR SELLER."}));
       return end({count:1800,results:rows});
     }
-    if(path.endsWith("/seller-taxonomy/nodes"))return end({results:[{id:10,name:"Paper & Party Supplies",children:[{id:11,name:"Calendars & Planners",children:[]},{id:12,name:"Party Games",children:[]},{id:13,name:"Coloring Books",children:[]}]},{id:20,name:"Patterns & How To",children:[{id:21,name:"Crochet",children:[]}]},{id:30,name:"Jewelry",children:[{id:31,name:"Prayer Beads",children:[]}]}]});
+    if(path.endsWith("/seller-taxonomy/nodes"))return end({results:[
+      {id:10,name:"Paper & Party Supplies",children:["Calendars & Planners","Party Games","Coloring Books","Journals & Notebooks","Recipe Cards","Educational & Learning","Scrapbooking & Digital Paper","Stickers","Greeting Cards","Puzzles","Labels & Tags","Design & Templates","Stationery"].map((name,index)=>({id:110+index,name,children:[]}))},
+      {id:20,name:"Patterns & How To",children:["Crochet","Knitting","Cross Stitch","Embroidery","Sewing","Macrame","Punch Needle"].map((name,index)=>({id:210+index,name,children:[]}))},
+      {id:30,name:"Jewelry",children:[{id:310,name:"Prayer Beads",children:[]}]},
+      {id:40,name:"Art & Collectibles",children:[{id:410,name:"Digital Prints",children:[]}]}
+    ]});
     if(path.endsWith("/shipping-profiles"))return end({results:[{shipping_profile_id:100,title:"SANDBOX ONLY"}]});
     if(path.endsWith("/policies/return"))return end({results:[{return_policy_id:101,accepts_returns:true,accepts_exchanges:true,return_deadline:30}]});
     if(path.endsWith("/readiness-state-definitions"))return end({results:[{readiness_state_id:102,readiness_state:"ready_to_ship"}]});
@@ -85,7 +90,7 @@ export function createSandbox(store: SandboxStore, origin: string) {
       if(method==="GET")return end({count:drafts.size,results:[...drafts.values()]});
       if(method!=="POST")return end({error:"Yalnız test taslağı oluşturulabilir."},409);
       const fields=Object.fromEntries(await request.formData());
-      const listing={...fields,listing_id:++sequence,state:"draft",is_digital:true,listing_type:"download",url:`${origin}/?draft=${sequence}`,price:{amount:Math.round(Number(fields.price)*100),divisor:100,currency_code:"USD"},fileNames:[],imageCount:0};
+      const listing={...fields,shop_id:777,listing_id:++sequence,state:"draft",is_digital:true,listing_type:"download",url:`${origin}/?draft=${sequence}`,price:{amount:Math.round(Number(fields.price)*100),divisor:100,currency_code:"USD"},fileNames:[],imageCount:0};
       drafts.set(sequence,listing);await saveDrafts();return end(listing,201);
     }
     const filePath=path.match(/\/shops\/777\/listings\/(\d+)\/(files|images)$/);

@@ -1365,6 +1365,7 @@ function TrendPanel({ online, active = true, onUse }: any) {
     finally { setScanning(undefined); }
   };
   const scanKeyword = async (target?: { keyword: string; group?: string }) => {
+    if (!online || scanning) return;
     const query = target?.keyword || keyword.trim();
     if (query.length < 3) return Alert.alert("Anahtar kelime", "İngilizce bir arama yazın (ör. crochet bag pattern).");
     setScanning(`custom:${query}`);
@@ -1392,8 +1393,8 @@ function TrendPanel({ online, active = true, onUse }: any) {
     <View style={styles.guardrail}><Ionicons name="information-circle-outline" size={20} color="#315B4C" /><Text style={[styles.guardrailText, { flex: 1 }]}>{board?.method || "Etsy resmî aramasındaki üst ilanlar puanlanır. Etsy satış adedini paylaşmadığı için puan tahmindir."}</Text></View>
     {board && !board.configured && <Text style={styles.shopierBlocker}>Etsy API anahtarı (keystring ve shared secret) sunucuya eklenince tarama başlar.</Text>}
     <View style={styles.chatInputRow}>
-      <TextInput style={styles.chatInput} value={keyword} onChangeText={setKeyword} placeholder="Arama tara (Google Trends ifadesi de olur): crochet bag pattern, misbaha" placeholderTextColor="#9AA39F" spellCheck={false} autoCorrect={false} autoCapitalize="none" />
-      <Pressable style={styles.sendButton} onPress={() => scanKeyword()} disabled={!online || Boolean(scanning)}><Ionicons name="search" size={19} color="white" /></Pressable>
+      <TextInput style={styles.chatInput} value={keyword} onChangeText={setKeyword} onSubmitEditing={() => scanKeyword()} returnKeyType="search" placeholder="Arama tara (Google Trends ifadesi de olur): crochet bag pattern, misbaha" placeholderTextColor="#9AA39F" spellCheck={false} autoCorrect={false} autoCapitalize="none" />
+      <Pressable accessibilityRole="button" accessibilityLabel="Aramayı tara" style={styles.sendButton} onPress={() => scanKeyword()} disabled={!online || Boolean(scanning)}><Ionicons name="search" size={19} color="white" /></Pressable>
     </View>
     {custom.map((result) => <TrendCard key={`custom:${result.keyword}`} title={result.keywordTr || `Arama: ${result.keyword}`} result={result} canScan={online && !scanning} scanning={scanning === `custom:${result.keyword}`} onScan={() => scanKeyword({ keyword: result.keyword, group: result.group })} expanded={expanded === `custom:${result.keyword}`} onToggle={() => setExpanded(expanded === `custom:${result.keyword}` ? undefined : `custom:${result.keyword}`)} onUse={() => use({ keyword: result.keyword }, result)} />)}
     <View style={[styles.chips, { marginTop: 14 }]}>{groups.map((item: any) => <Pressable key={item.id} style={[styles.chip, group === item.id && styles.chipActive]} onPress={() => setGroup(item.id)}><Text style={[styles.chipText, group === item.id && styles.chipTextActive]}>{item.labelTr}</Text></Pressable>)}</View>
@@ -2154,8 +2155,12 @@ function DigitalUploadForm({ visible, suspended = false, prefill, onClose, onSav
   const [files, setFiles] = useState<any[]>([]);
   const [images, setImages] = useState<any[]>([]);
   const [saving, setSaving] = useState(false);
+  // Closing is a pause, not a new upload. Compare content, not parent object identity.
+  const uploadSeed = JSON.stringify(prefill ?? null);
+  const initializedSeed = useRef<string | undefined>(undefined);
   useEffect(() => {
-    if (!visible) return;
+    if (!visible || initializedSeed.current === uploadSeed) return;
+    initializedSeed.current = uploadSeed;
     setName(prefill?.name || "");
     setCraft(prefill?.craft || "crochet");
     // Boş açılan form dijital ürünle başlar; el işi deseni yalnız desen stüdyosundan (craft ile) gelir.
@@ -2177,7 +2182,7 @@ function DigitalUploadForm({ visible, suspended = false, prefill, onClose, onSav
     setTestMade(false);
     setFiles([]);
     setImages([]);
-  }, [visible, prefill]);
+  }, [visible, uploadSeed]);
   // Ürün tipi değişince onaylar o tipin güvenli varsayılanına döner (desende yapay zekâ ve render yok).
   useEffect(() => {
     if (!visible) return;
@@ -2248,6 +2253,7 @@ function DigitalUploadForm({ visible, suspended = false, prefill, onClose, onSav
           const response = await fetch(`${API_URL}/api/digital/products`, { method: "POST", headers: apiHeaders(), body: form });
           const body = await response.json().catch(() => ({})) as any;
           if (!response.ok) throw new Error(body.error || "Yükleme tamamlanamadı.");
+          initializedSeed.current = undefined;
           onSaved(body.product);
         } catch (error) { Alert.alert("Yüklenemedi", errorText(error)); }
         finally { setSaving(false); }
@@ -2425,7 +2431,7 @@ function DigitalPanel({ online, active = true, shopReady, prefill, onPrefillUsed
         {!grant.revoked && <Pressable onPress={() => revoke(grant, product.id)}><Ionicons name="close-circle-outline" size={21} color="#A84A3A" /></Pressable>}
       </View>)}
     </View>)}
-    <DigitalUploadForm visible={formVisible} suspended={!active} prefill={prefill} onClose={() => { setFormVisible(false); onPrefillUsed(); }} onSaved={async () => { setFormVisible(false); onPrefillUsed(); await load(); Alert.alert("Yüklendi", "PDF güvenli depoya alındı. Etsy mağazası hazırsa 'Etsy taslağı oluştur' ile ilana dönüştürebilirsiniz."); }} />
+    <DigitalUploadForm visible={formVisible} suspended={!active} prefill={prefill} onClose={() => { setFormVisible(false); }} onSaved={async () => { setFormVisible(false); onPrefillUsed(); await load(); Alert.alert("Yüklendi", "PDF güvenli depoya alındı. Etsy mağazası hazırsa 'Etsy taslağı oluştur' ile ilana dönüştürebilirsiniz."); }} />
     <GrantForm product={grantProduct} onClose={async (created: boolean) => { const id = grantProduct?.id; setGrantProduct(undefined); if (created && id) await loadDetail(id); }} />
   </>;
 }
