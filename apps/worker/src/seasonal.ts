@@ -22,7 +22,8 @@ export interface UpcomingSeason {
   daysUntil: number;
   listByProducts: string;
   listByPatterns: string;
-  urgency: "Hemen listele" | "Bu ay hazırla" | "Planla";
+  listByDigital: string;
+  urgency: "Hemen listele" | "Bu ay hazırla" | "Planla" | "Yalnız dijital için kısa süre" | "Hazırlık dönemi geçti";
   tipTr: string;
   keywords: Array<{ keyword: string; group: KeywordGroup; result?: TrendResult }>;
 }
@@ -172,7 +173,8 @@ export function upcomingSeasons(now = new Date(), horizonDays = 180): Array<Omit
         daysUntil,
         listByProducts: iso(listByProducts),
         listByPatterns: iso(listByPatterns),
-        urgency: daysToListBy <= 7 ? "Hemen listele" as const : daysToListBy <= 30 ? "Bu ay hazırla" as const : "Planla" as const,
+        listByDigital: iso(new Date(date.getTime() - 14 * DAY_MS)),
+        urgency: daysToListBy < 0 ? daysUntil > 14 ? "Yalnız dijital için kısa süre" as const : "Hazırlık dönemi geçti" as const : daysToListBy <= 7 ? "Hemen listele" as const : daysToListBy <= 30 ? "Bu ay hazırla" as const : "Planla" as const,
         tipTr: season.tipTr,
         keywords: (Object.entries(season.keywords) as Array<[KeywordGroup, string[]]>).flatMap(([group, keywords]) => keywords.map((keyword) => ({ keyword, group })))
       });
@@ -191,6 +193,6 @@ export async function seasonalBoard(store: TrendStore | undefined, now = new Dat
   return {
     today: iso(now),
     events,
-    note: "Son listeleme tarihleri: fiziksel ürünler için bayramdan önceki alışveriş ve ABD'ye kargo süresi, desenler için alıcının ürünü örmesi gereken ek 3 hafta hesaba katılarak verilir. Hicri bayram tarihleri yaklaşıktır."
+    note: "Tarihler yaklaşık hazırlık hedefleridir; teslimat veya satış garantisi vermez. Fiziksel ürünlerde alışveriş ve ABD'ye kargo süresi, desenlerde ek 3 hafta, hazır dijital ürünlerde 14 günlük hazırlık payı kullanılır. Hicri bayram tarihleri yaklaşıktır."
   };
 }
