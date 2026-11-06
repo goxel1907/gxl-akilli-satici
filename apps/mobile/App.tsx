@@ -4,6 +4,7 @@ import { canRankTrend, compareTrendEvidence, trendFreshness } from "./trend-prio
 import { listingProgress, listingTasks, physicalListingProgress, etsyTransferComplete, type ListingProgressInput } from "./listing-progress";
 import ListingMascot, { type ListingMascotProps } from "./ListingMascot";
 import LiveCheckPanel from "./LiveCheckPanel";
+import { appendLocalFile } from "./upload-file";
 import { isLiveReadPath } from "./live-check";
 import { sameProduct } from "./product-identity";
 import { mergeLocalProducts, generationKey, uploadPrices, PRINTABLE_WORKSPACE_KEY, parsePrintableWorkspace, type PrintableWorkspace } from "./workflow-state";
@@ -162,6 +163,7 @@ function useAppUpdates() {
 
 // Hangi sürümün çalıştığı ekran görüntüsünden anlaşılsın diye Özet'in altında gösterilir.
 function appVersionText(): string {
+  if (process.env.EXPO_PUBLIC_WEB_SANDBOX === "true") return "Web test · 0.8.6 ortak ekranları · örnek servis verisi";
   const version = Constants.expoConfig?.version || "";
   if (!Updates.isEnabled || Updates.isEmbeddedLaunch || !Updates.createdAt) return `Uygulama ${version} · APK ile gelen sürüm`;
   return `Uygulama ${version} · güncelleme ${Updates.createdAt.toLocaleDateString("tr-TR")} ${Updates.createdAt.toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })}`;
@@ -404,7 +406,7 @@ function App() {
     setOnline(false);
   };
 
-  const confirmResetToken = () => Alert.alert("Bağlantı anahtarı", "Kayıtlı anahtar silinip giriş ekranı açılacak. Cloudflare'a kaydettiğiniz APP_ACCESS_TOKEN değerini yeniden girmeniz gerekir. Devam edilsin mi?", [
+  const confirmResetToken = () => process.env.EXPO_PUBLIC_WEB_SANDBOX === "true" ? Alert.alert("Web test anahtarı", "Bu ortam gerçek anahtar kabul etmez. Test araçlarından normal senaryoya dönüp bağlantıyı yeniden dene.") : Alert.alert("Bağlantı anahtarı", "Kayıtlı anahtar silinip giriş ekranı açılacak. Cloudflare'a kaydettiğiniz APP_ACCESS_TOKEN değerini yeniden girmeniz gerekir. Devam edilsin mi?", [
     { text: "Vazgeç", style: "cancel" },
     { text: "Sil ve yeniden gir", style: "destructive", onPress: () => { resetApiToken(); } }
   ]);
@@ -422,7 +424,7 @@ function App() {
           <Text style={styles.eyebrow}>SATIŞ MERKEZİ</Text>
           <Text style={styles.title}>GXL Akıllı Satıcı</Text>
         </View>
-        <View style={[styles.agentBadge, !online && styles.localBadge]}><View style={[styles.dot, !online && styles.localDot]} /><Text style={styles.agentText}>{online ? "Bağlı" : "Bağlantı yok"}</Text></View>
+        <View style={[styles.agentBadge, !online && styles.localBadge]}><View style={[styles.dot, !online && styles.localDot]} /><Text style={styles.agentText}>{online ? process.env.EXPO_PUBLIC_WEB_SANDBOX === "true" ? "Web test" : "Bağlı" : "Bağlantı yok"}</Text></View>
       </View>
       {loading ? <ActivityIndicator style={{ marginTop: 40 }} color="#C88B47" /> : (
         <ScrollView ref={scrollRef} contentContainerStyle={[styles.content, { paddingBottom: 110 + insets.bottom }]}>
@@ -1156,7 +1158,7 @@ async function liveCheckRequest(path: string, signal?: AbortSignal) {
   finally { clearTimeout(timer); signal?.removeEventListener("abort", abort); }
 }
 function LiveDeviceCheck() {
-  return <LiveCheckPanel request={liveCheckRequest} environment={{ appVersion: Constants.expoConfig?.version || "unknown", runtimeVersion: String(Updates.runtimeVersion || "unknown"), channel: Updates.channel || "unknown", embedded: Updates.isEmbeddedLaunch, updateId: Updates.updateId || undefined, updateCreatedAt: Updates.createdAt?.toISOString() }} />;
+  return <LiveCheckPanel request={liveCheckRequest} environment={{ appVersion: Constants.expoConfig?.version || "unknown", runtimeVersion: String(Updates.runtimeVersion || "unknown"), channel: Updates.channel || "unknown", embedded: Updates.isEmbeddedLaunch, updateId: Updates.updateId || undefined, updateCreatedAt: Updates.createdAt?.toISOString(), testMode: process.env.EXPO_PUBLIC_WEB_SANDBOX === "true" ? "synthetic-web" : undefined }} />;
 }
 
 function errorCode(error: unknown): string | undefined {
@@ -2235,7 +2237,7 @@ function DigitalUploadForm({ visible, suspended = false, prefill, onClose, onSav
             const part = new FormData();
             part.append("confirm", "true"); part.append("role", role);
             const zip = /\.zip$/i.test(asset.name || "") || /zip/.test(asset.mimeType || "");
-            part.append("asset", { uri: asset.uri, name: asset.name || asset.fileName || `${role}-${index + 1}.${role === "image" ? "jpg" : zip ? "zip" : "pdf"}`, type: asset.mimeType || (role === "image" ? "image/jpeg" : zip ? "application/zip" : "application/pdf") } as any);
+            await appendLocalFile(part, "asset", asset, asset.name || asset.fileName || `${role}-${index + 1}.${role === "image" ? "jpg" : zip ? "zip" : "pdf"}`, asset.mimeType || (role === "image" ? "image/jpeg" : zip ? "application/zip" : "application/pdf"));
             const result = await apiJson("/api/digital/upload-part", { method: "POST", headers: apiHeaders(), body: part });
             if (!result.id) throw new Error("Dosya yüklemesi doğrulanamadı.");
             return result.id as string;
@@ -3686,7 +3688,7 @@ function PhotoListingStudio({ online, etsyReady, wizard, onStepChange }: any) {
         report(`Fotoğraf ${index + 1}/${photos.length} yükleniyor…`);
         const large = await shrinkPhoto(photo, 3000, 0.85);
         const form = new FormData();
-        form.append("image", { uri: large.uri, name: `photo-${index + 1}.jpg`, type: "image/jpeg" } as any);
+        await appendLocalFile(form, "image", large, `photo-${index + 1}.jpg`, "image/jpeg");
         const response = await fetch(`${API_URL}/api/products/photos`, { method: "POST", headers: apiHeaders(), body: form });
         const body = await response.json().catch(() => ({})) as any;
         if (!response.ok) throw new Error(body.error || `${index + 1}. fotoğraf yüklenemedi.`);

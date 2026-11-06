@@ -1,6 +1,6 @@
 export type LiveCheckStatus = "pending" | "verified" | "warning" | "failed" | "reported" | "skipped";
 export interface LiveCheckRow { id: string; labelTr: string; source: "live_read" | "device" | "seller"; status: LiveCheckStatus; detailTr: string; checkedAt?: string; }
-export interface LiveEnvironment { appVersion: string; runtimeVersion: string; channel: string; embedded: boolean; updateId?: string; updateCreatedAt?: string; }
+export interface LiveEnvironment { appVersion: string; runtimeVersion: string; channel: string; embedded: boolean; updateId?: string; updateCreatedAt?: string; testMode?: "synthetic-web"; }
 export interface LiveCheckReport { version: 1; id: string; startedAt: string; finishedAt?: string; productId?: string; state: "running" | "completed" | "cancelled"; environment: LiveEnvironment; checks: LiveCheckRow[]; }
 export type LiveReader = (path: string, signal?: AbortSignal) => Promise<any>;
 interface ProbeStorage { getItem(key: string): Promise<string | null>; setItem(key: string, value: string): Promise<void>; removeItem(key: string): Promise<void>; }
@@ -32,7 +32,8 @@ export const LIVE_READ_PATHS = ["/health", "/api/dashboard", "/api/channels/stat
 export function isLiveReadPath(path: string): boolean { return (LIVE_READ_PATHS as readonly string[]).includes(path) || /^\/api\/digital\/products\/[a-f0-9-]{36}\/qa$/.test(path); }
 function safeEnvironment(env: LiveEnvironment): LiveEnvironment {
   const version = (value: string) => /^\d+(?:\.\d+){1,3}$/.test(value) ? value : "unknown";
-  return { appVersion: version(env.appVersion), runtimeVersion: version(env.runtimeVersion), channel: ["preview", "production", "development"].includes(env.channel) ? env.channel : "unknown", embedded: env.embedded === true,
+  return { appVersion: version(env.appVersion), runtimeVersion: version(env.runtimeVersion), channel: ["preview", "production", "development", "web-test"].includes(env.channel) ? env.channel : "unknown", embedded: env.embedded === true,
+    ...(env.testMode === "synthetic-web" ? {testMode: "synthetic-web" as const}: {}),
     ...(typeof env.updateId==="string" && /^[a-f0-9-]{36}$/i.test(env.updateId)?{updateId:env.updateId}:{}),
     ...(typeof env.updateCreatedAt==="string" && Number.isFinite(Date.parse(env.updateCreatedAt))?{updateCreatedAt:new Date(env.updateCreatedAt).toISOString()}: {}) };
 }
@@ -62,7 +63,7 @@ function errorDetail(error: unknown): string {
 }
 export async function runLiveReads(env: LiveEnvironment, request: LiveReader, options: { signal?: AbortSignal; storage?: ProbeStorage; onProgress?: (report: LiveCheckReport)=>void } = {}): Promise<LiveCheckReport> {
   let report = newLiveReport(env);
-  const change = (id: string,status: LiveCheckStatus,detail: string) => { report=updateLiveRow(report,id,status,detail);options.onProgress?.(report); };
+  const change = (id: string,status: LiveCheckStatus,detail: string) => { report=updateLiveRow(report,id,report.environment.testMode && status==="verified" ? "warning" : status,report.environment.testMode ? `WEB TESTİ: Örnek servis/ortam; gerçek Etsy veya Android doğrulaması değildir. ${detail}` : detail);options.onProgress?.(report); };
   change("environment",report.environment.channel === "unknown" || report.environment.runtimeVersion === "unknown" ? "warning" : "verified",`Sürüm ${report.environment.appVersion}; kanal ${report.environment.channel}; çalışma sürümü ${report.environment.runtimeVersion}. Bu, en yeni güncellemenin kurulu olduğunu kanıtlamaz.`);
   if (options.storage) {
     const key=`gxl.liveQaProbe.${report.id}`;

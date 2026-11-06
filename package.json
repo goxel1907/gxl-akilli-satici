@@ -9,7 +9,8 @@
     "worker:dev": "wrangler dev",
     "worker:deploy": "wrangler deploy",
     "test": "node --import tsx --test apps/api/test/*.test.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "web:test:build": "node apps/web-test/build.mjs"
   },
   "dependencies": {
     "fast-xml-validator": "1.4.2",
@@ -22,6 +23,8 @@
     "@types/react-test-renderer": "19.1.0",
     "esbuild": "0.28.2",
     "react": "19.1.0",
+    "react-dom": "^19.1.0",
+    "react-native-web": "^0.21.2",
     "react-test-renderer": "19.1.0",
     "tsx": "^4.20.0",
     "typescript": "^5.9.0",
