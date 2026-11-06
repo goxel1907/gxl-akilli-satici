@@ -15,6 +15,7 @@ const reply = (body: unknown, status = 200) => Response.json(body, { status });
 export function createSandbox(store: SandboxStore, origin: string) {
   let scenario: Scenario = "normal", sequence = 900000;
   const events: SandboxEvent[] = [], drafts = new Map<number, Record<string, any>>();
+  const samples = new Map<number, Record<string, any>>();
   const emit = (method: string,path: string,status: number) => { events.push({ at:new Date().toISOString(),method,path,status,simulated:true });if(events.length>250)events.shift(); };
   const env: any = {
     APP_ACCESS_TOKEN: SANDBOX_TOKEN, ETSY_API_KEY:"SANDBOX_API_KEY", ETSY_SHARED_SECRET:"SANDBOX_SHARED_SECRET", ETSY_OAUTH:store,
@@ -72,7 +73,9 @@ export function createSandbox(store: SandboxStore, origin: string) {
     if(path.endsWith("/listings/active")) {
       const query=url.searchParams.get("keywords")||"printable planner";
       const digital=!/tesbih|prayer beads|vintage|silver/i.test(query);
-      const rows=Array.from({length:30},(_,index)=>({listing_id:810000+index,title:`${query} — TEST SAMPLE ${index+1}`,state:"active",listing_type:digital?"download":"physical",type:digital?"download":"physical",url:`${origin}/?sample=${index+1}`,num_favorers:20+index*13,original_creation_timestamp:Math.floor((Date.now()-(20+index*5)*86400000)/1000),creation_timestamp:Math.floor((Date.now()-30*86400000)/1000),price:{amount:499+index*10,divisor:100,currency_code:"USD"},tags:[query.slice(0,20),"printable pdf","instant download","US Letter","A4"],description:"SYNTHETIC WEB TEST DATA. NOT AN ACTUAL PRODUCT OR SELLER."}));
+      const queryId = [...query].reduce((value, char) => (value * 31 + char.charCodeAt(0)) >>> 0, 0) % 1000000;
+      const rows=Array.from({length:30},(_,index)=>({listing_id:100000000+queryId*100+index,title:`${query} — TEST SAMPLE ${index+1}`,state:"active",listing_type:digital?"download":"physical",type:digital?"download":"physical",url:`${origin}/?sample=${index+1}`,num_favorers:20+index*13,original_creation_timestamp:Math.floor((Date.now()-(20+index*5)*86400000)/1000),creation_timestamp:Math.floor((Date.now()-30*86400000)/1000),price:{amount:499+index*10,divisor:100,currency_code:"USD"},tags:[query.slice(0,20),"printable pdf","instant download","US Letter","A4"],description:"SYNTHETIC WEB TEST DATA. NOT AN ACTUAL PRODUCT OR SELLER."}));
+      rows.forEach(row=>samples.set(row.listing_id,row));
       return end({count:1800,results:rows});
     }
     if(path.endsWith("/seller-taxonomy/nodes"))return end({results:[
@@ -101,7 +104,7 @@ export function createSandbox(store: SandboxStore, origin: string) {
       await saveDrafts();return end({listing_file_id:++sequence,listing_image_id:sequence},201);
     }
     const listingPath=path.match(/\/listings\/(\d+)$/);
-    if(listingPath){if(method!=="GET")return end({error:"Test taslağı yayımlanamaz.",code:"SANDBOX_WRITE_BLOCKED"},409);const draft=drafts.get(Number(listingPath[1]));return draft?end(draft):end({error:"Test ilanı bulunamadı."},404);}
+    if(listingPath){if(method!=="GET")return end({error:"Test taslağı yayımlanamaz.",code:"SANDBOX_WRITE_BLOCKED"},409);const draft=drafts.get(Number(listingPath[1]))||samples.get(Number(listingPath[1]));return draft?end(draft):end({error:"Test ilanı bulunamadı."},404);}
     return end({error:`Bu dış servis yolu testte tanımlı değil: ${path}`},501);
   }
   return {api,upstream,events,drafts,get scenario(){return scenario;},setScenario(value:Scenario){scenario=value;},scope:"synthetic-only" as const};

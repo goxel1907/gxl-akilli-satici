@@ -1,6 +1,7 @@
 import { etsyRequest, EtsyIntegrationError, type EtsyRuntimeEnv } from "./etsy.js";
 import { inferPrintableKind, normalizeKeyword, scoreTrend, type PrintableKind } from "./etsy-trends.js";
 import { buildCompetition } from "./pattern-seed.js";
+import { buildMarketStrategy } from "./market-strategy.js";
 
 type ResearchProduct = { kind: PrintableKind; productType: string; keyword?: string; pageCount?: number; competitorLinks?: string };
 export function competitorIds(value = ""): string[] {
@@ -62,6 +63,7 @@ export async function researchPrintableMarket(env: EtsyRuntimeEnv, input: Resear
   });
   if (comparable.length < 3) throw new EtsyIntegrationError("VALIDATION_FAILED", "Bu aramada aynı tür ve konuda en az 3 dijital rakip bulunamadı. Daha belirgin bir Etsy araması yazın; eski analiz veya tahmini fiyat kullanılmadı.", 400);
   const result = scoreTrend(keyword, { count: response.count, results: comparable }, Date.now(), "printables", "product_matched");
+  result.strategy = buildMarketStrategy(keyword, comparable, Date.parse(result.scannedAt), "product_matched", selectedIds);
   if (!result.strategy || result.strategy.sampleSize < 3) throw new EtsyIntegrationError("VALIDATION_FAILED", "Korunan isimler elendikten sonra en az 3 karşılaştırılabilir rakip gerekli. Başka bir Etsy araması deneyin.", 400);
   if (!result.strategy.pricing) throw new EtsyIntegrationError("VALIDATION_FAILED", "Korunan isimler elendikten sonra en az 3 karşılaştırılabilir USD fiyatı gerekli. Başka bir Etsy araması deneyin; farklı para birimleri fiyat önerisine katılmadı.", 400);
   const competition = buildCompetition(result, input.kind, input.pageCount, []);

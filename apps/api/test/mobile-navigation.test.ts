@@ -249,8 +249,9 @@ test("real screen buttons drive Trend → Studio → Digital → draft → verif
     await act(async () => { await searchButton.props.onPress(); });
     await tap(renderer, /^Bu nişte dijital ürün hazırla$/);
     await tap(renderer, /^Goxi ile rakipleri araştır$/);
+    assert.equal(Boolean(plan), false, "Research preview must not generate a listing");
+    await tap(renderer, /^Goxi ile ilan paketini hazırla$/);
     assert.ok(plan?.quality.ok, JSON.stringify(ui.alerts));
-    await tap(renderer, /^Rakip kanıtlarını ve stratejiyi göster$/);
     assert.ok(renderer.root.findAllByType("Text" as any).some(node => visible(node) && text(node).includes("Bestseller rozeti doğrulanmadı")));
     await tap(renderer, /^Goxi ile üretim paketini paylaş$/);
     assert.equal((ui.shares.at(-1) as { message: string }).message, plan.brief.masterPrompt);

@@ -522,7 +522,7 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
     if (request.method === "POST" && url.pathname === "/api/patterns/seed") {
       const input = await readBody(request);
       const text = (value: unknown) => value ? String(value) : undefined;
-      return json(200, await createPatternSeed(env, env.ETSY_OAUTH as unknown as TrendStore | undefined, { keyword: text(input.keyword), craft: text(input.craft), group: text(input.group), kind: text(input.kind), studio: text(input.studio) }));
+      return json(200, await createPatternSeed(env, env.ETSY_OAUTH as unknown as TrendStore | undefined, { keyword: text(input.keyword), craft: text(input.craft), group: text(input.group), kind: text(input.kind), studio: text(input.studio), avoidKeyword: text(input.avoidKeyword) }));
     }
     // Etsy 22 Ekim 2026: yapay zekâ deseni yasak. Yapay zekâya desen yazdıran talimat paketi artık üretilmez;
     // yalnız satıcının kendi yazdığı ve denediği desen için ilan metni (başlık, etiket, açıklama) hazırlanır.
@@ -537,6 +537,12 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
       const listing = await createDigitalListing(normalizeDigitalListingInput({ ...input, ...flags, avoidNames: usedNames }), env);
       // Telefona gitmeden önce otomatik denetim: küçük hatalar düzeltilir, kalan sorun "quality" ile bildirilir.
       return json(200, guardDigitalListing(listing));
+    }
+
+    if (request.method === "POST" && url.pathname === "/api/printables/research") {
+      const input = normalizePrintablePlanInput(await readBody(request));
+      // Read-only research: no generated name, handoff, product or Etsy draft.
+      return json(200, { research: await researchPrintableMarket(env, input) });
     }
 
     if (request.method === "POST" && url.pathname === "/api/printables/plan") {
