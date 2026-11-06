@@ -1621,7 +1621,8 @@ const STUDIO_MODES = [
 
 // Rakipleri geçmek için plan: fiyat, içerik miktarı, format boşlukları, paket ve öne çıkan rakipler.
 function MarketStrategyCard({ strategy }: any) {
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(true);
+  useEffect(() => { setExpanded(true); }, [strategy?.id]);
   if (strategy?.version !== 1 || !Array.isArray(strategy.leaders) || !Array.isArray(strategy.actions) || !Array.isArray(strategy.experiments) || !Array.isArray(strategy.limitationsTr)) return null;
   return <View style={styles.analysisCard}>
     <Text style={styles.cardTitle}>Kanıta dayalı rakip stratejisi</Text>
@@ -1631,16 +1632,32 @@ function MarketStrategyCard({ strategy }: any) {
     {expanded && <>
     {strategy.limitationsTr.map((line: string) => <Text key={line} style={styles.warningText}>• {line}</Text>)}
     {strategy.pricing && <Text style={styles.listingTitle}>Fiyat deneme referansları: {strategy.pricing.trialsUsd.join(" / ")} USD · maliyet ve ücretleri ayrıca kontrol edin</Text>}
-    {strategy.actions.map((action: any) => <View key={action.id} style={styles.visualRow}><Text style={styles.rowTitle}>{action.titleTr}</Text><Text style={styles.analysisLine}>{action.instructionTr}</Text></View>)}
+    {strategy.actions.map((action: any) => <View key={action.id} style={styles.visualRow}><Text style={styles.rowTitle}>{action.titleTr}</Text><Text style={styles.analysisLine}>{action.instructionTr}</Text>{!!action.evidenceIds?.length && <Text style={styles.small}>Dayanak: {action.evidenceIds.slice(0, 5).join(", ")} numaralı örnek ilanlar</Text>}</View>)}
     <Text style={styles.warningTitle}>İncelenen rakipler</Text>
     {strategy.leaders.map((row: any) => <View key={row.id} style={styles.visualRow}>
       <Text style={styles.rowTitle}>{row.title}</Text>
+      {row.selectedBySeller && <Text style={styles.evidence}>Senin karşılaştırmaya eklediğin ilan</Text>}
       <Text style={styles.small}>{row.priceUsd ? `${row.priceUsd} USD · ` : ""}{row.favorites ?? "?"} favori · {row.ageDays === null ? "yaş bilinmiyor" : `${row.ageDays} gün`}{row.monthlyFavoriteAverage !== null ? ` · aylık ortalama ${row.monthlyFavoriteAverage} favori` : ""}</Text>
       {!!row.url && <Pressable style={styles.secondaryButton} onPress={() => openUrl(row.url, "Rakip ilanı")}><Text style={styles.secondaryButtonText}>Kaynak ilanı aç</Text></Pressable>}
     </View>)}
     <Text style={styles.warningTitle}>Yayın sonrası ölçüm</Text>
     {strategy.experiments.map((experiment: any) => <View key={experiment.id} style={styles.visualRow}><Text style={styles.rowTitle}>{experiment.changeTr}</Text><Text style={styles.analysisLine}>{experiment.metricTr}</Text><Text style={styles.small}>{experiment.stopRuleTr}</Text></View>)}
     </>}
+  </View>;
+}
+
+function SearchSelectionCard({ selection, onSelect, disabled }: any) {
+  if (!selection?.candidates?.length) return null;
+  return <View style={styles.analysisCard}>
+    <Text style={styles.cardTitle}>Kategori aramaları karşılaştırması</Text>
+    <Text style={styles.small}>{selection.comparedCount} güncel örneklem · {selection.totalCandidates} araştırma fikri · {new Date(selection.checkedAt).toLocaleString("tr-TR")}</Text>
+    <Text style={styles.warningText}>{selection.noteTr}</Text>
+    <Text style={styles.formHint}>Bunlar Etsy aramalarıdır. İlan başlığı, seçtiğin ürünün özellikleriyle sonraki aşamada hazırlanır.</Text>
+    {selection.candidates.map((row: any) => <View key={row.keyword} style={styles.visualRow}>
+      <Text style={styles.rowTitle}>{row.keyword}{row.keyword === selection.selectedKeyword ? " · seçilen arama" : ""}</Text>
+      <Text style={styles.small}>{row.state === "fresh" && Number.isFinite(row.score) ? `${row.score} puan · ${row.sampleSize ?? "?"} örnek ilan` : row.state === "failed" ? row.errorTr : row.state === "stale" ? "Veri eski; güncel sıralamaya katılmadı" : "Henüz yeterli güncel veri yok; kazanan sayılmaz"}</Text>
+      {row.keyword !== selection.selectedKeyword && <Pressable style={styles.secondaryButton} disabled={disabled} onPress={() => onSelect(row.keyword)}><Text style={styles.secondaryButtonText}>{row.keyword} aramasını seç</Text></Pressable>}
+    </View>)}
   </View>;
 }
 
@@ -1657,7 +1674,7 @@ function CompetitionCard({ competition }: any) {
   </View>;
 }
 
-function PrintableStudio({ online, seed, seeding, resumeWorkspace, onPrepared, onReseed, onPickKind, onUpload }: any) {
+function PrintableStudio({ online, seed, seeding, resumeWorkspace, onPrepared, onReseed, onPickKind, onPickQuery, onUpload }: any) {
   const [kind, setKind] = useState("planner");
   const [assistant, setAssistant] = useState("chatgpt");
   const assistantPreferenceChanged = useRef(false);
@@ -1675,6 +1692,7 @@ function PrintableStudio({ online, seed, seeding, resumeWorkspace, onPrepared, o
   const [trendFeatures, setTrendFeatures] = useState<string[]>([]);
   const [basis, setBasis] = useState<string[]>([]);
   const [plan, setPlan] = useState<any>();
+  const [researchPreview, setResearchPreview] = useState<any>();
   const [working, setWorking] = useState(false);
   const generationRequest = useRef(0);
   useEffect(() => {
@@ -1692,6 +1710,7 @@ function PrintableStudio({ online, seed, seeding, resumeWorkspace, onPrepared, o
     setBasis(seed.basis || []);
     setAudience(seed.audience || "");
     setPlan(undefined);
+    setResearchPreview(undefined);
   }, [seed]);
   useEffect(() => {
     if (!resumeWorkspace) return;
@@ -1705,6 +1724,18 @@ function PrintableStudio({ online, seed, seeding, resumeWorkspace, onPrepared, o
   }, [resumeWorkspace]);
   const workspaceInput = { kind, productType, referenceNotes, colors, formats, pageCount, audience, keyword, ...(competitorLinks ? { competitorLinks } : {}), trendTags, trendFeatures, assistant };
   const inputKey = generationKey(workspaceInput);
+  const researchKey = generationKey({ kind, productType, keyword, competitorLinks });
+  const currentPreview = researchPreview?.inputKey === researchKey ? researchPreview.research : undefined;
+  const analyze = async () => {
+    if (productType.trim().length < 3) return Alert.alert("Ürün", "Önce araştırılacak ürünü ve hedef Etsy aramasını yazın.");
+    const requestId = ++generationRequest.current;
+    setWorking(true);
+    try {
+      const result = await apiJson("/api/printables/research", { method: "POST", headers: apiHeaders(true), body: JSON.stringify({ kind, productType, keyword, competitorLinks, pageCount: pageCount ? Number(pageCount) : undefined }) });
+      if (requestId === generationRequest.current) setResearchPreview({ inputKey: researchKey, research: result.research });
+    } catch (error) { if (requestId === generationRequest.current) { setResearchPreview(undefined); Alert.alert("Rakip araştırması alınamadı", errorText(error)); } }
+    finally { if (requestId === generationRequest.current) setWorking(false); }
+  };
   const generate = async () => {
     if (productType.trim().length < 3) return Alert.alert("Ürün", "Ürünü İngilizce yazın (ör. budget planner, adult coloring pages).");
     const requestId = ++generationRequest.current;
@@ -1725,10 +1756,12 @@ function PrintableStudio({ online, seed, seeding, resumeWorkspace, onPrepared, o
   const currentPlan = plan?.inputKey === inputKey ? plan : undefined;
   const brief = currentPlan?.brief;
   const listing = currentPlan?.listing;
+  const seedEvidenceCurrent = seed?.kind === kind && seed?.keyword === keyword && seed?.productType === productType;
+  const research = currentPlan?.research || currentPreview;
   return <>
     <ListingGuide input={{ phase: "studio", planReady: Boolean(currentPlan?.quality?.ok), assistant: assistant === "claude" ? "claude" : "chatgpt" }}
-      actionLabel={currentPlan?.quality?.ok ? "Goxi ile üretim paketini paylaş" : "Goxi ile rakipleri araştır"}
-      onAction={() => currentPlan?.quality?.ok ? shareChecked(currentPlan.quality, currentPlan.brief.masterPrompt, `${currentPlan.brief.name} - tek paket`) : generate()}
+      actionLabel={currentPlan?.quality?.ok ? "Goxi ile üretim paketini paylaş" : currentPreview ? "Goxi ile ilan paketini hazırla" : "Goxi ile rakipleri araştır"}
+      onAction={() => currentPlan?.quality?.ok ? shareChecked(currentPlan.quality, currentPlan.brief.masterPrompt, `${currentPlan.brief.name} - tek paket`) : currentPreview ? generate() : analyze()}
       disabled={!online || working || seeding}
       secondaryLabel="Dosyalarım hazır, yüklemeye geç"
       onSecondary={currentPlan?.quality?.ok ? () => onUpload({ name: currentPlan.handoff?.name || brief.name, kind: currentPlan.handoff?.kind || kind, productType: currentPlan.handoff?.productType || productType, listing, pins: brief.pins, priceUsd: brief.priceUsd, research: currentPlan.research, handoffName: brief.name, handoff: currentPlan.handoff, assistant }) : undefined} />
@@ -1738,10 +1771,13 @@ function PrintableStudio({ online, seed, seeding, resumeWorkspace, onPrepared, o
       <Text style={styles.formHint}>İsterseniz alanları değiştirin; değilse doğrudan aşağıdaki düğmeye basın.</Text>
       <View style={styles.inlineActions}>
         <Pressable style={styles.secondaryButton} disabled={!online} onPress={onReseed}><Text style={styles.secondaryButtonText}>Başka trend kombinasyonu</Text></Pressable>
-        <Pressable style={styles.secondaryButton} disabled={!online} onPress={() => onPickKind(kind)}><Text style={styles.secondaryButtonText}>Başka arama seç</Text></Pressable>
+        <Pressable style={styles.secondaryButton} disabled={!online || seeding || working} onPress={() => onPickKind(kind, keyword)}><Text style={styles.secondaryButtonText}>Başka arama seç</Text></Pressable>
       </View>
     </View>}
-    {!seeding && <CompetitionCard competition={currentPlan?.research?.competition} />}
+    {!seeding && seedEvidenceCurrent && <SearchSelectionCard selection={seed.selection} onSelect={onPickQuery} disabled={!online || working} />}
+    {!seeding && <CompetitionCard competition={research?.competition || (seedEvidenceCurrent ? seed.competition : undefined)} />}
+    {research && <Text style={styles.formHint}>Rakip analizi: {research.keyword} · {research.sampleSize} benzer dijital ilan · {new Date(research.scannedAt).toLocaleString("tr-TR")}. {research.noteTr}</Text>}
+    <MarketStrategyCard strategy={research?.strategy || (seedEvidenceCurrent ? seed.marketStrategy : undefined)} />
     <Text style={styles.fieldLabel}>Dijital ürün türü</Text>
     <ChipGroup options={PRINTABLE_KIND_OPTIONS} value={kind} onChange={(next: string) => { setKind(next); onPickKind(next); }} />
     {!!KIND_HELP[kind] && <Text style={styles.formHint}>{KIND_HELP[kind]}</Text>}
@@ -1755,11 +1791,10 @@ function PrintableStudio({ online, seed, seeding, resumeWorkspace, onPrepared, o
     <Field label="Sayfa / tasarım sayısı" value={pageCount} onChangeText={setPageCount} keyboardType="number-pad" placeholder="30" />
     <Field label="Hedef kitle (isteğe bağlı)" value={audience} onChangeText={setAudience} placeholder="busy moms, teachers, brides-to-be" />
     <Field label="Hedef Etsy araması" value={keyword} onChangeText={setKeyword} placeholder="budget planner printable" autoCapitalize="none" />
-    <Field label="Karşılaştırılacak rakip ilanları (isteğe bağlı, en fazla 5)" value={competitorLinks} onChangeText={setCompetitorLinks} placeholder="Etsy ilan linkleri veya numaraları; boşlukla ayırın" multiline autoCapitalize="none" />
-    <Text style={styles.formHint}>İncelemek istediğiniz ilanları ekleyebilirsiniz. Uygulama tür/konu eşleşmesini denetler; satış adedi veya Bestseller rozeti doğrulanmış sayılmaz.</Text>
+    <Field label="Bu ürünün rakip ilanları (isteğe bağlı, en fazla 5)" value={competitorLinks} onChangeText={setCompetitorLinks} placeholder="Etsy ilan linkleri veya numaraları; boşlukla ayırın" multiline autoCapitalize="none" />
+    <Text style={styles.formHint}>Etsy'de bu ürüne bakarken altta önerilen veya çok satan olarak gördüğün ilanların linklerini ekle. Aynı tür ve konu denetlenir; eklediğin ilanlar raporda işaretlenir. Satış adedi, rozet ve satışın nedeni doğrulanmış sayılmaz.</Text>
+    <Pressable style={[styles.secondaryButton, (working || seeding || !online) && styles.primaryDisabled]} disabled={working || seeding || !online} onPress={analyze}><Text style={styles.secondaryButtonText}>İlan hazırlamadan bu ürünün rakiplerini incele</Text></Pressable>
     <Pressable style={[styles.analyzeButton, (working || seeding || !online) && styles.primaryDisabled]} disabled={working || seeding || !online} onPress={generate}>{working ? <ActivityIndicator color="white" /> : <Ionicons name="sparkles" size={18} color="white" />}<Text style={styles.primaryText}>{plan ? "Yeni adla yeniden hazırla" : "Prompt, görsel ve ilanı hazırla"}</Text></Pressable>
-    {currentPlan?.research && <Text style={styles.formHint}>Rakip analizi: {currentPlan.research.keyword} · {currentPlan.research.sampleSize} benzer dijital ilan · {new Date(currentPlan.research.scannedAt).toLocaleString("tr-TR")}. {currentPlan.research.noteTr}</Text>}
-    <MarketStrategyCard strategy={currentPlan?.research?.strategy} />
     {brief && <>
       <View style={styles.analysisCard}>
         <Text style={styles.small}>Sistemin seçtiği ürün adı</Text>
@@ -1919,7 +1954,7 @@ function StudioPanel({ online, active, seed, onUpload, etsyReady }: any) {
     setSeeding(true);
     if (source.studio === "pattern" || source.group === "patterns") { setPlan(undefined); setOwnPattern(false); setPatternTested(false); setRealPhotos(false); setCompetition(undefined); }
     try {
-      const filled = await apiJson("/api/patterns/seed", { method: "POST", headers: apiHeaders(true), body: JSON.stringify({ keyword: source.keyword, craft: source.craft, group: source.group, kind: source.kind, studio: source.studio }) });
+      const filled = await apiJson("/api/patterns/seed", { method: "POST", headers: apiHeaders(true), body: JSON.stringify({ keyword: source.keyword, craft: source.craft, group: source.group, kind: source.kind, studio: source.studio, avoidKeyword: source.avoidKeyword }) });
       if (requestId !== seedRequest.current) return;
       if (filled.studio === "printable") {
         setPrintableSeed(filled);
@@ -2029,7 +2064,7 @@ function StudioPanel({ online, active, seed, onUpload, etsyReady }: any) {
     {!!savedWorkspace && <View style={styles.analysisCard}><Text style={styles.cardTitle}>Son kaydedilen çalışma</Text><Text style={styles.rowTitle}>{savedWorkspace.plan.brief.name}</Text><Text style={styles.small}>{new Date(savedWorkspace.savedAt).toLocaleString("tr-TR")} · {savedWorkspace.input.assistant === "claude" ? "Claude" : "ChatGPT"}</Text><Text style={styles.evidence}>Yapay zekâdan döndüğünde bu çalışmayı aç. Başlık, açıklama, etiketler, fiyat ve ürün kaydı birlikte geri gelir; indirdiğin dosyaları sen seçersin.</Text><Pressable style={styles.secondaryButton} onPress={resumeSaved}><Text style={styles.secondaryButtonText}>Son çalışmayı aç</Text></Pressable></View>}
     {seeding && <View style={styles.guardrail}><ActivityIndicator color="#315B4C" /><Text style={[styles.guardrailText, { flex: 1 }]}>Etsy trend verisi okunuyor; tüm alanlar otomatik dolduruluyor…</Text></View>}
     <View testID="studio-mode-physical" style={mode === "physical" ? undefined : styles.hidden}>{seed?.studio === "physical" && <Text style={styles.formHint}>Seçilen pazar araması: {seed.keyword}. Kendi ürününüzün gerçek fotoğrafları ve doğruladığınız bilgilerle ilerleyin; rakibin özellikleri ürününüze aktarılmaz.</Text>}<PhotoListingStudio online={online} etsyReady={etsyReady} /></View>
-    <View testID="studio-mode-printable" style={mode === "printable" ? undefined : styles.hidden}><PrintableStudio online={online} seed={printableSeed} resumeWorkspace={resumeWorkspace} onPrepared={setSavedWorkspace} seeding={seeding} onReseed={() => printableSeed?.keyword && fillFromTrend({ keyword: printableSeed.keyword, studio: "printable" })} onPickKind={(kind: string) => fillFromTrend({ studio: "printable", kind })} onUpload={onUpload} /></View>
+    <View testID="studio-mode-printable" style={mode === "printable" ? undefined : styles.hidden}><PrintableStudio online={online} seed={printableSeed} resumeWorkspace={resumeWorkspace} onPrepared={setSavedWorkspace} seeding={seeding} onReseed={() => printableSeed?.keyword && fillFromTrend({ keyword: printableSeed.keyword, kind: printableSeed.kind, studio: "printable" })} onPickKind={(kind: string, avoidKeyword?: string) => fillFromTrend({ studio: "printable", kind, avoidKeyword })} onPickQuery={(keyword: string) => fillFromTrend({ studio: "printable", kind: printableSeed?.kind, keyword })} onUpload={onUpload} /></View>
     <View testID="studio-mode-pattern" style={mode === "pattern" ? undefined : styles.hidden}>
     <ListingGuide input={{ phase: "studio", ownPattern: true, planReady: Boolean(currentPatternPlan?.quality?.ok) }}
       actionLabel={currentPatternPlan?.quality?.ok ? "Goxi ile kendi desenimi yüklemeye geç" : "Goxi ile kendi desenimin ilanını hazırla"}
