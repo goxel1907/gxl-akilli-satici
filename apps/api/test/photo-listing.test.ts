@@ -187,13 +187,13 @@ test("photos are stored by the app itself and served for the listing, without Sh
   assert.match(((await text.json()) as { error: string }).error, /JPG veya PNG/);
 });
 
-test("photo analysis explains the missing Gemini key and cleans the model answer", async () => {
+test("photo analysis explains separate API access and cleans the model answer", async () => {
   const env = { APP_ACCESS_TOKEN: "app-token" };
   const headers = { authorization: "Bearer app-token", "content-type": "application/json" };
   const image = `data:image/jpeg;base64,${Buffer.from(jpeg()).toString("base64")}`;
   const missing = await handleRequest(new Request("https://gxl.example/api/products/photo-analyze", { method: "POST", headers, body: JSON.stringify({ imageDataUrls: [image] }) }), env);
   assert.equal(missing.status, 503);
-  assert.match(((await missing.json()) as { error: string }).error, /GEMINI_API_KEY/);
+  assert.match(((await missing.json()) as { error: string }).error, /Sohbet aboneliği/);
   const tooMany = await handleRequest(new Request("https://gxl.example/api/products/photo-analyze", { method: "POST", headers, body: JSON.stringify({ imageDataUrls: [image, image, image, image] }) }), env);
   assert.equal(tooMany.status, 400);
 

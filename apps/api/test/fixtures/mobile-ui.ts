@@ -29,7 +29,7 @@ const mocks: Record<string, string> = {
   "@react-native-async-storage/async-storage": `const values=globalThis.__gxlUi.storage; export default {getItem:async key=>values.get(key)||null,setItem:async(key,value)=>{values.set(key,value)},removeItem:async key=>{values.delete(key)}};`,
   "expo-document-picker": `export const getDocumentAsync=(...args)=>globalThis.__gxlUi.pickFiles(...args);`,
   "expo-image-picker": `export const launchImageLibraryAsync=(...args)=>globalThis.__gxlUi.pickImages(...args); export const requestMediaLibraryPermissionsAsync=async()=>({granted:true}),requestCameraPermissionsAsync=async()=>({granted:true}),launchCameraAsync=async()=>({canceled:true});`,
-  "expo-image-manipulator": `export const SaveFormat={JPEG:'jpeg'}; export const ImageManipulator={manipulate:()=>({resize(){},renderAsync:async()=>({saveAsync:async()=>({uri:'local-image',width:100,height:100})})})};`,
+  "expo-image-manipulator": `export const SaveFormat={JPEG:'jpeg'}; export const ImageManipulator={manipulate:()=>({resize(){},renderAsync:async()=>({saveAsync:async()=>({uri:'local-image',width:100,height:100,base64:'dGVzdA=='})})})};`,
   "expo-secure-store": `const values=globalThis.__gxlUi.storage; export const getItemAsync=async key=>values.get(key)||null,setItemAsync=async(key,value)=>{values.set(key,value)},deleteItemAsync=async key=>{values.delete(key)};`
 };
 await build({ entryPoints: [appPath], outfile: output, bundle: true, platform: "node", format: "cjs", jsx: "automatic", external: ["react", "react/*"],
@@ -37,7 +37,7 @@ await build({ entryPoints: [appPath], outfile: output, bundle: true, platform: "
   plugins: [{ name: "native-test-boundary", setup(build) {
     build.onResolve({ filter: /^(react-native|react-native-safe-area-context|@expo\/vector-icons|expo-updates|expo-constants|@react-native-async-storage\/async-storage|expo-document-picker|expo-image-picker|expo-image-manipulator|expo-secure-store)$/ }, args => ({ path: args.path, namespace: "native-mock" }));
     build.onLoad({ filter: /.*/, namespace: "native-mock" }, args => ({ contents: mocks[args.path], loader: "js" }));
-    build.onLoad({ filter: /App\.tsx$/ }, args => ({ contents: readFileSync(args.path, "utf8") + '\nactiveApiToken="local-test";\nexport { App, EtsyScreen, TrendPanel, StudioPanel, PrintableStudio, SeasonalPanel, DiscoveryPanel, DigitalPanel };', loader: "tsx", resolveDir: resolve("apps/mobile") }));
+    build.onLoad({ filter: /App\.tsx$/ }, args => ({ contents: readFileSync(args.path, "utf8") + '\nactiveApiToken="local-test";\nexport { App, EtsyScreen, TrendPanel, StudioPanel, PrintableStudio, SeasonalPanel, DiscoveryPanel, DigitalPanel, PhotoListingStudio, EtsyProductPlanner, EtsyPlanResult };', loader: "tsx", resolveDir: resolve("apps/mobile") }));
     build.onLoad({ filter: /\.(png|jpg)$/ }, () => ({ contents: 'export default "local-asset";', loader: "js" }));
   } }] });
 export const screens = require(output);

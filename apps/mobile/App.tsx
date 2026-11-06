@@ -1,3 +1,4 @@
+import { photoAssistantPrompt, parsePhotoAssistant } from "./photo-assistant";
 import { canRankTrend, compareTrendEvidence, trendFreshness } from "./trend-priority";
 import { listingProgress, etsyTransferComplete, type ListingProgressInput } from "./listing-progress";
 import { sameProduct } from "./product-identity";
@@ -2725,7 +2726,7 @@ async function researchEtsyPlan(base: any, setProgress: (text: string) => void) 
 }
 
 function EtsyProductPlanner({ product, etsyReady, onClose }: any) {
-  const [origin, setOrigin] = useState("designed_by_seller");
+  const [origin, setOrigin] = useState("unknown");
   const [yearMade, setYearMade] = useState("");
   const [materialVerified, setMaterialVerified] = useState(false);
   const [weightGrams, setWeightGrams] = useState("");
@@ -2738,13 +2739,17 @@ function EtsyProductPlanner({ product, etsyReady, onClose }: any) {
   const [progress, setProgress] = useState("");
   const [plan, setPlan] = useState<any>();
   const [payload, setPayload] = useState<any>();
+  const inputKey = generationKey({ product, origin, yearMade, materialVerified, weightGrams, beadCount, lengthCm, shippingTry, productNounEn, usdTryRate, readyToShip });
+  const currentPlan = plan?.inputKey === inputKey ? plan : undefined;
   useEffect(() => {
+    setOrigin("unknown"); setYearMade(""); setMaterialVerified(false); setBeadCount(""); setLengthCm(""); setShippingTry(""); setProductNounEn(""); setUsdTryRate(""); setReadyToShip(true);
     setPlan(undefined);
     setProgress("");
     const weight = String(product?.title || "").match(/(\d+(?:[.,]\d+)?)\s*(?:g|gr|gram)\b/i);
     setWeightGrams(weight ? weight[1].replace(",", ".") : "");
   }, [product]);
   const analyze = async () => {
+    if (origin === "unknown") return Alert.alert("Üretim bilgisi", "Bu ürünü kim yaptı sorusunu yanıtlayın.");
     const base: any = {
       sourceId: product.id,
       titleTr: product.title,
@@ -2767,7 +2772,7 @@ function EtsyProductPlanner({ product, etsyReady, onClose }: any) {
     try {
       const result = await researchEtsyPlan(base, setProgress);
       setPayload(result.payload);
-      setPlan(result.plan);
+      setPlan({ ...result.plan, inputKey });
     } catch (error) { Alert.alert("Hazırlanamadı", errorText(error)); }
     finally { setProgress(""); }
   };
@@ -2793,7 +2798,7 @@ function EtsyProductPlanner({ product, etsyReady, onClose }: any) {
       <Field label="Dolar kuru (boşsa güncel kur alınır)" value={usdTryRate} onChangeText={setUsdTryRate} keyboardType="decimal-pad" />
       <Pressable style={[styles.analyzeButton, Boolean(progress) && styles.primaryDisabled]} disabled={Boolean(progress)} onPress={analyze}>{progress ? <ActivityIndicator color="white" /> : <Ionicons name="search" size={18} color="white" />}<Text style={styles.primaryText}>{plan ? "Yeniden araştır" : "Etsy'de araştır ve hazırla"}</Text></Pressable>
       {!!progress && <Text style={styles.formHint}>{progress}</Text>}
-      {plan && <EtsyPlanResult plan={plan} payload={payload} etsyReady={etsyReady} priceSourceLabel="Shopier fiyatı" photoCount={payload?.imageUrls?.length} />}
+      {currentPlan && <EtsyPlanResult key={currentPlan.inputKey} plan={currentPlan} payload={payload} etsyReady={etsyReady} priceSourceLabel="Shopier fiyatı" photoCount={payload?.imageUrls?.length} />}
     </ScrollView></SafeAreaView>
   </Modal>;
 }
@@ -3446,11 +3451,48 @@ function PhotoListingStudio({ online, etsyReady, wizard, onStepChange }: any) {
   const [progress, setProgress] = useState("");
   const [plan, setPlan] = useState<any>();
   const [payload, setPayload] = useState<any>();
+  const [photoAssistant, setPhotoAssistant] = useState("chatgpt");
+  const [assistantReply, setAssistantReply] = useState("");
+  const [externalRequest, setExternalRequest] = useState<{ id: string; key: string }>();
   const knit = kind === "knitwear";
+  const inputKey = generationKey({ sourceId, photos, kind, origin, maker, craft, audience, nameTr, productNounEn, material, materialVerified, size, chestCm, lengthCm, widthCm, fiber, care, colors, attributes, weightGrams, beadCount, yearMade, conditionNote, conditionLevel, priceTry, shippingTry, quantity, readyToShip, riskFlags });
+  const liveInputKey = useRef(inputKey); liveInputKey.current = inputKey;
+  const currentPlan = plan?.inputKey === inputKey ? plan : undefined;
+  const photoKey = generationKey({ sourceId, photos, kind, nameTr });
+  const applyAnalysis = (result: any) => {
+    setAnalysis(result);
+    if (!kind) chooseKind(result.productKind);
+    setNameTr((current) => current.trim() || result.nameTr);
+    setProductNounEn((current) => current.trim() || result.productNounEn);
+    setMaterial((current) => current.trim() || result.materialGuessTr);
+    setColors((current) => current.trim() || result.colors.join(", "));
+    setAttributes((current) => current.trim() || result.attributesEn.join(", "));
+    setConditionNote((current) => current.trim() || result.conditionNotesEn.join(" "));
+    if (result.craft !== "none") setCraft(result.craft);
+    if (result.audience !== "unknown") setAudience(result.audience);
+    setRiskFlags(current => [...new Set([...current, ...result.riskFlags])]);
+    setPlan(undefined);
+  };
+  const sharePhotoPrompt = async () => {
+    if (!photos.length) return Alert.alert("Fotoğraf gerekli", "Önce bu ürünün fotoğraflarını seçin.");
+    const request = { id: `${sourceId}-${Date.now()}`, key: photoKey };
+    try {
+      await Share.share({ message: photoAssistantPrompt(kind, nameTr, request.id) });
+      setExternalRequest(request); setAssistantReply("");
+    } catch (error) { Alert.alert("Paylaşılamadı", errorText(error)); }
+  };
+  const importPhotoAnalysis = () => {
+    if (!externalRequest || externalRequest.key !== photoKey) return Alert.alert("Ürün değişti", "Bu fotoğraflar ve ürün için talimatı yeniden paylaşın. Eski yanıt uygulanamaz.");
+    try {
+      const result = parsePhotoAssistant(assistantReply, externalRequest.id);
+      if (kind && result.productKind !== kind) return Alert.alert("Ürün türü farklı", "Yanıttaki ürün türü seçiminizle uyuşmuyor. Fotoğrafları ve sohbet yanıtını kontrol edin.");
+      applyAnalysis(result); setAssistantReply(""); setExternalRequest(undefined);
+    } catch (error) { Alert.alert("Yanıt uygulanamadı", errorText(error)); }
+  };
 
   const chooseKind = (next: string) => {
     setKind(next);
-    setOrigin(next === "vintage" ? "vintage" : next === "tesbih" ? "designed_by_seller" : "made_by_seller");
+    setOrigin(next === "vintage" ? "vintage" : next === "knitwear" ? "made_by_seller" : "unknown");
     setPlan(undefined);
   };
   const addPhotos = async (camera: boolean) => {
@@ -3470,6 +3512,7 @@ function PhotoListingStudio({ online, etsyReady, wizard, onStepChange }: any) {
 
   const analyze = async () => {
     if (!photos.length) return Alert.alert("Fotoğraf gerekli", "Önce ürünün fotoğrafını çekin veya seçin.");
+    const requestedKey = inputKey;
     setAnalyzing(true);
     try {
       const images: string[] = [];
@@ -3478,19 +3521,9 @@ function PhotoListingStudio({ online, etsyReady, wizard, onStepChange }: any) {
         if (small.base64) images.push(`data:image/jpeg;base64,${small.base64}`);
       }
       const { analysis: result } = await apiJson("/api/products/photo-analyze", { method: "POST", headers: apiHeaders(true), body: JSON.stringify({ imageDataUrls: images, kind: kind || undefined, name: nameTr.trim() || undefined }) });
-      setAnalysis(result);
-      if (!kind) chooseKind(result.productKind);
-      setNameTr((current) => current.trim() || result.nameTr);
-      setProductNounEn((current) => current.trim() || result.productNounEn);
-      setMaterial((current) => current.trim() || result.materialGuessTr);
-      setColors((current) => current.trim() || result.colors.join(", "));
-      setAttributes((current) => current.trim() || result.attributesEn.join(", "));
-      setConditionNote((current) => current.trim() || result.conditionNotesEn.join(" "));
-      if (result.craft !== "none") setCraft(result.craft);
-      if (result.audience !== "unknown") setAudience(result.audience);
-      setRiskFlags(result.riskFlags);
-      setPlan(undefined);
-    } catch (error) { Alert.alert("Fotoğraf analizi yapılamadı", `${errorText(error)}\nAlanları elle doldurup devam edebilirsiniz.`); }
+      if (liveInputKey.current !== requestedKey) return;
+      applyAnalysis(result);
+    } catch (error) { if (liveInputKey.current === requestedKey) Alert.alert("Sunucu analizi kullanılamıyor", `${errorText(error)}\nChatGPT / Claude sohbeti seçeneğini kullanabilir veya alanları elle doldurabilirsiniz.`); }
     finally { setAnalyzing(false); }
   };
 
@@ -3498,6 +3531,7 @@ function PhotoListingStudio({ online, etsyReady, wizard, onStepChange }: any) {
     if (!photos.length) return Alert.alert("Fotoğraf gerekli", "Etsy ilanı için en az bir fotoğraf ekleyin; 5 ve üzeri önerilir.");
     if (!kind) return Alert.alert("Ürün türü", "Örgü, tesbih, vintage veya diğer seçeneklerinden birini seçin.");
     if (nameTr.trim().length < 3) return Alert.alert("Ürün adı", "Ürünün Türkçe adını yazın; fotoğraf analizi de önerebilir.");
+    if (!knit && origin === "unknown") return Alert.alert("Üretim bilgisi", "Bu ürünü kim yaptı sorusunu yanıtlayın. Uygulama ürünü sizin yaptığınızı veya tasarladığınızı varsaymaz.");
     const net = parseAmount(priceTry);
     if (!net) return Alert.alert("Elinize geçecek tutar", "Bu üründen elinize geçmesini istediğiniz tutarı TL olarak yazın. Etsy fiyatı, kesintiler ve kargo eklenerek buna göre hesaplanır.");
     const list = (text: string) => text.split(",").map((item) => item.trim()).filter(Boolean);
@@ -3537,7 +3571,7 @@ function PhotoListingStudio({ online, etsyReady, wizard, onStepChange }: any) {
     try {
       const result = await researchEtsyPlan(base, setProgress);
       setPayload(result.payload);
-      setPlan(result.plan);
+      setPlan({ ...result.plan, inputKey });
     } catch (error) { Alert.alert("Hazırlanamadı", errorText(error)); }
     finally { setProgress(""); }
   };
@@ -3568,7 +3602,7 @@ function PhotoListingStudio({ online, etsyReady, wizard, onStepChange }: any) {
   const next = async () => {
     if (step === 1) {
       if (!photos.length) return Alert.alert("Fotoğraf gerekli", "Etsy ilanı için en az bir fotoğraf ekleyin; 5 ve üzeri önerilir.");
-      if (online && !analysis && !analyzing) await analyze();
+      // Subscription users can continue without an API analysis. Fields may be entered manually or imported from their chat.
     }
     if (step === 2) {
       if (!kind) return Alert.alert("Ürün türü", "Ürünün türünü seçin: örgü giyim, tesbih, vintage ya da diğer.");
@@ -3586,6 +3620,7 @@ function PhotoListingStudio({ online, etsyReady, wizard, onStepChange }: any) {
 
   const reset = () => {
     setStep(1);
+    setExternalRequest(undefined); setAssistantReply("");
     setSourceId(`photo-${Date.now()}`);
     uploaded.current = {};
     setPhotos([]); setKind(""); setOrigin("made_by_seller"); setMaker("me"); setCraft(""); setAudience("women");
@@ -3603,7 +3638,7 @@ function PhotoListingStudio({ online, etsyReady, wizard, onStepChange }: any) {
     </View>}
     {!wizard && <View style={styles.analysisCard}>
       <Text style={styles.cardTitle}>Elinizdeki ürünü Etsy'de satın</Text>
-      <Text style={styles.analysisLine}>Fotoğrafları çekin ve ürün türünü seçin. Uygulama fotoğrafa bakar, Etsy'de alıcıların aramalarını tarar; başlık, 13 etiket, İngilizce açıklama ve fiyatı hazırlar. Shopier gerekmez.</Text>
+      <Text style={styles.analysisLine}>Fotoğrafları çekin ve ürün türünü seçin. Fotoğraf bilgilerini ChatGPT / Claude sohbetinden aktarabilir, sunucu analizini deneyebilir veya elle girebilirsiniz. Uygulama Etsy'de alıcıların aramalarını tarar; başlık, 13 etiket, İngilizce açıklama ve fiyatı hazırlar. Shopier gerekmez.</Text>
     </View>}
     {show(1) && <>
     <Text style={styles.fieldLabel}>Fotoğraflar ({photos.length}/{MAX_LISTING_PHOTOS}) · kapak yapmak için fotoğrafa dokunun</Text>
@@ -3618,8 +3653,16 @@ function PhotoListingStudio({ online, etsyReady, wizard, onStepChange }: any) {
       <Pressable style={styles.secondaryButton} onPress={() => addPhotos(true)}><Text style={styles.secondaryButtonText}>Fotoğraf çek</Text></Pressable>
       <Pressable style={styles.secondaryButton} onPress={() => addPhotos(false)}><Text style={styles.secondaryButtonText}>Galeriden seç</Text></Pressable>
     </View>
-    <Text style={styles.formHint}>Gün ışığında, sade zeminde çekin: önden, arkadan, doku veya damga yakın planı ve ölçü gösteren bir kare. Etsy'de 5 ve üzeri fotoğraf satışı artırır.</Text>
-    {!wizard && <Pressable style={[styles.analyzeButton, (analyzing || !online) && styles.primaryDisabled]} disabled={analyzing || !online} onPress={analyze}>{analyzing ? <ActivityIndicator color="white" /> : <Ionicons name="sparkles" size={18} color="white" />}<Text style={styles.primaryText}>{analyzing ? "Fotoğraflar inceleniyor…" : "Fotoğraflara bak, alanları doldur"}</Text></Pressable>}
+    <Text style={styles.formHint}>Gün ışığında, sade zeminde çekin: önden, arkadan, doku veya damga yakın planı ve ölçü gösteren bir kare. Ön, arka ve detay fotoğraflarıyla ürünü açıkça gösterin.</Text>
+    <View style={styles.analysisCard}>
+      <Text style={styles.cardTitle}>ChatGPT / Claude sohbetiyle analiz</Text>
+      <Text style={styles.formHint}>Plus / ücretli sohbet hesabınızı kendi uygulamasında kullanın. Burada API çağrısı yapılmaz. Talimatı paylaşın, fotoğrafları sohbete ayrıca ekleyin; JSON yanıtını buraya yapıştırın. Hiçbir ilan otomatik yayınlanmaz.</Text>
+      <ChipGroup options={[{ id: "chatgpt", label: "ChatGPT" }, { id: "claude", label: "Claude" }]} value={photoAssistant} onChange={setPhotoAssistant} />
+      <Pressable style={styles.secondaryButton} onPress={sharePhotoPrompt}><Text style={styles.secondaryButtonText}>{photoAssistant === "claude" ? "Claude için analiz talimatını paylaş" : "ChatGPT için analiz talimatını paylaş"}</Text></Pressable>
+      <Field label="Sohbetten gelen analiz JSON'u" value={assistantReply} onChangeText={setAssistantReply} multiline autoCapitalize="none" />
+      <Pressable style={styles.secondaryButton} onPress={importPhotoAnalysis}><Text style={styles.secondaryButtonText}>Analiz yanıtını uygula</Text></Pressable>
+    </View>
+    {!wizard && <Pressable style={[styles.analyzeButton, (analyzing || !online) && styles.primaryDisabled]} disabled={analyzing || !online} onPress={analyze}>{analyzing ? <ActivityIndicator color="white" /> : <Ionicons name="sparkles" size={18} color="white" />}<Text style={styles.primaryText}>{analyzing ? "Fotoğraflar inceleniyor…" : "Sunucuyla otomatik analiz (ayrı API)"}</Text></Pressable>}
     {wizard && analyzing && <Text style={styles.formHint}>Yapay zekâ fotoğrafa bakıyor…</Text>}
     </>}
     {show(2) && <>
@@ -3632,8 +3675,8 @@ function PhotoListingStudio({ online, etsyReady, wizard, onStepChange }: any) {
     </View>}
     <Text style={[styles.fieldLabel, { marginTop: 12 }]}>Ürün türü</Text>
     <ChipGroup options={PHOTO_KINDS} value={kind} onChange={chooseKind} />
-    <Field label="Ürün adı (Türkçe)" value={nameTr} onChangeText={setNameTr} placeholder="ör. Krem tığ işi oversize kazak" />
-    {!wizard && <Field label="İngilizce ürün adı (boş bırakın, sistem bulur)" value={productNounEn} onChangeText={setProductNounEn} autoCapitalize="none" placeholder="crochet sweater = tığ işi kazak" />}
+    <Field label="Ürün adı (Türkçe)" value={nameTr} onChangeText={setNameTr} placeholder={kind === "tesbih" ? "ör. Arpa kesim püsküllü tesbih" : kind === "vintage" ? "ör. Eski bakır tepsi" : knit ? "ör. Krem tığ işi kazak" : "Ürünün kısa adı"} />
+    {!wizard && <Field label="İngilizce ürün adı (boş bırakın, sistem bulur)" value={productNounEn} onChangeText={setProductNounEn} autoCapitalize="none" placeholder={kind === "tesbih" ? "prayer beads" : kind === "vintage" ? "copper tray" : knit ? "crochet sweater" : "Boş bırakabilirsiniz"} />}
     {knit && <>
       <Text style={styles.fieldLabel}>Kim ördü?</Text>
       <ChipGroup options={KNIT_MAKER_OPTIONS} value={maker} onChange={setMaker} />
@@ -3674,7 +3717,7 @@ function PhotoListingStudio({ online, etsyReady, wizard, onStepChange }: any) {
     </>}
     {show(3) && <>
     <Field label="Renkler (Türkçe yazabilirsiniz, virgülle)" value={colors} onChangeText={setColors} autoCapitalize="none" placeholder="krem, adaçayı yeşili, bordo" />
-    <Field label="Öne çıkan özellikler (Türkçe yazabilirsiniz, virgülle)" value={attributes} onChangeText={setAttributes} autoCapitalize="none" placeholder="bol kesim, kare motif, püsküllü, telkari" />
+    <Field label="Öne çıkan özellikler (Türkçe yazabilirsiniz, virgülle)" value={attributes} onChangeText={setAttributes} autoCapitalize="none" placeholder={kind === "tesbih" ? "arpa kesim, püsküllü, telkari" : knit ? "bol kesim, kare motif" : "kabartma, el oyması, çiçek desenli"} />
     <Text style={styles.formHint}>Sistem bunları İngilizceye çevirir. Çeviremediği kelimeyi ilana koymaz ve size söyler; yanlış İngilizce yazılmaz.</Text>
     </>}
     {show(4) && <>
@@ -3689,7 +3732,7 @@ function PhotoListingStudio({ online, etsyReady, wizard, onStepChange }: any) {
     {show(5) && <>
     <Pressable style={[styles.analyzeButton, { marginTop: 12 }, (Boolean(progress) || !online) && styles.primaryDisabled]} disabled={Boolean(progress) || !online} onPress={prepare}>{progress ? <ActivityIndicator color="white" /> : <Ionicons name="search" size={18} color="white" />}<Text style={styles.primaryText}>{plan ? "Yeniden araştır" : "Etsy'de araştır ve ilanı hazırla"}</Text></Pressable>
     {!!progress && <Text style={styles.formHint}>{progress}</Text>}
-    {plan && <EtsyPlanResult plan={plan} payload={payload} etsyReady={etsyReady} priceSourceLabel="Elinize geçecek tutar" prepareProduct={uploadPhotos} photoCount={photos.length} />}
+    {currentPlan && <EtsyPlanResult key={currentPlan.inputKey} plan={currentPlan} payload={payload} etsyReady={etsyReady} priceSourceLabel="Elinize geçecek tutar" prepareProduct={uploadPhotos} photoCount={photos.length} />}
     </>}
     {wizard && <View style={styles.wizardNav}>
       {step > 1 && <Pressable style={styles.secondaryButton} onPress={() => goTo(step - 1)}><Text style={styles.secondaryButtonText}>← Geri</Text></Pressable>}

@@ -73,7 +73,7 @@ export async function assistBuyerMessage(input: MessageAssistInput, env: AiRunti
       replyTr: "",
       warningsTr: ruleWarnings,
       aiUsed: false,
-      noticeTr: "Çeviri ve cevap için sunucuda yapay zekâ anahtarı (GEMINI_API_KEY) gerekli. Aşağıdaki uyarılar yine de geçerlidir."
+      noticeTr: "Çeviri ve cevap için sunucuda ayrı bir yapay zekâ API bağlantısı gerekli; sohbet aboneliğiniz bu bağlantıyı sağlamaz. Aşağıdaki uyarılar yine de geçerlidir."
     };
   }
   let raw: Partial<MessageAssistResult>;

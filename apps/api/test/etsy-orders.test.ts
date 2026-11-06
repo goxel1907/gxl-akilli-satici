@@ -134,7 +134,7 @@ test("buyer messages: scam and off-Etsy signs are flagged even without AI; AI ad
   assert.equal(detectRedFlags(scam).length, 4);
   const offline = await assistBuyerMessage(normalizeMessageInput({ text: scam }), {});
   assert.equal(offline.aiUsed, false);
-  assert.match(offline.noticeTr || "", /GEMINI_API_KEY/);
+  assert.match(offline.noticeTr || "", /API bağlantısı/);
   assert.ok(offline.warningsTr.some((warning) => warning.includes("Etsy dışında ödeme")));
   assert.throws(() => normalizeMessageInput({ text: " " }), /yapıştırın/);
 

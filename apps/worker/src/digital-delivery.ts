@@ -654,6 +654,9 @@ export async function createEtsyDigitalDraft(
       form.set("rank", String(index + 1));
       await etsyRequest(env, `/application/shops/${shop.shopId}/listings/${listingId}/images`, { method: "POST", multipart: form }, fetcher);
       product.etsy.imagesUploaded = index + 1;
+      // Save each accepted asset before starting another network request. A
+      // terminated Worker cannot run the catch block that also saves progress.
+      await store.put(`${PRODUCT_PREFIX}${product.id}`, JSON.stringify(product));
     }
     // Tüm dosyalar sırayla ilana eklenir; yarıda kalırsa bir sonraki denemede kaldığı dosyadan devam eder.
     for (const [index, meta] of productFiles(product).entries()) {
@@ -666,6 +669,7 @@ export async function createEtsyDigitalDraft(
       form.set("rank", String(index + 1));
       await etsyRequest(env, `/application/shops/${shop.shopId}/listings/${listingId}/files`, { method: "POST", multipart: form }, fetcher);
       product.etsy.filesUploaded = index + 1;
+      await store.put(`${PRODUCT_PREFIX}${product.id}`, JSON.stringify(product));
     }
     product.etsy.fileUploaded = true;
     delete product.etsy.error;

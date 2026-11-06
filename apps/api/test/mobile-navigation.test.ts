@@ -289,6 +289,49 @@ test("real screen buttons drive Trend → Studio → Digital → draft → verif
   } finally { await unmount(renderer); globalThis.FormData = NativeFormData; ui.assets.clear(); ui.storage.delete(PRINTABLE_WORKSPACE_KEY); ui.pickFiles = async () => ({ canceled: true }); ui.pickImages = async () => ({ canceled: true }); }
 });
 
+test("Digital resumes a partial draft after an error and clears an unverified active badge", async context => {
+  ui.alerts.length = 0;
+  const product = {
+    id: "partial-product", name: "Animal Coloring Pages", kind: "coloring", productType: "animal coloring pages",
+    fileName: "Animal-US-Letter.pdf", fileSize: 100,
+    files: [{ name: "Animal-US-Letter.pdf", size: 100 }, { name: "Animal-A4.pdf", size: 100 }],
+    images: [{ url: "https://local.invalid/preview.png" }],
+    listing: { title: "Animal Coloring Pages", description: "Printable pages.", tags: [], materials: [] },
+    prices: { usd: 6.5 }, flags: { testMade: true },
+    etsy: { listingId: 901, editUrl: "https://www.etsy.com/your/shops/me/listing-editor/edit/901", imagesUploaded: 1, filesUploaded: 1, fileUploaded: false, error: "Temporary failure" }
+  };
+  let attempts = 0, statusFails = false;
+  context.mock.method(globalThis, "fetch", router((path, init) => {
+    if (path === "/api/digital/products") return Response.json({ products: [product] });
+    if (path.endsWith("/etsy-draft")) {
+      assert.equal(path, "/api/digital/products/partial-product/etsy-draft");
+      assert.equal(init?.method, "POST");
+      attempts++;
+      if (attempts === 1) return Response.json({ error: "Temporary failure" }, { status: 502 });
+      Object.assign(product.etsy, { filesUploaded: 2, fileUploaded: true, error: "" });
+      return Response.json({ editUrl: product.etsy.editUrl });
+    }
+    if (path.endsWith("/etsy-status")) return statusFails
+      ? Response.json({ error: "Connection failed" }, { status: 502 })
+      : Response.json({ state: "active", checkedAt: new Date().toISOString(), url: "https://www.etsy.com/listing/901" });
+    throw Error(`Unexpected request ${path}`);
+  }));
+  const renderer = await mount(screens.DigitalPanel, { online: true, shopReady: true, onPrefillUsed: () => {} });
+  try {
+    await waitFor(() => buttons(renderer, /^Etsy yüklemesini tamamla$/).length === 1);
+    await tap(renderer, /^Etsy yüklemesini tamamla$/); await confirm(/^Etsy'de taslak/, /^Taslak oluştur$/);
+    assert.ok(ui.alerts.some(item => item.title === "Etsy taslağı oluşturulamadı"));
+    assert.equal(buttons(renderer, /^Etsy yüklemesini tamamla$/).length, 1);
+    await tap(renderer, /^Etsy yüklemesini tamamla$/); await confirm(/^Etsy'de taslak/, /^Taslak oluştur$/);
+    assert.equal(attempts, 2); assert.equal(buttons(renderer, /^Etsy ilanını aç$/).length, 1);
+    await tap(renderer, /^Yayın durumunu denetle$/);
+    assert.ok(renderer.root.findAllByType("Text" as any).some(node => text(node) === "Etsy’de yayında olduğu doğrulandı"));
+    statusFails = true; await tap(renderer, /^Yayın durumunu denetle$/);
+    assert.ok(!renderer.root.findAllByType("Text" as any).some(node => text(node) === "Etsy’de yayında olduğu doğrulandı"));
+    assert.ok(ui.alerts.some(item => item.title === "Yayın durumu doğrulanamadı"));
+  } finally { await unmount(renderer); }
+});
+
 test("physical Trend groups open the photo workflow without generating a crochet or printable seed", async context => {
   let seedRequests = 0;
   context.mock.method(globalThis, "fetch", router(path => {

@@ -28,11 +28,14 @@ Tests render the actual `App.tsx` components with React and replace only the nat
 - Search → Studio preparation → complete assistant share payload → saved-workspace close/reopen → Digital prefill → PDF/image selection → staged uploads → actual Worker storage → Etsy draft → draft/active state confirmation.
 - Physical Trend selection opens the photo workflow without pattern generation.
 - A late preparation response cannot replace an explicitly resumed workspace.
+- Digital retries the same partial draft after an error and removes a previously active badge when the next status request cannot be verified.
 
 The full screen flow asserts unchanged title, description, tags and price and verifies that two PDFs and one image reach the draft. A separate state change simulates the seller's Etsy-side publication; no publish request is sent. Workspace parser tests cover retained identity and invalid/incompatible records.
 
 ## Validation and limits
 
-229 tests pass, including the 12 screen scenarios and two workspace tests. Root/mobile TypeScript checks, Android Expo export and Worker dry-run pass. Test dependencies are development-only; the mobile native dependency list and runtime version are unchanged.
+239 tests pass, including the 13 navigation screen scenarios, additional photo-assistant screen tests and workspace tests. Root/mobile TypeScript checks, offline Android Expo export and local Worker bundling pass. Test dependencies are development-only; the mobile native dependency list and runtime version are unchanged. See `PHOTO_ASSISTANT_QA.md` for the current release status and additional scenarios. A new Wrangler check was blocked by automatic approval review.
+
+Each Etsy-accepted image and file now checkpoints its progress before the next upload starts. The pipeline test inspects the persisted checkpoint during subsequent requests, in addition to checking retry counts. This reduces lost progress if a Worker terminates without executing its error handler. It does not provide exactly-once delivery if Etsy accepts a request but the response or subsequent storage write is lost, nor does it serialize simultaneous requests through eventually consistent KV.
 
 React Native hosts, AsyncStorage, file pickers, the URI-to-multipart native transport, linking/sharing and Etsy responses are controlled substitutes. This is not an Android device test, visual layout approval, actual assistant-file production, real product-content QA, or a live Etsy publication. The screen flow uses parseable PDF fixtures and a repository PNG only to exercise upload mechanics. No live listing, customer message or pin is created.
