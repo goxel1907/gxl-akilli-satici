@@ -55,6 +55,8 @@ test("printable form edits survive a round trip through another Studio mode", as
   }));
   const renderer = await mount(screens.StudioPanel, { online: true, active: true, onUpload: () => {} });
   try {
+    await waitFor(() => buttons(renderer, /^Konumu veya kapsamı kendim belirleyeceğim$/).length === 1);
+    await tap(renderer, /^Konumu veya kapsamı kendim belirleyeceğim$/);
     await waitFor(() => field(renderer, /^Ürün \(İngilizce\)$/).props.value === seed.productType);
     await type(renderer, /^Ürün \(İngilizce\)$/, "ocean animal coloring pages");
     await tap(renderer, /^El işi deseni$/); await tap(renderer, /^Dijital ürün$/);
@@ -248,18 +250,20 @@ test("real screen buttons drive Trend → Studio → Digital → draft → verif
     const searchButton = renderer.root.findAllByType("Pressable" as any).find(node => visible(node) && node.findAllByType("Icon" as any).some(icon => icon.props.name === "search"))!;
     await act(async () => { await searchButton.props.onPress(); });
     await tap(renderer, /^Bu nişte dijital ürün hazırla$/);
-    await tap(renderer, /^Goxi ile rakipleri araştır$/);
-    assert.equal(Boolean(plan), false, "Research preview must not generate a listing");
-    await tap(renderer, /^Goxi ile ilan paketini hazırla$/);
+    await waitFor(() => buttons(renderer, /^Bu öneriyi seç →$/).length === 1);
+    assert.equal(Boolean(plan), false, "Suggestion previews must not prepare or publish the selected product");
+    await tap(renderer, /^Açıklama, etiketler ve rakip dayanağı$/);
+    assert.ok(renderer.root.findAllByType("Text" as any).some(node => visible(node) && text(node).includes("Gözlenen fiyat ve başlıklar satışın nedenini kanıtlamaz")));
+    await tap(renderer, /^Kapat$/);
+    await tap(renderer, /^Bu öneriyi seç →$/);
     assert.ok(plan?.quality.ok, JSON.stringify(ui.alerts));
-    assert.ok(renderer.root.findAllByType("Text" as any).some(node => visible(node) && text(node).includes("Bestseller rozeti doğrulanmadı")));
-    await tap(renderer, /^Goxi ile üretim paketini paylaş$/);
+    await tap(renderer, /^Tek paketi ChatGPT’ye gönder$/);
     assert.equal((ui.shares.at(-1) as { message: string }).message, plan.brief.masterPrompt);
     assert.ok(ui.storage.has(PRINTABLE_WORKSPACE_KEY), "Prepared handoff must survive leaving the app");
     await unmount(renderer);
     renderer = await mount(screens.EtsyScreen, { online: true, channels: { etsy: { shopReady: true, shopId: 777 } } });
     await tap(renderer, /^Stüdyo$/); await tap(renderer, /^Son çalışmayı aç$/);
-    assert.equal(buttons(renderer, /^Dosyalar hazırsa yükle →$/).length, 1);
+    assert.equal(visible(renderer.root.findByProps({ testID: "listing-offer-production" })), true);
     await tap(renderer, /^Dosyalarım hazır, yüklemeye geç$/);
     assert.equal(field(renderer, /^Ürün adı$/).props.value, plan.brief.name);
     assert.equal(field(renderer, /^Başlık \(/).props.value, plan.listing.title);

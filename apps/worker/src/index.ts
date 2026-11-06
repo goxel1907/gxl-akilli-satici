@@ -5,6 +5,7 @@ import { crmRequest, CrmStorageError, isCrmRoute, readCrmSnapshot, type CrmEnv }
 export { CrmStore } from "./crm-store.js";
 import { registerProductHandoff } from "./product-handoff.js";
 import { recommendProduct } from "./product-recommendation.js";
+import { acceptListingOffer, createListingOffers } from "./listing-offers.js";
 import { rememberProduct, type IdeaStore } from "./product-memory.js";
 import { researchPrintableMarket } from "./printable-research.js";
 import { products } from "../../api/src/data.js";
@@ -541,6 +542,10 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
       return json(200, guardDigitalListing(listing));
     }
 
+    if (request.method === "POST" && url.pathname === "/api/printables/suggestions") {
+      return json(200,await createListingOffers(env,env.ETSY_OAUTH as unknown as Parameters<typeof createListingOffers>[1],await readBody(request)));
+    }
+
     if (request.method === "POST" && url.pathname === "/api/printables/research") {
       const raw = await readBody(request);
       const input = normalizePrintablePlanInput(raw);
@@ -553,6 +558,7 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
 
     if (request.method === "POST" && url.pathname === "/api/printables/plan") {
       const raw = await readBody(request);
+      if (raw.suggestionId) return json(200,await acceptListingOffer(env.ETSY_OAUTH as unknown as Parameters<typeof acceptListingOffer>[0],String(raw.suggestionId)));
       let input = normalizePrintablePlanInput(raw);
       const research = raw.research === true ? await researchPrintableMarket(env, input) : undefined;
       const recommendation = research ? await recommendProduct(input,research,env.ETSY_OAUTH as unknown as IdeaStore | undefined) : undefined;

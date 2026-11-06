@@ -4,6 +4,7 @@ import { canRankTrend, compareTrendEvidence, trendFreshness } from "./trend-prio
 import { listingProgress, listingTasks, physicalListingProgress, etsyTransferComplete, type ListingProgressInput } from "./listing-progress";
 import ListingMascot, { type ListingMascotProps } from "./ListingMascot";
 import LiveCheckPanel from "./LiveCheckPanel";
+import ListingOfferPicker from "./ListingOfferPicker";
 import { appendLocalFile } from "./upload-file";
 import { isLiveReadPath } from "./live-check";
 import { sameProduct } from "./product-identity";
@@ -1696,12 +1697,20 @@ function CompetitionCard({ competition }: any) {
   </View>;
 }
 
-function PrintableStudio({ online, seed, seeding, resumeWorkspace, onPrepared, onReseed, onPickKind, onPickQuery, onUpload }: any) {
+function PrintableStudio({ online, seed, seeding, resumeWorkspace, onPrepared, onReseed, onPickKind, onPickQuery, onUpload, guided = false }: any) {
+  const [flow,setFlow]=useState<"offers"|"production"|"manual">("offers");
+  const [kindPicker,setKindPicker]=useState(false);
+  const [offers,setOffers]=useState<any[]>([]);
+  const [offersNote,setOffersNote]=useState("");
+  const [offersError,setOffersError]=useState("");
+  const [offersBusy,setOffersBusy]=useState(false);
+  const [researchDetails,setResearchDetails]=useState(!guided);
+  const offerRequest=useRef(0),autoOfferKey=useRef("");
   const [kind, setKind] = useState("planner");
   const [assistant, setAssistant] = useState("chatgpt");
   const assistantPreferenceChanged = useRef(false);
   useEffect(() => { AsyncStorage.getItem(ASSISTANT_KEY).then((value) => { if (!assistantPreferenceChanged.current && (value === "claude" || value === "chatgpt")) setAssistant(value); }).catch(() => undefined); }, []);
-  const chooseAssistant = (next: string) => { generationRequest.current += 1; setWorking(false); assistantPreferenceChanged.current = true; setAssistant(next); setPlan(undefined); AsyncStorage.setItem(ASSISTANT_KEY, next).catch(() => undefined); };
+  const chooseAssistant = (next: string) => { generationRequest.current += 1; offerRequest.current+=1; setOffersBusy(false); setWorking(false); assistantPreferenceChanged.current = true; setAssistant(next); setPlan(undefined); if(guided&&flow!=="manual")setFlow("offers"); AsyncStorage.setItem(ASSISTANT_KEY, next).catch(() => undefined); };
   const [productType, setProductType] = useState("");
   const [referenceNotes, setReferenceNotes] = useState("");
   const [colors, setColors] = useState("");
@@ -1735,6 +1744,7 @@ function PrintableStudio({ online, seed, seeding, resumeWorkspace, onPrepared, o
     setAudience(seed.audience || "");
     setPlan(undefined);
     setResearchPreview(undefined);
+    if(guided){offerRequest.current+=1;autoOfferKey.current="";setOffersBusy(false);setOffers([]);setOffersError("");setFlow("offers");}
   }, [seed]);
   useEffect(() => {
     if (!resumeWorkspace) return;
@@ -1746,6 +1756,7 @@ function PrintableStudio({ online, seed, seeding, resumeWorkspace, onPrepared, o
     pageCountEdited.current = true;
     setKeyword(input.keyword || ""); setTrendTags(input.trendTags || []); setTrendFeatures(input.trendFeatures || []); setAssistant(input.assistant);
     setCompetitorLinks(input.competitorLinks || ""); setBasis([]); setPlan(resumeWorkspace.plan);
+    if(guided){offerRequest.current+=1;setOffersBusy(false);setFlow("production");}
   }, [resumeWorkspace]);
   const workspaceInput = { kind, productType, referenceNotes, colors, formats, pageCount, audience, keyword, ...(competitorLinks ? { competitorLinks } : {}), trendTags, trendFeatures, assistant };
   const inputKey = generationKey(workspaceInput);
@@ -1792,13 +1803,68 @@ function PrintableStudio({ online, seed, seeding, resumeWorkspace, onPrepared, o
   const listing = currentPlan?.listing;
   const seedEvidenceCurrent = seed?.kind === kind && seed?.keyword === keyword && seed?.productType === productType;
   const research = currentPlan?.research || currentPreview;
+  const loadOffers=async(includeSeed=false)=>{
+    const requestId=++offerRequest.current;
+    setOffersBusy(true);setOffersError("");setOffers([]);
+    const chosenKind=includeSeed?(seed?.kind || kind):kind;
+    try{
+      const body={kind:chosenKind,assistant,...(includeSeed&&seed?.keyword?(seed.selection?{includeKeyword:seed.keyword}:{keyword:seed.keyword,productType:seed.productType}):{})};
+      const result=await apiJson("/api/printables/suggestions",{method:"POST",headers:apiHeaders(true),body:JSON.stringify(body)});
+      if(requestId!==offerRequest.current)return;
+      if(!Array.isArray(result.offers)||!result.offers.length)throw new Error("Seçilebilir öneri hazırlanamadı. Konuyu kendiniz yazabilir veya yeniden araştırabilirsiniz.");
+      setOffers(result.offers);setOffersNote(result.noteTr || "");
+    }catch(error){if(requestId===offerRequest.current)setOffersError(errorText(error));}
+    finally{if(requestId===offerRequest.current)setOffersBusy(false);}
+  };
+  useEffect(()=>{
+    if(!guided||flow!=="offers"||resumeWorkspace||seeding||!online||!seed?.kind)return;
+    const stamp=JSON.stringify([seed.kind,seed.keyword,seed.selection?.checkedAt,assistant]);
+    if(autoOfferKey.current===stamp)return;
+    autoOfferKey.current=stamp;void loadOffers(true);
+  },[guided,flow,resumeWorkspace,seeding,online,seed,assistant]);
+  useEffect(()=>()=>{offerRequest.current+=1;},[]);
+  const chooseOffer=async(id:string)=>{
+    const requestId=++generationRequest.current;offerRequest.current+=1;
+    setOffersBusy(true);setOffersError("");
+    try{
+      const result=await apiJson("/api/printables/plan",{method:"POST",headers:apiHeaders(true),body:JSON.stringify({suggestionId:id})});
+      if(requestId!==generationRequest.current)return;
+      const input={...result.selectionInput};if(!input.competitorLinks)delete input.competitorLinks;
+      if(!result.quality?.ok||!input.kind||!input.productType)throw new Error("Seçilen önerinin paket bilgileri doğrulanamadı.");
+      setKind(input.kind);setProductType(input.productType);setKeyword(input.keyword || "");setReferenceNotes(input.referenceNotes || "");setColors(input.colors || "");setFormats(input.formats || "");setPageCount(input.pageCount || "");setAudience(input.audience || "");setCompetitorLinks(input.competitorLinks || "");setTrendTags(input.trendTags || []);setTrendFeatures(input.trendFeatures || []);pageCountEdited.current=true;setBasis([]);setResearchPreview(undefined);
+      const prepared={...result,inputKey:generationKey(input)};setPlan(prepared);setFlow("production");
+      const workspace:PrintableWorkspace={version:1,savedAt:new Date().toISOString(),input,plan:prepared};
+      try{await AsyncStorage.setItem(PRINTABLE_WORKSPACE_KEY,JSON.stringify(workspace));onPrepared?.(workspace);}
+      catch{Alert.alert("Paket hazır","Çalışma bu oturumda açık, ancak telefona kaydedilemedi. Uygulamayı kapatmadan paketi paylaşın ve dosyaları yükleyin.");}
+    }catch(error){if(requestId===generationRequest.current)setOffersError(errorText(error));}
+    finally{if(requestId===generationRequest.current)setOffersBusy(false);}
+  };
+  if(guided&&flow!=="manual"){
+    if(flow==="production"&&currentPlan?.quality?.ok)return <View testID="listing-offer-production">
+      <Text style={styles.sectionTitle}>Seçtiğin ürün hazır</Text>
+      <Text style={styles.listingTitle}>{listing.title}</Text>
+      <Text style={styles.rowTitle}>{currentPlan.contentBudget?.effective || pageCount} {currentPlan.contentBudget?.limits?.unitTr || "içerik"} · {brief.priceUsd?.toFixed(2)} USD · {listing.tags.length} etiket</Text>
+      <ListingMascot step={2} title="Şimdi ürün dosyalarını üretelim" instruction={`Seçtiğin başlık, açıklama, 13 etiket, fiyat ve içerik planı tek pakette. Paketi ${assistant === "claude"?"Claude’a":"ChatGPT’ye"} gönder; aynı sohbette üretimi tamamlat.`} actionLabel={assistant==="claude"?"Tek paketi Claude’a gönder":"Tek paketi ChatGPT’ye gönder"} onAction={()=>shareChecked(currentPlan.quality,brief.masterPrompt,`${brief.name} - tek paket`)}/>
+      <Text style={styles.analysisLine}>1. Ürün dosyalarını ve gerçek içerik görsellerini telefonuna indir.</Text><Text style={styles.analysisLine}>2. Dosyaları açıp sayfa, cevap ve format kontrollerini tamamla.</Text><Text style={styles.analysisLine}>3. Aşağıdaki düğmeyle aynı ürünün yükleme formuna geç.</Text>
+      <Pressable style={styles.primary} onPress={()=>onUpload({name:currentPlan.handoff?.name || brief.name,kind:currentPlan.handoff?.kind || kind,productType:currentPlan.handoff?.productType || productType,listing,pins:brief.pins,priceUsd:brief.priceUsd,research:currentPlan.research,handoffName:brief.name,handoff:currentPlan.handoff,assistant})}><Text style={styles.primaryText}>Dosyalarım hazır, yüklemeye geç</Text></Pressable>
+      <Pressable style={styles.secondaryButton} onPress={()=>setFlow("manual")}><Text style={styles.secondaryButtonText}>İlan metnini ve ayarları incele</Text></Pressable>
+      <Pressable style={styles.secondaryButton} onPress={()=>setFlow("offers")}><Text style={styles.secondaryButtonText}>Başka ürün seç</Text></Pressable>
+    </View>;
+    return <View>
+      <Text style={styles.fieldLabel}>Üretim aracı</Text><ChipGroup options={ASSISTANT_OPTIONS} value={assistant} onChange={chooseAssistant} disabled={offersBusy||Boolean(seeding)}/>
+      <ListingOfferPicker offers={offers} busy={offersBusy||Boolean(seeding)} offline={!online} error={offersError} note={offersNote} kindLabel={PRINTABLE_KIND_OPTIONS.find(row=>row.id===kind)?.label || kind} onChoose={chooseOffer} onRefresh={()=>loadOffers(false)} onChangeKind={()=>setKindPicker(true)} onManual={()=>setFlow("manual")} onOpenSource={(url:string)=>openUrl(url,"Rakip ilanı")}/>
+      <Modal visible={kindPicker} animationType="slide" onRequestClose={()=>setKindPicker(false)}><SafeAreaView style={styles.formSafe}><ScrollView contentContainerStyle={styles.formContent}><Text style={styles.sectionTitle}>Ne tür ürün hazırlayalım?</Text><ChipGroup options={PRINTABLE_KIND_OPTIONS} value={kind} onChange={(next:string)=>{setKindPicker(false);setKind(next);onPickKind(next);}}/><Pressable style={styles.secondaryButton} onPress={()=>setKindPicker(false)}><Text style={styles.secondaryButtonText}>Kapat</Text></Pressable></ScrollView></SafeAreaView></Modal>
+    </View>;
+  }
   return <>
+    {guided&&<View style={styles.inlineActions}><Pressable style={styles.secondaryButton} onPress={()=>setFlow(currentPlan?.quality?.ok?"production":"offers")}><Text style={styles.secondaryButtonText}>{currentPlan?.quality?.ok?"Üretim adımını göster":"Ürün önerilerine dön"}</Text></Pressable><Pressable style={styles.secondaryButton} onPress={()=>setResearchDetails(!researchDetails)}><Text style={styles.secondaryButtonText}>{researchDetails?"Araştırma ayrıntılarını gizle":"Araştırma ayrıntılarını göster"}</Text></Pressable></View>}
     <ListingGuide input={{ phase: "studio", planReady: Boolean(currentPlan?.quality?.ok), assistant: assistant === "claude" ? "claude" : "chatgpt" }}
       actionLabel={currentPlan?.quality?.ok ? "Goxi ile üretim paketini paylaş" : currentPreview?.recommendation?.requiresNewTopic ? "Goxi ile yeni konu bul" : currentPreview ? "Goxi ile ilan paketini hazırla" : "Goxi ile rakipleri araştır"}
       onAction={() => currentPlan?.quality?.ok ? shareChecked(currentPlan.quality, currentPlan.brief.masterPrompt, `${currentPlan.brief.name} - tek paket`) : currentPreview?.recommendation?.requiresNewTopic ? onPickKind(kind,keyword) : currentPreview ? generate() : analyze()}
       disabled={!online || working || seeding}
       secondaryLabel="Dosyalarım hazır, yüklemeye geç"
       onSecondary={currentPlan?.quality?.ok ? () => onUpload({ name: currentPlan.handoff?.name || brief.name, kind: currentPlan.handoff?.kind || kind, productType: currentPlan.handoff?.productType || productType, listing, pins: brief.pins, priceUsd: brief.priceUsd, research: currentPlan.research, handoffName: brief.name, handoff: currentPlan.handoff, assistant }) : undefined} />
+    {researchDetails&&<>
     {!!basis.length && !seeding && <View style={styles.analysisCard}>
       <Text style={styles.cardTitle}>Trendden otomatik dolduruldu: {keyword}</Text>
       {basis.map((line) => <Text style={styles.analysisLine} key={line}>• {line}</Text>)}
@@ -1813,6 +1879,7 @@ function PrintableStudio({ online, seed, seeding, resumeWorkspace, onPrepared, o
     {research && <Text style={styles.formHint}>Rakip analizi: {research.keyword} · {research.sampleSize} benzer dijital ilan · {new Date(research.scannedAt).toLocaleString("tr-TR")}. {research.noteTr}</Text>}
     <MarketStrategyCard strategy={research?.strategy || (seedEvidenceCurrent ? seed.marketStrategy : undefined)} />
     <ProductRecommendationCard recommendation={research?.recommendation} onNewIdea={()=>onPickKind(kind,keyword)} disabled={!online || working || seeding} />
+    </>}
     <Text style={styles.fieldLabel}>Dijital ürün türü</Text>
     <ChipGroup options={PRINTABLE_KIND_OPTIONS} value={kind} onChange={(next: string) => { setKind(next); onPickKind(next); }} />
     {!!KIND_HELP[kind] && <Text style={styles.formHint}>{KIND_HELP[kind]}</Text>}
@@ -1879,8 +1946,8 @@ function PrintableStudio({ online, seed, seeding, resumeWorkspace, onPrepared, o
   </>;
 }
 
-function ChipGroup({ options, value, onChange }: any) {
-  return <View style={styles.chips}>{options.map((option: any) => <Pressable key={option.id} style={[styles.chip, value === option.id && styles.chipActive]} onPress={() => onChange(option.id)}><Text style={[styles.chipText, value === option.id && styles.chipTextActive]}>{option.label}</Text></Pressable>)}</View>;
+function ChipGroup({ options, value, onChange, disabled = false }: any) {
+  return <View style={styles.chips}>{options.map((option: any) => <Pressable key={option.id} disabled={disabled} style={[styles.chip, value === option.id && styles.chipActive,disabled&&styles.primaryDisabled]} onPress={() => onChange(option.id)}><Text style={[styles.chipText, value === option.id && styles.chipTextActive]}>{option.label}</Text></Pressable>)}</View>;
 }
 
 // Sunucu her talimatı, başlığı, etiketi ve açıklamayı telefona göndermeden önce otomatik denetler; küçük hataları
@@ -1987,6 +2054,7 @@ function StudioPanel({ online, active, seed, onUpload, etsyReady }: any) {
   const fillFromTrend = async (source: any) => {
     if (!source?.keyword && !source?.studio) return;
     const requestId = ++seedRequest.current;
+    setResumeWorkspace(undefined);
     setSeeding(true);
     if (source.studio === "pattern" || source.group === "patterns") { setPlan(undefined); setOwnPattern(false); setPatternTested(false); setRealPhotos(false); setCompetition(undefined); }
     try {
@@ -2100,7 +2168,7 @@ function StudioPanel({ online, active, seed, onUpload, etsyReady }: any) {
     {!!savedWorkspace && <View style={styles.analysisCard}><Text style={styles.cardTitle}>Son kaydedilen çalışma</Text><Text style={styles.rowTitle}>{savedWorkspace.plan.brief.name}</Text><Text style={styles.small}>{new Date(savedWorkspace.savedAt).toLocaleString("tr-TR")} · {savedWorkspace.input.assistant === "claude" ? "Claude" : "ChatGPT"}</Text><Text style={styles.evidence}>Yapay zekâdan döndüğünde bu çalışmayı aç. Başlık, açıklama, etiketler, fiyat ve ürün kaydı birlikte geri gelir; indirdiğin dosyaları sen seçersin.</Text><Pressable style={styles.secondaryButton} onPress={resumeSaved}><Text style={styles.secondaryButtonText}>Son çalışmayı aç</Text></Pressable></View>}
     {seeding && <View style={styles.guardrail}><ActivityIndicator color="#315B4C" /><Text style={[styles.guardrailText, { flex: 1 }]}>Etsy trend verisi okunuyor; tüm alanlar otomatik dolduruluyor…</Text></View>}
     <View testID="studio-mode-physical" style={mode === "physical" ? undefined : styles.hidden}>{seed?.studio === "physical" && <Text style={styles.formHint}>Seçilen pazar araması: {seed.keyword}. Kendi ürününüzün gerçek fotoğrafları ve doğruladığınız bilgilerle ilerleyin; rakibin özellikleri ürününüze aktarılmaz.</Text>}<PhotoListingStudio online={online} etsyReady={etsyReady} /></View>
-    <View testID="studio-mode-printable" style={mode === "printable" ? undefined : styles.hidden}><PrintableStudio online={online} seed={printableSeed} resumeWorkspace={resumeWorkspace} onPrepared={setSavedWorkspace} seeding={seeding} onReseed={() => printableSeed?.keyword && fillFromTrend({ keyword: printableSeed.keyword, kind: printableSeed.kind, studio: "printable" })} onPickKind={(kind: string, avoidKeyword?: string) => fillFromTrend({ studio: "printable", kind, avoidKeyword })} onPickQuery={(keyword: string) => fillFromTrend({ studio: "printable", kind: printableSeed?.kind, keyword })} onUpload={onUpload} /></View>
+    <View testID="studio-mode-printable" style={mode === "printable" ? undefined : styles.hidden}><PrintableStudio guided online={online} seed={printableSeed} resumeWorkspace={resumeWorkspace} onPrepared={setSavedWorkspace} seeding={seeding} onReseed={() => printableSeed?.keyword && fillFromTrend({ keyword: printableSeed.keyword, kind: printableSeed.kind, studio: "printable" })} onPickKind={(kind: string, avoidKeyword?: string) => fillFromTrend({ studio: "printable", kind, avoidKeyword })} onPickQuery={(keyword: string) => fillFromTrend({ studio: "printable", kind: printableSeed?.kind, keyword })} onUpload={onUpload} /></View>
     <View testID="studio-mode-pattern" style={mode === "pattern" ? undefined : styles.hidden}>
     <ListingGuide input={{ phase: "studio", ownPattern: true, planReady: Boolean(currentPatternPlan?.quality?.ok) }}
       actionLabel={currentPatternPlan?.quality?.ok ? "Goxi ile kendi desenimi yüklemeye geç" : "Goxi ile kendi desenimin ilanını hazırla"}
