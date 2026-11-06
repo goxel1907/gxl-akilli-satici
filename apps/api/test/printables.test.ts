@@ -82,7 +82,7 @@ test("printable brief gives a kind-specific print prompt, artwork prompts and ad
   assert.match(planner.pdfPrompt, /@page/);
   assert.match(planner.pdfPrompt, /Never use trademarked names/);
   assert.deepEqual(planner.artPrompts, []);
-  assert.equal(planner.adVisuals.length, 10);
+  assert.equal(planner.adVisuals.length, 12);
   assert.ok(planner.adVisuals.every((visual) => visual.useTr && visual.aspect && visual.prompt.includes("Do not add any new text")));
   assert.ok(planner.adVisuals.every((visual) => visual.prompt.includes("Never use another seller's images")));
   assert.ok(planner.adVisuals.some((visual) => /Pinterest/.test(visual.useTr) && visual.aspect.startsWith("2:3")));
@@ -122,7 +122,7 @@ test("printable listing leads with the buyer phrase, lists formats and drops bra
 
 test("pattern briefs also get placement-labelled ad visuals", () => {
   const brief = buildPatternBrief({ craft: "crochet", productType: "cardigan", seed: "x", trendFeatures: ["granny square"], colors: ["sage green"] });
-  assert.equal(brief.adVisuals.length, 10);
+  assert.equal(brief.adVisuals.length, 12);
   assert.match(brief.adVisuals[1].prompt, /cardigan/);
   assert.match(brief.adVisuals[0].prompt, /Follow the Design spec from step 1 of this chat/);
 });

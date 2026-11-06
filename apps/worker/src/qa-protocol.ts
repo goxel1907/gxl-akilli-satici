@@ -168,7 +168,7 @@ export function qaProtocol(input: QaInput): string[] {
       : input.type === "printable" && input.kind === "spreadsheet"
       ? "MARGINS — in the quick-start PDF every word's bounding box is at least 6 mm from each page edge; in the workbook no text is cut off in its cell at 100% zoom."
       : `MARGINS — every word's bounding box is at least 6 mm from each page edge${binding ? " (19 mm on the binding side of print editions)" : input.type === "printable" && input.kind === "recipe" ? " (19 mm on the binding side of the binder pages)" : ""}; nothing is clipped.`,
-    `AMERICAN ENGLISH — list every word in the files and file names that is not in an American English dictionary and fix the real typos (the product name "${input.name}" is a coined word: keep it); also list and fix any British spelling or word (\"colour\", \"favourite\", \"organise\", \"grey\", \"centre\", \"Mum\", \"maths\") and any Turkish word or Turkish-only letter (c-cedilla, g-breve, dotless i, o-umlaut, s-cedilla, u-umlaut).`,
+    `AMERICAN ENGLISH — list every word in the files and file names that is not in an American English dictionary and fix the real typos (the exact product name "${input.name}" is a declared proper-name allowlist entry: keep it); also list and fix any British spelling or word (\"colour\", \"favourite\", \"organise\", \"grey\", \"centre\", \"Mum\", \"maths\") and any Turkish word or Turkish-only letter (c-cedilla, g-breve, dotless i, o-umlaut, s-cedilla, u-umlaut).`,
     "VISUAL — render every page to a contact-sheet image, look at it and list anything empty, crowded, cut off or inconsistent."
   ];
   if (input.type === "printable") {

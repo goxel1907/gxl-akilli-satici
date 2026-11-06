@@ -66,6 +66,7 @@ export async function researchPrintableMarket(env: EtsyRuntimeEnv, input: Resear
   if (!result.strategy.pricing) throw new EtsyIntegrationError("VALIDATION_FAILED", "Korunan isimler elendikten sonra en az 3 karşılaştırılabilir USD fiyatı gerekli. Başka bir Etsy araması deneyin; farklı para birimleri fiyat önerisine katılmadı.", 400);
   const competition = buildCompetition(result, input.kind, input.pageCount, []);
   if (!competition.launchPriceUsd) throw new EtsyIntegrationError("VALIDATION_FAILED", "Karşılaştırılabilir rakip fiyatı alınamadı. Başka arama deneyin.", 400);
-  return { keyword, scannedAt: result.scannedAt, sampleSize: result.strategy.sampleSize, selectedIds, strategy: result.strategy, competition, trendTags: result.topTags.map(item => item.tag),
+  const marketBriefEn = `Fresh product-matched Etsy sample for ${JSON.stringify(keyword)}; checked ${result.scannedAt}; ${result.strategy.sampleSize} eligible digital listings. Comparable USD median: ${result.strategy.pricing.medianUsd.toFixed(2)} USD. Candidate launch price: ${competition.launchPriceUsd.toFixed(2)} USD (heuristic test, not an optimal-price claim). Observations are titles/tags, not verified sales or buyer preferences.`;
+  return { keyword, scannedAt: result.scannedAt, sampleSize: result.strategy.sampleSize, selectedIds, strategy: result.strategy, marketBriefEn, competition, trendTags: result.topTags.map(item => item.tag),
     noteTr: "Etsy aramasındaki aynı tür ve konuda eşleştirilen dijital ilan örneklemidir. Favori ve ilan sayıları satış değildir; fiyatlar gözlenen örnekleme dayanır." };
 }

@@ -543,7 +543,7 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
       const raw = await readBody(request);
       let input = normalizePrintablePlanInput(raw);
       const research = raw.research === true ? await researchPrintableMarket(env, input) : undefined;
-      if (research) input = { ...input, priceUsd: research.competition.launchPriceUsd, trendTags: research.trendTags, referenceNotes: `${input.referenceNotes || ""}\nResearch query: ${research.keyword}; checked ${research.scannedAt}; ${research.sampleSize} comparable digital listings. Prices and favorites are observations, not sales.` };
+      if (research) input = { ...input, priceUsd: research.competition.launchPriceUsd, trendTags: research.trendTags, referenceNotes: `${research.marketBriefEn}${input.referenceNotes && !/^(?:Etsy market brief|Fresh product-matched Etsy sample)/i.test(input.referenceNotes.trim()) ? `\nSeller design notes (not independent market evidence): ${input.referenceNotes}` : ""}` };
       const store = env.ETSY_OAUTH as unknown as TrendStore | undefined;
       const usedNames = await readUsedNames(store);
       const brief = buildPrintableBrief({ ...input, avoidNames: usedNames });
