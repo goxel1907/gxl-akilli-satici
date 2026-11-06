@@ -1,7 +1,8 @@
 import { addLocalWhatsapp, localWhatsappLink } from "./marketing-local";
 import { photoAssistantPrompt, parsePhotoAssistant } from "./photo-assistant";
 import { canRankTrend, compareTrendEvidence, trendFreshness } from "./trend-priority";
-import { listingProgress, etsyTransferComplete, type ListingProgressInput } from "./listing-progress";
+import { listingProgress, listingTasks, physicalListingProgress, etsyTransferComplete, type ListingProgressInput } from "./listing-progress";
+import ListingMascot, { type ListingMascotProps } from "./ListingMascot";
 import { sameProduct } from "./product-identity";
 import { mergeLocalProducts, generationKey, uploadPrices, PRINTABLE_WORKSPACE_KEY, parsePrintableWorkspace, type PrintableWorkspace } from "./workflow-state";
 import React, { useEffect, useMemo, useRef, useState } from "react";
@@ -538,6 +539,7 @@ function Overview({ data, setTab, online, channels, onSimple }: any) {
           ? "Güvenli token deposu bekleniyor"
           : "Bağlanmak için dokun");
   return <>
+    <ListingMascot title="İlan açmak mı istiyorsun?" instruction="Ürününü seç, rakiplerini incele ve ilanını hazırla. Stüdyo, dosya yükleme ve Etsy taslağı aşamalarında sana ne yapacağını göstereceğim." actionLabel="Goxi ile yeni ilana başla" onAction={() => setTab("Etsy")} />
     <EtsyOrdersPanel online={online} compact />
     <Text style={styles.sectionTitle}>Bugünün görünümü</Text>
     <View style={styles.metrics}>
@@ -1165,9 +1167,11 @@ function EtsyScreen({ online, channels, active = true, initialSection = "Trend" 
       {(["Trend", "Stüdyo", "Dijital", "Pinterest", "Kılavuz"] as const).map((item) => <Pressable key={item} style={[styles.segmentItem, section === item && styles.segmentActive]} onPress={() => setSection(item)}><Text style={[styles.segmentText, section === item && styles.segmentTextActive]}>{item}</Text></Pressable>)}
     </View>
     {!online && section !== "Kılavuz" && <Text style={styles.shopierBlocker}>Sunucu bağlantısı yok. Trend tarama, prompt üretimi, mağaza durumu ve dosya yükleme için sunucuya bağlanmak gerekir; üstteki "Yeniden bağlan" düğmesine basın.</Text>}
-    <View testID="etsy-section-trend" style={section === "Trend" ? undefined : styles.hidden}><TrendPanel online={online} active={active && section === "Trend"} onUse={(seed: any) => { setStudioSeed(seed); setSection("Stüdyo"); }} /></View>
+    <View testID="etsy-section-trend" style={section === "Trend" ? undefined : styles.hidden}>
+      <ListingMascot title="Yeni ilanını birlikte hazırlayalım" instruction="Ne satacağını biliyorsan Stüdyo’ya geç. Kararsızsan aşağıdaki Trend kartlarını incele; puan bir satış garantisi değildir." tasks={["Dijital ürün, kendi desenin veya elindeki fiziksel ürün için doğru yolu seç.", "Bir trend seçersen karttaki hazırlama düğmesi aynı konuyu Stüdyo’ya taşır."]} actionLabel="Ürünümü seçmek istiyorum" onAction={() => setSection("Stüdyo")} />
+      <TrendPanel online={online} active={active && section === "Trend"} onUse={(seed: any) => { setStudioSeed(seed); setSection("Stüdyo"); }} /></View>
     <View style={section === "Stüdyo" ? undefined : styles.hidden}><StudioPanel online={online} active={active && section === "Stüdyo"} etsyReady={shopReady} seed={studioSeed} onUpload={(prefill: any) => { setUploadPrefill(prefill); setSection("Dijital"); }} /></View>
-    <View testID="etsy-section-digital" style={section === "Dijital" ? undefined : styles.hidden}><DigitalPanel online={online} active={active && section === "Dijital"} shopReady={shopReady} prefill={uploadPrefill} onPrefillUsed={() => setUploadPrefill(undefined)} /></View>
+    <View testID="etsy-section-digital" style={section === "Dijital" ? undefined : styles.hidden}><DigitalPanel online={online} active={active && section === "Dijital"} shopReady={shopReady} prefill={uploadPrefill} onPrefillUsed={() => setUploadPrefill(undefined)} onPrepare={() => setSection("Stüdyo")} /></View>
     {section === "Pinterest" && <PinterestPanel online={online} />}
     {section === "Kılavuz" && <><ShopReadinessCard online={online} onSell={() => setSection("Stüdyo")} /><ShopSettingsCard online={online} shopReady={shopReady} /><ShopListingsScorecard online={online} /><EtsyGuide shopReady={shopReady} authorized={authorized} /></>}
   </>;
@@ -1701,7 +1705,12 @@ function PrintableStudio({ online, seed, seeding, resumeWorkspace, onPrepared, o
   const brief = currentPlan?.brief;
   const listing = currentPlan?.listing;
   return <>
-    <ListingGuide input={{ phase: "studio", planReady: Boolean(currentPlan?.quality?.ok) }} />
+    <ListingGuide input={{ phase: "studio", planReady: Boolean(currentPlan?.quality?.ok), assistant: assistant === "claude" ? "claude" : "chatgpt" }}
+      actionLabel={currentPlan?.quality?.ok ? "Goxi ile üretim paketini paylaş" : "Goxi ile rakipleri araştır"}
+      onAction={() => currentPlan?.quality?.ok ? shareChecked(currentPlan.quality, currentPlan.brief.masterPrompt, `${currentPlan.brief.name} - tek paket`) : generate()}
+      disabled={!online || working || seeding}
+      secondaryLabel="Dosyalarım hazır, yüklemeye geç"
+      onSecondary={currentPlan?.quality?.ok ? () => onUpload({ name: currentPlan.handoff?.name || brief.name, kind: currentPlan.handoff?.kind || kind, productType: currentPlan.handoff?.productType || productType, listing, pins: brief.pins, priceUsd: brief.priceUsd, research: currentPlan.research, handoffName: brief.name, handoff: currentPlan.handoff, assistant }) : undefined} />
     {!!basis.length && !seeding && <View style={styles.analysisCard}>
       <Text style={styles.cardTitle}>Trendden otomatik dolduruldu: {keyword}</Text>
       {basis.map((line) => <Text style={styles.analysisLine} key={line}>• {line}</Text>)}
@@ -1998,6 +2007,9 @@ function StudioPanel({ online, active, seed, onUpload, etsyReady }: any) {
     <View testID="studio-mode-physical" style={mode === "physical" ? undefined : styles.hidden}>{seed?.studio === "physical" && <Text style={styles.formHint}>Seçilen pazar araması: {seed.keyword}. Kendi ürününüzün gerçek fotoğrafları ve doğruladığınız bilgilerle ilerleyin; rakibin özellikleri ürününüze aktarılmaz.</Text>}<PhotoListingStudio online={online} etsyReady={etsyReady} /></View>
     <View testID="studio-mode-printable" style={mode === "printable" ? undefined : styles.hidden}><PrintableStudio online={online} seed={printableSeed} resumeWorkspace={resumeWorkspace} onPrepared={setSavedWorkspace} seeding={seeding} onReseed={() => printableSeed?.keyword && fillFromTrend({ keyword: printableSeed.keyword, studio: "printable" })} onPickKind={(kind: string) => fillFromTrend({ studio: "printable", kind })} onUpload={onUpload} /></View>
     <View testID="studio-mode-pattern" style={mode === "pattern" ? undefined : styles.hidden}>
+    <ListingGuide input={{ phase: "studio", ownPattern: true, planReady: Boolean(currentPatternPlan?.quality?.ok) }}
+      actionLabel={currentPatternPlan?.quality?.ok ? "Goxi ile kendi desenimi yüklemeye geç" : "Goxi ile kendi desenimin ilanını hazırla"}
+      onAction={() => currentPatternPlan?.quality?.ok ? onUpload({ name: brief?.name || patternName.trim() || listing.title.split(",")[0], craft, productType, listing, priceUsd: competition?.launchPriceUsd, ownPattern: true }) : generate()} disabled={!online || working || seeding} />
     <View style={[styles.qualityNote, styles.qualityBad]}>
       <Ionicons name="alert-circle-outline" size={18} color="#9B2C2C" />
       <View style={{ flex: 1 }}>
@@ -2073,12 +2085,9 @@ function StudioPanel({ online, active, seed, onUpload, etsyReady }: any) {
   </>;
 }
 
-function ListingGuide({ input }: { input: ListingProgressInput }) {
+function ListingGuide({ input, ...actions }: { input: ListingProgressInput } & Pick<ListingMascotProps, "onAction" | "actionLabel" | "disabled" | "onSecondary" | "secondaryLabel">) {
   const guide = listingProgress(input);
-  return <View style={styles.analysisCard}>
-    <View style={styles.shopierProductTop}><Ionicons name={guide.complete ? "checkmark-circle-outline" : "happy-outline"} size={28} color="#315B4C" /><Text style={[styles.cardTitle, { flex: 1 }]}>GXL Rehber · {guide.complete ? "Yayın doğrulandı" : `Adım ${guide.step}/5`}</Text></View>
-    <Text style={styles.rowTitle}>{guide.title}</Text><Text style={styles.evidence}>{guide.instruction}</Text>
-  </View>;
+  return <ListingMascot {...guide} tasks={listingTasks(input)} {...actions} />;
 }
 
 function Toggle({ label, value, onChange }: any) {
@@ -2222,10 +2231,14 @@ function DigitalUploadForm({ visible, suspended = false, prefill, onClose, onSav
       } }
     ]);
   };
+  const uploadGuideInput: ListingProgressInput = { phase: "upload", files: files.length, images: images.length, tested: testMade, title, description, tags: tags.split(",").map(tag => tag.trim()).filter(Boolean), priceUsd, priceTry };
+  const uploadReady = listingProgress(uploadGuideInput).title === "Kaydetmeye hazır";
   return <Modal visible={visible && !suspended} animationType="slide" onRequestClose={onClose}>
     <SafeAreaView style={styles.formSafe}><StatusBar barStyle="dark-content" /><ScrollView contentContainerStyle={styles.formContent}>
       <View style={styles.formHeader}><Text style={styles.sectionTitle}>Dijital ürün yükle</Text><Pressable onPress={onClose}><Ionicons name="close" size={26} color="#315B4C" /></Pressable></View>
-      <ListingGuide input={{ phase: "upload", files: files.length, images: images.length, tested: testMade, title, description, tags: tags.split(",").map(tag => tag.trim()).filter(Boolean), priceUsd, priceTry }} />
+      <ListingGuide input={uploadGuideInput}
+        actionLabel={!files.length ? "Goxi ile ürün dosyalarını seç" : !images.length ? "Goxi ile ilan görsellerini seç" : uploadReady ? "Goxi ile dosyaları güvenli depoya yükle" : undefined}
+        onAction={!files.length ? pickFiles : !images.length ? pickImages : uploadReady ? save : undefined} disabled={saving} />
       {prefill && <Text style={styles.formHint}>1. Aynı ürünü ChatGPT veya Claude'da tamamlayın. 2. Dosyaları ve ilan görsellerini telefonunuza indirin. Toplu indirme ZIP'ini önce çıkarın. 3. Aşağıdan yalnız bu ürüne ait PDF/ZIP dosyalarını ve görselleri seçin. Başlık, açıklama, etiketler ve önerilen fiyat ürün kaydından gelir.</Text>}
       {!prefill && <Text style={styles.warningText}>Bu form Stüdyo'dan dolu gelir. Önce Etsy → Stüdyo'da ürünü hazırlayın; yapay zekâ dosyaları ve görselleri verince Stüdyo'daki 'Dosyalar hazırsa yükle'ye basın. Başlık, etiket, açıklama ve fiyat kendiliğinden dolar.</Text>}
       <Pressable style={styles.uploadRow} onPress={pickFiles}><Ionicons name="document-text-outline" size={22} color="#315B4C" /><Text style={[styles.rowTitle, { flex: 1 }]}>{files.length ? `${files.length}/5 dosya seçildi · eklemek için dokunun` : "Dosyaları seç: PDF veya ZIP (birden çok seçilebilir, en fazla 5)"}</Text></Pressable>
@@ -2292,7 +2305,7 @@ function GrantForm({ product, onClose }: any) {
   </Modal>;
 }
 
-function DigitalPanel({ online, active = true, shopReady, prefill, onPrefillUsed }: any) {
+function DigitalPanel({ online, active = true, shopReady, prefill, onPrefillUsed, onPrepare }: any) {
   const [products, setProducts] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [formVisible, setFormVisible] = useState(false);
@@ -2355,6 +2368,7 @@ function DigitalPanel({ online, active = true, shopReady, prefill, onPrefillUsed
     <View style={styles.guardrail}><Ionicons name="lock-closed-outline" size={20} color="#315B4C" /><Text style={[styles.guardrailText, { flex: 1 }]}>Dosyalar herkese açık değildir. Etsy'de dosyayı Etsy yalnızca ödeme yapan alıcıya verir. Shopier ve doğrudan satışlarda her sipariş için sınırlı indirmeli, süreli ve kapatılabilir özel bağlantı oluşturulur.</Text></View>
     <View style={styles.sectionHeading}><Text style={styles.sectionTitle}>Dijital ürünler</Text><Pressable style={[styles.addButton, !online && styles.primaryDisabled]} disabled={!online} onPress={() => setFormVisible(true)}><Ionicons name="add" size={18} color="white" /><Text style={styles.addButtonText}>Dosya yükle</Text></Pressable></View>
     {loading && <ActivityIndicator color="#C88B47" />}
+    {!loading && !products.length && <ListingMascot title="Önce ilan paketini hazırlayalım" instruction="Stüdyo’da ürününü seçip ilanı hazırla. ChatGPT/Claude’dan son dosyaları telefonuna indirdikten sonra aynı çalışmanın yükleme düğmesini kullan; ilan bilgileri birlikte gelir." actionLabel="Stüdyo’da ürün hazırlamaya geç" onAction={onPrepare} />}
     {!loading && !products.length && <Empty icon="document-text-outline" title="Henüz dijital ürün yok" text="Stüdyo'da ilanı hazırlayın; yapay zekânın verdiği dosyaları ve ilan görsellerini buradan yükleyin." />}
     {products.map((product) => <View style={styles.card} key={product.id}>
       <View style={styles.shopierProductTop}>
@@ -2362,7 +2376,9 @@ function DigitalPanel({ online, active = true, shopReady, prefill, onPrefillUsed
         <View style={{ flex: 1 }}><Text style={styles.cardTitle}>{product.name}</Text><Text style={styles.small}>{product.files?.length > 1 ? `${product.files.length} dosya · ${Math.round(product.files.reduce((sum: number, file: any) => sum + file.size, 0) / 1024)} KB` : `${product.fileName} · ${Math.round(product.fileSize / 1024)} KB`} · {product.images?.length || 0} görsel</Text><Text style={styles.price}>{[product.prices?.usd ? `${product.prices.usd} USD` : "", product.prices?.try ? `${product.prices.try} TL` : ""].filter(Boolean).join(" · ")}</Text></View>
       </View>
       <Text style={styles.small} numberOfLines={2}>{product.listing?.title}</Text>
-      <ListingGuide input={{ phase: "saved", files: product.files?.length || (product.fileName ? 1 : 0), images: product.images?.length || 0, etsy: product.etsy, verifiedState: publication[product.id]?.state }} />
+      <ListingGuide input={{ phase: "saved", files: product.files?.length || (product.fileName ? 1 : 0), images: product.images?.length || 0, etsy: product.etsy, verifiedState: publication[product.id]?.state, qaOk: fileQa[product.id]?.ok }}
+        actionLabel={fileQa[product.id]?.ok !== true ? "Goxi ile dosyaları denetle" : transferComplete(product) ? "Goxi ile Etsy durumunu doğrula" : "Goxi ile taslağı hazırla"}
+        onAction={() => fileQa[product.id]?.ok !== true ? auditFiles(product) : transferComplete(product) ? verifyPublication(product) : etsyDraft(product)} disabled={!online || busy === product.id} />
       {publication[product.id] && <Text style={styles.small}>Etsy durumu: {publication[product.id].state === "active" ? "Yayında" : publication[product.id].state === "draft" ? "Taslak" : "Yayında değil"} · {new Date(publication[product.id].checkedAt).toLocaleString("tr-TR")}</Text>}
       {/* "Denendi" yalnız desen için anlamlıdır (Etsy kuralı); hazır dijital üründe uyarı gösterilmez. */}
       {fileQa[product.id] && <View style={styles.adviceBox}>
@@ -2831,6 +2847,7 @@ function EtsyProductPlanner({ product, etsyReady, onClose }: any) {
   return <Modal visible={Boolean(product)} animationType="slide" onRequestClose={onClose}>
     <SafeAreaView style={styles.formSafe}><StatusBar barStyle="dark-content" /><ScrollView contentContainerStyle={styles.formContent}>
       <View style={styles.formHeader}><Text style={[styles.sectionTitle, { flex: 1 }]}>Etsy ilanı hazırla</Text><Pressable onPress={onClose}><Ionicons name="close" size={26} color="#315B4C" /></Pressable></View>
+      {!currentPlan && <ListingMascot step={2} title="Shopier ürününü Etsy için doğrula" instruction="Bu ürünü kim yaptı sorusunu yanıtla. Gerçek malzeme, ölçü, stok ve ABD kargo bilgilerini kontrol et; ardından Etsy araştırmasını başlat." tasks={["Üretim kökenini seç; gerekiyorsa vintage yılını doğrula.", "Paketli ürünün gerçek ABD kargosunu ve ölçülerini gir.", "Hazırlanan ilanı inceledikten sonra Etsy taslağına geç."]} actionLabel="Goxi ile Shopier ürünü için Etsy araştırması" onAction={analyze} disabled={Boolean(progress)} /> }
       <Text style={styles.cardTitle}>{product?.title}</Text>
       <Text style={styles.price}>{product?.price} {product?.currency || "TRY"}</Text>
       <Text style={[styles.fieldLabel, { marginTop: 14 }]}>Bu ürünü kim yaptı?</Text>
@@ -2958,6 +2975,12 @@ function EtsyPlanResult({ plan, payload, etsyReady, priceSourceLabel, preparePro
   const pricing = plan.pricing;
   const bannerStyle = eligibility.status === "allowed" ? styles.policyAllowed : eligibility.status === "blocked" ? styles.policyBlocked : styles.policyReview;
   return <>
+      <ListingMascot step={published?.state === "active" || draft ? 5 : 4} complete={published?.state === "active"}
+        title={published?.state === "active" ? "Etsy’de yayında olduğu doğrulandı" : draft ? "Taslağını Etsy’de kontrol et" : eligibility.status !== "allowed" ? "Önce kural kontrolündeki eksikleri düzelt" : "İlanı incele, sonra Etsy taslağına geç"}
+        instruction={published?.state === "active" ? "Alıcıya görünen ilanı aç; gerçek fotoğrafları, fiyatı ve kargoyu son kez kontrol et." : draft ? "Taslak henüz yayında ilan değildir. Fotoğraf, fiyat, kategori, kargo ve gerekli üretim ortağı bilgilerini Etsy’de kontrol et; ardından aşağıdaki yayınlama düğmesini kullan." : "Aşağıdaki başlık, açıklama, 13 etiket, fiyat ve kural kontrolünü gerçek ürününle karşılaştır. Eksik veya yanlış bilgiyi düzelt; uygunsa taslak oluştur."}
+        roadmap={["Ürün ve fotoğraflar", "Gerçek bilgiler ve köken", "Fiyat ve kargo", "İlan kontrolü ve taslak", "Etsy kontrolü ve yayın doğrulaması"]}
+        actionLabel={published?.state === "active" ? "Goxi ile yayındaki ilanı aç" : draft ? "Goxi ile Etsy taslağını aç" : "Goxi ile fiziksel ürün taslağını hazırla"}
+        onAction={() => published?.state === "active" ? openUrl(published.url, "Etsy ilanı") : draft ? openUrl(draft.editUrl, "Etsy taslağı") : createDraft()} disabled={eligibility.status !== "allowed" || saving || publishing || !etsyReady} />
       <MarketStrategyCard strategy={plan.strategy} />
       <View style={[styles.policyBox, bannerStyle, { marginBottom: 14 }]}>
         <Text style={styles.policyName}>ETSY KURAL KONTROLÜ</Text>
@@ -3369,6 +3392,7 @@ function HomeScreen({ online, channels, setTab, openSell }: any) {
       ? "Etsy'de yayında ilanınız yok. İlk ilanı hazırlayın: 'Ürün sat' ya da uzman mod → Dijital ürünler. Eksik adımlar: Yardım → Mağaza hazırlığı."
       : "İlanlarınızı alıcılara göstermek için 'Müşteri bul' planını hazırlayın.";
   return <>
+    <ListingMascot title="Merhaba, ben Goxi" instruction="İlan açarken sana sıradaki işi göstereceğim. Önce ne satacağını seçelim; her aşamada gerçek durumuna göre devam edeceğiz." actionLabel="İlan açmaya başlayalım" onAction={() => openSell("choose")} />
     <Text style={styles.homeHello}>Ne yapmak istiyorsunuz?</Text>
     <HomeTile icon="camera" title="Ürün sat" text="Ürünün fotoğrafını çekin; başlık, açıklama, etiket ve fiyat sizin için hazırlanır." onPress={() => openSell("choose")} />
     <HomeTile icon="receipt" title="Siparişler" text="Gelen Etsy siparişleri, son kargo tarihi ve takip numarası." onPress={() => setTab("Siparişler")} />
@@ -3407,6 +3431,7 @@ function SellScreen({ online, channels, route, setRoute, onStepChange, setTab }:
 
 function SellRouteContent({ online, channels, route, setRoute, setTab, back }: any) {
   if (route === "choose") return <>
+    <ListingMascot title="Önce satacağın ürünü seç" instruction="Elindeki fiziksel ürünü fotoğraflarla, dijital ürünü dosyalarla hazırlayacağız. Aşağıdan sana uygun seçeneğe dokun; henüz karar vermediysen fikir bölümünü aç." />
     <Text style={styles.homeHello}>Ne satacaksınız?</Text>
     <ChoiceTile icon="cube-outline" title="Elimdeki bir ürünü" text="Tesbih, vintage eşya, örgü kazak/hırka ya da başka bir ürün. Fotoğrafını çekip satarsınız." onPress={() => setRoute("where")} />
     <ChoiceTile icon="document-text-outline" title="Dijital ürün ya da kendi deseniniz" text="Planlayıcı, boyama sayfası, junk journal kiti gibi indirilebilir dosya ya da kendi yazıp denediğiniz örgü deseni. Kargo yok; bir kez hazırlanır, çok satılır." onPress={() => setRoute("digital")} />
@@ -3415,6 +3440,7 @@ function SellRouteContent({ online, channels, route, setRoute, setTab, back }: a
   </>;
   if (route === "where") return <>
     {back}
+    <ListingMascot title="Satış kanalını seç" instruction="Etsy için İngilizce ilan ve yurt dışı kargo, Shopier için Türkçe ilan ve yurt içi satış yolunu izle. Aşağıdan istediğin kanala dokun." />
     <Text style={styles.homeHello}>Nerede satılsın?</Text>
     <ChoiceTile icon="globe-outline" title="Etsy (ABD'deki alıcılar)" text="Dolarla satış, yurt dışına kargo. İlan İngilizce hazırlanır; size Türkçesi gösterilir." onPress={() => setRoute("photo")} />
     <ChoiceTile icon="bag-handle-outline" title="Shopier (Türkiye'deki alıcılar)" text="TL ile satış, yurt içi kargo. Instagram ve WhatsApp'tan gelen müşteri için." onPress={() => setRoute("shopier")} />
@@ -3460,8 +3486,8 @@ function HelpScreen({ online, channels, onExpert, onSell }: any) {
 // "İleri" eksik bilgiyi söyler. Uzman modda form tek sayfadır.
 const WIZARD_STEPS = ["Fotoğraflar", "Ürün bilgisi", "Renk ve özellikler", "Fiyat ve kargo", "Önizleme ve gönder"];
 const WIZARD_HINTS = [
-  "Ürünün 1–10 fotoğrafını çekin ya da galeriden seçin. Gün ışığında, sade zeminde; önden, arkadan ve yakın plan. İleri'ye basınca yapay zekâ fotoğrafa bakar.",
-  "Ürünün ne olduğunu doğrulayın. Fotoğraftan anlaşılanlar dolduruldu; yanlışsa düzeltin. Emin olmadığınız bilgiyi yazmayın.",
+  "Ürünün 1–10 gerçek fotoğrafını çekin veya galeriden seçin. ChatGPT/Claude sohbet analizi isteğe bağlıdır; İleri düğmesi kendiliğinden analiz başlatmaz.",
+  "Ürün türünü, adını ve doğruladığınız bilgileri yazın. Sohbet analizinden aktardıysanız önerileri kontrol edin; emin olmadığınız bilgiyi yazmayın.",
   "Renkleri ve öne çıkan özellikleri Türkçe yazabilirsiniz; sistem İngilizceye çevirir. Bu adım isteğe bağlıdır.",
   "Satıştan elinize geçmesini istediğiniz tutarı ve ABD'ye kargo ücretini yazın. Etsy kesintileri ve kargo fiyata eklenir.",
   "Uygulama Etsy'de alıcıların aramalarını tarar; İngilizce başlık, 13 etiket, açıklama ve fiyatı hazırlar. Türkçe karşılığına bakıp Etsy'ye gönderin."
@@ -3682,7 +3708,11 @@ function PhotoListingStudio({ online, etsyReady, wizard, onStepChange }: any) {
     setPriceTry(""); setShippingTry(""); setQuantity("1"); setReadyToShip(true); setAnalysis(undefined); setRiskFlags([]); setPlan(undefined); setPayload(undefined);
   };
 
+  const photoGuide = physicalListingProgress({ wizardStep: wizard ? step : undefined, photos: photos.length, kind, name: nameTr, price: parseAmount(priceTry), shipping: parseAmount(shippingTry) });
   return <>
+    {!currentPlan && <ListingMascot {...photoGuide}
+      roadmap={WIZARD_STEPS} actionLabel={!photos.length || wizard && step === 1 ? "Goxi ile galeriden fotoğraf seç" : wizard && step < 5 ? "Goxi ile sonraki adıma geç" : "Goxi ile Etsy araştırmasını başlat"}
+      onAction={!photos.length || wizard && step === 1 ? () => addPhotos(false) : wizard && step < 5 ? next : photoGuide.step === 5 ? prepare : undefined} disabled={analyzing || Boolean(progress) || (!online && photos.length > 0)} />}
     {wizard && <View style={styles.analysisCard}>
       <View style={styles.stepBar}>{WIZARD_STEPS.map((label, index) => <View key={label} style={[styles.stepDot, index < step && styles.stepDotActive]} />)}</View>
       <Text style={styles.small}>Adım {step}/{WIZARD_STEPS.length}</Text>
