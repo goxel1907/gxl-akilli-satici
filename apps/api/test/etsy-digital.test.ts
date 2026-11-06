@@ -1,3 +1,4 @@
+import { zipSync } from "fflate";
 import { validPdf } from "./fixtures/valid-pdf.js";
 import assert from "node:assert/strict";
 import test from "node:test";
@@ -225,25 +226,9 @@ function pdfFile(name = "Juniper Crown.pdf") {
   return new File([validPdf(name)], name, { type: "application/pdf" });
 }
 
-// Sıkıştırmasız, geçerli merkez dizinli küçük bir ZIP (yalnız dosya adları kontrol edilir).
+// Real ZIP files containing parseable PDFs; no signature-only dummy entries.
 function makeZip(names: string[]): Uint8Array<ArrayBuffer> {
-  const locals: Buffer[] = [];
-  const centrals: Buffer[] = [];
-  let offset = 0;
-  for (const name of names) {
-    const nameBytes = Buffer.from(name);
-    const content = Buffer.alloc(1_200, name.length);
-    const local = Buffer.alloc(30); local.writeUInt32LE(0x04034b50, 0); local.writeUInt16LE(nameBytes.length, 26);
-    local.writeUInt32LE(content.length, 18); local.writeUInt32LE(content.length, 22);
-    const central = Buffer.alloc(46); central.writeUInt32LE(0x02014b50, 0); central.writeUInt16LE(nameBytes.length, 28); central.writeUInt32LE(offset, 42);
-    locals.push(local, nameBytes, content);
-    centrals.push(central, nameBytes);
-    offset += 30 + nameBytes.length + content.length;
-  }
-  const directory = Buffer.concat(centrals);
-  const end = Buffer.alloc(22); end.writeUInt32LE(0x06054b50, 0); end.writeUInt16LE(names.length, 8); end.writeUInt16LE(names.length, 10);
-  end.writeUInt32LE(directory.length, 12); end.writeUInt32LE(offset, 16);
-  return Uint8Array.from(Buffer.concat([...locals, directory, end]));
+  return Uint8Array.from(zipSync(Object.fromEntries(names.map(name => [name, validPdf(name)])), { level: 0 }));
 }
 
 function uploadForm(confirm = true, pdf: File = pdfFile()) {

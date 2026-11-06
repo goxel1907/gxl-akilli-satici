@@ -250,6 +250,8 @@ test("real screen buttons drive Trend → Studio → Digital → draft → verif
     await tap(renderer, /^Bu nişte dijital ürün hazırla$/);
     await tap(renderer, /^Prompt, görsel ve ilanı hazırla$/);
     assert.ok(plan?.quality.ok, JSON.stringify(ui.alerts));
+    await tap(renderer, /^Rakip kanıtlarını ve stratejiyi göster$/);
+    assert.ok(renderer.root.findAllByType("Text" as any).some(node => visible(node) && text(node).includes("Bestseller rozeti doğrulanmadı")));
     await tap(renderer, /^Tek paketi ChatGPT'ye gönder$/);
     assert.equal((ui.shares.at(-1) as { message: string }).message, plan.brief.masterPrompt);
     assert.ok(ui.storage.has(PRINTABLE_WORKSPACE_KEY), "Prepared handoff must survive leaving the app");
@@ -275,6 +277,9 @@ test("real screen buttons drive Trend → Studio → Digital → draft → verif
     await tap(renderer, /^Güvenli depoya yükle$/); await confirm(/^Dosyalar güvenli/, /^Yükle$/);
     await waitFor(() => Boolean(saved) && buttons(renderer, /^Etsy taslağı oluştur$/).length === 1);
     assert.equal(saved!.files?.length, 2); assert.equal(saved!.images.length, 1);
+    await tap(renderer, /^Dosya yapısını denetle$/);
+    assert.ok(renderer.root.findAllByType("Text" as any).some(node => visible(node) && text(node) === "Dosya yapısı kontrolleri geçti"));
+    assert.equal(draftWrites + imageWrites + fileWrites + publishWrites, 0, "Read-only file QA must not send a listing to Etsy");
     await tap(renderer, /^Etsy taslağı oluştur$/); await confirm(/^Etsy'de taslak/, /^Taslak oluştur$/);
     await waitFor(() => buttons(renderer, /^Yayın durumunu denetle$/).length === 1);
     assert.equal(draftWrites, 1); assert.equal(imageWrites, 1); assert.equal(fileWrites, 2);

@@ -42,8 +42,10 @@ test("product plan, staged assets, Etsy draft retry and publication verification
   try {
     const planResponse = await post("/api/printables/plan", JSON.stringify({ kind: "coloring", productType: "abc animal coloring book baby shower", assistant: "chatgpt", research: true }), true);
     assert.equal(planResponse.status, 200, await planResponse.clone().text());
-    const plan = await planResponse.json() as { brief: { name: string; priceUsd: number }; listing: DigitalProduct["listing"]; handoff: { id: string }; quality: { ok: boolean } };
+    const plan = await planResponse.json() as { brief: { name: string; priceUsd: number; masterPrompt: string }; listing: DigitalProduct["listing"]; handoff: { id: string }; quality: { ok: boolean } };
     assert.equal(plan.quality.ok, true); assert.equal(plan.listing.tags.length, 13);
+    assert.match(plan.brief.masterPrompt, /MARKET STRATEGY/); assert.match(plan.brief.masterPrompt, /Authoritative listing metadata/);
+    assert.ok(plan.brief.masterPrompt.includes(plan.listing.title));
     const parts: { files: string[]; images: string[] } = { files: [], images: [] };
     const stage = async (file: File, role: "file" | "image") => {
       const form = new FormData(); form.set("confirm", "true"); form.set("role", role); form.set("asset", file);
@@ -57,6 +59,9 @@ test("product plan, staged assets, Etsy draft retry and publication verification
     form.set("parts", JSON.stringify(parts));
     const saved = await post("/api/digital/products", form); assert.equal(saved.status, 201, await saved.clone().text());
     const { product } = await saved.json() as { product: DigitalProduct };
+    const auditPath = `https://local.invalid/api/digital/products/${product.id}/qa`;
+    const audit = await (await handleRequest(new Request(auditPath, { headers }), env)).json() as { ok: boolean; files: unknown[] };
+    assert.equal(audit.ok,true);assert.equal(audit.files.length,2);
     const draftPath = `/api/digital/products/${product.id}/etsy-draft`;
     assert.equal((await post(draftPath, JSON.stringify({ confirm: true }), true)).status, 502);
     const resumed = await post(draftPath, JSON.stringify({ confirm: true }), true);
@@ -74,5 +79,10 @@ test("product plan, staged assets, Etsy draft retry and publication verification
     state = "active";
     assert.equal((await (await handleRequest(new Request(statusPath, { headers }), env)).json() as { state: string }).state, "active");
     assert.equal(draftCalls, 1);
+    values.set(`digital:file:${product.id}`, new TextEncoder().encode("corrupt payload").buffer);
+    const damaged = await (await handleRequest(new Request(auditPath, { headers }), env)).json() as { ok: boolean };
+    assert.equal(damaged.ok,false);
+    assert.equal((await post(draftPath, JSON.stringify({ confirm: true }), true)).status,400);
+    assert.equal(draftCalls,1,"A failed file audit must not make another Etsy write");
   } finally { globalThis.fetch = originalFetch; }
 });

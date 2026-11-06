@@ -23,6 +23,7 @@ export function parsePrintableWorkspace(raw: string | null): PrintableWorkspace 
   try {
     const value = JSON.parse(raw) as PrintableWorkspace;
     const input = value.input, plan = value.plan;
+    if (input?.competitorLinks !== undefined && (typeof input.competitorLinks !== "string" || input.competitorLinks.length > 2500)) return undefined;
     const textFields = ["kind", "productType", "referenceNotes", "colors", "formats", "pageCount", "audience", "keyword", "assistant"];
     if (!input || !textFields.every(key => typeof input[key] === "string") || ![input.trendTags, input.trendFeatures].every(rows => Array.isArray(rows) && rows.every(item => typeof item === "string"))) return undefined;
     if (value.version !== 1 || !Number.isFinite(Date.parse(value.savedAt)) || !input || !plan || plan.quality?.ok !== true
@@ -40,6 +41,12 @@ export function parsePrintableWorkspace(raw: string | null): PrintableWorkspace 
       || brief.adVisuals !== undefined && !objects(brief.adVisuals, ["titleTr", "aspect", "useTr", "prompt"])
       || brief.priceUsd !== undefined && !Number.isFinite(brief.priceUsd)) return undefined;
     const competition = plan.research?.competition;
+    const strategy = plan.research?.strategy;
+    if (strategy && (strategy.version !== 1 || !objects(strategy.actions, ["id", "titleTr", "instructionTr"])
+      || !objects(strategy.leaders, ["id", "title"]) || !objects(strategy.experiments, ["id", "changeTr", "metricTr", "stopRuleTr"])
+      || !strings(strategy.limitationsTr) || typeof strategy.keyword !== "string" || typeof strategy.checkedAt !== "string"
+      || strategy.leaders.some((row: any) => row.url !== undefined && (typeof row.url !== "string" || !/^https:\/\/www\.etsy\.com\/listing\/\d+$/.test(row.url)))
+      || strategy.pricing && (!Array.isArray(strategy.pricing.trialsUsd) || !strategy.pricing.trialsUsd.every((price: unknown) => typeof price === "number" && Number.isFinite(price) && price > 0)))) return undefined;
     if (competition && (!strings(competition.planTr) || !objects(competition.topCompetitors, ["title"])
       || [competition.launchPriceUsd, competition.bundlePriceUsd, ...competition.topCompetitors.map((row: any) => row.priceUsd)].some(price => price !== undefined && !Number.isFinite(price)))) return undefined;
     return value;

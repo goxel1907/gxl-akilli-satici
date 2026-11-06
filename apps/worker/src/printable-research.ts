@@ -2,7 +2,19 @@ import { etsyRequest, EtsyIntegrationError, type EtsyRuntimeEnv } from "./etsy.j
 import { inferPrintableKind, normalizeKeyword, scoreTrend, type PrintableKind } from "./etsy-trends.js";
 import { buildCompetition } from "./pattern-seed.js";
 
-type ResearchProduct = { kind: PrintableKind; productType: string; keyword?: string; pageCount?: number };
+type ResearchProduct = { kind: PrintableKind; productType: string; keyword?: string; pageCount?: number; competitorLinks?: string };
+export function competitorIds(value = ""): string[] {
+  const refs = value.trim().split(/[\s,]+/).filter(Boolean);
+  if (refs.length > 5) throw new EtsyIntegrationError("VALIDATION_FAILED", "En fazla 5 rakip ilan linki veya numarası girin.", 400);
+  return [...new Set(refs.map(ref => {
+    if (/^[1-9]\d{0,14}$/.test(ref)) return ref;
+    try {
+      const url = new URL(ref), id = url.pathname.match(/^\/(?:[a-z-]+\/)?listing\/([1-9]\d{0,14})(?:\/|$)/i)?.[1];
+      if (url.protocol === "https:" && /^(www\.)?etsy\.com$/i.test(url.hostname) && id) return id;
+    } catch { /* Invalid links never become arbitrary network targets. */ }
+    throw new EtsyIntegrationError("VALIDATION_FAILED", "Rakip için geçerli bir Etsy ilan linki veya ilan numarası girin.", 400);
+  }))];
+}
 const TOPICS = [
   /\b(abc|alphabet|a-z)\b/, /\banimals?\b|\bwildlife\b/, /\bbaby showers?\b/, /\bbridal showers?\b/,
   /\b(christmas|xmas|noel)\b/, /\bhalloween\b/, /\bvalentine.?s?\b/, /\b(easter|spring eggs)\b/,
@@ -33,14 +45,27 @@ export function matchesPrintableProduct(input: ResearchProduct, row: Record<stri
 // physical products into digital-product price recommendations.
 export async function researchPrintableMarket(env: EtsyRuntimeEnv, input: ResearchProduct, fetcher: typeof fetch = fetch) {
   const keyword = normalizeKeyword(input.keyword || input.productType);
+  const selectedIds = competitorIds(input.competitorLinks);
   const response = await etsyRequest<{ count?: number; results?: Array<Record<string, unknown>> }>(env, "/application/listings/active", {
     authenticated: false, query: { keywords: keyword, sort_on: "score", limit: 100, currency: "USD" }
   }, fetcher);
-  const comparable = (response.results || []).filter(row => matchesPrintableProduct(input, row));
+  const selected: Record<string, unknown>[] = [];
+  for (const id of selectedIds) {
+    const row = await etsyRequest<Record<string, unknown>>(env, `/application/listings/${id}`, { authenticated: false }, fetcher);
+    if (row.state !== "active" || !matchesPrintableProduct(input, row)) throw new EtsyIntegrationError("VALIDATION_FAILED", `Seçilen ${id} numaralı rakip yayında değil veya bu ürünle aynı tür/konuda değil. Rakip listesini düzeltin.`, 400);
+    selected.push({ ...row, listing_id: Number(id) });
+  }
+  const seen = new Set<string>();
+  const comparable = [...selected, ...(response.results || []).filter(row => matchesPrintableProduct(input, row))].filter(row => {
+    if (!row.listing_id) return true;
+    const id = String(row.listing_id); if (seen.has(id)) return false; seen.add(id); return true;
+  });
   if (comparable.length < 3) throw new EtsyIntegrationError("VALIDATION_FAILED", "Bu aramada aynı tür ve konuda en az 3 dijital rakip bulunamadı. Daha belirgin bir Etsy araması yazın; eski analiz veya tahmini fiyat kullanılmadı.", 400);
-  const result = scoreTrend(keyword, { count: response.count, results: comparable }, Date.now(), "printables");
+  const result = scoreTrend(keyword, { count: response.count, results: comparable }, Date.now(), "printables", "product_matched");
+  if (!result.strategy || result.strategy.sampleSize < 3) throw new EtsyIntegrationError("VALIDATION_FAILED", "Korunan isimler elendikten sonra en az 3 karşılaştırılabilir rakip gerekli. Başka bir Etsy araması deneyin.", 400);
+  if (!result.strategy.pricing) throw new EtsyIntegrationError("VALIDATION_FAILED", "Korunan isimler elendikten sonra en az 3 karşılaştırılabilir USD fiyatı gerekli. Başka bir Etsy araması deneyin; farklı para birimleri fiyat önerisine katılmadı.", 400);
   const competition = buildCompetition(result, input.kind, input.pageCount, []);
   if (!competition.launchPriceUsd) throw new EtsyIntegrationError("VALIDATION_FAILED", "Karşılaştırılabilir rakip fiyatı alınamadı. Başka arama deneyin.", 400);
-  return { keyword, scannedAt: result.scannedAt, sampleSize: comparable.length, competition, trendTags: result.topTags.map(item => item.tag),
+  return { keyword, scannedAt: result.scannedAt, sampleSize: result.strategy.sampleSize, selectedIds, strategy: result.strategy, competition, trendTags: result.topTags.map(item => item.tag),
     noteTr: "Etsy aramasındaki aynı tür ve konuda eşleştirilen dijital ilan örneklemidir. Favori ve ilan sayıları satış değildir; fiyatlar gözlenen örnekleme dayanır." };
 }

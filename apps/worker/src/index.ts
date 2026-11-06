@@ -1,4 +1,5 @@
 import { readProductIdeas } from "./product-ideas.js";
+import { canRankTrend } from "../../mobile/trend-priority.js";
 import { readEtsyListingStatus } from "./etsy-listing-status.js";
 import { crmRequest, CrmStorageError, isCrmRoute, readCrmSnapshot, type CrmEnv } from "./crm-store.js";
 export { CrmStore } from "./crm-store.js";
@@ -68,6 +69,7 @@ import {
 import {
   stageDigitalUpload,
   createDigitalProduct,
+  auditDigitalFiles,
   createEtsyDigitalDraft,
   createGrant,
   DigitalDeliveryError,
@@ -546,9 +548,11 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
       const usedNames = await readUsedNames(store);
       const brief = buildPrintableBrief({ ...input, avoidNames: usedNames });
       await rememberName(store, brief.name, usedNames);
-      const listing = await createPrintableListing(input, brief.name, env);
+      const listing = await createPrintableListing(input, brief.name, env, research?.strategy);
       const handoff = store ? await registerProductHandoff(store, { name: brief.name, kind: input.kind, productType: input.productType }) : undefined;
-      return json(200, { ...guardPrintablePlan(brief, listing, { kind: input.kind, formats: input.formats }), ...(research ? { research } : {}), ...(handoff ? { handoff } : {}) });
+      const guarded = guardPrintablePlan(brief, listing, { kind: input.kind, formats: input.formats });
+      if (research) guarded.brief.masterPrompt += `\n\n## Evidence-based market strategy\n${research.strategy.productionBriefEn}\n\n## Authoritative listing metadata\n${JSON.stringify({ productName: brief.name, title: guarded.listing.title, description: guarded.listing.description, tags: guarded.listing.tags, priceUsd: brief.priceUsd }, null, 2)}\nKeep this listing metadata aligned with the final product. If any claimed deliverable cannot be produced, report FAIL and ask the seller to regenerate the package rather than silently changing the product or claims. Do not publish the listing.`;
+      return json(200, { ...guardPrintablePlan(guarded.brief, guarded.listing, { kind: input.kind, formats: input.formats }), ...(research ? { research } : {}), ...(handoff ? { handoff } : {}) });
     }
 
     if (request.method === "GET" && url.pathname === "/api/pinterest/status") return json(200, await getPinterestStatus(env));
@@ -675,7 +679,7 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
       let inlineScans = 0;
       for (const keyword of keywords) {
         const cached = await readCached(store, keyword);
-        if (cached) scans.push(cached);
+        if (cached && cached.strategy?.version === 1 && canRankTrend(cached)) scans.push(cached);
         else if (inlineScans < 2 && env.ETSY_API_KEY && env.ETSY_SHARED_SECRET) {
           inlineScans += 1;
           scans.push(await scanTrend(env, { keyword }, store));
@@ -737,13 +741,14 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
       const store = digitalStore(env);
       return json(201, { product: await createDigitalProduct(store, form, url.origin, (key, bytes, mimeType) => putProductMedia(env, key, bytes, mimeType)) });
     }
-    const digitalProductMatch = url.pathname.match(/^\/api\/digital\/products\/([a-f0-9-]{36})(?:\/(grants|etsy-draft|etsy-status))?$/);
+    const digitalProductMatch = url.pathname.match(/^\/api\/digital\/products\/([a-f0-9-]{36})(?:\/(grants|etsy-draft|etsy-status|qa))?$/);
     if (digitalProductMatch && request.method === "GET" && !digitalProductMatch[2]) {
       const store = digitalStore(env);
       const product = await getDigitalProduct(store, digitalProductMatch[1]);
       const grants = (await listGrants(store, product.id)).map((grant) => ({ ...grant, url: `${url.origin}/d/${grant.id}` }));
       return json(200, { product, grants });
     }
+    if (digitalProductMatch && request.method === "GET" && digitalProductMatch[2] === "qa") return json(200, await auditDigitalFiles(digitalStore(env), digitalProductMatch[1]));
     if (digitalProductMatch && request.method === "GET" && digitalProductMatch[2] === "etsy-status") {
       const product = await getDigitalProduct(digitalStore(env), digitalProductMatch[1]);
       if (!product.etsy?.listingId) return json(409, { error: "Önce Etsy taslağını oluşturun." });

@@ -1,4 +1,5 @@
 import { matchesStoredHandoff } from "./product-handoff.js";
+import { inspectSaleArchive, ArchiveQaError } from "./archive-qa.js";
 import { PDFDocument } from "pdf-lib";
 import { etsyRequest, EtsyIntegrationError, getConnectedShop, type EtsyRuntimeEnv } from "./etsy.js";
 import { isCraftSupply, patternPolicyMessage } from "./etsy-policy.js";
@@ -34,6 +35,7 @@ export interface DigitalFile {
   name: string;
   size: number;
   mimeType: "application/pdf" | "application/zip";
+  qa?: { state: "structural_pass"; checks: number; entries: number; contentReview: "seller_required" };
 }
 
 export interface DigitalProduct {
@@ -188,6 +190,14 @@ export async function validateDigitalPdf(bytes: ArrayBuffer, name: string): Prom
   }
 }
 
+async function validateArchive(bytes: ArrayBuffer, name: string) {
+  try { return await inspectSaleArchive(new Uint8Array(bytes), validateDigitalPdf); }
+  catch(error) {
+    if (error instanceof DigitalDeliveryError) throw error;
+    throw new DigitalDeliveryError("VALIDATION_FAILED", `${name}: ${error instanceof ArchiveQaError ? error.message : "ZIP içeriği denetlenemedi. Dosyayı yeniden dışa aktarın."}`);
+  }
+}
+
 // "• Formats: US Letter, A4, ..." satırındaki vaatler; satır yoksa (ör. desenler) kontrol atlanır.
 export function claimedFormats(description: string): FormatId[] {
   const line = description.split("\n").find((item) => /^\W*formats?\s*:/i.test(item.trim()));
@@ -231,6 +241,27 @@ export function productFiles(product: DigitalProduct): DigitalFile[] {
   return product.files?.length ? product.files : [{ name: product.fileName, size: product.fileSize, mimeType: "application/pdf" }];
 }
 
+export async function auditDigitalFiles(store: DigitalStore, productId: string) {
+  const product = await getDigitalProduct(store, productId);
+  const rows: Array<{ name: string; ok: boolean; checks: number; entries: number; error?: string }> = [];
+  const covered = new Set<FormatId>(), hashes = new Set<string>();
+  for (const [index, meta] of productFiles(product).entries()) {
+    try {
+      const bytes = await store.get(fileKey(productId,index), "arrayBuffer");
+      if (!bytes) throw new Error("Dosya depoda bulunamadı.");
+      const hash=await sha256(bytes);if(hashes.has(hash)) throw new Error("Aynı içerik başka bir dosyada tekrar ediyor.");hashes.add(hash);
+      let names=[meta.name],checks=1;
+      if(new Uint8Array(bytes)[0]===0x25) await validateDigitalPdf(bytes,meta.name);
+      else {const archive=await validateArchive(bytes,meta.name);names=archive.names;checks=archive.checks;}
+      for(const name of names) for(const format of formatsOfText(name)) covered.add(format);
+      rows.push({name:meta.name,ok:true,checks,entries:names.length});
+    } catch(error) { rows.push({name:meta.name,ok:false,checks:0,entries:0,error:error instanceof Error ? error.message : "Dosya denetlenemedi."}); }
+  }
+  const missingFormats=claimedFormats(product.listing.description).filter(format=>!covered.has(format)).map(format=>FORMAT_LABELS[format]);
+  return { ok:rows.every(row=>row.ok) && !missingFormats.length, checkedAt:new Date().toISOString(), files:rows, missingFormats,
+    noteTr:"Bu sonuç dosya yapısı ve vaat edilen formatlar içindir. Görünüm, içerik doğruluğu, oyun cevapları, formüllerin işlevi ve hedef uygulamada açılma satıcı tarafından ayrıca kontrol edilmelidir." };
+}
+
 function positivePrice(value: unknown): number | undefined {
   const number = Number(String(value ?? "").replace(",", "."));
   return Number.isFinite(number) && number > 0 ? Math.round(number * 100) / 100 : undefined;
@@ -255,7 +286,8 @@ export async function stageDigitalUpload(store: DigitalStore, file: File, role: 
   const head = new Uint8Array(bytes);
   if (role === "file") {
     if (startsWith(head, [0x25, 0x50, 0x44, 0x46, 0x2d])) await validateDigitalPdf(bytes, file.name);
-    else if (!startsWith(head, [0x50, 0x4b, 0x03, 0x04]) || !zipEntryNames(bytes).length) throw new DigitalDeliveryError("VALIDATION_FAILED", "Dosya geçerli PDF/ZIP olmalı.");
+    else if (startsWith(head, [0x50, 0x4b, 0x03, 0x04])) await validateArchive(bytes, file.name);
+    else throw new DigitalDeliveryError("VALIDATION_FAILED", "Dosya geçerli PDF/ZIP olmalı.");
   } else if (!imageType(head)) throw new DigitalDeliveryError("VALIDATION_FAILED", "Görsel JPG veya PNG olmalı.");
   const id = crypto.randomUUID();
   await store.put(`${PART_PREFIX}${id}:bytes`, bytes, { expirationTtl: 3600 });
@@ -342,13 +374,13 @@ export async function createDigitalProduct(store: DigitalStore, form: FormData, 
     const isZip = startsWith(head, [0x50, 0x4b, 0x03, 0x04]);
     if (!isPdf && !isZip) throw new DigitalDeliveryError("VALIDATION_FAILED", `${upload.name || "Dosya"} geçerli bir PDF veya ZIP değil.`);
     if (isPdf) await validateDigitalPdf(bytes, upload.name);
-    if (isZip && !zipEntryNames(bytes).length) throw new DigitalDeliveryError("VALIDATION_FAILED", `${upload.name}: ZIP açılamadı veya boş.`);
+    const archive = isZip ? await validateArchive(bytes, upload.name) : undefined;
     let fileName = safeFileName(upload.name || name, kind ? "printable" : "pattern", isPdf ? "pdf" : "zip");
     for (let copy = 2; usedNames.has(fileName.toLowerCase()); copy += 1) fileName = fileName.replace(/(-\d+)?\.(pdf|zip)$/, `-${copy}.$2`);
     usedNames.add(fileName.toLowerCase());
-    files.push({ name: fileName, size: bytes.byteLength, mimeType: isPdf ? "application/pdf" : "application/zip" });
+    files.push({ name: fileName, size: bytes.byteLength, mimeType: isPdf ? "application/pdf" : "application/zip", qa: { state: "structural_pass", checks: archive?.checks || 1, entries: archive?.names.length || 1, contentReview: "seller_required" } });
     hashes.push(await sha256(bytes));
-    for (const entry of isZip ? zipEntryNames(bytes) : [fileName]) for (const format of formatsOfText(entry)) covered.add(format);
+    for (const entry of archive?.names || [fileName]) for (const format of formatsOfText(entry)) covered.add(format);
     const temporaryKey = `digital:pending:${crypto.randomUUID()}`;
     await store.put(temporaryKey, bytes, { expirationTtl: 3600 });
     temporaryKeys.push(temporaryKey);
@@ -594,6 +626,8 @@ export async function createEtsyDigitalDraft(
   fetcher: Fetcher = fetch
 ) {
   const product = await getDigitalProduct(store, productId);
+  const audit = await auditDigitalFiles(store, productId);
+  if (!audit.ok) throw new DigitalDeliveryError("VALIDATION_FAILED", `Dosya denetimi geçmedi: ${[...audit.files.filter(row=>!row.ok).map(row=>`${row.name}: ${row.error}`), ...audit.missingFormats.map(format=>`${format} eksik`)].join(" ")}`);
   if (product.etsy?.listingId && product.etsy.fileUploaded
     && (product.etsy.filesUploaded ?? (productFiles(product).length === 1 ? 1 : 0)) >= productFiles(product).length
     && product.etsy.imagesUploaded >= product.images.length) {

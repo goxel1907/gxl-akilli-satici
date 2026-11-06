@@ -1203,6 +1203,7 @@ function TrendCard({ title, keyword: plannedKeyword, result, expanded, onToggle,
     </Pressable>
     {result && trendFreshness(result) !== "fresh" && <Text style={styles.warningText}>Eski tarama · yeniden tara</Text>}
     {!!result && <>
+      {expanded && <MarketStrategyCard strategy={result.strategy} />}
       <Text style={styles.trendVerdict}>{result.verdict}</Text>
       {!!result.signals?.ipRisks?.length && <Text style={styles.shopierBlocker}>Marka/telif riski: {result.signals.ipRisks.join(", ")}. Bu kelimeleri başlıkta, etikette ve tasarımda kullanma.</Text>}
       <Text style={styles.small}>Rakip: {Number(result.metrics.activeListings).toLocaleString("tr-TR")} ilan · Talep: {demandText(result.metrics)} · Yeni ilan payı: %{Math.round(result.metrics.newcomerShare * 100)}{result.metrics.medianPriceUsd ? ` · Ortanca ${result.metrics.medianPriceUsd} USD` : ""}</Text>
@@ -1594,14 +1595,38 @@ const STUDIO_MODES = [
 ];
 
 // Rakipleri geçmek için plan: fiyat, içerik miktarı, format boşlukları, paket ve öne çıkan rakipler.
+function MarketStrategyCard({ strategy }: any) {
+  const [expanded, setExpanded] = useState(false);
+  if (strategy?.version !== 1 || !Array.isArray(strategy.leaders) || !Array.isArray(strategy.actions) || !Array.isArray(strategy.experiments) || !Array.isArray(strategy.limitationsTr)) return null;
+  return <View style={styles.analysisCard}>
+    <Text style={styles.cardTitle}>Kanıta dayalı rakip stratejisi</Text>
+    <Text style={styles.small}>{strategy.keyword} · {strategy.sampleSize} örnek · {strategy.linkedSampleSize} bağlantılı ilan · {new Date(strategy.checkedAt).toLocaleString("tr-TR")}</Text>
+    <Text style={styles.evidence}>Kapsam: {strategy.scope === "product_matched" ? "aynı tür ve konuda ürünler" : "arama örneklemi"} · Kanıt: {strategy.evidenceLevel === "supported" ? "örneklem destekli" : strategy.evidenceLevel === "limited" ? "sınırlı" : "yetersiz"}</Text>
+    <Pressable style={styles.secondaryButton} onPress={() => setExpanded(!expanded)}><Text style={styles.secondaryButtonText}>{expanded ? "Rakip stratejisini kapat" : "Rakip kanıtlarını ve stratejiyi göster"}</Text></Pressable>
+    {expanded && <>
+    {strategy.limitationsTr.map((line: string) => <Text key={line} style={styles.warningText}>• {line}</Text>)}
+    {strategy.pricing && <Text style={styles.listingTitle}>Fiyat deneme referansları: {strategy.pricing.trialsUsd.join(" / ")} USD · maliyet ve ücretleri ayrıca kontrol edin</Text>}
+    {strategy.actions.map((action: any) => <View key={action.id} style={styles.visualRow}><Text style={styles.rowTitle}>{action.titleTr}</Text><Text style={styles.analysisLine}>{action.instructionTr}</Text></View>)}
+    <Text style={styles.warningTitle}>İncelenen rakipler</Text>
+    {strategy.leaders.map((row: any) => <View key={row.id} style={styles.visualRow}>
+      <Text style={styles.rowTitle}>{row.title}</Text>
+      <Text style={styles.small}>{row.priceUsd ? `${row.priceUsd} USD · ` : ""}{row.favorites ?? "?"} favori · {row.ageDays === null ? "yaş bilinmiyor" : `${row.ageDays} gün`}{row.monthlyFavoriteAverage !== null ? ` · aylık ortalama ${row.monthlyFavoriteAverage} favori` : ""}</Text>
+      {!!row.url && <Pressable style={styles.secondaryButton} onPress={() => openUrl(row.url, "Rakip ilanı")}><Text style={styles.secondaryButtonText}>Kaynak ilanı aç</Text></Pressable>}
+    </View>)}
+    <Text style={styles.warningTitle}>Yayın sonrası ölçüm</Text>
+    {strategy.experiments.map((experiment: any) => <View key={experiment.id} style={styles.visualRow}><Text style={styles.rowTitle}>{experiment.changeTr}</Text><Text style={styles.analysisLine}>{experiment.metricTr}</Text><Text style={styles.small}>{experiment.stopRuleTr}</Text></View>)}
+    </>}
+  </View>;
+}
+
 function CompetitionCard({ competition }: any) {
   if (!competition || (!competition.planTr?.length && !competition.topCompetitors?.length)) return null;
   return <View style={styles.adviceBox}>
-    <Text style={styles.cardTitle}>Rakipleri geçmek için</Text>
+    <Text style={styles.cardTitle}>Rakip gözlemleri ve deneme planı</Text>
     {!!competition.launchPriceUsd && <Text style={styles.listingTitle}>Önerilen fiyat: {competition.launchPriceUsd.toFixed(2)} USD · set: {competition.bundlePriceUsd?.toFixed(2)} USD</Text>}
     {(competition.planTr || []).map((line: string) => <Text style={styles.analysisLine} key={line}>• {line}</Text>)}
     {!!competition.topCompetitors?.length && <>
-      <Text style={styles.warningTitle}>Geçilecek rakipler</Text>
+      <Text style={styles.warningTitle}>İlgi göstergesi yüksek örnekler (satış sıralaması değil)</Text>
       {competition.topCompetitors.map((item: any, index: number) => <Text style={styles.small} key={`${item.title}-${index}`}>{item.favorites} favori · {item.ageDays} gün{item.priceUsd ? ` · ${item.priceUsd.toFixed(2)} USD` : ""} · {item.title}</Text>)}
     </>}
   </View>;
@@ -1620,6 +1645,7 @@ function PrintableStudio({ online, seed, seeding, resumeWorkspace, onPrepared, o
   const [pageCount, setPageCount] = useState("");
   const [audience, setAudience] = useState("");
   const [keyword, setKeyword] = useState("");
+  const [competitorLinks, setCompetitorLinks] = useState("");
   const [trendTags, setTrendTags] = useState<string[]>([]);
   const [trendFeatures, setTrendFeatures] = useState<string[]>([]);
   const [basis, setBasis] = useState<string[]>([]);
@@ -1635,7 +1661,7 @@ function PrintableStudio({ online, seed, seeding, resumeWorkspace, onPrepared, o
     setColors((seed.colors || []).join(", "));
     setFormats((seed.formats || []).join(", "));
     setPageCount(seed.pageCount ? String(seed.pageCount) : "");
-    setKeyword(seed.keyword || "");
+    setKeyword(seed.keyword || ""); setCompetitorLinks("");
     setTrendTags(seed.trendTags || []);
     setTrendFeatures(seed.trendFeatures || []);
     setBasis(seed.basis || []);
@@ -1650,16 +1676,16 @@ function PrintableStudio({ online, seed, seeding, resumeWorkspace, onPrepared, o
     setKind(input.kind); setProductType(input.productType); setReferenceNotes(input.referenceNotes || "");
     setColors(input.colors || ""); setFormats(input.formats || ""); setPageCount(input.pageCount || ""); setAudience(input.audience || "");
     setKeyword(input.keyword || ""); setTrendTags(input.trendTags || []); setTrendFeatures(input.trendFeatures || []); setAssistant(input.assistant);
-    setBasis([]); setPlan(resumeWorkspace.plan);
+    setCompetitorLinks(input.competitorLinks || ""); setBasis([]); setPlan(resumeWorkspace.plan);
   }, [resumeWorkspace]);
-  const workspaceInput = { kind, productType, referenceNotes, colors, formats, pageCount, audience, keyword, trendTags, trendFeatures, assistant };
+  const workspaceInput = { kind, productType, referenceNotes, colors, formats, pageCount, audience, keyword, ...(competitorLinks ? { competitorLinks } : {}), trendTags, trendFeatures, assistant };
   const inputKey = generationKey(workspaceInput);
   const generate = async () => {
     if (productType.trim().length < 3) return Alert.alert("Ürün", "Ürünü İngilizce yazın (ör. budget planner, adult coloring pages).");
     const requestId = ++generationRequest.current;
     setWorking(true);
     try {
-      const result = await apiJson("/api/printables/plan", { method: "POST", headers: apiHeaders(true), body: JSON.stringify({ kind, productType, referenceNotes, colors, formats, pageCount: pageCount ? Number(pageCount) : undefined, audience, keyword, trendTags, trendFeatures, assistant, research: true, seed: String(Date.now()) }) });
+      const result = await apiJson("/api/printables/plan", { method: "POST", headers: apiHeaders(true), body: JSON.stringify({ kind, productType, referenceNotes, colors, formats, pageCount: pageCount ? Number(pageCount) : undefined, audience, keyword, competitorLinks, trendTags, trendFeatures, assistant, research: true, seed: String(Date.now()) }) });
       if (requestId !== generationRequest.current) return;
       const prepared = { ...result, inputKey };
       setPlan(prepared);
@@ -1699,8 +1725,11 @@ function PrintableStudio({ online, seed, seeding, resumeWorkspace, onPrepared, o
     <Field label="Sayfa / tasarım sayısı" value={pageCount} onChangeText={setPageCount} keyboardType="number-pad" placeholder="30" />
     <Field label="Hedef kitle (isteğe bağlı)" value={audience} onChangeText={setAudience} placeholder="busy moms, teachers, brides-to-be" />
     <Field label="Hedef Etsy araması" value={keyword} onChangeText={setKeyword} placeholder="budget planner printable" autoCapitalize="none" />
+    <Field label="Karşılaştırılacak rakip ilanları (isteğe bağlı, en fazla 5)" value={competitorLinks} onChangeText={setCompetitorLinks} placeholder="Etsy ilan linkleri veya numaraları; boşlukla ayırın" multiline autoCapitalize="none" />
+    <Text style={styles.formHint}>İncelemek istediğiniz ilanları ekleyebilirsiniz. Uygulama tür/konu eşleşmesini denetler; satış adedi veya Bestseller rozeti doğrulanmış sayılmaz.</Text>
     <Pressable style={[styles.analyzeButton, (working || seeding || !online) && styles.primaryDisabled]} disabled={working || seeding || !online} onPress={generate}>{working ? <ActivityIndicator color="white" /> : <Ionicons name="sparkles" size={18} color="white" />}<Text style={styles.primaryText}>{plan ? "Yeni adla yeniden hazırla" : "Prompt, görsel ve ilanı hazırla"}</Text></Pressable>
     {currentPlan?.research && <Text style={styles.formHint}>Rakip analizi: {currentPlan.research.keyword} · {currentPlan.research.sampleSize} benzer dijital ilan · {new Date(currentPlan.research.scannedAt).toLocaleString("tr-TR")}. {currentPlan.research.noteTr}</Text>}
+    <MarketStrategyCard strategy={currentPlan?.research?.strategy} />
     {brief && <>
       <View style={styles.analysisCard}>
         <Text style={styles.small}>Sistemin seçtiği ürün adı</Text>
@@ -2270,6 +2299,13 @@ function DigitalPanel({ online, active = true, shopReady, prefill, onPrefillUsed
   const [grantProduct, setGrantProduct] = useState<any>();
   const [details, setDetails] = useState<Record<string, any>>({});
   const [busy, setBusy] = useState<string>();
+  const [fileQa, setFileQa] = useState<Record<string, any>>({});
+  const auditFiles = async (product: any) => {
+    setBusy(product.id);
+    try { const report = await apiJson(`/api/digital/products/${product.id}/qa`, { headers: apiHeaders() }); setFileQa(current => ({ ...current, [product.id]: report })); }
+    catch (error) { Alert.alert("Dosya denetimi alınamadı", errorText(error)); }
+    finally { setBusy(undefined); }
+  };
   const [publication, setPublication] = useState<Record<string, { state: string; checkedAt: string; url: string }>>({});
   const transferComplete = (product: any) => etsyTransferComplete({ phase: "saved", files: product.files?.length || (product.fileName ? 1 : 0), images: product.images?.length || 0, etsy: product.etsy });
   const verifyPublication = async (product: any) => {
@@ -2329,9 +2365,16 @@ function DigitalPanel({ online, active = true, shopReady, prefill, onPrefillUsed
       <ListingGuide input={{ phase: "saved", files: product.files?.length || (product.fileName ? 1 : 0), images: product.images?.length || 0, etsy: product.etsy, verifiedState: publication[product.id]?.state }} />
       {publication[product.id] && <Text style={styles.small}>Etsy durumu: {publication[product.id].state === "active" ? "Yayında" : publication[product.id].state === "draft" ? "Taslak" : "Yayında değil"} · {new Date(publication[product.id].checkedAt).toLocaleString("tr-TR")}</Text>}
       {/* "Denendi" yalnız desen için anlamlıdır (Etsy kuralı); hazır dijital üründe uyarı gösterilmez. */}
+      {fileQa[product.id] && <View style={styles.adviceBox}>
+        <Text style={styles.rowTitle}>{fileQa[product.id].ok ? "Dosya yapısı kontrolleri geçti" : "Dosya denetimi: düzeltme gerekli"}</Text>
+        {fileQa[product.id].files.map((row: any) => <Text key={row.name} style={row.ok ? styles.small : styles.warningText}>{row.name}: {row.ok ? `${row.entries} içerik, ${row.checks} yapısal kontrol` : row.error}</Text>)}
+        {!!fileQa[product.id].missingFormats.length && <Text style={styles.warningText}>Eksik formatlar: {fileQa[product.id].missingFormats.join(", ")}</Text>}
+        <Text style={styles.evidence}>{fileQa[product.id].noteTr}</Text>
+      </View>}
       {!!product.craft && !product.flags?.testMade && <Text style={styles.warningText}>• Desen denenmedi</Text>}
       {!!product.etsy?.error && <Text style={styles.warningText}>• Etsy: {product.etsy.error}</Text>}
       <View style={styles.inlineActions}>
+        <Pressable style={styles.secondaryButton} disabled={busy === product.id || !online} onPress={() => auditFiles(product)}><Text style={styles.secondaryButtonText}>Dosya yapısını denetle</Text></Pressable>
         <Pressable style={[styles.secondaryButton, busy === product.id && styles.primaryDisabled]} disabled={busy === product.id} onPress={() => etsyDraft(product)}><Text style={styles.secondaryButtonText}>{transferComplete(product) ? "Etsy ilanını aç" : product.etsy?.listingId ? "Etsy yüklemesini tamamla" : "Etsy taslağı oluştur"}</Text></Pressable>
         {!!product.etsy?.listingId && <Pressable style={[styles.secondaryButton, busy === product.id && styles.primaryDisabled]} disabled={busy === product.id} onPress={() => verifyPublication(product)}><Text style={styles.secondaryButtonText}>Yayın durumunu denetle</Text></Pressable>}
         <Pressable style={styles.secondaryButton} onPress={() => setGrantProduct(product)}><Text style={styles.secondaryButtonText}>Satış bağlantısı</Text></Pressable>
@@ -2915,6 +2958,7 @@ function EtsyPlanResult({ plan, payload, etsyReady, priceSourceLabel, preparePro
   const pricing = plan.pricing;
   const bannerStyle = eligibility.status === "allowed" ? styles.policyAllowed : eligibility.status === "blocked" ? styles.policyBlocked : styles.policyReview;
   return <>
+      <MarketStrategyCard strategy={plan.strategy} />
       <View style={[styles.policyBox, bannerStyle, { marginBottom: 14 }]}>
         <Text style={styles.policyName}>ETSY KURAL KONTROLÜ</Text>
         <Text style={styles.policyLabel}>{eligibility.status === "allowed" ? "Etsy'de satılabilir" : eligibility.status === "blocked" ? "Etsy'de yayınlanmaz" : "Eksik bilgi var"}</Text>
