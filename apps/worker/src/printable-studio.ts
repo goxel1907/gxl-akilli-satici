@@ -1,4 +1,6 @@
 import { AI_DISCLOSURE_WARNING_TR } from "./etsy-policy.js";
+import { effectiveContentCount } from "./content-budget.js";
+import { EtsyIntegrationError } from "./etsy.js";
 import type { MarketStrategy } from "./market-strategy.js";
 import { generateStructuredObject, hasAiProvider, type AiRuntimeEnv } from "../../api/src/structured-ai.js";
 import { buildAdVisuals, type AdVisual } from "./ad-visuals.js";
@@ -23,6 +25,7 @@ export interface PrintablePlanInput {
   keyword?: string;
   competitorLinks?: string;
   referenceNotes?: string;
+  creativeDirection?: string;
   trendFeatures?: string[];
   trendTags?: string[];
   colors?: string[];
@@ -436,12 +439,14 @@ export function normalizePrintablePlanInput(raw: Record<string, unknown>): Print
   const productType = cleanText(raw.productType, 60).toLowerCase();
   if (productType.length < 3) throw new Error("PATTERN_PRODUCT_REQUIRED");
   const pages = Number(raw.pageCount);
+  if (raw.pageCount !== undefined && raw.pageCount !== null && raw.pageCount !== "" && (!Number.isInteger(pages) || pages < 1 || pages > 1000)) throw new EtsyIntegrationError("VALIDATION_FAILED","İçerik sayısı 1–1000 arasında tam sayı olmalı. Ürüne özgü sınırlar ayrıca uygulanır.",400);
   return {
     kind,
     productType,
     keyword: cleanText(raw.keyword, 60).toLowerCase() || undefined,
     competitorLinks: cleanText(raw.competitorLinks, 2500) || undefined,
     referenceNotes: cleanText(raw.referenceNotes, 1000) || undefined,
+    creativeDirection: cleanText(raw.creativeDirection, 1000) || undefined,
     trendFeatures: cleanList(raw.trendFeatures, 6, 40).map((item) => item.toLowerCase()).filter((item) => !isIpRisky(item)),
     trendTags: cleanList(raw.trendTags, 20, 40).map((item) => item.toLowerCase()).filter((item) => !isIpRisky(item)),
     colors: cleanList(raw.colors, 6, 30),
@@ -578,7 +583,7 @@ function validateFormats(input: PrintablePlanInput) {
 
 function prepare(raw: PrintablePlanInput): Prepared {
   validateFormats(raw);
-  if (isAlphabet(raw)) raw = { ...raw, pageCount: 26 };
+  raw = { ...raw, pageCount: effectiveContentCount(raw.kind, raw.pageCount || PRINTABLE_KINDS[raw.kind].defaultPages, isAlphabet(raw)) };
   if (raw.kind === "party" && ESCAPE_ROOM.test(raw.productType) && !raw.formats?.length) raw = { ...raw, formats: ["US Letter", "A4"] };
   const productWords = new Set(raw.productType.split(/\s+/).flatMap((word) => [word, singular(word)]));
   // "vintage" yeni bir dijital ürün için "vintage style" demektir (Etsy'de "vintage" 20 yaş üstü ürünlerdir);
@@ -1511,7 +1516,7 @@ export function buildPrintableBrief(raw: PrintablePlanInput): PrintableBrief {
   const rules = originalityPlan(prepared, profile);
   const art = buildArtPlan(prepared, profile, pages);
   const formats = input.formats?.length ? input.formats : profile.defaultFormats;
-  const pdfPrompt = buildPdfPrompt(prepared, profile, name, rules.en, art);
+  const pdfPrompt = buildPdfPrompt(prepared, profile, name, rules.en, art) + (input.creativeDirection ? `\n\n## Product-specific creative direction\n${input.creativeDirection}\nKeep every deliverable and count aligned with the authoritative spec; do not promise features that cannot be completed.` : "");
   // Görsel promptuna yalnız görünen özellikler girer ("iPad", "daily" gibi içerik kelimeleri değil).
   const visibleFeatures = (input.trendFeatures || []).filter((feature) => themeFamilies(feature).size || art.subjects.some((subject) => subject.toLowerCase().includes(feature)));
   const adVisuals = buildAdVisuals({ kind: input.kind, productType: input.productType, name, colors: input.colors, features: visibleFeatures, formats, pageCount: pages, seed: input.seed, papersOnly: input.kind === "paper_craft" && paperMode(input.productType) === "papers" });
