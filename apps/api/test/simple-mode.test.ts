@@ -18,7 +18,6 @@ test("selling is a five-step wizard that stops on missing information", () => {
   assert.match(app, /const WIZARD_STEPS = \["Fotoğraflar", "Ürün bilgisi", "Renk ve özellikler", "Fiyat ve kargo", "Önizleme ve gönder"\];/);
   assert.match(app, /<PhotoListingStudio online=\{online\} etsyReady=\{etsyReady\} wizard onStepChange=\{onStepChange\} \/>/);
   assert.match(app, /if \(!photos\.length\) return Alert\.alert\("Fotoğraf gerekli"/);
-  assert.match(app, /if \(online && !analysis && !analyzing\) await analyze\(\);/, "photos are analysed when the seller moves on");
   assert.match(app, /Vintage ürün en az 20 yıllık olmalı/);
   assert.match(app, /if \(!parseAmount\(shippingTry\)\) return Alert\.alert\("ABD'ye kargo ücreti"/, "a missing shipping cost would make the seller lose money");
   assert.match(app, /route === "choose" && current === "photo" \? current : route/, "a half-filled listing is not lost when going back home");

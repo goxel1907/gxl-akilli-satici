@@ -49,18 +49,14 @@ async function callGemini<T>(request: StructuredRequest, env: AiRuntimeEnv): Pro
     },
     body: JSON.stringify({
       contents: [{ role: "user", parts }],
-      generationConfig: {
-        responseFormat: {
-          text: { mimeType: "application/json", schema: request.schema }
-        }
-      }
-    })
+      generationConfig: { responseMimeType: "application/json", responseJsonSchema: request.schema }
+    }),
+    signal: AbortSignal.timeout(45000)
   });
 
   if (!response.ok) {
-    const details = (await response.text()).slice(0, 500);
-    console.error(`Gemini request failed (${response.status}): ${details}`);
-    throw new Error(response.status === 429 ? "AI_FREE_QUOTA_EXCEEDED" : "AI_PROVIDER_REQUEST_FAILED");
+    console.error(`Gemini request failed (${response.status})`);
+    throw new Error(response.status === 429 ? "AI_FREE_QUOTA_EXCEEDED" : response.status === 400 ? "AI_PROVIDER_INVALID_REQUEST" : response.status === 401 || response.status === 403 ? "AI_PROVIDER_ACCESS_DENIED" : "AI_PROVIDER_REQUEST_FAILED");
   }
   return JSON.parse(extractGeminiText(await response.json())) as T;
 }
@@ -87,7 +83,17 @@ export function hasAiProvider(overrides?: AiRuntimeEnv): boolean {
 
 export async function generateStructuredObject<T>(request: StructuredRequest, overrides?: AiRuntimeEnv): Promise<T> {
   const env = { ...nodeEnvironment(), ...overrides };
-  if (env.GEMINI_API_KEY) return callGemini<T>(request, env);
-  if (env.OPENAI_API_KEY) return callOpenAI<T>(request, env);
-  throw new Error("AI_PROVIDER_NOT_CONFIGURED");
+  try {
+    if (env.GEMINI_API_KEY) return await callGemini<T>(request, env);
+    if (env.OPENAI_API_KEY) return await callOpenAI<T>(request, env);
+    throw new Error("AI_PROVIDER_NOT_CONFIGURED");
+  } catch (error) {
+    const status = Number((error as { status?: number })?.status);
+    if (error instanceof Error && (error.name === "TimeoutError" || error.name === "APIConnectionTimeoutError")) throw new Error("AI_PROVIDER_TIMEOUT");
+    if (error instanceof SyntaxError || error instanceof Error && error.message === "EMPTY_ANALYSIS") throw new Error("AI_PROVIDER_INVALID_RESPONSE");
+    if (status === 429) throw new Error("AI_FREE_QUOTA_EXCEEDED");
+    if (status === 400) throw new Error("AI_PROVIDER_INVALID_REQUEST");
+    if (status === 401 || status === 403) throw new Error("AI_PROVIDER_ACCESS_DENIED");
+    throw error;
+  }
 }

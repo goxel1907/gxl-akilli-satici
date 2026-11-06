@@ -28,6 +28,10 @@ test("product plan, staged assets, Etsy draft retry and publication verification
     if (path === "/v3/application/shops/777/listings") { draftCalls++; sentListing = init?.body as URLSearchParams; return Response.json({ listing_id: 901 }, { status: 201 }); }
     if (path.endsWith("/images")) { imageCalls++; return Response.json({ listing_image_id: 1 }, { status: 201 }); }
     if (path.endsWith("/files")) {
+      const persisted = [...values.entries()].find(([key]) => key.startsWith("digital:product:"))?.[1];
+      const checkpoint = JSON.parse(String(persisted)) as DigitalProduct;
+      assert.equal(checkpoint.etsy?.imagesUploaded, 1, "Accepted images must be checkpointed before starting files");
+      if (fileCalls === 1) assert.equal(checkpoint.etsy?.filesUploaded, 1, "Accepted files must be checkpointed before the next request");
       fileCalls++; const form = init?.body as FormData; const name = String(form.get("name"));
       if (name.includes("A4") && failA4) { failA4 = false; return Response.json({ error: "Simulated temporary upload failure" }, { status: 500 }); }
       uploadedNames.push(name); return Response.json({ listing_file_id: fileCalls }, { status: 201 });

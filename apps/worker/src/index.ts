@@ -906,9 +906,13 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
     if (error instanceof CrmStorageError) return json(503, { error: error.message, code: "CRM_STORAGE_UNAVAILABLE" });
     const code = error instanceof Error ? error.message : "";
     if (code === "PAYLOAD_TOO_LARGE") return json(413, { error: "İstek çok büyük; her dosya (PDF veya ZIP) en fazla 20 MB olmalı ve görseller sıkıştırılmış olmalıdır." });
-    if (code === "AI_PROVIDER_NOT_CONFIGURED") return json(503, { error: "Gemini anahtarı henüz sunucuya eklenmedi." });
-    if (code === "AI_FREE_QUOTA_EXCEEDED") return json(429, { error: "Ücretsiz Gemini kotası doldu. Kota yenilenince tekrar deneyin; ücretli işlem yapılmadı." });
-    if (code === "AI_PROVIDER_REQUEST_FAILED") return json(502, { error: "Gemini geçici olarak yanıt vermedi. Bir süre sonra tekrar deneyin." });
+    if (code === "AI_PROVIDER_NOT_CONFIGURED") return json(503, { error: "Sunucuda yapay zekâ API bağlantısı yok. Sohbet aboneliği API bağlantısından ayrıdır." });
+    if (code === "AI_FREE_QUOTA_EXCEEDED") return json(429, { error: "Sunucudaki yapay zekâ API kotası veya hız sınırı aşıldı. ChatGPT / Claude sohbetini kullanabilir ya da sonra tekrar deneyebilirsiniz." });
+    if (code === "AI_PROVIDER_INVALID_REQUEST") return json(502, { error: "Yapay zekâ servisi sunucunun istek biçimini kabul etmedi. Bu bir bağlantı ayarı hatasıdır; tekrar denemek yerine sohbetten analiz aktarabilirsiniz." });
+    if (code === "AI_PROVIDER_ACCESS_DENIED") return json(503, { error: "Sunucudaki yapay zekâ API erişimi doğrulanamadı. ChatGPT / Claude sohbetinden analiz aktarabilirsiniz." });
+    if (code === "AI_PROVIDER_REQUEST_FAILED") return json(502, { error: "Sunucudaki yapay zekâ servisine ulaşılamadı. Sohbetten analiz aktarabilir veya sonra tekrar deneyebilirsiniz." });
+    if (code === "AI_PROVIDER_TIMEOUT") return json(504, { error: "Sunucudaki yapay zekâ analizi zaman aşımına uğradı. Bilgileriniz korunur; sohbetten analiz aktarabilir veya sonra tekrar deneyebilirsiniz." });
+    if (code === "AI_PROVIDER_INVALID_RESPONSE") return json(502, { error: "Yapay zekâ yanıtı okunamadı. Bilgileri elle girebilir veya sohbetten analiz aktarabilirsiniz." });
     if (code === "INVALID_IMAGE_INPUT") return json(400, { error: "Görsel biçimi veya boyutu uygun değil." });
     if (code === "PATTERN_CRAFT_INVALID") return json(400, { error: "El işi türünü seçin." });
     if (code === "PRODUCT_TITLE_REQUIRED") return json(400, { error: "Ürün adı gerekli." });

@@ -92,7 +92,7 @@ export async function analyzeListingPhotos(input: { imageDataUrls: unknown; kind
   if (images.length > MAX_ANALYSIS_IMAGES) throw new PhotoListingError(`Analiz için en fazla ${MAX_ANALYSIS_IMAGES} fotoğraf gönderilir.`);
   if (images.some((image) => !validImage(image))) throw new PhotoListingError("Fotoğraf okunamadı veya çok büyük. Uygulamayı güncelleyip tekrar deneyin.");
   if (!hasAiProvider(env)) {
-    throw new PhotoListingError("Fotoğraf analizi için Cloudflare'de GEMINI_API_KEY tanımlı değil. Analiz olmadan da ürün türünü seçip adını yazarak devam edebilirsiniz.", 503);
+    throw new PhotoListingError("Sunucuda fotoğraf analizi için API bağlantısı yok. ChatGPT / Claude sohbetinden analiz aktarabilir veya bilgileri elle girebilirsiniz. Sohbet aboneliği ve sunucu API bağlantısı ayrıdır.", 503);
   }
   const kindHint = KINDS.includes(String(input.kindHint) as ProductKind) ? String(input.kindHint) : "";
   const nameHint = String(input.nameHint || "").slice(0, 80);
