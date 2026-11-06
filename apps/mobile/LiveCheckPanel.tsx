@@ -29,7 +29,7 @@ export default function LiveCheckPanel({ request, environment }: { request: Live
       const next=await runLiveReads(environment,request,{signal:abort.signal,storage:AsyncStorage,onProgress:value=>{if(identity===runId.current && generation===activeGeneration)remember(value);}});
       if(identity!==runId.current || generation!==activeGeneration)return;
       remember(next);setNotice(next.state==="cancelled"?"Kontrol durduruldu; denenmeyen adımlar bekliyor.":"Canlı okumalar bitti. Telefon adımları ve gerçek dosya incelemesi ayrıca bekliyor.");
-      if(!abort.signal.aborted && next.checks.some(row=>row.id==="app_auth" && row.status==="verified")) {
+      if(!abort.signal.aborted && next.checks.some(row=>row.id==="app_auth" && (row.status==="verified" || environment.testMode && row.status==="warning"))) {
         try { const body=await request("/api/digital/products",abort.signal);if(identity===runId.current && generation===activeGeneration && Array.isArray(body?.products)) setProducts(body.products.filter((row:any)=>/^[a-f0-9-]{36}$/.test(row.id) && typeof row.name==="string").map((row:any)=>({id:row.id,name:row.name.slice(0,100)}))); }
         catch {setNotice("Canlı okumalar kaydedildi; seçilebilir ürün listesi bu kez alınamadı.");}
       }
@@ -45,7 +45,7 @@ export default function LiveCheckPanel({ request, environment }: { request: Live
     const identity=runId.current,generation=activeGeneration,id=selected;setBusy(true);
     try {const result=await auditLiveProduct(request,id);if(identity!==runId.current || generation!==activeGeneration || !latest.current)return;
       const base={...latest.current,productId:id,checks:[...latest.current.checks.filter(row=>row.id!=="stored_file_qa"),{id:"stored_file_qa",labelTr:"Depodaki seçili ürünün dosya yapısı",source:"live_read" as const,status:"pending" as const,detailTr:""}]};
-      remember(updateLiveRow(base,"stored_file_qa",result.status,result.detailTr));
+      remember(updateLiveRow(base,"stored_file_qa",environment.testMode && result.status==="verified"?"warning":result.status,`${environment.testMode?"WEB TESTİ: Yalnız tarayıcının test deposu incelendi. ":""}${result.detailTr}`));
     } finally {if(identity===runId.current)setBusy(false);}
   };
   const picker=async(kind:"file"|"image")=>{
@@ -54,7 +54,7 @@ export default function LiveCheckPanel({ request, environment }: { request: Live
       const value=kind==="file"?await DocumentPicker.getDocumentAsync({type:["application/pdf","application/zip","application/x-zip-compressed"],multiple:true,copyToCacheDirectory:true}):await ImagePicker.launchImageLibraryAsync({mediaTypes:["images"],allowsMultipleSelection:true,selectionLimit:10,quality:0.7});
       if(identity!==runId.current || generation!==activeGeneration || !latest.current)return;
       const count=value.canceled?0:value.assets?.length||0;
-      remember(updateLiveRow(latest.current,kind==="file"?"file_picker":"image_picker",count?"verified":"warning",count?`Telefondaki seçici ${count} öğe döndürdü. İçerik veya yükleme doğrulanmadı; bu denemede dosya sunucuya gönderilmedi.`:"Seçim iptal edildi veya öğe gelmedi; başarılı dosya seçimi doğrulanmadı."));
+      remember(updateLiveRow(latest.current,kind==="file"?"file_picker":"image_picker",count&&!environment.testMode?"verified":"warning",count?`${environment.testMode?"WEB TESTİ: Tarayıcı seçicisidir; Android doğrulanmadı. ":""}Telefondaki seçici ${count} öğe döndürdü. İçerik veya yükleme doğrulanmadı; bu denemede dosya sunucuya gönderilmedi.`:"Seçim iptal edildi veya öğe gelmedi; başarılı dosya seçimi doğrulanmadı."));
     }catch {if(identity===runId.current && generation===activeGeneration && latest.current)remember(updateLiveRow(latest.current,kind==="file"?"file_picker":"image_picker","failed","Telefondaki seçici açılamadı veya seçim sonucu okunamadı. İzinleri ve gerçek uygulama akışını kontrol et."));}
     finally {if(identity===runId.current)setBusy(false);}
   };

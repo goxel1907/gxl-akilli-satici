@@ -11,7 +11,7 @@ test("the app opens in simple mode with four plain doors and keeps expert mode o
   assert.match(app, /\(mode === "simple" \? simpleTabs : navigationTabs\)\.map/);
   assert.match(app, /onExpert=\{\(\) => changeMode\("expert"\)\}/);
   assert.match(app, /onSimple=\{\(\) => changeMode\("simple"\)\}/);
-  assert.match(app, /\{online \? "Bağlı" : "Bağlantı yok"\}/, "no 'Ajan' or 'Yerel mod' jargon in the header");
+  assert.match(app, /\{online \? (?:process\.env\.EXPO_PUBLIC_WEB_SANDBOX === "true" \? "Web test" : )?"Bağlı" : "Bağlantı yok"\}/, "no 'Ajan' or 'Yerel mod' jargon in the header");
 });
 
 test("selling is a five-step wizard that stops on missing information", () => {
