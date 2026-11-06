@@ -10,12 +10,12 @@ Run `npm ci` in the repository and `npm ci` in `apps/mobile`, then `npm run web:
 
 Source and static output are synchronized to the dedicated owner-private Sites repository. Its manifest retains `project_id=appgprj_6aedd1bd9d7c819186b0f79d15cb6639`, with `static.directory=dist`. Preserve that identity and audience. The Site source helper owns source commits, pushes and deployment archives. Keep runtime production credentials out of both repositories and bundles.
 
-The managed local preview command failed because its preview relay was unavailable. The private hosted deployment succeeded. The cloud browser reached the private Site's sign-in gate and then OpenAI's login page; it had no authenticated ChatGPT session. End-to-end visual/browser interaction tests remain blocked until secure sign-in completes. Successful hosting, compilation and controlled automated tests do not establish that all screens have passed in a real browser or on Android.
+The managed local preview relay was unavailable, so verification used the owner-private hosted deployment. Secure sign-in subsequently completed. Actual browser checks now cover navigation, Trend → Studio handoff, prompt preview, file selection/upload, failure recovery, structural QA and synthetic Etsy drafts. See [the dated browser QA report](WEB_BROWSER_QA_2026_11_06.md) for the tested boundaries and remaining production checks.
 
 ## Test tools
 
 - Normal test service responses; application 401; offline network; Etsy disconnect; Etsy 429; staged upload 503.
-- Downloadable sample US Letter/A4 PDFs prominently marked WEB TEST ONLY, not saleable product content.
+- Separate downloadable sample US Letter/A4 PDFs and a preview PNG prominently marked WEB TEST ONLY, not saleable product content.
 - Method/path/status-only request log with a synthetic-only marker. No headers, credentials, file contents or customer data are exported.
 - Local synthetic draft metadata viewer: compare the actual title, tags, description, price and file/image progress produced by the workflow.
 - Dedicated local IndexedDB for text/binary test assets and synthetic Etsy drafts. Product records and drafts survive browser reload. Reset clears only this Site's local test storage.
@@ -29,6 +29,8 @@ Android multipart transport accepts URI descriptors, while browser FormData requ
 
 ## Verification
 
-289 automated tests pass, including eight sandbox/transport scenarios. Root/mobile TypeScript checks, the browser bundle and the Android Expo export pass. These results do not include authenticated browser or Android-device execution.
+295 automated tests pass, including nine sandbox scenarios and five browser regression tests. Root/mobile TypeScript checks, the browser bundle and the Android Expo export pass. Authenticated browser checks are recorded separately; these results do not establish Android-device execution.
 
 Automated coverage includes actual protected Worker routes, marked synthetic research, independent failure scenarios, blocked write paths, real PDF storage/audit and local Etsy draft creation, synthetic draft restart persistence, diagnostics provenance, and browser multipart bytes/error handling. Existing actual-component navigation/workflow tests continue to cover the shared UI with controlled native boundaries. Root/mobile type checks, the browser bundle and Android export are checked separately. Real Android layout/pickers, real private Etsy permissions and drafts, actual assistant receipt/output, product answers/design/printing and sales performance remain separate unverified tasks.
+
+Browser-discovered corrections include the XML dependency's missing Buffer global, split-chunk font/image paths, Enter-key Trend searches, accessible search controls, duplicate title phrases, unsupported sales/market claims, and unfinished upload state loss. Closing an upload now pauses the same form instead of discarding metadata, files or the Studio handoff; a different product seed resets it, and a successful save starts a fresh form on the next open. Unsaved selections are kept only while the form remains mounted, not across full reload or phone process termination.

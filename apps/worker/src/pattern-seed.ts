@@ -528,7 +528,7 @@ export function buildCompetition(result: TrendResult | undefined, kind: Printabl
   const gapFiles = gaps.filter(deliverable);
   const standardFiles = standard.filter(deliverable);
   if (gapFiles.length) {
-    planTr.push(`Rakiplerin azının başlık/etiketinde belirttiği, bizim sunup ilanda açıkça yazacağımız: ${gapFiles.map((item) => `${FORMAT_OFFERS[item.id].tr} (rakiplerin ${percent(item.share)}'i)`).join(", ")}.`);
+    planTr.push(`Başlık/etiket örnekleminde az belirtilen tasarım seçenekleri: ${gapFiles.map((item) => `${FORMAT_OFFERS[item.id].tr} (rakiplerin ${percent(item.share)}'i)`).join(", ")}. Bunlar mevcut ürüne otomatik dahil değildir; yalnız seçip gerçekten hazırladığınız formatları ilanda belirtin.`);
     const plural = gapFiles.length > 1 || /\b(sizes|versions|files|sheets)\b/.test(FORMAT_OFFERS[gapFiles[0].id].en);
     planEn.push(`include ${joinEn(gapFiles.map((item) => FORMAT_OFFERS[item.id].en))} and name ${plural ? "them" : "it"} on the cover, because few sampled titles or tags mention ${plural ? "them" : "it"}; actual file availability is unverified`);
   }

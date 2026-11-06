@@ -46,15 +46,15 @@ test("printable scans measure competitor formats, bundles, page counts and brand
   assert.equal(result.signals!.pageCountMedian, 35);
   assert.deepEqual(result.signals!.ipRisks, ["disney"]);
   assert.equal(result.advice![0].titleTr, "Marka / telif riski");
-  assert.ok(result.advice!.some((item) => item.titleTr === "Boşluk: US Letter"));
+  assert.ok(result.advice!.some((item) => item.titleTr === "Tasarım seçeneği: US Letter"));
   assert.ok(result.advice!.some((item) => item.titleTr === "Daha fazla değer ver" && item.detailTr.includes("42")));
 });
 
 test("advice reacts to standard formats and bundle-heavy niches", () => {
   const result = scoreTrend("adult coloring pages", { count: 20_000, results: Array.from({ length: 12 }, (_, index) => listing(`Mandala Coloring Bundle ${index} US Letter A4 50 pages`, ["adult coloring pages", "mandala coloring"], 300 + index, 40)) }, NOW);
   const advice = buildAdvice(result);
-  assert.ok(advice.some((item) => item.titleTr === "Bu formatlar artık standart" && item.detailTr.includes("US Letter")));
-  assert.ok(advice.some((item) => item.titleTr === "Paketler satıyor"));
+  assert.ok(advice.some((item) => item.titleTr === "Örneklemde sık belirtilen formatlar" && item.detailTr.includes("US Letter")));
+  assert.ok(advice.some((item) => item.titleTr === "Örneklemde set ilanları"));
 });
 
 test("printable seed fills kind, product, formats and a page count above competitors", () => {
