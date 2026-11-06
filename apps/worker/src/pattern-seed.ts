@@ -663,7 +663,7 @@ export function buildPatternSeed(keywordInput: string, result: TrendResult | und
     if (!FIXED_FORMAT_KINDS.has(kind!)) for (const gap of competition.gapFormats) if (!sizeTokens(gap).every((token) => covered().has(token)) && printable.formats.length < 7) printable.formats.push(gap);
   }
   const notes = [
-    `Etsy market brief for "${keyword}"${metrics ? ` (${metrics.activeListings.toLocaleString("en-US")} live listings${metrics.medianPriceUsd ? `, median price ${metrics.medianPriceUsd} USD` : ""})` : ""}`,
+    `Etsy market brief for "${keyword}"${metrics ? ` (${metrics.activeListings.toLocaleString("en-US")} live listings${competition.medianPriceUsd ? `, comparable USD median ${competition.medianPriceUsd} USD` : ""})` : ""}`,
     // "moody botanical and botanical" tekrar etmez: başka bir özelliğin içinde geçen özellik ayrıca yazılmaz.
     chosen.features.length ? `: sampled titles and tags mention ${joinEn(chosen.features.filter((feature, index) => !chosen.features.some((other, otherIndex) => otherIndex !== index && other.length > feature.length && ` ${other} `.includes(` ${feature} `))).map(proseCase))}` : "",
     risingFeatures.length ? `; newer sampled listings mention ${joinEn(risingFeatures.map(proseCase))}` : "",
@@ -682,7 +682,7 @@ export function buildPatternSeed(keywordInput: string, result: TrendResult | und
     `Ürün türü: ${PRINTABLE_KINDS[kind].labelTr} · Ürün: ${product.product} (${product.source})`,
     chosen.features.length ? `Bu seferki trend özellikleri: ${chosen.features.join(", ")}${risingFeatures.length ? ` · yeni ilanlarda görülen: ${risingFeatures.join(", ")}` : ""}` : "Trendde belirgin özellik sinyali yok; ürününüzün özgün özelliklerini siz belirleyin.",
     `Renkler: ${palette.colors.join(", ")} (${palette.source})`,
-    `Formatlar: ${printable!.formats.join(", ")}${competition.gapFormats.length ? " (rakiplerde az olanlar eklendi)" : printable!.mined.length ? ` (rakiplerde geçen: ${printable!.mined.slice(0, 3).join(", ")})` : " (türün standart formatları)"}`,
+    `Formatlar: ${printable!.formats.join(", ")}${competition.gapFormats.length ? " (örneklemde az belirtilenler tasarım seçeneği olarak eklendi; dosyalar doğrulanmadı)" : printable!.mined.length ? ` (rakiplerde geçen: ${printable!.mined.slice(0, 3).join(", ")})` : " (türün standart formatları)"}`,
     ...(audience ? [`Hedef kitle: ${audience} (etiket ve başlıklardan)`] : []),
     competitorPages ? `${unitTr(kind)}: ${pageCount} (rakiplerin ortancası ${competitorPages}; daha fazla değer için %20 fazlası)` : `${unitTr(kind)}: ${pageCount} (trendde bu sayı için sinyal yok; türün tipik değeri)`,
     chosen.fresh ? "Bu özellik kombinasyonu bu arama için ilk kez kullanılıyor." : "Bu aramadaki tüm özellik kombinasyonları denendi; palet ve ad yine yeni seçildi.",

@@ -1728,7 +1728,7 @@ function PrintableStudio({ online, seed, seeding, resumeWorkspace, onPrepared, o
     <ChipGroup options={ASSISTANT_OPTIONS} value={assistant} onChange={chooseAssistant} />
     <Text style={styles.formHint}>{assistant === "claude" ? "Claude: dosyaları ve vektör (SVG) çizimleri kendisi yapar; fotoğraf üretemez. Fotoğraf gibi sahneler için size görsel promptunu verir, onu bir görsel aracında çalıştırırsınız." : "ChatGPT: görselleri kendi görsel aracıyla, dosyaları Python ile hazırlar ve indirme bağlantısı verir."}</Text>
     <Field label="Ürün (İngilizce)" value={productType} onChangeText={(value: string) => { setProductType(value); setKeyword(""); setTrendTags([]); setTrendFeatures([]); setReferenceNotes(""); }} placeholder="budget planner, adult coloring pages, recipe cards" autoCapitalize="none" />
-    <Field label="Trend özeti (Etsy üst ilanlarından)" value={referenceNotes} onChangeText={setReferenceNotes} placeholder="Trendden gelince otomatik dolar" multiline />
+    <Field label="Trend özeti (Etsy üst ilanlarından)" value={currentPlan?.research?.marketBriefEn || referenceNotes} onChangeText={setReferenceNotes} placeholder="Trendden gelince otomatik dolar" multiline />
     <Field label="Renkler" value={colors} onChangeText={setColors} placeholder="sage green, cream, terracotta" autoCapitalize="none" />
     <Field label="Formatlar (virgülle)" value={formats} onChangeText={setFormats} placeholder="US Letter, A4, A5" />
     <Field label="Sayfa / tasarım sayısı" value={pageCount} onChangeText={setPageCount} keyboardType="number-pad" placeholder="30" />
@@ -1753,7 +1753,7 @@ function PrintableStudio({ online, seed, seeding, resumeWorkspace, onPrepared, o
       <AdVisualsPanel visuals={brief.adVisuals} />
       <View style={styles.analysisCard}>
         <Text style={styles.cardTitle}>Pinterest pinleri</Text>
-        <Text style={styles.small}>Dijital ürünlerde en büyük dış trafik Pinterest'ten gelir. Pinleri farklı günlerde paylaş; görsel için 9. görsel promptunu kullan.</Text>
+        <Text style={styles.small}>Pinterest ölçülerek denenebilecek bir trafik kanalıdır. Pinleri farklı günlerde paylaş; Pinterest için ayrılan dikey görsel promptunu kullan. C1-C10 Etsy galerisine, C11-C12 ayrı pazarlama kanallarına aittir.</Text>
         {brief.pins.map((pin: any) => <View key={pin.title} style={styles.visualRow}>
           <Text style={styles.rowTitle}>{pin.title}</Text>
           <Text style={styles.trendVerdict}>Görsel üstü yazı: {pin.overlay}</Text>
@@ -1803,7 +1803,8 @@ function QualityNote({ quality }: any) {
   return <View style={[styles.qualityNote, errors.length ? styles.qualityBad : styles.qualityGood]}>
     <Ionicons name={errors.length ? "alert-circle-outline" : "checkmark-circle-outline"} size={18} color={errors.length ? "#9B2C2C" : "#2F6B4F"} />
     <View style={{ flex: 1 }}>
-      <Text style={styles.qualityTitle}>{errors.length ? `Otomatik denetim: ${errors.length} sorun bulundu` : `Otomatik denetim: ${quality.checks} kontrol, sorun yok`}</Text>
+      <Text style={styles.qualityTitle}>{errors.length ? `Otomatik denetim: ${errors.length} sorun bulundu` : `Metin denetimi: ${quality.checks} kuralda hata bulunmadı`}</Text>
+      <Text style={styles.small}>Bu sonuç hazırlanan metin içindir. Üretilecek dosyaların içeriği, görünümü ve işlevi henüz doğrulanmış değildir.</Text>
       {!!quality.fixed?.length && <Text style={styles.small}>Küçük yazım hataları gönderilmeden önce düzeltildi.</Text>}
       {errors.slice(0, 5).map((issue: any, index: number) => <Text key={`${issue.code}-${index}`} style={styles.small}>• {issue.messageTr}</Text>)}
       {!!errors.length && <Text style={styles.small}>Yeniden üretmek (Hazırla'ya tekrar dokunmak) genellikle düzeltir.</Text>}
@@ -1871,8 +1872,9 @@ function StudioPanel({ online, active, seed, onUpload, etsyReady }: any) {
   const [working, setWorking] = useState(false);
   const [initialized, setInitialized] = useState(false);
   const [savedWorkspace, setSavedWorkspace] = useState<PrintableWorkspace>();
+  const [workspaceOutdated, setWorkspaceOutdated] = useState(false);
   const [resumeWorkspace, setResumeWorkspace] = useState<PrintableWorkspace>();
-  useEffect(() => { let mounted = true; AsyncStorage.getItem(PRINTABLE_WORKSPACE_KEY).then(raw => { if (mounted) setSavedWorkspace(parsePrintableWorkspace(raw)); }).catch(() => undefined); return () => { mounted = false; }; }, []);
+  useEffect(() => { let mounted = true; AsyncStorage.getItem(PRINTABLE_WORKSPACE_KEY).then(raw => { if (mounted) { const restored = parsePrintableWorkspace(raw); setSavedWorkspace(restored); setWorkspaceOutdated(Boolean(raw && !restored)); } }).catch(() => undefined); return () => { mounted = false; }; }, []);
   const resumeSaved = () => {
     if (!savedWorkspace) return;
     seedRequest.current += 1; setSeeding(false); setInitialized(true); setMode("printable");
@@ -2002,6 +2004,7 @@ function StudioPanel({ online, active, seed, onUpload, etsyReady }: any) {
   return <>
     <Text style={styles.sectionTitle}>{mode === "physical" ? "Elimdeki ürünü sat" : "Yeni ürün fikri"}</Text>
     <ChipGroup options={STUDIO_MODES} value={mode} onChange={changeMode} />
+    {workspaceOutdated && !savedWorkspace && <Text style={styles.warningText}>Önceki hazırlama paketi bu sürümün kontrollerinden geçmedi. Aşağıdan ürünü seçip yeniden hazırla; eski paketi üretimde kullanma. Telefona indirdiğin dosyalar silinmedi.</Text>}
     {!!savedWorkspace && <View style={styles.analysisCard}><Text style={styles.cardTitle}>Son kaydedilen çalışma</Text><Text style={styles.rowTitle}>{savedWorkspace.plan.brief.name}</Text><Text style={styles.small}>{new Date(savedWorkspace.savedAt).toLocaleString("tr-TR")} · {savedWorkspace.input.assistant === "claude" ? "Claude" : "ChatGPT"}</Text><Text style={styles.evidence}>Yapay zekâdan döndüğünde bu çalışmayı aç. Başlık, açıklama, etiketler, fiyat ve ürün kaydı birlikte geri gelir; indirdiğin dosyaları sen seçersin.</Text><Pressable style={styles.secondaryButton} onPress={resumeSaved}><Text style={styles.secondaryButtonText}>Son çalışmayı aç</Text></Pressable></View>}
     {seeding && <View style={styles.guardrail}><ActivityIndicator color="#315B4C" /><Text style={[styles.guardrailText, { flex: 1 }]}>Etsy trend verisi okunuyor; tüm alanlar otomatik dolduruluyor…</Text></View>}
     <View testID="studio-mode-physical" style={mode === "physical" ? undefined : styles.hidden}>{seed?.studio === "physical" && <Text style={styles.formHint}>Seçilen pazar araması: {seed.keyword}. Kendi ürününüzün gerçek fotoğrafları ve doğruladığınız bilgilerle ilerleyin; rakibin özellikleri ürününüze aktarılmaz.</Text>}<PhotoListingStudio online={online} etsyReady={etsyReady} /></View>
@@ -2351,7 +2354,7 @@ function DigitalPanel({ online, active = true, shopReady, prefill, onPrefillUsed
         try {
           const result = await apiJson(`/api/digital/products/${product.id}/etsy-draft`, { method: "POST", headers: apiHeaders(true), body: JSON.stringify({ confirm: true }) });
           await load();
-          Alert.alert("Etsy taslağı hazır", `Taslağı açıp yapay zekâ kutusunu, kategoriyi ve fiyatı kontrol ettikten sonra yayınlayın.${result.pinsQueued ? `\n\nPinterest: ${result.pinsQueued} pin planlandı; ilan yayına girince satış linkiyle otomatik atılacak.` : ""}`, [{ text: "Taslağı aç", onPress: () => openUrl(result.editUrl, "Etsy taslak ilanı") }, { text: "Tamam" }]);
+          Alert.alert("Etsy taslağı hazır", `Taslağı açıp açıklamadaki yapay zekâ beyanını, kategoriyi ve fiyatı kontrol ettikten sonra yayınlayın.${result.pinsQueued ? `\n\nPinterest: ${result.pinsQueued} pin planlandı; ilan yayına girince satış linkiyle otomatik atılacak.` : ""}`, [{ text: "Taslağı aç", onPress: () => openUrl(result.editUrl, "Etsy taslak ilanı") }, { text: "Tamam" }]);
         } catch (error) { Alert.alert("Etsy taslağı oluşturulamadı", errorText(error)); await load(); }
         finally { setBusy(undefined); }
       } }
@@ -2565,7 +2568,7 @@ const ETSY_GUIDE: Array<{ id: string; title: string; icon: any; steps: string[] 
     "10 görselin hepsini kullanın. 'Neler var?', 'Ölçü/format' ve 'Nasıl çalışır' görselleri yanlış beklentiyi, iadeyi ve kötü yorumu azaltır.",
     "ABD alıcısı US Letter kullanır: Letter ve A4'ü birlikte sunun. Rakiplerin az sunduğu formatı (A5, düzenlenebilir, tablet) Trend kartındaki boşluk önerisine göre ekleyin.",
     "Aynı stilde ürün ailesi kurun (ör. planlayıcı + takip sayfası + günlük) ve paket satın; tekli ilanların açıklamasında pakete yönlendirin.",
-    "Pinterest'i açın; dijital ürünlerde en büyük dış trafik kaynağıdır. Her ürün için Stüdyo'nun hazırladığı 3 pini kullanın.",
+    "Pinterest'i ölçülebilir bir trafik denemesi için açın. Her ürün için Stüdyo'nun hazırladığı 3 pini kullanın; sonucu gerçek ziyaret ve siparişlerle değerlendirin.",
     "Düzenli yeni ürün ekleyin: yeni ilanlar aramada kısa süreli görünürlük kazanır ve mağazanız daha çok aramada yer alır.",
     "Marka, karakter ve ünlü adı kullanmayın; sistem bu kelimeleri ilanlarınızdan otomatik çıkarır. İhlal, ilan kaldırma ve mağaza kapanmasının en sık nedenidir.",
     "Dosyanın içine 'Nasıl kullanılır / yazdırılır' sayfası ve teşekkür sayfası koyun; satıştan sonra kısa bir teşekkür mesajı gönderin. Etsy kuralları gereği yorum karşılığında indirim veya hediye vermeyin."
@@ -4030,6 +4033,6 @@ const styles = StyleSheet.create({
   grantRow: { flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 10, borderTopWidth: 1, borderTopColor: "#F0EDE6", marginTop: 6 },
   modalBackdrop: { flex: 1, backgroundColor: "#00000066", justifyContent: "flex-end" },
   modalCard: { backgroundColor: "#F5F2EA", borderTopLeftRadius: 22, borderTopRightRadius: 22, padding: 20, paddingBottom: 34 },
-  navText: { color: "#748079", fontSize: 9, fontWeight: "600" },
+  navText: { color: "#748079", fontSize: 9, fontWeight: "600", width: "100%", textAlign: "center", flexShrink: 1 },
   navTextActive: { color: "#A86B2E" }
 });

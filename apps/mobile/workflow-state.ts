@@ -26,7 +26,7 @@ export function parsePrintableWorkspace(raw: string | null): PrintableWorkspace 
     if (input?.competitorLinks !== undefined && (typeof input.competitorLinks !== "string" || input.competitorLinks.length > 2500)) return undefined;
     const textFields = ["kind", "productType", "referenceNotes", "colors", "formats", "pageCount", "audience", "keyword", "assistant"];
     if (!input || !textFields.every(key => typeof input[key] === "string") || ![input.trendTags, input.trendFeatures].every(rows => Array.isArray(rows) && rows.every(item => typeof item === "string"))) return undefined;
-    if (value.version !== 1 || !Number.isFinite(Date.parse(value.savedAt)) || !input || !plan || plan.quality?.ok !== true
+    if (value.version !== 1 || plan?.brief?.productionContractVersion !== 2 || !Number.isFinite(Date.parse(value.savedAt)) || !input || !plan || plan.quality?.ok !== true
       || typeof input.kind !== "string" || typeof input.productType !== "string" || !["chatgpt", "claude"].includes(input.assistant)
       || typeof plan.brief?.name !== "string" || typeof plan.brief?.masterPrompt !== "string" || typeof plan.listing?.title !== "string" || typeof plan.listing?.description !== "string" || !Array.isArray(plan.listing.tags)
       || plan.listing.tags.length !== 13 || !plan.listing.tags.every((tag: unknown) => typeof tag === "string" && tag.length <= 20) || generationKey(input) !== plan.inputKey) return undefined;
