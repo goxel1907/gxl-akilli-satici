@@ -1,8 +1,9 @@
 import { canRankTrend, compareTrendEvidence, trendFreshness } from "../../mobile/trend-priority.js";
 import { printableSearches } from "./printable-searches.js";
+import { ideaKey, readProductMemory, topicKey } from "./product-memory.js";
 import type { MarketStrategy } from "./market-strategy.js";
 import { upcomingSeasons } from "./seasonal.js";
-import type { EtsyRuntimeEnv } from "./etsy.js";
+import { EtsyIntegrationError, type EtsyRuntimeEnv } from "./etsy.js";
 import { RELEVANT_FORMATS } from "./advice.js";
 import { listDiscoveries } from "./discovery.js";
 import { inferPrintableKind, inferTrendGroup, isTrendGroup, normalizeKeyword, readCached, scanTrend, TREND_NICHES, type PatternCraft, type PrintableKind, type TrendGroup, type TrendResult, type TrendStore } from "./etsy-trends.js";
@@ -64,8 +65,9 @@ export interface SearchSelection {
   selectedKeyword: string;
   comparedCount: number;
   totalCandidates: number;
+  avoidedCount?: number;
   noteTr: string;
-  candidates: Array<{ keyword: string; state: "fresh" | "stale" | "unscanned" | "failed"; score?: number; sampleSize?: number; scannedAt?: string; errorTr?: string }>;
+  candidates: Array<{ keyword: string; state: "fresh" | "stale" | "unscanned" | "failed"; score?: number; sampleSize?: number; scannedAt?: string; errorTr?: string; usedBefore?: boolean }>;
 }
 
 interface Row { tokens: string[]; weight: number; rising: boolean }
@@ -765,12 +767,24 @@ export async function pickBestKeyword(store: TrendStore | undefined, input: { st
   const scored = await Promise.all(candidates.map(async (keyword) => ({ keyword, result: await readCached(store, keyword) })));
   const recentKey = `${AUTOPICK_PREFIX}${group}:${kind || craft || "all"}`;
   const recent = await readJson<string[]>(store, recentKey, []);
+  const history = group === "printables" ? await readProductMemory(store) : [];
+  const previousKeys = new Set(history.flatMap(row => [ideaKey(row.kind,row.keyword),ideaKey(row.kind,row.productType)]));
+  const queryKind = (query:string) => kind || inferPrintableKind(query) || craft || group;
+  const used = (query:string) => previousKeys.has(ideaKey(queryKind(query),query)) || recent.some(previous => ideaKey(queryKind(previous),previous)===ideaKey(queryKind(query),query));
+  // Expand from observed tags, not invented trends, when the starting catalog is used.
+  const expanded = [...new Set(scored.flatMap(row => row.result?.topTags?.map(item=>normalizeKeyword(item.tag)) || []))]
+    .filter(query => query.length >= 6 && query.length <= 60 && !isIpRisky(query) && !candidates.includes(query) && (kind ? inferPrintableKind(query)===kind : inferTrendGroup(query)===group)).slice(0,20);
+  for(const keyword of expanded) scored.push({keyword,result:await readCached(store,keyword)});
   const avoid = normalizeKeyword(input.avoidKeyword || "");
+  const available = scored.filter(item=>!used(item.keyword) && (!avoid || ideaKey(queryKind(item.keyword),item.keyword)!==ideaKey(queryKind(avoid),avoid)));
+  if (!available.length) throw new EtsyIntegrationError("VALIDATION_FAILED","Bu kategorideki kayıtlı araştırma fikirleri daha önce kullanılmış. Aynı ürünü yeniden adlandırmak yerine yeni bir konu veya Etsy araması yazın. Önceki paketi sürdürmek için Son çalışmayı aç seçeneğini kullanın.",400);
+  const globalRecent = await readJson<string[]>(store,"studio:last-suggestions:v1",[]);
+  const recentTopics = new Set([...globalRecent,...history.slice(0,10).map(row=>row.keyword)].map(topicKey));
   const errors = new Map<string, string>();
   // A bounded comparison, with exploration before reusing the first cached niche.
   // Rate limiting stops the batch; it must never turn into invented market evidence.
   if (live?.env.ETSY_API_KEY && live.env.ETSY_SHARED_SECRET) {
-    const ordered = [...scored].sort((a, b) => compareTrendEvidence(a.result, b.result, now));
+    const ordered = [...available].sort((a, b) => compareTrendEvidence(a.result, b.result, now));
     const unexplored = ordered.filter(item => !canRankTrend(item.result, now));
     const anchor = ordered.find(item => canRankTrend(item.result, now) && item.keyword !== avoid && !recent.includes(item.keyword));
     const pending = [...(anchor ? [anchor] : []), ...unexplored.filter(item => item.keyword !== avoid && !recent.includes(item.keyword)), ...unexplored];
@@ -784,19 +798,23 @@ export async function pickBestKeyword(store: TrendStore | undefined, input: { st
       }
     }
   }
-  const ranking = scored.sort((a, b) => compareTrendEvidence(a.result, b.result, now));
+  const ranking = available.sort((a, b) => compareTrendEvidence(a.result, b.result, now));
   const fresh = ranking.filter(item => canRankTrend(item.result, now));
-  const choice = fresh.slice(0, 5).find(item => item.keyword !== avoid && !recent.includes(item.keyword))
+  const choice = fresh.slice(0,5).find(item=>item.keyword!==avoid && item.result!.score>=fresh[0].result!.score-10 && !recentTopics.has(topicKey(item.keyword)))
+    || fresh.slice(0, 5).find(item => item.keyword !== avoid && !recent.includes(item.keyword))
     || fresh.find(item => item.keyword !== avoid)
     || ranking.find(item => item.keyword !== avoid && !recent.includes(item.keyword))
     || ranking.find(item => item.keyword !== avoid) || ranking[0];
-  if (store) await store.put(recentKey, JSON.stringify([choice.keyword, ...recent.filter((item) => item !== choice.keyword)].slice(0, 3)));
+  if (store) {
+    await store.put(recentKey, JSON.stringify([choice.keyword, ...recent.filter((item) => item !== choice.keyword)].slice(0, 120)));
+    await store.put("studio:last-suggestions:v1",JSON.stringify([choice.keyword,...globalRecent.filter(item=>item!==choice.keyword)].slice(0,20)));
+  }
   const reason = choice.result && canRankTrend(choice.result, now)
     ? `Otomatik seçilen arama: "${choice.keyword}" (${fresh.length} güncel örneklem arasında; ${choice.result.score} puan, ${choice.result.verdict}; satış sıralaması değildir)`
     : `Otomatik seçilen arama: "${choice.keyword}" (araştırılacak fikir; güncel karşılaştırma doğrulanamadı)`;
   const displayed = [choice, ...ranking.filter(item => item !== choice)].slice(0, 8);
-  const selection: SearchSelection = { checkedAt: new Date(now).toISOString(), selectedKeyword: choice.keyword, comparedCount: fresh.length, totalCandidates: candidates.length,
-    noteTr: fresh.length >= 2 ? "Puanlar güncel arama örneklemlerini karşılaştırır; satış olasılığı veya Bestseller sıralaması değildir. Daha önce kullanılan aramalar çeşitlilik için atlanabilir."
+  const selection: SearchSelection = { checkedAt: new Date(now).toISOString(), selectedKeyword: choice.keyword, comparedCount: fresh.length, totalCandidates: scored.length, avoidedCount:scored.length-available.length,
+    noteTr: fresh.length >= 2 ? "Puanlar güncel arama örneklemlerini karşılaştırır; satış olasılığı veya Bestseller sıralaması değildir. Önceki hazırlanmış/yüklenmiş konular ve kullanılan aramalar otomatik öneriden çıkarılır; yakın puanlı yeni konulara öncelik verilir."
       : "En az iki güncel arama örneklemi yok; kategori karşılaştırması yetersiz. Listelenen fikirler ölçülmüş kazananlar değildir.",
     candidates: displayed.map(item => ({ keyword: item.keyword, state: errors.has(item.keyword) ? "failed" : trendFreshness(item.result, now),
       ...(canRankTrend(item.result, now) ? { score: item.result!.score } : {}),

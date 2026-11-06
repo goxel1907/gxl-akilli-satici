@@ -4,6 +4,8 @@ import { readEtsyListingStatus } from "./etsy-listing-status.js";
 import { crmRequest, CrmStorageError, isCrmRoute, readCrmSnapshot, type CrmEnv } from "./crm-store.js";
 export { CrmStore } from "./crm-store.js";
 import { registerProductHandoff } from "./product-handoff.js";
+import { recommendProduct } from "./product-recommendation.js";
+import { rememberProduct, type IdeaStore } from "./product-memory.js";
 import { researchPrintableMarket } from "./printable-research.js";
 import { products } from "../../api/src/data.js";
 import { patternPolicyIssues, patternPolicyMessage } from "./etsy-policy.js";
@@ -540,15 +542,27 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
     }
 
     if (request.method === "POST" && url.pathname === "/api/printables/research") {
-      const input = normalizePrintablePlanInput(await readBody(request));
+      const raw = await readBody(request);
+      const input = normalizePrintablePlanInput(raw);
       // Read-only research: no generated name, handoff, product or Etsy draft.
-      return json(200, { research: await researchPrintableMarket(env, input) });
+      const research = await researchPrintableMarket(env, input);
+      const recommendation = await recommendProduct(input,research,env.ETSY_OAUTH as unknown as IdeaStore | undefined);
+      if (raw.autoScope === true) recommendation.contentBudget.effective = recommendation.contentBudget.suggested;
+      return json(200, { research: { ...research,recommendation } });
     }
 
     if (request.method === "POST" && url.pathname === "/api/printables/plan") {
       const raw = await readBody(request);
       let input = normalizePrintablePlanInput(raw);
       const research = raw.research === true ? await researchPrintableMarket(env, input) : undefined;
+      const recommendation = research ? await recommendProduct(input,research,env.ETSY_OAUTH as unknown as IdeaStore | undefined) : undefined;
+      if (recommendation?.requiresNewTopic) return json(422,{error:"Bu konuda önerilen içerik yaklaşımları daha önce hazırlanmış. Aynı ürünü yeniden adlandırmak yerine farklı bir konu veya hedef Etsy araması seçin.",code:"PRODUCT_IDEA_EXHAUSTED"});
+      if (recommendation) {
+        const budget = recommendation.contentBudget;
+        input = { ...input, pageCount: raw.autoScope === true ? budget.suggested : budget.effective, creativeDirection: recommendation.directionEn };
+        budget.effective = input.pageCount!;
+        recommendation.productionBriefEn = recommendation.productionBriefEn.replace(/Core scope: \d+/,`Core scope: ${input.pageCount}`);
+      }
       if (research) input = { ...input, priceUsd: research.competition.launchPriceUsd, trendTags: research.trendTags, referenceNotes: `${research.marketBriefEn}${input.referenceNotes && !/^(?:Etsy market brief|Fresh product-matched Etsy sample)/i.test(input.referenceNotes.trim()) ? `\nSeller design notes (not independent market evidence): ${input.referenceNotes}` : ""}` };
       const store = env.ETSY_OAUTH as unknown as TrendStore | undefined;
       const usedNames = await readUsedNames(store);
@@ -557,8 +571,11 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
       const listing = await createPrintableListing(input, brief.name, env, research?.strategy);
       const handoff = store ? await registerProductHandoff(store, { name: brief.name, kind: input.kind, productType: input.productType }) : undefined;
       const guarded = guardPrintablePlan(brief, listing, { kind: input.kind, formats: input.formats });
+      if (recommendation) guarded.brief.masterPrompt += `\n\n## Product recommendation and originality checks\n${recommendation.productionBriefEn}`;
       if (research) guarded.brief.masterPrompt += `\n\n## Evidence-based market strategy\n${research.strategy.productionBriefEn}\n\n## Authoritative listing metadata\n${JSON.stringify({ productName: brief.name, title: guarded.listing.title, description: guarded.listing.description, tags: guarded.listing.tags, priceUsd: brief.priceUsd }, null, 2)}\nKeep this listing metadata aligned with the final product. If any claimed deliverable cannot be produced, report FAIL and ask the seller to regenerate the package rather than silently changing the product or claims. Do not publish the listing.`;
-      return json(200, { ...guardPrintablePlan(guarded.brief, guarded.listing, { kind: input.kind, formats: input.formats }), ...(research ? { research } : {}), ...(handoff ? { handoff } : {}) });
+      const finalPlan = guardPrintablePlan(guarded.brief, guarded.listing, { kind: input.kind, formats: input.formats });
+      if (finalPlan.quality.ok && recommendation) await rememberProduct(env.ETSY_OAUTH as unknown as IdeaStore | undefined,{kind:input.kind,keyword:research!.keyword,productType:input.productType,name:brief.name,title:finalPlan.listing.title,direction:recommendation.directionEn,pageCount:input.pageCount,createdAt:new Date().toISOString(),state:"prepared"});
+      return json(200, { ...finalPlan, ...(research ? { research: { ...research, ...(recommendation ? { recommendation } : {}) } } : {}), ...(recommendation ? { contentBudget: recommendation.contentBudget } : {}), ...(handoff ? { handoff } : {}) });
     }
 
     if (request.method === "GET" && url.pathname === "/api/pinterest/status") return json(200, await getPinterestStatus(env));

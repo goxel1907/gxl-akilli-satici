@@ -1651,6 +1651,7 @@ function SearchSelectionCard({ selection, onSelect, disabled }: any) {
   return <View style={styles.analysisCard}>
     <Text style={styles.cardTitle}>Kategori aramaları karşılaştırması</Text>
     <Text style={styles.small}>{selection.comparedCount} güncel örneklem · {selection.totalCandidates} araştırma fikri · {new Date(selection.checkedAt).toLocaleString("tr-TR")}</Text>
+    {!!selection.avoidedCount && <Text style={styles.evidence}>{selection.avoidedCount} önceki konu / arama tekrar önerilmedi.</Text>}
     <Text style={styles.warningText}>{selection.noteTr}</Text>
     <Text style={styles.formHint}>Bunlar Etsy aramalarıdır. İlan başlığı, seçtiğin ürünün özellikleriyle sonraki aşamada hazırlanır.</Text>
     {selection.candidates.map((row: any) => <View key={row.keyword} style={styles.visualRow}>
@@ -1658,6 +1659,27 @@ function SearchSelectionCard({ selection, onSelect, disabled }: any) {
       <Text style={styles.small}>{row.state === "fresh" && Number.isFinite(row.score) ? `${row.score} puan · ${row.sampleSize ?? "?"} örnek ilan` : row.state === "failed" ? row.errorTr : row.state === "stale" ? "Veri eski; güncel sıralamaya katılmadı" : "Henüz yeterli güncel veri yok; kazanan sayılmaz"}</Text>
       {row.keyword !== selection.selectedKeyword && <Pressable style={styles.secondaryButton} disabled={disabled} onPress={() => onSelect(row.keyword)}><Text style={styles.secondaryButtonText}>{row.keyword} aramasını seç</Text></Pressable>}
     </View>)}
+  </View>;
+}
+
+function ProductRecommendationCard({ recommendation, onNewIdea, disabled }: any) {
+  if (!recommendation?.contentBudget) return null;
+  const budget=recommendation.contentBudget;
+  return <View style={styles.analysisCard}>
+    <Text style={styles.cardTitle}>Goxi’nin ürün ve içerik önerisi</Text>
+    <Text style={styles.rowTitle}>{recommendation.productType}</Text>
+    <Text style={styles.analysisLine}>{recommendation.rationaleTr}</Text>
+    <Text style={styles.listingTitle}>Önerilen kapsam: {budget.suggested} {budget.limits.unitTr}</Text>
+    <Text style={styles.rowTitle}>Bu çalışmanın kapsamı: {budget.effective} {budget.limits.unitTr}</Text>
+    <Text style={styles.analysisLine}>{budget.basisTr}</Text>
+    <Text style={styles.warningText}>{budget.noteTr}</Text>
+    <Text style={styles.rowTitle}>Özgün yaklaşım: {recommendation.directionTr}</Text>
+    {recommendation.evidenceTr?.map((line:string)=><Text style={styles.small} key={line}>• {line}</Text>)}
+    <Text style={styles.evidence}>{recommendation.historyCount} önceki ürün kaydı karşılaştırıldı.</Text>
+    <Text style={styles.warningText}>{recommendation.noveltyTr}</Text>
+    {recommendation.requiresNewTopic && <Text style={styles.warningText}>Bu konudaki içerik yaklaşımları kullanılmış. Yeni ürün için başka konu seç; mevcut paketi Son çalışmayı aç ile sürdürebilirsin.</Text>}
+    {recommendation.previous?.map((row:any)=><Text style={styles.small} key={row.name}>• {row.name} · {row.state === "prepared" ? "paketi hazırlanmış" : row.state === "saved" ? "dosyaları kaydedilmiş" : "Etsy kaydı var; yayın durumu ayrıca doğrulanmalı"}</Text>)}
+    <Pressable style={styles.secondaryButton} disabled={disabled} onPress={onNewIdea}><Text style={styles.secondaryButtonText}>Goxi ile başka ürün öner</Text></Pressable>
   </View>;
 }
 
@@ -1685,6 +1707,7 @@ function PrintableStudio({ online, seed, seeding, resumeWorkspace, onPrepared, o
   const [colors, setColors] = useState("");
   const [formats, setFormats] = useState("");
   const [pageCount, setPageCount] = useState("");
+  const pageCountEdited = useRef(false);
   const [audience, setAudience] = useState("");
   const [keyword, setKeyword] = useState("");
   const [competitorLinks, setCompetitorLinks] = useState("");
@@ -1704,6 +1727,7 @@ function PrintableStudio({ online, seed, seeding, resumeWorkspace, onPrepared, o
     setColors((seed.colors || []).join(", "));
     setFormats((seed.formats || []).join(", "));
     setPageCount(seed.pageCount ? String(seed.pageCount) : "");
+    pageCountEdited.current = false;
     setKeyword(seed.keyword || ""); setCompetitorLinks("");
     setTrendTags(seed.trendTags || []);
     setTrendFeatures(seed.trendFeatures || []);
@@ -1719,20 +1743,27 @@ function PrintableStudio({ online, seed, seeding, resumeWorkspace, onPrepared, o
     assistantPreferenceChanged.current = true;
     setKind(input.kind); setProductType(input.productType); setReferenceNotes(input.referenceNotes || "");
     setColors(input.colors || ""); setFormats(input.formats || ""); setPageCount(input.pageCount || ""); setAudience(input.audience || "");
+    pageCountEdited.current = true;
     setKeyword(input.keyword || ""); setTrendTags(input.trendTags || []); setTrendFeatures(input.trendFeatures || []); setAssistant(input.assistant);
     setCompetitorLinks(input.competitorLinks || ""); setBasis([]); setPlan(resumeWorkspace.plan);
   }, [resumeWorkspace]);
   const workspaceInput = { kind, productType, referenceNotes, colors, formats, pageCount, audience, keyword, ...(competitorLinks ? { competitorLinks } : {}), trendTags, trendFeatures, assistant };
   const inputKey = generationKey(workspaceInput);
   const researchKey = generationKey({ kind, productType, keyword, competitorLinks });
+  const liveInputKey = useRef(inputKey); liveInputKey.current=inputKey;
+  const liveResearchKey = useRef(researchKey); liveResearchKey.current=researchKey;
   const currentPreview = researchPreview?.inputKey === researchKey ? researchPreview.research : undefined;
   const analyze = async () => {
     if (productType.trim().length < 3) return Alert.alert("Ürün", "Önce araştırılacak ürünü ve hedef Etsy aramasını yazın.");
     const requestId = ++generationRequest.current;
+    setPlan(undefined);
     setWorking(true);
     try {
-      const result = await apiJson("/api/printables/research", { method: "POST", headers: apiHeaders(true), body: JSON.stringify({ kind, productType, keyword, competitorLinks, pageCount: pageCount ? Number(pageCount) : undefined }) });
-      if (requestId === generationRequest.current) setResearchPreview({ inputKey: researchKey, research: result.research });
+      const result = await apiJson("/api/printables/research", { method: "POST", headers: apiHeaders(true), body: JSON.stringify({ kind, productType, keyword, competitorLinks, pageCount: pageCount ? Number(pageCount) : undefined, autoScope: !pageCountEdited.current }) });
+      if (requestId === generationRequest.current && liveResearchKey.current === researchKey) {
+        setResearchPreview({ inputKey: researchKey, research: result.research });
+        if (!pageCountEdited.current && result.research?.recommendation?.contentBudget?.suggested) setPageCount(String(result.research.recommendation.contentBudget.suggested));
+      }
     } catch (error) { if (requestId === generationRequest.current) { setResearchPreview(undefined); Alert.alert("Rakip araştırması alınamadı", errorText(error)); } }
     finally { if (requestId === generationRequest.current) setWorking(false); }
   };
@@ -1741,12 +1772,15 @@ function PrintableStudio({ online, seed, seeding, resumeWorkspace, onPrepared, o
     const requestId = ++generationRequest.current;
     setWorking(true);
     try {
-      const result = await apiJson("/api/printables/plan", { method: "POST", headers: apiHeaders(true), body: JSON.stringify({ kind, productType, referenceNotes, colors, formats, pageCount: pageCount ? Number(pageCount) : undefined, audience, keyword, competitorLinks, trendTags, trendFeatures, assistant, research: true, seed: String(Date.now()) }) });
-      if (requestId !== generationRequest.current) return;
-      const prepared = { ...result, inputKey };
+      const result = await apiJson("/api/printables/plan", { method: "POST", headers: apiHeaders(true), body: JSON.stringify({ kind, productType, referenceNotes, colors, formats, pageCount: pageCount ? Number(pageCount) : undefined, autoScope: !pageCountEdited.current, audience, keyword, competitorLinks, trendTags, trendFeatures, assistant, research: true, seed: String(Date.now()) }) });
+      if (requestId !== generationRequest.current || liveInputKey.current !== inputKey) return;
+      const effectivePages = result.contentBudget?.effective;
+      const savedInput = effectivePages ? { ...workspaceInput,pageCount:String(effectivePages) } : workspaceInput;
+      if (effectivePages) setPageCount(String(effectivePages));
+      const prepared = { ...result, inputKey:generationKey(savedInput) };
       setPlan(prepared);
       if (result.quality?.ok) {
-        const workspace: PrintableWorkspace = { version: 1, savedAt: new Date().toISOString(), input: workspaceInput, plan: prepared };
+        const workspace: PrintableWorkspace = { version: 1, savedAt: new Date().toISOString(), input: savedInput, plan: prepared };
         try { await AsyncStorage.setItem(PRINTABLE_WORKSPACE_KEY, JSON.stringify(workspace)); if (requestId === generationRequest.current) onPrepared?.(workspace); }
         catch { Alert.alert("Paket hazır", "Bu çalışma telefonda saklanamadı. Uygulamayı kapatmadan paketi paylaşın ve dosyaları yükleyin."); }
       }
@@ -1760,8 +1794,8 @@ function PrintableStudio({ online, seed, seeding, resumeWorkspace, onPrepared, o
   const research = currentPlan?.research || currentPreview;
   return <>
     <ListingGuide input={{ phase: "studio", planReady: Boolean(currentPlan?.quality?.ok), assistant: assistant === "claude" ? "claude" : "chatgpt" }}
-      actionLabel={currentPlan?.quality?.ok ? "Goxi ile üretim paketini paylaş" : currentPreview ? "Goxi ile ilan paketini hazırla" : "Goxi ile rakipleri araştır"}
-      onAction={() => currentPlan?.quality?.ok ? shareChecked(currentPlan.quality, currentPlan.brief.masterPrompt, `${currentPlan.brief.name} - tek paket`) : currentPreview ? generate() : analyze()}
+      actionLabel={currentPlan?.quality?.ok ? "Goxi ile üretim paketini paylaş" : currentPreview?.recommendation?.requiresNewTopic ? "Goxi ile yeni konu bul" : currentPreview ? "Goxi ile ilan paketini hazırla" : "Goxi ile rakipleri araştır"}
+      onAction={() => currentPlan?.quality?.ok ? shareChecked(currentPlan.quality, currentPlan.brief.masterPrompt, `${currentPlan.brief.name} - tek paket`) : currentPreview?.recommendation?.requiresNewTopic ? onPickKind(kind,keyword) : currentPreview ? generate() : analyze()}
       disabled={!online || working || seeding}
       secondaryLabel="Dosyalarım hazır, yüklemeye geç"
       onSecondary={currentPlan?.quality?.ok ? () => onUpload({ name: currentPlan.handoff?.name || brief.name, kind: currentPlan.handoff?.kind || kind, productType: currentPlan.handoff?.productType || productType, listing, pins: brief.pins, priceUsd: brief.priceUsd, research: currentPlan.research, handoffName: brief.name, handoff: currentPlan.handoff, assistant }) : undefined} />
@@ -1778,6 +1812,7 @@ function PrintableStudio({ online, seed, seeding, resumeWorkspace, onPrepared, o
     {!seeding && <CompetitionCard competition={research?.competition || (seedEvidenceCurrent ? seed.competition : undefined)} />}
     {research && <Text style={styles.formHint}>Rakip analizi: {research.keyword} · {research.sampleSize} benzer dijital ilan · {new Date(research.scannedAt).toLocaleString("tr-TR")}. {research.noteTr}</Text>}
     <MarketStrategyCard strategy={research?.strategy || (seedEvidenceCurrent ? seed.marketStrategy : undefined)} />
+    <ProductRecommendationCard recommendation={research?.recommendation} onNewIdea={()=>onPickKind(kind,keyword)} disabled={!online || working || seeding} />
     <Text style={styles.fieldLabel}>Dijital ürün türü</Text>
     <ChipGroup options={PRINTABLE_KIND_OPTIONS} value={kind} onChange={(next: string) => { setKind(next); onPickKind(next); }} />
     {!!KIND_HELP[kind] && <Text style={styles.formHint}>{KIND_HELP[kind]}</Text>}
@@ -1788,7 +1823,8 @@ function PrintableStudio({ online, seed, seeding, resumeWorkspace, onPrepared, o
     <Field label="Trend özeti (Etsy üst ilanlarından)" value={currentPlan?.research?.marketBriefEn || referenceNotes} onChangeText={setReferenceNotes} placeholder="Trendden gelince otomatik dolar" multiline />
     <Field label="Renkler" value={colors} onChangeText={setColors} placeholder="sage green, cream, terracotta" autoCapitalize="none" />
     <Field label="Formatlar (virgülle)" value={formats} onChangeText={setFormats} placeholder="US Letter, A4, A5" />
-    <Field label="Sayfa / tasarım sayısı" value={pageCount} onChangeText={setPageCount} keyboardType="number-pad" placeholder="30" />
+    <Field label="Sayfa / tasarım sayısı" value={pageCount} onChangeText={(value:string)=>{pageCountEdited.current=true;setPageCount(value);}} keyboardType="number-pad" placeholder="30" />
+    <Text style={styles.formHint}>10 sabit sınır değildir. Goxi araştırmadan sonra kapsam önerir; buraya kendi sayını yazarsan onu korur. Ana içerik ile kapak, rehber ve cevaplar ayrı sayılır. Takvim 12 ay, ABC boyama 26 harf, özgeçmiş 4 şablondur; sunum oyunu 15–50 soru ve 5’in katıdır.</Text>
     <Field label="Hedef kitle (isteğe bağlı)" value={audience} onChangeText={setAudience} placeholder="busy moms, teachers, brides-to-be" />
     <Field label="Hedef Etsy araması" value={keyword} onChangeText={setKeyword} placeholder="budget planner printable" autoCapitalize="none" />
     <Field label="Bu ürünün rakip ilanları (isteğe bağlı, en fazla 5)" value={competitorLinks} onChangeText={setCompetitorLinks} placeholder="Etsy ilan linkleri veya numaraları; boşlukla ayırın" multiline autoCapitalize="none" />
