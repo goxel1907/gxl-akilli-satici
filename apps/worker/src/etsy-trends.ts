@@ -2,6 +2,7 @@ import { compareTrendEvidence, trendFreshness } from "../../mobile/trend-priorit
 import { buildAdvice, type TrendAdvice } from "./advice.js";
 import { etsyRequest, EtsyIntegrationError, type EtsyRuntimeEnv } from "./etsy.js";
 import { findIpRisks } from "./ip-guard.js";
+import { buildMarketStrategy, type MarketStrategy } from "./market-strategy.js";
 
 type Fetcher = typeof fetch;
 
@@ -160,6 +161,7 @@ export interface TrendExample {
 }
 
 export interface TrendResult {
+  strategy?: MarketStrategy;
   keyword: string;
   group: TrendGroup;
   nicheId?: string;
@@ -283,7 +285,7 @@ export function normalizeKeyword(value: string): string {
   return value.toLowerCase().replace(/[^\p{L}\p{Nd}\s'-]/gu, " ").replace(/\s+/g, " ").trim().slice(0, 60);
 }
 
-export function scoreTrend(keyword: string, payload: { count?: number; results?: unknown[] }, now = Date.now(), group: TrendGroup = inferTrendGroup(keyword)): TrendResult {
+export function scoreTrend(keyword: string, payload: { count?: number; results?: unknown[] }, now = Date.now(), group: TrendGroup = inferTrendGroup(keyword), scope: MarketStrategy["scope"] = "search_sample"): TrendResult {
   const profile = TREND_GROUPS[group];
   const listings = (Array.isArray(payload.results) ? payload.results : []).filter((row): row is EtsyListingRow => Boolean(row && typeof row === "object"));
   const activeListings = Math.max(0, Number(payload.count || listings.length));
@@ -369,6 +371,7 @@ export function scoreTrend(keyword: string, payload: { count?: number; results?:
     : "Zor";
 
   const result: TrendResult = {
+    strategy: buildMarketStrategy(keyword, pageOne.filter(row => profile.expectsDigital === undefined || (profile.expectsDigital ? row.listing_type === "download" || row.listing_type === "both" : row.listing_type === "physical")), now, scope),
     keyword,
     group,
     ...(group === "printables" ? { kind: inferPrintableKind(keyword) } : {}),
@@ -429,7 +432,7 @@ export async function scanTrend(
   const cached = await readCached(store, keyword);
   if (cached) {
     const age = now - Date.parse(cached.scannedAt);
-    if (age >= -300_000 && age < CACHE_TTL_SECONDS * 1000 && (!input.force || age < FORCE_REFRESH_AFTER_MS)) return { ...cached, cached: true };
+    if (cached.strategy?.version === 1 && age >= -300_000 && age < CACHE_TTL_SECONDS * 1000 && (!input.force || age < FORCE_REFRESH_AFTER_MS)) return { ...cached, cached: true };
   }
 
   const payload = await etsyRequest<{ count?: number; results?: unknown[] }>(env, "/application/listings/active", {

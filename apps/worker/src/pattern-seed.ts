@@ -1,4 +1,5 @@
 import { canRankTrend, compareTrendEvidence } from "../../mobile/trend-priority.js";
+import type { MarketStrategy } from "./market-strategy.js";
 import { upcomingSeasons } from "./seasonal.js";
 import type { EtsyRuntimeEnv } from "./etsy.js";
 import { RELEVANT_FORMATS } from "./advice.js";
@@ -15,6 +16,7 @@ type Fetcher = typeof fetch;
 // sabit bir listeden değil, o aramadaki üst ve yükselen ilanların etiket ve başlıklarından çıkarılır.
 // Rakipleri geçmek için veriden çıkarılan plan: fiyat, içerik miktarı, format boşlukları, paket.
 export interface CompetitionPlan {
+  strategy?: MarketStrategy;
   medianPriceUsd?: number;
   launchPriceUsd?: number;
   bundlePriceUsd?: number;
@@ -23,7 +25,7 @@ export interface CompetitionPlan {
   standardFormats: string[];
   gapFormats: string[];
   bundleShare?: number;
-  topCompetitors: Array<{ title: string; favorites: number; priceUsd?: number; ageDays: number }>;
+  topCompetitors: Array<{ title: string; favorites: number; priceUsd?: number; ageDays: number; url?: string }>;
   planTr: string[];
   planEn: string[];
 }
@@ -496,7 +498,9 @@ function joinEn(items: string[]): string {
 }
 
 export function buildCompetition(result: TrendResult | undefined, kind: PrintableKind | undefined, ourPages: number | undefined, risingFeatures: string[]): CompetitionPlan {
-  const median = result?.metrics.medianPriceUsd;
+  // New evidence records exclude protected-name products and need three USD
+  // prices. Do not fall back to the broader, possibly mixed legacy median.
+  const median = result?.strategy ? result.strategy.pricing?.medianUsd : result?.metrics.medianPriceUsd;
   const signals = result?.signals;
   const relevant = RELEVANT_FORMATS[kind || "pattern"];
   const formats = (signals?.formats || []).filter((item) => relevant.includes(item.id) && FORMAT_OFFERS[item.id]);
@@ -509,7 +513,7 @@ export function buildCompetition(result: TrendResult | undefined, kind: Printabl
   const planTr: string[] = [];
   const planEn: string[] = [];
   if (median && launch && bundle) {
-    planTr.push(`Fiyat: rakip ortancası ${median.toFixed(2)} USD → ilk yorumlara kadar ${launch.toFixed(2)} USD, set ${bundle.toFixed(2)} USD.`);
+    planTr.push(`Fiyat denemesi: örneklem ortancası ${median.toFixed(2)} USD; başlangıç adayı ${launch.toFixed(2)} USD. Bu indirim katsayısı bir sezgisel denemedir, en iyi fiyat olduğu kanıtlanmadı. Maliyet ve ücretleri kontrol edin. Ayrı ve gerçekten hazırlanmış bir set için ${bundle.toFixed(2)} USD yalnızca deneme adayıdır.`);
   }
   if (competitorPages && ourPages) {
     planTr.push(`İçerik: rakipler ortanca ${competitorPages} sayfa → bizde ${ourPages} sayfa.`);
@@ -535,7 +539,7 @@ export function buildCompetition(result: TrendResult | undefined, kind: Printabl
   for (const item of [...gaps, ...standard].filter((entry) => !deliverable(entry))) planTr.push(MANUAL_OFFER_TR[item.id](percent(item.share)));
   if (signals && result!.metrics.sampleSize > 10) {
     if (signals.bundleShare < 0.1) {
-      planTr.push(`Paket boşluğu: rakiplerin yalnızca ${percent(signals.bundleShare)}'i set sunuyor → aynı stilde set de hazırla.`);
+      planTr.push(`Örneklem başlık/etiketlerinin yalnızca ${percent(signals.bundleShare)}'i set belirtiyor. Bu, rakiplerin dosyalarında set olmadığı anlamına gelmez; aynı stilde ayrı bir set hazırlamayı deneyebilirsiniz.`);
       planEn.push("design it so it can be sold as part of a matching set");
     } else if (signals.bundleShare >= 0.3) {
       planTr.push(`Set olarak listeleniyor (rakiplerin ${percent(signals.bundleShare)}'i) → tekli ürünle birlikte set ilanı da aç.`);
@@ -549,6 +553,7 @@ export function buildCompetition(result: TrendResult | undefined, kind: Printabl
   if (result && result.metrics.newcomerShare >= 0.4) planTr.push(`Üst ilanların ${percent(result.metrics.newcomerShare)}'i son 6 ayda açılmış → bu, yeni ilan payıdır; mağaza yaşı ve satış başarısı ölçülmedi.`);
   if (signals?.ipRisks.length) planTr.push(`Telif riski olan kelimeler kullanılmayacak: ${signals.ipRisks.join(", ")}.`);
   return {
+    ...(result?.strategy ? { strategy: result.strategy } : {}),
     medianPriceUsd: median,
     launchPriceUsd: launch,
     bundlePriceUsd: bundle,
@@ -557,7 +562,7 @@ export function buildCompetition(result: TrendResult | undefined, kind: Printabl
     standardFormats: standard.map((item) => FORMAT_OFFERS[item.id].tr),
     gapFormats: gaps.filter((item) => FORMAT_OFFERS[item.id].format).map((item) => FORMAT_OFFERS[item.id].format!),
     bundleShare: signals?.bundleShare,
-    topCompetitors: (result?.examples || []).slice(0, 3).map((example) => ({ title: example.title.slice(0, 90), favorites: example.favorites, priceUsd: example.priceUsd, ageDays: example.ageDays })),
+    topCompetitors: (result?.examples || []).slice(0, 3).map((example) => ({ title: example.title.slice(0, 90), favorites: example.favorites, priceUsd: example.priceUsd, ageDays: example.ageDays, ...(example.url ? { url: example.url } : {}) })),
     planTr,
     planEn
   };

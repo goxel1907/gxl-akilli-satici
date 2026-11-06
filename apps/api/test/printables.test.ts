@@ -180,7 +180,7 @@ test("studio auto-picks the strongest search for a kind and fills a competitive 
   assert.ok(first.competition.launchPriceUsd! < first.competition.medianPriceUsd!);
   assert.ok(first.competition.bundlePriceUsd! > first.competition.medianPriceUsd!);
   assert.ok(first.competition.ourPages! > first.competition.competitorPages!);
-  assert.ok(first.competition.planTr.some((line) => line.startsWith("Fiyat:")));
+  assert.ok(first.competition.planTr.some((line) => line.startsWith("Fiyat denemesi:")));
   assert.match(first.referenceNotes, /Design options to evaluate \(no sales guarantee\)/);
   assert.ok(!first.formats.some((format) => /lisans/.test(format)));
   const second = await createPatternSeed({}, store, { studio: "printable", kind: "paper_craft" });

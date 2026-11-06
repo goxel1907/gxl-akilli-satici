@@ -1,4 +1,6 @@
 import { readEtsyListingStatus } from "./etsy-listing-status.js";
+import { canRankTrend } from "../../mobile/trend-priority.js";
+import type { MarketStrategy } from "./market-strategy.js";
 import { evaluateMarketplacePolicies, type ProductOrigin, type RiskFlag } from "../../api/src/marketplace-policy.js";
 import { generateStructuredObject, hasAiProvider, type AiRuntimeEnv } from "../../api/src/structured-ai.js";
 import { etsyRequest, EtsyIntegrationError, getConnectedShop, type EtsyRuntimeEnv } from "./etsy.js";
@@ -108,6 +110,7 @@ export interface ProductPricing {
 }
 
 export interface ProductPlan {
+  strategy?: MarketStrategy;
   primaryKeyword: string;
   keywordScores: Array<{ keyword: string; score?: number; verdict?: string; activeListings?: number; medianPriceUsd?: number }>;
   title: string;
@@ -722,6 +725,7 @@ function openingSentence(input: ProductPlanInput, signals: ProductSignals, prima
 }
 
 export function buildProductPlan(input: ProductPlanInput, phrases: string[], scans: TrendResult[], context: { usdTryRate?: number; shopCurrency?: string; signals?: ProductSignals }): ProductPlan {
+  scans = scans.filter(scan => canRankTrend(scan));
   const signals = context.signals || detectProductSignals(input);
   const candidates = withoutFalseAntique(input, phrases);
   const byKeyword = new Map(scans.map((scan) => [scan.keyword, scan]));
@@ -734,7 +738,8 @@ export function buildProductPlan(input: ProductPlanInput, phrases: string[], sca
   const materials = (signals.isKnitwear ? knitMaterials(input, signals) : [signals.material?.en, ...(signals.extraMaterials || []).map((item) => item.en), signals.noun === "prayer beads" ? "beads" : undefined])
     .filter((value): value is string => Boolean(value))
     .map((value) => value.replace(/[^\p{L}\p{Nd}\p{Zs}]/gu, " ").trim());
-  const pricing = computePricing({ priceTry: input.priceTry, shippingTry: input.shippingTry, usdTryRate: context.usdTryRate, shopCurrency: context.shopCurrency, medianUsd: best?.metrics.medianPriceUsd });
+  const marketMedian = best?.strategy ? best.strategy.pricing?.medianUsd : best?.metrics.medianPriceUsd;
+  const pricing = computePricing({ priceTry: input.priceTry, shippingTry: input.shippingTry, usdTryRate: context.usdTryRate, shopCurrency: context.shopCurrency, medianUsd: marketMedian });
   const warnings = [
     ...(!scans.length ? ["Etsy araması yapılamadı; başlık ve etiketler yalnızca kurallarla üretildi."] : []),
     ...(!input.weightGrams && signals.material?.precious ? ["Ağırlık girilmedi; gümüş ve altın ürünlerde ağırlık alıcı için önemli bir bilgidir."] : []),
@@ -756,6 +761,7 @@ export function buildProductPlan(input: ProductPlanInput, phrases: string[], sca
     ...(signals.isVintage && /\b(copper|brass)\b/.test(`${signals.noun} ${signals.material?.en || ""}`) ? ["Bakır/pirinç kapta gıdayla kullanım bilgisini durum notuna yazın (ör. \"For decorative use only\" veya \"Tin-lined, food safe\")."] : [])
   ];
   return {
+    ...(best?.strategy ? { strategy: best.strategy } : {}),
     primaryKeyword: primary,
     keywordScores: candidates.map((keyword) => {
       const scan = byKeyword.get(keyword);
