@@ -38,8 +38,11 @@ export const syncTrackedProducts=(products:any[])=>mutateProduction(rows=>produc
 export async function shareProductionPackage(workspace:PrintableWorkspace){
   await saveProductionWorkspace(workspace);
   const id=productionId(workspace),rows=await mutateProduction(rows=>rows),record=rows.find(row=>row.id===id)!;
-  await Share.share({message:workspace.plan.brief.masterPrompt+productionTrackingPrompt(record),title:`${workspace.plan.brief.name} - tek paket`});
-  if(record.stage==="package_ready")await mutateProduction(rows=>changeProduction(rows,id,"share_opened","app"));
+  const opening=record.stage==="package_ready"||record.stage==="status_unknown";
+  // Persist before Android can background/kill this process in another app.
+  if(opening)await mutateProduction(rows=>changeProduction(rows,id,"share_opened","app"));
+  try{await Share.share({message:workspace.plan.brief.masterPrompt+productionTrackingPrompt(record),title:`${workspace.plan.brief.name} - tek paket`});}
+  catch(error){if(opening)await mutateProduction(rows=>rows.find(row=>row.id===id)?.stage==="share_opened"?changeProduction(rows,id,record.stage,"app"):rows);throw error;}
 }
 export function useProductionRecords(){
   const [rows,setRows]=useState<ProductionRecord[]>([]),[loaded,setLoaded]=useState(false);
@@ -66,10 +69,9 @@ export default function ProductionJourney({workspace,onUpload,onOpenProduct}:{wo
   const run=async(action:()=>Promise<unknown>)=>{setBusy(true);try{await action();}catch(error){Alert.alert("Çalışma kaydedilemedi",error instanceof Error?error.message:"Telefon depolamasını kontrol edin.");}finally{setBusy(false);}};
   const update=(stage:ProductionStage,source:ProductionRecord["source"]="seller")=>run(async()=>{await saveProductionWorkspace(workspace);await mutateProduction(rows=>changeProduction(rows,id,stage,source));setStatusModal(false);setReceipt("");});
   const share=(continuation=false)=>run(async()=>{
+    if(!continuation)return shareProductionPackage(workspace);
     await saveProductionWorkspace(workspace);
-    const message=continuation?productionContinuation(record):workspace.plan.brief.masterPrompt+productionTrackingPrompt(record);
-    await Share.share({message,title:`${workspace.plan.brief.name} - ${continuation?"aynı çalışmaya devam":"tek paket"}`});
-    if(record.stage==="package_ready")await mutateProduction(rows=>changeProduction(rows,id,"share_opened","app"));
+    await Share.share({message:productionContinuation(record),title:`${workspace.plan.brief.name} - aynı çalışmaya devam`});
   });
   const uploaded=Boolean(record.productId),downloaded=record.stage==="downloaded";
   const instruction=uploaded?record.stage==="published"?"Etsy’den son alınan durum aktif. Son doğrulama zamanı aşağıda; ilanı tekrar kontrol edebilirsin.":"Dosyaların aynı ürün kaydına bağlı. Dosya denetimi, Etsy taslağı ve yayın durumuna Dijital bölümünden devam et.":downloaded?"Son dosyaları indirdiğini bildirdin. Aynı ilan bilgileriyle dosyalarını ve gerçek önizlemeleri yükle; ardından denetim ve Etsy taslağına geçeceğiz.":record.stage==="package_ready"?`Seçili ilan bilgilerin kaydedildi. Tek paketi ${toTool} gönder; aynı sohbette üretimi tamamla.`:`${tool} sohbetini otomatik okuyamam. Aşamayı aşağıdan güncelle veya asistanın GXL durum JSON’unu içe aktar. Devam metnini kopyalayıp mevcut sohbete yapıştır; paylaşım yeni sohbet açabilir. Yeni ürün paketi başlatma.`;
