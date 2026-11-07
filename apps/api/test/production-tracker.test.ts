@@ -74,3 +74,9 @@ test("failed persistence prevents opening an assistant handoff with untracked co
   context.mock.method(ui.storage,"set",(key:string,value:string)=>{if(key===PRODUCTION_TRACKER_KEY)throw new Error("Disk full");return set(key,value);});
   await assert.rejects(screens.shareProductionPackage(workspace()),/Disk full/);assert.equal(ui.shares.length,0);assert.equal(ui.storage.has(PRINTABLE_WORKSPACE_KEY),false);
 });
+
+test("share progress is already durable when the operating-system handoff starts",async context=>{
+  ui.storage.clear();const push=ui.shares.push;let observed=false;
+  ui.shares.push=(...items:unknown[])=>{const rows=readProductionRecords(ui.storage.get(PRODUCTION_TRACKER_KEY)||null);assert.equal(rows[0]?.stage,"share_opened");assert.ok(ui.storage.has(PRINTABLE_WORKSPACE_KEY));observed=true;return push.apply(ui.shares,items);};
+  try{await screens.shareProductionPackage(workspace());assert.equal(observed,true);}finally{ui.shares.push=push;ui.storage.clear();}
+});
