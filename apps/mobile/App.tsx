@@ -5,6 +5,7 @@ import { listingProgress, listingTasks, physicalListingProgress, etsyTransferCom
 import ListingMascot, { type ListingMascotProps } from "./ListingMascot";
 import LiveCheckPanel from "./LiveCheckPanel";
 import ListingOfferPicker from "./ListingOfferPicker";
+import OwnerNotificationsPanel from "./OwnerNotificationsPanel";
 import ProductionJourney, { ProductionWorkList, useProductionRecords, saveProductionWorkspace, activeProduction, syncTrackedProduct, syncTrackedProducts, shareProductionPackage, restoreProductions } from "./ProductionTracker";
 import { type ProductionRecord } from "./production-tracker";
 import { appendLocalFile } from "./upload-file";
@@ -3552,6 +3553,9 @@ function MessageResult({ result }: any) {
 }
 
 function MessageHelperCard({ online }: any) {
+  const [productName,setProductName]=useState("");
+  const [noticeRevision,setNoticeRevision]=useState(0);
+  const notifyRequest=(path:string,body?:unknown)=>apiJson(path,body===undefined?{headers:apiHeaders()}:{method:"POST",headers:apiHeaders(true),body:JSON.stringify(body)});
   const [text, setText] = useState("");
   const [note, setNote] = useState("");
   const [result, setResult] = useState<any>();
@@ -3559,17 +3563,20 @@ function MessageHelperCard({ online }: any) {
   const run = async () => {
     if (text.trim().length < 2) return Alert.alert("Mesaj", "Alıcının mesajını kopyalayıp buraya yapıştırın (kutuya uzun basın → Yapıştır).");
     setBusy(true);
-    try { setResult(await apiJson("/api/messages/assist", { method: "POST", headers: apiHeaders(true), body: JSON.stringify({ text, sellerNoteTr: note }) })); }
+    try { setResult(await apiJson("/api/messages/assist", { method: "POST", headers: apiHeaders(true), body: JSON.stringify({ text, sellerNoteTr: note,productName }) }));setNoticeRevision(value=>value+1); }
     catch (err) { Alert.alert("Hazırlanamadı", errorText(err)); }
     finally { setBusy(false); }
   };
   return <View style={styles.analysisCard}>
     <View style={styles.shopierProductTop}><Ionicons name="chatbubbles-outline" size={22} color="#315B4C" /><Text style={[styles.cardTitle, { flex: 1 }]}>Alıcı mesajı yardımcısı</Text></View>
     <Text style={styles.evidence}>Etsy'de gelen İngilizce mesajı kopyalayıp buraya yapıştırın. Türkçesini, alıcının ne istediğini ve gönderebileceğiniz İngilizce cevabı hazırlarım. Etsy mesajları uygulamalara kapalı olduğu için cevabı siz kopyalayıp Etsy'ye yapıştırırsınız.</Text>
-    <Field label="Alıcının mesajı" value={text} onChangeText={setText} multiline placeholder="Hi! Is this available in size L?" />
-    <Field label="Ne cevap vermek istersiniz? (Türkçe, isteğe bağlı)" value={note} onChangeText={setNote} multiline placeholder="ör. L beden yok, M var; göğüs 54 cm" />
+    <Field label="İlgili ürün (isteğe bağlı)" value={productName} onChangeText={(value:string)=>{setProductName(value);setResult(undefined);}} />
+    <Field label="Alıcının mesajı" value={text} onChangeText={(value:string)=>{setText(value);setResult(undefined);}} multiline placeholder="Hi! Is this available in size L?" />
+    <Field label="Ne cevap vermek istersiniz? (Türkçe, isteğe bağlı)" value={note} onChangeText={(value:string)=>{setNote(value);setResult(undefined);}} multiline placeholder="ör. L beden yok, M var; göğüs 54 cm" />
     <Pressable style={[styles.primary, { marginTop: 10, marginBottom: 0 }, (busy || !online) && styles.primaryDisabled]} disabled={busy || !online} onPress={run}>{busy ? <ActivityIndicator color="white" /> : <Ionicons name="language" size={18} color="white" />}<Text style={styles.primaryText}>{busy ? "Hazırlanıyor…" : "Türkçesini ve cevabı hazırla"}</Text></Pressable>
     {!!result && <MessageResult result={result} />}
+    {!!result?.notification&&<Text style={styles.formHint}>{result.notification.queued?"Size özel bildirim kuyruğuna alındı; kanal sonucunu aşağıdan kontrol edin.":result.notification.reasonTr}</Text>}
+    <OwnerNotificationsPanel online={online} request={notifyRequest} revision={noticeRevision}/>
     <Pressable style={[styles.secondaryButton, { alignSelf: "flex-start", marginTop: 12 }]} onPress={() => openUrl("https://www.etsy.com/messages", "Etsy mesajları")}><Text style={styles.secondaryButtonText}>Etsy mesajlarını aç</Text></Pressable>
   </View>;
 }

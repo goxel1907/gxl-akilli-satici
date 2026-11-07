@@ -1,3 +1,4 @@
+import { emptyOwnerSettings, normalizeOwnerSettings } from "../worker/src/owner-alert-store.js";
 import { handleRequest } from "../worker/src/index.js";
 
 export const SANDBOX_TOKEN = "gxl-browser-sandbox-not-a-real-secret";
@@ -22,6 +23,11 @@ export function createSandbox(store: SandboxStore, origin: string) {
     CRM_STORE: { idFromName:(name:string)=>name,get:()=>({fetch:async(request:Request)=>{
       const path=new URL(request.url).pathname;
       const snapshot={leads:[],approvals:[],messages:[],metrics:{activeLeads:0,pendingApprovals:0,conversations:0}};
+      if(path==="/internal/owner/settings"){
+        if(request.method==="GET")return reply(JSON.parse(await store.get("web-test:owner-settings")||"null")||emptyOwnerSettings());
+        if(request.method==="POST"){try{const value=normalizeOwnerSettings(await request.json() as any);await store.put("web-test:owner-settings",JSON.stringify(value));return reply(value);}catch(error){return reply({error:(error as Error).message},400);}}
+      }
+      if(request.method==="GET"&&["/internal/owner/alerts","/internal/owner/pending"].includes(path))return reply({alerts:[]});
       if(request.method!=="GET")return reply({error:"Web testinde müşteri veya mesaj kaydı değiştirilmez.",code:"SANDBOX_WRITE_BLOCKED"},409);
       return reply(path==="/snapshot"?snapshot:path==="/api/dashboard"?{...snapshot,metrics:{...snapshot.metrics,catalogProducts:0},products:[]}:path==="/api/leads"?{leads:[]}:path==="/api/approvals"?{approvals:[]}:{});
     }}) }

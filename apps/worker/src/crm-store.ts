@@ -1,3 +1,4 @@
+import { initOwnerAlerts, ownerStoreRoute } from "./owner-alert-store.js";
 import { products } from "../../api/src/data.js";
 import { canStartConversation, requestsOptOut } from "../../api/src/policy.js";
 import { scoreProspect, type ProspectSignal } from "../../api/src/prospecting.js";
@@ -37,6 +38,7 @@ export class CrmStore {
   private sql: CrmSql;
   constructor(private ctx: CrmState) {
     this.sql = ctx.storage.sql;
+    initOwnerAlerts(this.sql);
     this.sql.exec("CREATE TABLE IF NOT EXISTS crm_leads (id TEXT PRIMARY KEY, channel TEXT NOT NULL, handle TEXT NOT NULL, data TEXT NOT NULL, UNIQUE(channel, handle))");
     this.sql.exec("CREATE TABLE IF NOT EXISTS crm_approvals (id TEXT PRIMARY KEY, data TEXT NOT NULL)");
     this.sql.exec("CREATE TABLE IF NOT EXISTS crm_messages (id TEXT PRIMARY KEY, lead_id TEXT NOT NULL, created_at TEXT NOT NULL, text TEXT NOT NULL, data TEXT NOT NULL, UNIQUE(lead_id, created_at, text))");
@@ -73,6 +75,7 @@ export class CrmStore {
   }
   private route(method: string, path: string, input: Record<string, unknown>): Response {
     const json = (status: number, value: unknown) => Response.json(value, { status });
+    if(path.startsWith("/internal/owner/"))return ownerStoreRoute(this.sql,method,path,input);
     if (method === "GET" && (path === "/snapshot" || path === "/api/dashboard")) {
       const snapshot = this.snapshot();
       return json(200, path === "/snapshot" ? snapshot : { ...snapshot, metrics: { ...snapshot.metrics, catalogProducts: products.length }, products });
