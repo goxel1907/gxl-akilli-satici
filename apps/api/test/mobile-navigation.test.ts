@@ -264,6 +264,8 @@ test("real screen buttons drive Trend → Studio → Digital → draft → verif
     await unmount(renderer);
     renderer = await mount(screens.EtsyScreen, { online: true, channels: { etsy: { shopReady: true, shopId: 777 } } });
     await tap(renderer, /^Stüdyo$/); await tap(renderer, /^Son çalışmayı aç$/);
+    assert.equal(visible(renderer.root.findByProps({testID:"saved-production-details"})),true);
+    await tap(renderer,/^Bu çalışmayı Stüdyo’da sürdür$/);
     assert.equal(visible(renderer.root.findByProps({ testID: "listing-offer-production" })), true);
     await tap(renderer, /^Dosyalarım hazır, yüklemeye geç$/);
     assert.equal(field(renderer, /^Ürün adı$/).props.value, plan.brief.name);
