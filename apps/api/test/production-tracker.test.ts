@@ -3,7 +3,7 @@ import test from "node:test";
 import {buildPrintableBrief,buildPrintableListing} from "../../worker/src/printable-studio.js";
 import {guardPrintablePlan} from "../../worker/src/output-guard.js";
 import {generationKey,PRINTABLE_WORKSPACE_KEY,type PrintableWorkspace} from "../../mobile/workflow-state.js";
-import {rememberProduction,changeProduction,syncProductionProduct,readProductionRecords,parseProductionReceipt,productionTrackingPrompt,productionContinuation,productionId,PRODUCTION_TRACKER_KEY} from "../../mobile/production-tracker.js";
+import {rememberProduction,changeProduction,syncProductionProduct,readProductionRecords,parseProductionReceipt,productionTrackingPrompt,productionContinuation,productionId,PRODUCTION_TRACKER_KEY,savedConversationUrl,setProductionConversation} from "../../mobile/production-tracker.js";
 import {registerProductHandoff} from "../../worker/src/product-handoff.js";
 import {screens,mount,tap,unmount,ui,buttons,text,visible,waitFor,act} from "./fixtures/mobile-ui.js";
 
@@ -79,4 +79,35 @@ test("share progress is already durable when the operating-system handoff starts
   ui.storage.clear();const push=ui.shares.push;let observed=false;
   ui.shares.push=(...items:unknown[])=>{const rows=readProductionRecords(ui.storage.get(PRODUCTION_TRACKER_KEY)||null);assert.equal(rows[0]?.stage,"share_opened");assert.ok(ui.storage.has(PRINTABLE_WORKSPACE_KEY));observed=true;return push.apply(ui.shares,items);};
   try{await screens.shareProductionPackage(workspace());assert.equal(observed,true);}finally{ui.shares.push=push;ui.storage.clear();}
+});
+
+test("last-work opens a distinct visible details screen with the exact existing listing",async context=>{
+  ui.storage.clear();const work=workspace();const rows=rememberProduction([],work);ui.storage.set(PRODUCTION_TRACKER_KEY,stored(rows));let searches=0;
+  context.mock.method(globalThis,"fetch",async(input:any)=>{if(/patterns\/seed|printables\/suggestions/.test(String(input)))searches++;return Response.json({});});
+  const renderer=await mount(screens.StudioPanel,{online:false,active:true,onUpload:()=>{}});
+  try{
+    await waitFor(()=>buttons(renderer,/^Son çalışmayı aç$/).length===1);await tap(renderer,/^Son çalışmayı aç$/);
+    const panel=renderer.root.findByProps({testID:"saved-production-details"});assert.equal(visible(panel),true);assert.ok(text(panel).includes(work.plan.brief.name));assert.ok(text(panel).includes(work.plan.listing.title));assert.equal(searches,0);
+    await tap(renderer,/^Çalışmanın açıklama ve etiketlerini göster$/);assert.ok(text(panel).includes(work.plan.listing.description));assert.ok(text(panel).includes(work.plan.listing.tags.join(", ")));
+    await tap(renderer,/^Kayıtlı çalışma ekranını kapat$/);assert.equal(buttons(renderer,/^Kayıtlı çalışma ekranını kapat$/).length,0);
+    await tap(renderer,/^Son çalışmayı aç$/);assert.equal(buttons(renderer,/^Kayıtlı çalışma ekranını kapat$/).length,1);
+    await tap(renderer,/^Bu çalışmayı Stüdyo’da sürdür$/);assert.equal(buttons(renderer,/^Kayıtlı çalışma ekranını kapat$/).length,0);
+    assert.deepEqual(readProductionRecords(ui.storage.get(PRODUCTION_TRACKER_KEY)!)[0].workspace.plan.listing,work.plan.listing);
+  }finally{await unmount(renderer);ui.storage.clear();}
+});
+test("private conversation links are bound to one product and reject public-share, login and foreign destinations",()=>{
+  const first=workspace(),second=workspace("Other Planner","claude"),url="https://chatgpt.com/c/11111111-1111-4111-8111-111111111111";let rows=rememberProduction(rememberProduction([],first),second);rows=setProductionConversation(rows,productionId(first),url);
+  assert.equal(readProductionRecords(stored(rows)).find(row=>row.id===productionId(first))?.conversationUrl,url);assert.equal(rows.find(row=>row.id===productionId(second))?.conversationUrl,undefined);
+  for(const value of ["https://evil.example/c/11111111","https://chatgpt.com/share/11111111","https://chatgpt.com/auth/login","javascript:alert(1)","https://chatgpt.com/c/11111111?token=secret","https://chatgpt.com@evil.example/c/11111111"]){assert.equal(savedConversationUrl(value,"chatgpt"),undefined);assert.throws(()=>setProductionConversation(rows,productionId(first),value));}
+  assert.equal(savedConversationUrl(url,"claude"),undefined);
+  const corrupt=rows.map(row=>row.id===productionId(first)?{...row,conversationUrl:"https://evil.example"}:row);assert.equal(readProductionRecords(stored(corrupt)).length,2);assert.equal(readProductionRecords(stored(corrupt)).find(row=>row.id===productionId(first))?.conversationUrl,undefined);
+});
+test("saved chat action opens the exact stored conversation after restart without sharing or regenerating",async context=>{
+  ui.storage.clear();ui.links.length=0;ui.shares.length=0;const work=workspace(),url="https://chatgpt.com/c/11111111-1111-4111-8111-111111111111";ui.storage.set(PRODUCTION_TRACKER_KEY,stored(rememberProduction([],work)));context.mock.method(globalThis,"fetch",async()=>Response.json({}));
+  let renderer=await mount(screens.StudioPanel,{online:false,active:true,onUpload:()=>{}});
+  try{
+    await waitFor(()=>buttons(renderer,/^Son çalışmayı aç$/).length===1);await tap(renderer,/^Son çalışmayı aç$/);await tap(renderer,/^Bu ürüne sohbet bağlantısı ekle$/);
+    const field=renderer.root.findAllByType("TextInput" as any).find(node=>visible(node)&&node.props.accessibilityLabel==="Bu ürünün özel sohbet bağlantısı")!;await act(async()=>{field.props.onChangeText(url);});await tap(renderer,/^Sohbet bağlantısını kaydet$/);
+    await unmount(renderer);renderer=await mount(screens.StudioPanel,{online:false,active:true,onUpload:()=>{}});await waitFor(()=>buttons(renderer,/^Son çalışmayı aç$/).length===1);await tap(renderer,/^Son çalışmayı aç$/);await tap(renderer,/^Kaydedilmiş ChatGPT sohbetini aç$/);assert.deepEqual(ui.links,[url]);assert.equal(ui.shares.length,0);assert.deepEqual(readProductionRecords(ui.storage.get(PRODUCTION_TRACKER_KEY)!)[0].workspace.plan.listing,work.plan.listing);
+  }finally{await unmount(renderer);ui.storage.clear();}
 });

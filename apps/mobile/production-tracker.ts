@@ -17,7 +17,7 @@ export const EXTERNAL_STAGES: ProductionStage[] = ["generating","product_files",
 export interface ProductionRecord {
   id: string; workspace: PrintableWorkspace; stage: ProductionStage; updatedAt: string;
   source: "app" | "seller" | "assistant"; productId?: string; listingId?: number;
-  etsyState?: string; checkedAt?: string;
+  etsyState?: string; checkedAt?: string; conversationUrl?:string;
   history: Array<{ stage: ProductionStage; at: string; source: "app" | "seller" | "assistant" }>;
 }
 export function productionId(workspace: PrintableWorkspace): string {
@@ -27,7 +27,7 @@ export function readProductionRecords(raw: string | null): ProductionRecord[] {
   if (!raw || raw.length > 20_000_000) return [];
   try {
     const value=JSON.parse(raw); if(value.version!==1 || !Array.isArray(value.records) || value.records.length>50)return [];
-    return value.records.filter((row:any)=>row && parsePrintableWorkspace(JSON.stringify(row.workspace)) && row.id===productionId(row.workspace) && Object.hasOwn(PRODUCTION_STAGES,row.stage) && ["app","seller","assistant"].includes(row.source) && Number.isFinite(Date.parse(row.updatedAt)) && Array.isArray(row.history) && row.history.every((item:any)=>item && Object.hasOwn(PRODUCTION_STAGES,item.stage) && Number.isFinite(Date.parse(item.at)) && ["app","seller","assistant"].includes(item.source)));
+    return value.records.filter((row:any)=>row && parsePrintableWorkspace(JSON.stringify(row.workspace)) && row.id===productionId(row.workspace) && Object.hasOwn(PRODUCTION_STAGES,row.stage) && ["app","seller","assistant"].includes(row.source) && Number.isFinite(Date.parse(row.updatedAt)) && Array.isArray(row.history) && row.history.every((item:any)=>item && Object.hasOwn(PRODUCTION_STAGES,item.stage) && Number.isFinite(Date.parse(item.at)) && ["app","seller","assistant"].includes(item.source))).map((row:ProductionRecord)=>({...row,conversationUrl:typeof row.conversationUrl==="string"?savedConversationUrl(row.conversationUrl,row.workspace.input.assistant):undefined}));
   } catch { return []; }
 }
 export function rememberProduction(rows: ProductionRecord[], workspace: PrintableWorkspace, now=new Date().toISOString()): ProductionRecord[] {
@@ -76,4 +76,19 @@ export function productionTrackingPrompt(record:ProductionRecord):string {
 }
 export function productionContinuation(record:ProductionRecord):string {
   return `Bu yeni ürün isteği değil. Aynı sohbette ${JSON.stringify(record.workspace.plan.brief.name)} ürününe kaldığımız yerden devam et. Goxi’de son bildirilen aşama: ${PRODUCTION_STAGES[record.stage]}. Önce bu sohbette gerçekten tamamlanan işleri ve eksikleri Türkçe belirt. Ürün adını, başlığı, açıklamayı, 13 etiketi, fiyatı ve kapsamı değiştirme; yeni isim üretme. Sonraki eksik işi tamamla. Önceki üretim bağlamı bu sohbette yoksa tahmin etme; benden Goxi’deki mevcut ürün paketini iste.\n${productionTrackingPrompt(record)}`;
+}
+
+export function savedConversationUrl(raw:string,assistant:string):string|undefined{
+  try{
+    const url=new URL(raw.trim());
+    if(url.protocol!=="https:"||url.username||url.password||url.port||url.search||url.hash)return;
+    const valid=assistant==="claude"?url.hostname==="claude.ai"&&/^\/chat\/[A-Za-z0-9_-]{8,100}\/?$/.test(url.pathname):assistant==="chatgpt"&&url.hostname==="chatgpt.com"&&/^\/c\/[A-Za-z0-9_-]{8,100}\/?$/.test(url.pathname);
+    return valid?url.href:undefined;
+  }catch{return;}
+}
+export function setProductionConversation(rows:ProductionRecord[],id:string,raw:string):ProductionRecord[]{
+  const row=rows.find(row=>row.id===id);if(!row)throw new Error("Çalışma kaydı bulunamadı.");
+  const conversationUrl=raw.trim()?savedConversationUrl(raw,row.workspace.input.assistant):undefined;
+  if(raw.trim()&&!conversationUrl)throw new Error("Bu ürüne ait özel sohbet bağlantısını kullanın: ChatGPT için chatgpt.com/c/…, Claude için claude.ai/chat/… . Paylaşım bağlantısı veya hesap giriş bağlantısı kullanmayın.");
+  return rows.map(row=>row.id===id?{...row,conversationUrl}:row);
 }

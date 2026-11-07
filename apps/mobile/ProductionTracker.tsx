@@ -1,10 +1,10 @@
 import React,{useEffect,useState} from "react";
-import {Alert,AppState,Modal,Pressable,ScrollView,Share,StyleSheet,Text,TextInput,View} from "react-native";
+import {Alert,AppState,Linking,Modal,Pressable,ScrollView,Share,StyleSheet,Text,TextInput,View} from "react-native";
 import {SafeAreaView} from "react-native-safe-area-context";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import ListingMascot from "./ListingMascot";
 import {PRINTABLE_WORKSPACE_KEY,parsePrintableWorkspace,type PrintableWorkspace} from "./workflow-state";
-import {PRODUCTION_TRACKER_KEY,PRODUCTION_STAGES,EXTERNAL_STAGES,productionId,readProductionRecords,rememberProduction,changeProduction,syncProductionProduct,parseProductionReceipt,productionTrackingPrompt,productionContinuation,type ProductionRecord,type ProductionStage} from "./production-tracker";
+import {PRODUCTION_TRACKER_KEY,PRODUCTION_STAGES,EXTERNAL_STAGES,productionId,readProductionRecords,rememberProduction,changeProduction,syncProductionProduct,parseProductionReceipt,productionTrackingPrompt,productionContinuation,savedConversationUrl,setProductionConversation,type ProductionRecord,type ProductionStage} from "./production-tracker";
 
 const ACTIVE_KEY="gxl.productionActive.v1";
 const listeners=new Set<(rows:ProductionRecord[])=>void>();
@@ -51,15 +51,38 @@ export function useProductionRecords(){
 }
 const sourceLabel=(row:ProductionRecord)=>row.source==="app"?"Uygulama kaydı":row.source==="assistant"?"Asistan bildirimi; dosyalar doğrulanmadı":"Senin bildirimin";
 export function ProductionWorkList({onResume,compact=false}:{onResume:(row:ProductionRecord)=>void;compact?:boolean}){
-  const {rows}=useProductionRecords(),[all,setAll]=useState(false);
-  const ordered=[...rows].sort((a,b)=>Number(a.stage==="published")-Number(b.stage==="published")||b.updatedAt.localeCompare(a.updatedAt)),latest=ordered[0];
+  const {rows}=useProductionRecords(),[all,setAll]=useState(false),[opened,setOpened]=useState<string>();
+  const ordered=[...rows].sort((a,b)=>Number(a.stage==="published")-Number(b.stage==="published")||b.updatedAt.localeCompare(a.updatedAt)),latest=ordered[0],selected=rows.find(row=>row.id===opened);
+  const close=()=>{setAll(false);setOpened(undefined);};
+  const openWork=(row:ProductionRecord)=>{setAll(false);setOpened(row.id);void saveProductionWorkspace(row.workspace).catch(()=>Alert.alert("Çalışma açıldı","Son açılan çalışma telefona kaydedilemedi. Mevcut kayıt silinmedi; depolamayı kontrol edin."));};
   if(!latest)return null;
   return <View style={s.card} testID="production-work-list">
     <Text style={s.heading}>{compact?"Goxi ilanını takip ediyor":"Son kaydedilen çalışma"}</Text><Text style={s.name}>{latest.workspace.plan.brief.name}</Text><Text style={s.status}>{PRODUCTION_STAGES[latest.stage]}</Text>
     <Text style={s.small}>{sourceLabel(latest)} · {new Date(latest.updatedAt).toLocaleString("tr-TR")}</Text>
-    <Pressable accessibilityRole="button" style={s.primary} onPress={()=>onResume(latest)}><Text style={s.white}>{compact?"İlan çalışmasına dön":"Son çalışmayı aç"}</Text></Pressable>
+    <Pressable accessibilityRole="button" style={s.primary} onPress={()=>openWork(latest)}><Text style={s.white}>{compact?"İlan çalışmasına dön":"Son çalışmayı aç"}</Text></Pressable>
     {rows.length>1&&<Pressable accessibilityRole="button" style={s.secondary} onPress={()=>setAll(true)}><Text style={s.link}>Tüm çalışmalar ({rows.length})</Text></Pressable>}
-    <Modal visible={all} animationType="slide" onRequestClose={()=>setAll(false)}><SafeAreaView style={s.safe}><ScrollView contentContainerStyle={s.content}><Text style={s.heading}>İlan çalışmalarım</Text><Pressable accessibilityRole="button" onPress={()=>setAll(false)}><Text style={s.link}>Çalışma listesini kapat</Text></Pressable>{ordered.map(row=><View style={s.card} key={row.id}><Text style={s.name}>{row.workspace.plan.brief.name}</Text><Text style={s.status}>{PRODUCTION_STAGES[row.stage]}</Text><Text style={s.small}>{sourceLabel(row)}</Text><Pressable accessibilityRole="button" accessibilityLabel={`${row.workspace.plan.brief.name} çalışmasına devam et`} style={s.primary} onPress={()=>{setAll(false);onResume(row);}}><Text style={s.white}>Bu çalışmaya devam et</Text></Pressable></View>)}</ScrollView></SafeAreaView></Modal>
+    <Modal visible={all||Boolean(selected)} animationType="slide" onRequestClose={close}><SafeAreaView style={s.safe}><ScrollView contentContainerStyle={s.content}>
+      {selected?<SavedProductionDetails key={selected.id} record={selected} onClose={close} onResume={()=>{close();onResume(selected);}}/>:<><Text style={s.heading}>İlan çalışmalarım</Text><Pressable accessibilityRole="button" onPress={close}><Text style={s.link}>Çalışma listesini kapat</Text></Pressable>{ordered.map(row=><View style={s.card} key={row.id}><Text style={s.name}>{row.workspace.plan.brief.name}</Text><Text style={s.status}>{PRODUCTION_STAGES[row.stage]}</Text><Text style={s.small}>{sourceLabel(row)}</Text><Pressable accessibilityRole="button" accessibilityLabel={`${row.workspace.plan.brief.name} çalışmasına devam et`} style={s.primary} onPress={()=>openWork(row)}><Text style={s.white}>Bu çalışmaya devam et</Text></Pressable></View>)}</>}
+    </ScrollView></SafeAreaView></Modal>
+  </View>;
+}
+function SavedProductionDetails({record,onClose,onResume}:{record:ProductionRecord;onClose:()=>void;onResume:()=>void}){
+  const [linkEditing,setLinkEditing]=useState(false),[link,setLink]=useState(record.conversationUrl||""),[details,setDetails]=useState(false),[busy,setBusy]=useState(false);
+  const {workspace}=record,tool=workspace.input.assistant==="claude"?"Claude":"ChatGPT",toolAcc=workspace.input.assistant==="claude"?"Claude’u":"ChatGPT’yi",conversation=savedConversationUrl(record.conversationUrl||"",workspace.input.assistant);
+  const run=async(action:()=>Promise<unknown>)=>{setBusy(true);try{await action();}catch(error){Alert.alert("Çalışma işlemi tamamlanamadı",error instanceof Error?error.message:"Yeniden deneyin.");}finally{setBusy(false);}};
+  return <View testID="saved-production-details">
+    <Text accessibilityRole="header" style={s.heading}>Kayıtlı çalışma açıldı</Text>
+    <Text style={s.name}>{workspace.plan.brief.name}</Text><Text style={s.status}>{PRODUCTION_STAGES[record.stage]}</Text><Text style={s.small}>{sourceLabel(record)} · {new Date(record.updatedAt).toLocaleString("tr-TR")}</Text>
+    <Text style={s.body}>Bu ürünün kayıtlı paketi açık. Başlık, açıklama, etiketler, fiyat ve kapsam aşağıda korunuyor.</Text>
+    <Pressable accessibilityRole="button" style={s.primary} disabled={busy} onPress={()=>run(()=>Linking.openURL(conversation||(workspace.input.assistant==="claude"?"https://claude.ai/":"https://chatgpt.com/")))}><Text style={s.white}>{conversation?`Kaydedilmiş ${tool} sohbetini aç`:`${toolAcc} aç ve mevcut sohbetini seç`}</Text></Pressable>
+    <Text style={s.small}>{conversation?"Bu bağlantı senin bu ürüne bağladığın sohbeti açar. Uygulama sohbeti otomatik okumaz.":`Bu ürünün özel sohbet bağlantısı henüz kayıtlı değil. ${tool} açıldığında mevcut ürün sohbetini geçmişinden seç. Aynı sohbete doğrudan dönmek için bağlantısını bir kez kaydedebilirsin.`}</Text>
+    <Pressable accessibilityRole="button" style={s.secondary} disabled={busy} onPress={()=>setLinkEditing(!linkEditing)}><Text style={s.link}>{linkEditing?"Sohbet bağlantısı alanını kapat":conversation?"Kayıtlı sohbet bağlantısını değiştir":"Bu ürüne sohbet bağlantısı ekle"}</Text></Pressable>
+    {linkEditing&&<><Text style={s.label}>Bu ürünün özel {tool} sohbet bağlantısı</Text><TextInput accessibilityLabel="Bu ürünün özel sohbet bağlantısı" style={s.input} value={link} onChangeText={setLink} autoCapitalize="none" autoCorrect={false}/><Pressable accessibilityRole="button" style={s.secondary} disabled={busy} onPress={()=>run(async()=>{await mutateProduction(rows=>setProductionConversation(rows,record.id,link));setLinkEditing(false);})}><Text style={s.link}>Sohbet bağlantısını kaydet</Text></Pressable></>}
+    <Pressable accessibilityRole="button" style={s.secondary} disabled={busy} onPress={()=>run(async()=>{await saveProductionWorkspace(workspace);await Share.share({message:productionContinuation(record),title:`${workspace.plan.brief.name} - aynı sohbete devam`});})}><Text style={s.link}>Aynı sohbete yapıştırılacak devam metnini aç</Text></Pressable>
+    <Text style={s.small}>Bu düğme devam metnini paylaşım ekranında açar. Metni mevcut sohbete yapıştır; paylaşım yeni sohbet açabilir.</Text>
+    <View style={s.card}><Text style={s.heading}>Seçili ilan bilgileri</Text><Text style={s.name}>{workspace.plan.listing.title}</Text><Text style={s.status}>{workspace.plan.brief.priceUsd?.toFixed(2)} USD · {workspace.plan.listing.tags.length} etiket · {workspace.input.pageCount} içerik</Text><Pressable accessibilityRole="button" style={s.secondary} onPress={()=>setDetails(!details)}><Text style={s.link}>{details?"Çalışmanın ilan ayrıntılarını gizle":"Çalışmanın açıklama ve etiketlerini göster"}</Text></Pressable>{details&&<><Text style={s.label}>Açıklama</Text><Text style={s.body}>{workspace.plan.listing.description}</Text><Text style={s.label}>13 etiket</Text><Text style={s.body}>{workspace.plan.listing.tags.join(", ")}</Text></>}</View>
+    <Pressable accessibilityRole="button" style={s.secondary} disabled={busy} onPress={onResume}><Text style={s.link}>Bu çalışmayı Stüdyo’da sürdür</Text></Pressable>
+    <Pressable accessibilityRole="button" style={s.secondary} onPress={onClose}><Text style={s.link}>Kayıtlı çalışma ekranını kapat</Text></Pressable>
   </View>;
 }
 export default function ProductionJourney({workspace,onUpload,onOpenProduct}:{workspace:PrintableWorkspace;onUpload:()=>void;onOpenProduct:()=>void}){
