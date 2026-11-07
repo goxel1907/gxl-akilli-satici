@@ -15,7 +15,7 @@ class MetaConnector implements ChannelConnector {
       return { accepted: false, reason: "META_ACCESS_TOKEN yapılandırılmadı; mesaj demo kuyruğunda tutuldu." };
     }
     // Üretimde kanal türüne göre Graph API endpoint'i çağrılır. Token istemciye asla gönderilmez.
-    return { accepted: true, externalId: `meta-demo-${message.id}` };
+    return { accepted: false, reason: "Meta müşteri mesajı gönderim adaptörü bağlı değil; mesaj gönderilmedi." };
   }
 }
 

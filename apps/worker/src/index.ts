@@ -1,3 +1,4 @@
+import { ownerStore, ownerNotificationStatus, enqueueOwnerDraft, processOwnerNotifications, type OwnerNotificationEnv } from "./owner-notifications.js";
 import { readProductIdeas } from "./product-ideas.js";
 import { canRankTrend } from "../../mobile/trend-priority.js";
 import { readEtsyListingStatus } from "./etsy-listing-status.js";
@@ -85,7 +86,7 @@ import {
   type DigitalStore
 } from "./digital-delivery.js";
 
-interface Env extends CrmEnv, AiRuntimeEnv, ShopierRuntimeEnv, EtsyRuntimeEnv, PinterestRuntimeEnv {
+interface Env extends CrmEnv, OwnerNotificationEnv, AiRuntimeEnv, ShopierRuntimeEnv, EtsyRuntimeEnv, PinterestRuntimeEnv {
   APP_ACCESS_TOKEN?: string;
   PRODUCT_MEDIA?: {
     get(key: string): Promise<{ body: ReadableStream; httpEtag?: string } | null>;
@@ -393,7 +394,7 @@ function authorized(request: Request, env: Env): boolean {
   return request.headers.get("authorization") === `Bearer ${env.APP_ACCESS_TOKEN}`;
 }
 
-export async function handleRequest(request: Request, env: Env): Promise<Response> {
+export async function handleRequest(request: Request, env: Env, context?: {waitUntil(task:Promise<unknown>):void}): Promise<Response> {
   try {
     if (request.method === "OPTIONS") return json(204, {});
     const url = new URL(request.url);
@@ -679,8 +680,30 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
     if (request.method === "POST" && url.pathname === "/api/etsy/orders/tracking") {
       return json(200, { order: await addEtsyTracking(env, normalizeTrackingInput(await readBody(request))) });
     }
+    if(url.pathname.startsWith("/api/owner-notifications")){
+      if(request.method==="GET"&&url.pathname==="/api/owner-notifications")return json(200,await ownerNotificationStatus(env));
+      if(request.method==="POST"){
+        const input=await readBody(request),blocked=requireConfirmedWrite(env,input,"Size özel bildirim ayarı veya gönderimi");if(blocked)return blocked;
+        if(url.pathname==="/api/owner-notifications/settings"){try{await ownerStore(env,"settings",input);return json(200,await ownerNotificationStatus(env));}catch(error){return json((error as any).status||503,{error:(error as Error).message});}}
+        if(url.pathname==="/api/owner-notifications/process"){
+          if(typeof input.id!=="string"||!/^[a-f0-9-]{36}$/.test(input.id))return json(400,{error:"Bir bildirim seçin."});
+          await processOwnerNotifications(env,{id:input.id,retry:true});return json(200,await ownerNotificationStatus(env));
+        }
+        if(url.pathname==="/api/owner-notifications/test"){
+          const result=await enqueueOwnerDraft(env,{text:"Where can I download my files?",productName:"GXL bağlantı testi"},{translationTr:"Dosyalarımı nereden indirebilirim?",intentTr:"İndirme yardımı",replyEn:"You can download your files from Purchases and reviews on Etsy.com. Thank you!",replyTr:"Dosyalarınızı Etsy.com üzerindeki Purchases and reviews bölümünden indirebilirsiniz. Teşekkür ederiz!",warningsTr:[],aiUsed:true},`Size özel bağlantı testi · ${crypto.randomUUID()}`);
+          if(result.id)await processOwnerNotifications(env,{id:result.id,retry:false});return json(200,{...await ownerNotificationStatus(env),test:result});
+        }
+      }
+      return json(404,{error:"Bildirim işlemi bulunamadı."});
+    }
     if (request.method === "POST" && url.pathname === "/api/messages/assist") {
-      return json(200, await assistBuyerMessage(normalizeMessageInput(await readBody(request)), env));
+      const input=normalizeMessageInput(await readBody(request)),result=await assistBuyerMessage(input,env);
+      let notification:any;
+      if(env.CRM_STORE&&result.aiUsed){
+        try{notification=await enqueueOwnerDraft(env,input,result);if(notification.id&&context)context.waitUntil(processOwnerNotifications(env,{id:notification.id}).catch(()=>undefined));}
+        catch{notification={queued:false,reasonTr:"Cevap hazır, ancak size özel bildirim kaydedilemedi. Bildirim bölümünü kontrol edin."};}
+      }
+      return json(200,{...result,...(notification?{notification}:{} )});
     }
     if (request.method === "POST" && url.pathname === "/api/marketing/plan") {
       const input = normalizeMarketingInput(await readBody(request));
@@ -986,11 +1009,12 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
 
 // Cron: Etsy trend otopilotu ve zamanı gelmiş Pinterest pini aynı tetiklemede çalışır.
 export async function handleScheduled(env: Env) {
-  const [autopilot, pinterest] = await Promise.all([
+  const [autopilot, pinterest, ownerNotifications] = await Promise.all([
     runAutopilot(env, env.ETSY_OAUTH as unknown as TrendStore | undefined),
-    processPinQueue(env, env.ETSY_OAUTH as unknown as PinterestStore | undefined).catch((error) => ({ error: error instanceof Error ? error.message : "Pinterest kuyruğu çalışmadı." }))
+    processPinQueue(env, env.ETSY_OAUTH as unknown as PinterestStore | undefined).catch((error) => ({ error: error instanceof Error ? error.message : "Pinterest kuyruğu çalışmadı." })),
+    processOwnerNotifications(env).catch(()=>({error:"Size özel bildirim kuyruğu işlenemedi."}))
   ]);
-  return { autopilot, pinterest };
+  return { autopilot, pinterest, ownerNotifications };
 }
 
 export default {
