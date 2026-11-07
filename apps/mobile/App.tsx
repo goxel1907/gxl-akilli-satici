@@ -5,6 +5,8 @@ import { listingProgress, listingTasks, physicalListingProgress, etsyTransferCom
 import ListingMascot, { type ListingMascotProps } from "./ListingMascot";
 import LiveCheckPanel from "./LiveCheckPanel";
 import ListingOfferPicker from "./ListingOfferPicker";
+import ProductionJourney, { ProductionWorkList, useProductionRecords, saveProductionWorkspace, activeProduction, syncTrackedProduct, syncTrackedProducts, shareProductionPackage, restoreProductions } from "./ProductionTracker";
+import { type ProductionRecord } from "./production-tracker";
 import { appendLocalFile } from "./upload-file";
 import { isLiveReadPath } from "./live-check";
 import { sameProduct } from "./product-identity";
@@ -227,6 +229,11 @@ function App() {
   const [mode, setMode] = useState<AppMode>("simple");
   const [tab, setTab] = useState<Tab>("Başla");
   const [sellRoute, setSellRoute] = useState<SellRoute>("choose");
+  const {rows:productionRows,loaded:productionLoaded}=useProductionRecords();
+  const [productionResume,setProductionResume]=useState<any>();
+  const startupProduction=useRef(false);
+  const resumeProduction=(row:ProductionRecord)=>{setProductionResume({id:row.id,revision:Date.now()});if(mode==="simple"){setSellRoute("digital");setTab("Sat");}else setTab("Etsy");};
+  useEffect(()=>{if(!productionLoaded||startupProduction.current)return;startupProduction.current=true;void activeProduction(productionRows).then(row=>{if(row)resumeProduction(row);}).catch(()=>undefined);},[productionLoaded]);
   const scrollRef = useRef<ScrollView>(null);
   useEffect(() => {
     AsyncStorage.getItem(APP_MODE_KEY).then((value) => { if (value === "expert") { setMode("expert"); setTab("Etsy"); } }).catch(() => undefined);
@@ -243,6 +250,23 @@ function App() {
   const [data, setData] = useState<any>(demo);
   const [loading, setLoading] = useState(true);
   const [online, setOnline] = useState(false);
+  const productionRefresh=useRef(false);
+  useEffect(()=>{
+    if(!online||!productionLoaded)return;
+    const refresh=async()=>{
+      if(productionRefresh.current)return;productionRefresh.current=true;
+      try{
+        const current=await activeProduction(await restoreProductions());if(!current)return;
+        const result=await apiJson("/api/digital/products",{headers:apiHeaders()});
+        const product=(result.products || []).find((product:any)=>product.id===current.productId || product.handoff?.id && product.handoff.id===current.workspace.plan.handoff?.id);
+        if(!product)return;
+        await syncTrackedProduct(product);
+        if(product.etsy?.listingId){try{await syncTrackedProduct(product,await apiJson(`/api/digital/products/${product.id}/etsy-status`,{headers:apiHeaders()}));}catch{await syncTrackedProduct(product,undefined,true);}}
+      }catch{/* Offline or missing server evidence never completes a project. */}
+      finally{productionRefresh.current=false;}
+    };
+    void refresh();const listener=AppState.addEventListener("change",state=>{if(state==="active")void refresh();});return()=>listener.remove();
+  },[online,productionLoaded]);
   const [offlineReason, setOfflineReason] = useState<OfflineReason>("");
   const [reconnecting, setReconnecting] = useState(false);
   const retryTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -430,14 +454,15 @@ function App() {
       {loading ? <ActivityIndicator style={{ marginTop: 40 }} color="#C88B47" /> : (
         <ScrollView ref={scrollRef} contentContainerStyle={[styles.content, { paddingBottom: 110 + insets.bottom }]}>
           {!online && <OfflineNotice reason={offlineReason} busy={reconnecting} onRetry={reconnect} onResetKey={confirmResetToken} />}
+          {tab!=="Etsy"&&tab!=="Sat"&&<ProductionWorkList compact onResume={resumeProduction}/>}
           {tab === "Başla" && <HomeScreen online={online} channels={channels} setTab={setTab} openSell={openSell} />}
-          {mode === "simple" && <View style={tab === "Sat" ? undefined : styles.hidden}><SellScreen online={online} channels={channels} route={sellRoute} setRoute={setSellRoute} onStepChange={scrollTop} setTab={setTab} /></View>}
+          {mode === "simple" && <View style={tab === "Sat" ? undefined : styles.hidden}><SellScreen online={online} active={tab==="Sat"} productionResume={productionResume} channels={channels} route={sellRoute} setRoute={setSellRoute} onStepChange={scrollTop} setTab={setTab} /></View>}
           {tab === "Siparişler" && <EtsyOrdersPanel online={online} />}
           {tab === "Müşteri" && <><SalesPlanCard online={online} shopierProducts={shopierCenter?.products} etsyActiveListings={channels?.etsy?.activeListings} /><MessageHelperCard online={online} /></>}
           {tab === "Yardım" && <HelpScreen online={online} channels={channels} onExpert={() => changeMode("expert")} onSell={() => openSell("choose")} />}
           {tab === "Özet" && <Overview data={data} setTab={setTab} online={online} channels={channels} onSimple={() => changeMode("simple")} />}
           {tab === "Shopier" && <ShopierScreen center={shopierCenter} online={online} onRefresh={refresh} etsyReady={Boolean(channels?.etsy?.shopReady || channels?.etsy?.shopId)} />}
-          <View style={tab === "Etsy" ? undefined : styles.hidden}><EtsyScreen online={online} active={tab === "Etsy"} channels={channels} /></View>
+          <View style={tab === "Etsy" ? undefined : styles.hidden}><EtsyScreen online={online} active={tab === "Etsy"} channels={channels} productionResume={productionResume} /></View>
           {tab === "Ajan" && <AgentScreen center={opportunityCenter} online={online} onRefresh={refresh} shopierProducts={shopierCenter?.products} etsyActiveListings={channels?.etsy?.activeListings} />}
           {tab === "Onaylar" && <Approvals items={pending} decide={decide} />}
           {tab === "Müşteriler" && <Leads items={data.leads} />}
@@ -1172,9 +1197,10 @@ function errorText(error: unknown) {
 
 type EtsySection = "Trend" | "Stüdyo" | "Dijital" | "Pinterest" | "Kılavuz";
 
-function EtsyScreen({ online, channels, active = true, initialSection = "Trend" }: any) {
+function EtsyScreen({ online, channels, active = true, initialSection = "Trend", productionResume }: any) {
   const [section, setSection] = useState<EtsySection>(initialSection);
   const [studioSeed, setStudioSeed] = useState<any>();
+  useEffect(()=>{if(productionResume)setSection("Stüdyo");},[productionResume]);
   const [uploadPrefill, setUploadPrefill] = useState<any>();
   const etsy = channels?.etsy || {};
   const shopReady = Boolean(etsy.shopReady || etsy.shopId);
@@ -1191,7 +1217,7 @@ function EtsyScreen({ online, channels, active = true, initialSection = "Trend" 
     <View testID="etsy-section-trend" style={section === "Trend" ? undefined : styles.hidden}>
       <ListingMascot title="Yeni ilanını birlikte hazırlayalım" instruction="Ne satacağını biliyorsan Stüdyo’ya geç. Kararsızsan aşağıdaki Trend kartlarını incele; puan bir satış garantisi değildir." tasks={["Dijital ürün, kendi desenin veya elindeki fiziksel ürün için doğru yolu seç.", "Bir trend seçersen karttaki hazırlama düğmesi aynı konuyu Stüdyo’ya taşır."]} actionLabel="Ürünümü seçmek istiyorum" onAction={() => setSection("Stüdyo")} />
       <TrendPanel online={online} active={active && section === "Trend"} onUse={(seed: any) => { setStudioSeed(seed); setSection("Stüdyo"); }} /></View>
-    <View style={section === "Stüdyo" ? undefined : styles.hidden}><StudioPanel online={online} active={active && section === "Stüdyo"} etsyReady={shopReady} seed={studioSeed} onUpload={(prefill: any) => { setUploadPrefill(prefill); setSection("Dijital"); }} /></View>
+    <View style={section === "Stüdyo" ? undefined : styles.hidden}><StudioPanel online={online} active={active && section === "Stüdyo"} etsyReady={shopReady} seed={studioSeed} productionResume={productionResume} onOpenProduct={()=>setSection("Dijital")} onUpload={(prefill: any) => { setUploadPrefill(prefill); setSection("Dijital"); }} /></View>
     <View testID="etsy-section-digital" style={section === "Dijital" ? undefined : styles.hidden}><DigitalPanel online={online} active={active && section === "Dijital"} shopReady={shopReady} prefill={uploadPrefill} onPrefillUsed={() => setUploadPrefill(undefined)} onPrepare={() => setSection("Stüdyo")} /></View>
     {section === "Pinterest" && <PinterestPanel online={online} />}
     {section === "Kılavuz" && <><LiveDeviceCheck /><ShopReadinessCard online={online} onSell={() => setSection("Stüdyo")} /><ShopSettingsCard online={online} shopReady={shopReady} /><ShopListingsScorecard online={online} /><EtsyGuide shopReady={shopReady} authorized={authorized} /></>}
@@ -1697,7 +1723,7 @@ function CompetitionCard({ competition }: any) {
   </View>;
 }
 
-function PrintableStudio({ online, seed, seeding, resumeWorkspace, onPrepared, onReseed, onPickKind, onPickQuery, onUpload, guided = false }: any) {
+function PrintableStudio({ online, seed, seeding, resumeWorkspace, onPrepared, onReseed, onPickKind, onPickQuery, onUpload, onOpenProduct, guided = false }: any) {
   const [flow,setFlow]=useState<"offers"|"production"|"manual">("offers");
   const [kindPicker,setKindPicker]=useState(false);
   const [offers,setOffers]=useState<any[]>([]);
@@ -1792,7 +1818,7 @@ function PrintableStudio({ online, seed, seeding, resumeWorkspace, onPrepared, o
       setPlan(prepared);
       if (result.quality?.ok) {
         const workspace: PrintableWorkspace = { version: 1, savedAt: new Date().toISOString(), input: savedInput, plan: prepared };
-        try { await AsyncStorage.setItem(PRINTABLE_WORKSPACE_KEY, JSON.stringify(workspace)); if (requestId === generationRequest.current) onPrepared?.(workspace); }
+        try { await saveProductionWorkspace(workspace); if (requestId === generationRequest.current) onPrepared?.(workspace); }
         catch { Alert.alert("Paket hazır", "Bu çalışma telefonda saklanamadı. Uygulamayı kapatmadan paketi paylaşın ve dosyaları yükleyin."); }
       }
     } catch (error) { if (requestId === generationRequest.current) Alert.alert("Hazırlanamadı", errorText(error)); }
@@ -1834,19 +1860,17 @@ function PrintableStudio({ online, seed, seeding, resumeWorkspace, onPrepared, o
       setKind(input.kind);setProductType(input.productType);setKeyword(input.keyword || "");setReferenceNotes(input.referenceNotes || "");setColors(input.colors || "");setFormats(input.formats || "");setPageCount(input.pageCount || "");setAudience(input.audience || "");setCompetitorLinks(input.competitorLinks || "");setTrendTags(input.trendTags || []);setTrendFeatures(input.trendFeatures || []);pageCountEdited.current=true;setBasis([]);setResearchPreview(undefined);
       const prepared={...result,inputKey:generationKey(input)};setPlan(prepared);setFlow("production");
       const workspace:PrintableWorkspace={version:1,savedAt:new Date().toISOString(),input,plan:prepared};
-      try{await AsyncStorage.setItem(PRINTABLE_WORKSPACE_KEY,JSON.stringify(workspace));onPrepared?.(workspace);}
+      try{await saveProductionWorkspace(workspace);onPrepared?.(workspace);}
       catch{Alert.alert("Paket hazır","Çalışma bu oturumda açık, ancak telefona kaydedilemedi. Uygulamayı kapatmadan paketi paylaşın ve dosyaları yükleyin.");}
     }catch(error){if(requestId===generationRequest.current)setOffersError(errorText(error));}
     finally{if(requestId===generationRequest.current)setOffersBusy(false);}
   };
   if(guided&&flow!=="manual"){
     if(flow==="production"&&currentPlan?.quality?.ok)return <View testID="listing-offer-production">
-      <Text style={styles.sectionTitle}>Seçtiğin ürün hazır</Text>
+      <Text style={styles.sectionTitle}>Seçili ilan çalışması</Text>
       <Text style={styles.listingTitle}>{listing.title}</Text>
       <Text style={styles.rowTitle}>{currentPlan.contentBudget?.effective || pageCount} {currentPlan.contentBudget?.limits?.unitTr || "içerik"} · {brief.priceUsd?.toFixed(2)} USD · {listing.tags.length} etiket</Text>
-      <ListingMascot step={2} title="Şimdi ürün dosyalarını üretelim" instruction={`Seçtiğin başlık, açıklama, 13 etiket, fiyat ve içerik planı tek pakette. Paketi ${assistant === "claude"?"Claude’a":"ChatGPT’ye"} gönder; aynı sohbette üretimi tamamlat.`} actionLabel={assistant==="claude"?"Tek paketi Claude’a gönder":"Tek paketi ChatGPT’ye gönder"} onAction={()=>shareChecked(currentPlan.quality,brief.masterPrompt,`${brief.name} - tek paket`)}/>
-      <Text style={styles.analysisLine}>1. Ürün dosyalarını ve gerçek içerik görsellerini telefonuna indir.</Text><Text style={styles.analysisLine}>2. Dosyaları açıp sayfa, cevap ve format kontrollerini tamamla.</Text><Text style={styles.analysisLine}>3. Aşağıdaki düğmeyle aynı ürünün yükleme formuna geç.</Text>
-      <Pressable style={styles.primary} onPress={()=>onUpload({name:currentPlan.handoff?.name || brief.name,kind:currentPlan.handoff?.kind || kind,productType:currentPlan.handoff?.productType || productType,listing,pins:brief.pins,priceUsd:brief.priceUsd,research:currentPlan.research,handoffName:brief.name,handoff:currentPlan.handoff,assistant})}><Text style={styles.primaryText}>Dosyalarım hazır, yüklemeye geç</Text></Pressable>
+      <ProductionJourney workspace={{version:1,savedAt:new Date().toISOString(),input:workspaceInput,plan:currentPlan}} onOpenProduct={()=>onOpenProduct?.()} onUpload={()=>onUpload({name:currentPlan.handoff?.name || brief.name,kind:currentPlan.handoff?.kind || kind,productType:currentPlan.handoff?.productType || productType,listing,pins:brief.pins,priceUsd:brief.priceUsd,research:currentPlan.research,handoffName:brief.name,handoff:currentPlan.handoff,assistant})}/>
       <Pressable style={styles.secondaryButton} onPress={()=>setFlow("manual")}><Text style={styles.secondaryButtonText}>İlan metnini ve ayarları incele</Text></Pressable>
       <Pressable style={styles.secondaryButton} onPress={()=>setFlow("offers")}><Text style={styles.secondaryButtonText}>Başka ürün seç</Text></Pressable>
     </View>;
@@ -1906,7 +1930,7 @@ function PrintableStudio({ online, seed, seeding, resumeWorkspace, onPrepared, o
         <Text style={styles.warningTitle}>Özgünlük planı</Text>
         {brief.originalityPlan.map((line: string) => <Text style={styles.analysisLine} key={line}>• {line}</Text>)}
       </View>
-      <MasterPromptCard brief={brief} quality={plan?.quality} assistant={assistant} />
+      <MasterPromptCard brief={brief} quality={plan?.quality} assistant={assistant} trackingWorkspace={currentPlan?.quality?.ok?{version:1,savedAt:new Date().toISOString(),input:workspaceInput,plan:currentPlan}:undefined} />
       <PromptBox quality={plan?.quality} title="1) Ürün dosyası şartnamesi (İngilizce; tek pakette zaten var)" text={brief.pdfPrompt} shareTitle={`${brief.name} PDF prompt`} />
       {!!brief.artPrompts?.length && <PromptBox quality={plan?.quality} title="2) Sayfa görselleri promptları (İngilizce)" text={brief.artPrompts.join("\n\n")} shareTitle={`${brief.name} artwork prompts`} />}
       <AdVisualsPanel visuals={brief.adVisuals} />
@@ -1983,7 +2007,7 @@ function shareChecked(quality: any, message: string, title?: string) {
 
 // Paylaşım ChatGPT/Claude'da her seferinde yeni sohbet açar; parçalar ayrı sohbetlere düşerse ad, palet ve spec kaybolur.
 // Tek paket tüm adımları sırayla içerir: bir kez gönderilir, tüm iş aynı sohbette yürür.
-function MasterPromptCard({ brief, quality, assistant }: any) {
+function MasterPromptCard({ brief, quality, assistant, trackingWorkspace }: any) {
   const tool = assistant === "claude" ? "Claude" : assistant === "chatgpt" ? "ChatGPT" : "ChatGPT'ye (veya Claude'a)";
   if (!brief?.masterPrompt) return null;
   const steps = (brief.masterPrompt.match(/^- (ADIM|STEP) \d+/gm) || []).length;
@@ -1996,7 +2020,7 @@ function MasterPromptCard({ brief, quality, assistant }: any) {
     <Text style={styles.analysisLine}>3. {assistant === "claude" ? "Claude görselleri kodla vektör çizer; fotoğraf gibi sahnelerin promptunu verir, onları bir görsel aracında üretip aynı sohbete yükle." : "ChatGPT görselleri kendi görsel aracıyla üretir; dosyaları indirme bağlantısıyla verir."}</Text>
     <Text style={styles.small}>{Math.round(brief.masterPrompt.length / 100) / 10} bin karakter. Uygulama uzun metni almazsa paylaş ekranının üstündeki kopyala simgesine dokunup aynı sohbete yapıştır.</Text>
     <QualityNote quality={quality} />
-    <Pressable style={[styles.primary, { marginTop: 12, marginBottom: 0 }]} onPress={() => shareChecked(quality, brief.masterPrompt, `${brief.name} - tek paket`)}><Text style={styles.primaryText}>{assistant === "claude" ? "Tek paketi Claude'a gönder" : assistant === "chatgpt" ? "Tek paketi ChatGPT'ye gönder" : "Tek paketi gönder"}</Text><Ionicons name="paper-plane-outline" size={18} color="white" /></Pressable>
+    <Pressable style={[styles.primary, { marginTop: 12, marginBottom: 0 }]} onPress={() => trackingWorkspace?shareProductionPackage(trackingWorkspace).catch((error:Error)=>Alert.alert("Paket açılamadı",error.message)):shareChecked(quality, brief.masterPrompt, `${brief.name} - tek paket`)}><Text style={styles.primaryText}>{assistant === "claude" ? "Tek paketi Claude'a gönder" : assistant === "chatgpt" ? "Tek paketi ChatGPT'ye gönder" : "Tek paketi gönder"}</Text><Ionicons name="paper-plane-outline" size={18} color="white" /></Pressable>
     <Text style={[styles.small, { marginTop: 10 }]}>Aşağıdaki parçalar bu paketin içindekilerdir. Ayrı kullanacaksan hepsini aynı sohbete yapıştır.</Text>
   </View>;
 }
@@ -2008,7 +2032,7 @@ function PromptBox({ title, text, shareTitle, quality }: any) {
   </View>;
 }
 
-function StudioPanel({ online, active, seed, onUpload, etsyReady }: any) {
+function StudioPanel({ online, active, seed, onUpload, onOpenProduct, etsyReady, productionResume }: any) {
   const [craft, setCraft] = useState("crochet");
   const [productType, setProductType] = useState("");
   const [referenceNotes, setReferenceNotes] = useState("");
@@ -2033,15 +2057,29 @@ function StudioPanel({ online, active, seed, onUpload, etsyReady }: any) {
   const [savedWorkspace, setSavedWorkspace] = useState<PrintableWorkspace>();
   const [workspaceOutdated, setWorkspaceOutdated] = useState(false);
   const [resumeWorkspace, setResumeWorkspace] = useState<PrintableWorkspace>();
-  useEffect(() => { let mounted = true; AsyncStorage.getItem(PRINTABLE_WORKSPACE_KEY).then(raw => { if (mounted) { const restored = parsePrintableWorkspace(raw); setSavedWorkspace(restored); setWorkspaceOutdated(Boolean(raw && !restored)); } }).catch(() => undefined); return () => { mounted = false; }; }, []);
-  const resumeSaved = () => {
-    if (!savedWorkspace) return;
+  const {rows:trackedWorks,loaded:workspaceLoaded}=useProductionRecords();
+  const restoredInitial=useRef(false);
+  useEffect(()=>{let mounted=true;AsyncStorage.getItem(PRINTABLE_WORKSPACE_KEY).then(raw=>{if(mounted){const restored=parsePrintableWorkspace(raw);setSavedWorkspace(restored);setWorkspaceOutdated(Boolean(raw&&!restored));}}).catch(()=>undefined);return()=>{mounted=false;};},[]);
+  const resumeSaved = (selected?:PrintableWorkspace) => {
+    const workspace=selected || savedWorkspace;
+    if (!workspace) return;
+    setSavedWorkspace(workspace);
     seedRequest.current += 1; setSeeding(false); setInitialized(true); setMode("printable");
-    const input = savedWorkspace.input;
+    const input = workspace.input;
     setPrintableSeed({ ...input, colors: String(input.colors || "").split(",").filter(Boolean), formats: String(input.formats || "").split(",").filter(Boolean), basis: [] });
-    setResumeWorkspace({ ...savedWorkspace });
-    AsyncStorage.setItem(PRINTABLE_WORKSPACE_KEY, JSON.stringify(savedWorkspace)).catch(() => Alert.alert("Çalışma açıldı", "Çalışma bu oturumda açık, ancak telefona yeniden kaydedilemedi."));
+    setResumeWorkspace({ ...workspace });
+    saveProductionWorkspace(workspace).catch(() => Alert.alert("Çalışma açıldı", "Çalışma bu oturumda açık, ancak telefona yeniden kaydedilemedi."));
   };
+  useEffect(()=>{
+    if(!workspaceLoaded||!active||restoredInitial.current||seed||productionResume)return;
+    restoredInitial.current=true;
+    void activeProduction(trackedWorks).then(row=>{if(row)resumeSaved(row.workspace);}).catch(()=>undefined);
+  },[workspaceLoaded,active]);
+  useEffect(()=>{
+    if(!workspaceLoaded||!productionResume)return;
+    const row=trackedWorks.find(row=>row.id===productionResume.id);
+    if(row){restoredInitial.current=true;resumeSaved(row.workspace);}
+  },[productionResume,workspaceLoaded]);
   // Etsy 22 Ekim 2026: yapay zekâ deseni yasak. Desen ilanı yalnız kendi yazılmış, denenmiş ve gerçek fotoğraflı desen içindir.
   const [patternName, setPatternName] = useState("");
   const [ownPattern, setOwnPattern] = useState(false);
@@ -2111,10 +2149,10 @@ function StudioPanel({ online, active, seed, onUpload, etsyReady }: any) {
   }, [seed]);
   // Stüdyo ilk kez açıldığında boş kalmasın: seçili modda en güçlü trend otomatik doldurulur.
   useEffect(() => {
-    if (!active || initialized || seed || !online) return;
+    if (!active || !workspaceLoaded || !restoredInitial.current || trackedWorks.some(row=>row.stage!=="published") || initialized || seed || !online) return;
     setInitialized(true);
     fillFromTrend({ studio: mode });
-  }, [active, online]);
+  }, [active, online,workspaceLoaded]);
   const changeMode = (next: "pattern" | "printable" | "physical") => {
     seedRequest.current += 1;
     setSeeding(false);
@@ -2165,10 +2203,10 @@ function StudioPanel({ online, active, seed, onUpload, etsyReady }: any) {
     <Text style={styles.sectionTitle}>{mode === "physical" ? "Elimdeki ürünü sat" : "Yeni ürün fikri"}</Text>
     <ChipGroup options={STUDIO_MODES} value={mode} onChange={changeMode} />
     {workspaceOutdated && !savedWorkspace && <Text style={styles.warningText}>Önceki hazırlama paketi bu sürümün kontrollerinden geçmedi. Aşağıdan ürünü seçip yeniden hazırla; eski paketi üretimde kullanma. Telefona indirdiğin dosyalar silinmedi.</Text>}
-    {!!savedWorkspace && <View style={styles.analysisCard}><Text style={styles.cardTitle}>Son kaydedilen çalışma</Text><Text style={styles.rowTitle}>{savedWorkspace.plan.brief.name}</Text><Text style={styles.small}>{new Date(savedWorkspace.savedAt).toLocaleString("tr-TR")} · {savedWorkspace.input.assistant === "claude" ? "Claude" : "ChatGPT"}</Text><Text style={styles.evidence}>Yapay zekâdan döndüğünde bu çalışmayı aç. Başlık, açıklama, etiketler, fiyat ve ürün kaydı birlikte geri gelir; indirdiğin dosyaları sen seçersin.</Text><Pressable style={styles.secondaryButton} onPress={resumeSaved}><Text style={styles.secondaryButtonText}>Son çalışmayı aç</Text></Pressable></View>}
+    <ProductionWorkList onResume={(row)=>resumeSaved(row.workspace)}/>
     {seeding && <View style={styles.guardrail}><ActivityIndicator color="#315B4C" /><Text style={[styles.guardrailText, { flex: 1 }]}>Etsy trend verisi okunuyor; tüm alanlar otomatik dolduruluyor…</Text></View>}
     <View testID="studio-mode-physical" style={mode === "physical" ? undefined : styles.hidden}>{seed?.studio === "physical" && <Text style={styles.formHint}>Seçilen pazar araması: {seed.keyword}. Kendi ürününüzün gerçek fotoğrafları ve doğruladığınız bilgilerle ilerleyin; rakibin özellikleri ürününüze aktarılmaz.</Text>}<PhotoListingStudio online={online} etsyReady={etsyReady} /></View>
-    <View testID="studio-mode-printable" style={mode === "printable" ? undefined : styles.hidden}><PrintableStudio guided online={online} seed={printableSeed} resumeWorkspace={resumeWorkspace} onPrepared={setSavedWorkspace} seeding={seeding} onReseed={() => printableSeed?.keyword && fillFromTrend({ keyword: printableSeed.keyword, kind: printableSeed.kind, studio: "printable" })} onPickKind={(kind: string, avoidKeyword?: string) => fillFromTrend({ studio: "printable", kind, avoidKeyword })} onPickQuery={(keyword: string) => fillFromTrend({ studio: "printable", kind: printableSeed?.kind, keyword })} onUpload={onUpload} /></View>
+    <View testID="studio-mode-printable" style={mode === "printable" ? undefined : styles.hidden}><PrintableStudio guided online={online} seed={printableSeed} resumeWorkspace={resumeWorkspace} onPrepared={setSavedWorkspace} seeding={seeding} onReseed={() => printableSeed?.keyword && fillFromTrend({ keyword: printableSeed.keyword, kind: printableSeed.kind, studio: "printable" })} onPickKind={(kind: string, avoidKeyword?: string) => fillFromTrend({ studio: "printable", kind, avoidKeyword })} onPickQuery={(keyword: string) => fillFromTrend({ studio: "printable", kind: printableSeed?.kind, keyword })} onOpenProduct={onOpenProduct} onUpload={onUpload} /></View>
     <View testID="studio-mode-pattern" style={mode === "pattern" ? undefined : styles.hidden}>
     <ListingGuide input={{ phase: "studio", ownPattern: true, planReady: Boolean(currentPatternPlan?.quality?.ok) }}
       actionLabel={currentPatternPlan?.quality?.ok ? "Goxi ile kendi desenimi yüklemeye geç" : "Goxi ile kendi desenimin ilanını hazırla"}
@@ -2491,13 +2529,13 @@ function DigitalPanel({ online, active = true, shopReady, prefill, onPrefillUsed
   const transferComplete = (product: any) => etsyTransferComplete({ phase: "saved", files: product.files?.length || (product.fileName ? 1 : 0), images: product.images?.length || 0, etsy: product.etsy });
   const verifyPublication = async (product: any) => {
     setBusy(product.id);
-    try { const status = await apiJson(`/api/digital/products/${product.id}/etsy-status`, { headers: apiHeaders() }); setPublication(current => ({ ...current, [product.id]: status })); }
-    catch (error) { setPublication(current => { const next = { ...current }; delete next[product.id]; return next; }); Alert.alert("Yayın durumu doğrulanamadı", errorText(error)); }
+    try { const status = await apiJson(`/api/digital/products/${product.id}/etsy-status`, { headers: apiHeaders() }); setPublication(current => ({ ...current, [product.id]: status })); await syncTrackedProduct(product,status).catch(()=>Alert.alert("Yayın durumu alındı", "Telefon takip kaydı güncellenemedi. Uygulamayı kapatmadan depolama sorununu giderip tekrar denetleyin.")); }
+    catch (error) { setPublication(current => { const next = { ...current }; delete next[product.id]; return next; }); await syncTrackedProduct(product,undefined,true).catch(()=>undefined); Alert.alert("Yayın durumu doğrulanamadı", errorText(error)); }
     finally { setBusy(undefined); }
   };
   const load = async () => {
     setLoading(true);
-    try { setProducts((await apiJson("/api/digital/products", { headers: apiHeaders() })).products || []); }
+    try { const next=(await apiJson("/api/digital/products", { headers: apiHeaders() })).products || [];setProducts(next);await syncTrackedProducts(next).catch(()=>Alert.alert("Ürünler alındı", "Telefon takip kaydı güncellenemedi. Ürünler sunucuda duruyor; depolamayı kontrol edin.")); }
     catch (error) { Alert.alert("Dijital ürünler alınamadı", errorText(error)); }
     finally { setLoading(false); }
   };
@@ -2570,7 +2608,7 @@ function DigitalPanel({ online, active = true, shopReady, prefill, onPrefillUsed
         {!grant.revoked && <Pressable onPress={() => revoke(grant, product.id)}><Ionicons name="close-circle-outline" size={21} color="#A84A3A" /></Pressable>}
       </View>)}
     </View>)}
-    <DigitalUploadForm visible={formVisible} suspended={!active} prefill={prefill} onClose={() => { setFormVisible(false); }} onSaved={async () => { setFormVisible(false); onPrefillUsed(); await load(); Alert.alert("Yüklendi", "PDF güvenli depoya alındı. Etsy mağazası hazırsa 'Etsy taslağı oluştur' ile ilana dönüştürebilirsiniz."); }} />
+    <DigitalUploadForm visible={formVisible} suspended={!active} prefill={prefill} onClose={() => { setFormVisible(false); }} onSaved={async (product:any) => { await syncTrackedProduct(product).catch(()=>Alert.alert("Ürün yüklendi", "Ürün sunucuda kayıtlı, ancak telefon takip kaydı güncellenemedi. Aynı dosyaları tekrar yüklemeyin; Dijital bölümünden mevcut ürüne devam edin."));setFormVisible(false); onPrefillUsed(); await load(); Alert.alert("Yüklendi", "PDF güvenli depoya alındı. Etsy mağazası hazırsa 'Etsy taslağı oluştur' ile ilana dönüştürebilirsiniz."); }} />
     <GrantForm product={grantProduct} onClose={async (created: boolean) => { const id = grantProduct?.id; setGrantProduct(undefined); if (created && id) await loadDetail(id); }} />
   </>;
 }
@@ -3585,7 +3623,7 @@ function ChoiceTile({ icon, title, text, onPress }: any) {
 
 const SELL_BACK: Record<SellRoute, SellRoute> = { choose: "choose", where: "choose", photo: "where", shopier: "where", digital: "choose", trend: "choose" };
 
-function SellScreen({ online, channels, route, setRoute, onStepChange, setTab }: any) {
+function SellScreen({ online, active=true, productionResume, channels, route, setRoute, onStepChange, setTab }: any) {
   const etsy = channels?.etsy || {};
   const etsyReady = Boolean(etsy.shopReady || etsy.shopId);
   const back = route !== "choose" && <Pressable style={[styles.secondaryButton, { alignSelf: "flex-start", marginBottom: 12 }]} onPress={() => setRoute(SELL_BACK[route as SellRoute])}><Text style={styles.secondaryButtonText}>{route === "photo" ? "← Ürün seçimine dön" : "← Geri"}</Text></Pressable>;
@@ -3593,11 +3631,11 @@ function SellScreen({ online, channels, route, setRoute, onStepChange, setTab }:
   // Yeni ürün için sihirbazın sonundaki "Yeni ürüne başla" kullanılır.
   return <>
     <View style={route === "photo" ? undefined : styles.hidden}>{route === "photo" && back}<PhotoListingStudio online={online} etsyReady={etsyReady} wizard onStepChange={onStepChange} /></View>
-    {route !== "photo" && <SellRouteContent online={online} channels={channels} route={route} setRoute={setRoute} setTab={setTab} back={back} />}
+    {route !== "photo" && <SellRouteContent online={online} active={active} productionResume={productionResume} channels={channels} route={route} setRoute={setRoute} setTab={setTab} back={back} />}
   </>;
 }
 
-function SellRouteContent({ online, channels, route, setRoute, setTab, back }: any) {
+function SellRouteContent({ online, active=true, productionResume, channels, route, setRoute, setTab, back }: any) {
   if (route === "choose") return <>
     <ListingMascot title="Önce satacağın ürünü seç" instruction="Elindeki fiziksel ürünü fotoğraflarla, dijital ürünü dosyalarla hazırlayacağız. Aşağıdan sana uygun seçeneğe dokun; henüz karar vermediysen fikir bölümünü aç." />
     <Text style={styles.homeHello}>Ne satacaksınız?</Text>
@@ -3627,8 +3665,8 @@ function SellRouteContent({ online, channels, route, setRoute, setTab, back }: a
   </>;
   return <>
     {back}
-    {route === "digital" && <View style={styles.guardrail}><Ionicons name="information-circle-outline" size={20} color="#315B4C" /><Text style={[styles.guardrailText, { flex: 1 }]}>Dijital ürün işi üç adımdır: 1) Trend'den konu seçin ("Bu nişte dijital ürün hazırla"), 2) Stüdyo'nun verdiği tek paketi ChatGPT ya da Claude'a gönderip dosyayı aldırın, 3) Dijital bölümünden Etsy'ye yükleyin. Desen için yapay zekâ kullanılmaz: yalnız kendi yazıp denediğiniz desen yüklenir.</Text></View>}
-    <EtsyScreen key={route} online={online} channels={channels} initialSection={route === "digital" ? "Stüdyo" : "Trend"} />
+    {route === "digital" && <View style={styles.guardrail}><Ionicons name="information-circle-outline" size={20} color="#315B4C" /><Text style={[styles.guardrailText, { flex: 1 }]}>Goxi açık çalışmanı ve sıradaki işi gösterir. Üretimi aynı ChatGPT/Claude sohbetinde sürdür; son dosyaları indirip aynı ilan kaydına yükle. Kendi desenin için yalnız yazıp denediğin dosyaları kullan.</Text></View>}
+    <EtsyScreen key={route} online={online} active={active} productionResume={productionResume} channels={channels} initialSection={route === "digital" ? "Stüdyo" : "Trend"} />
   </>;
 }
 

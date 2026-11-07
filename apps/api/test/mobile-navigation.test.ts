@@ -258,7 +258,8 @@ test("real screen buttons drive Trend → Studio → Digital → draft → verif
     await tap(renderer, /^Bu öneriyi seç →$/);
     assert.ok(plan?.quality.ok, JSON.stringify(ui.alerts));
     await tap(renderer, /^Tek paketi ChatGPT’ye gönder$/);
-    assert.equal((ui.shares.at(-1) as { message: string }).message, plan.brief.masterPrompt);
+    assert.ok((ui.shares.at(-1) as { message: string }).message.startsWith(plan.brief.masterPrompt));
+    assert.match((ui.shares.at(-1) as { message: string }).message,/GXL production tracking/);
     assert.ok(ui.storage.has(PRINTABLE_WORKSPACE_KEY), "Prepared handoff must survive leaving the app");
     await unmount(renderer);
     renderer = await mount(screens.EtsyScreen, { online: true, channels: { etsy: { shopReady: true, shopId: 777 } } });

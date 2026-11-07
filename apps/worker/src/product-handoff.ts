@@ -5,7 +5,9 @@ const PREFIX = "digital:handoff:";
 
 export async function registerProductHandoff(store: Store, identity: ProductIdentity) {
   const handoff = { ...identity, id: crypto.randomUUID() };
-  await store.put(`${PREFIX}${handoff.id}`, JSON.stringify(handoff), { expirationTtl: 30 * 86400 });
+  // A selected production project remains resumable until publication; it is
+  // not the short-lived suggestion quote. Do not expire its identity mid-work.
+  await store.put(`${PREFIX}${handoff.id}`, JSON.stringify(handoff));
   return handoff;
 }
 
