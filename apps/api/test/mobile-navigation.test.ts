@@ -418,3 +418,19 @@ test("Discovery hides searches whose buyer demand is weak until the seller asks 
     assert.match(shown(), /weak discovery item/);
   } finally { await unmount(renderer); }
 });
+
+test("Trend explains a group where every scanned search has weak demand and never calls a sub-45 search a strong opportunity", async context => {
+  const rows = [
+    { id: "a", labelTr: "Vintage bakır", keyword: "vintage copper", group: "vintage", kind: "planner", result: { ...sample("vintage copper", "vintage", 23), verdict: "Talep zayıf" } },
+    { id: "b", labelTr: "Vintage broş", keyword: "vintage brooch", group: "vintage", kind: "planner", result: { ...sample("vintage brooch", "vintage", 14), verdict: "Talep zayıf" } }
+  ];
+  context.mock.method(globalThis, "fetch", router(path => path === "/api/etsy/trends" ? Response.json({ configured: true, groups: [{ id: "vintage", labelTr: "Vintage" }], niches: rows }) : Response.json({ items: [], events: [] })));
+  const renderer = await mount(screens.TrendPanel, { online: true, onUse: () => {} });
+  try {
+    await tap(renderer, /^Vintage$/);
+    const shown = () => renderer.root.findAllByType("Text" as any).filter(node => visible(node)).map(node => text(node)).join(" | ");
+    await waitFor(() => shown().includes("Bu gruptaki aramaların hepsinde alıcı ilgisi zayıf"));
+    assert.doesNotMatch(shown(), /Vintage bakır/);
+    assert.doesNotMatch(shown(), /Alıcı ilgisi olan en iyi fırsatlar/);
+  } finally { await unmount(renderer); }
+});

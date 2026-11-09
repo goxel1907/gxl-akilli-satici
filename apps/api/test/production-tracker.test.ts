@@ -30,7 +30,7 @@ test("share and imported assistant reports cannot claim download, upload or Etsy
   assert.throws(()=>parseProductionReceipt(receipt("files_ready","another"),row),/başka bir ürüne/);
   assert.throws(()=>changeProduction(rows,row.id,"published","seller"),/doğrulanmalıdır/);
   assert.equal(changeProduction(rows,row.id,"share_opened","app")[0].stage,"share_opened");
-  assert.match(productionTrackingPrompt(row),/Never claim Goxi automatically received it/);assert.match(productionContinuation(row),/yeni ürün isteği değil/);
+  assert.match(productionTrackingPrompt(row),/Never claim Goxi automatically received it/);assert.match(productionTrackingPrompt(row),/do not repeat it while a step is still in progress/);assert.match(productionContinuation(row),/yeni ürün isteği değil/);
 });
 test("only matching uploaded identity and a successful Etsy read can complete the same production",()=>{
   const rows=rememberProduction([],workspace()),row=rows[0],product={id:"p1",handoff:{id:row.id},files:[{},{}],images:[{}],etsy:{listingId:42,fileUploaded:true,filesUploaded:2,imagesUploaded:1}};

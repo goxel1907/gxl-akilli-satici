@@ -127,4 +127,8 @@ test("every package tells the assistant how to work in small saved parts and res
   const tr = plan("planner", "daily planner").brief.masterPrompt.split("\n---\n")[0];
   assert.match(tr, /Donmamak için işi küçük parçalara böl/);
   assert.match(tr, /'kaldığın yerden devam et'/);
+  // Her 3-4 sayfada durup 'devam' bekletmez: parçalar aynı yanıtta art arda çalışır.
+  assert.match(tr, /AYNI YANIT İÇİNDE art arda/);
+  assert.match(tr, /asla 'senden işlem gerekmiyor' deme/);
+  assert.doesNotMatch(tr, /3-4 sayfa/);
 });
