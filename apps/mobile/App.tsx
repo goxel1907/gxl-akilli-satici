@@ -1169,7 +1169,9 @@ const CRAFT_WORDS = /\b(crochet|knitting|knit|embroidery|cross stitch|sewing|mac
 async function apiJson(path: string, init: RequestInit = {}) {
   const response = await fetch(`${API_URL}${path}`, init);
   const body = await response.json().catch(() => ({})) as any;
-  if (!response.ok) throw Object.assign(new Error(body.error || "İstek tamamlanamadı."), { code: body.code ? String(body.code) : undefined, status: response.status });
+  // Sunucu Türkçe hata vermeden düştüyse (ör. büyük dosyada işlem süresi sınırı) kod numarasıyla anlaşılır mesaj verilir.
+  const fallback = response.status >= 500 ? `Sunucu bu isteği zamanında bitiremedi (kod ${response.status}). Birkaç dakika sonra tekrar deneyin.` : `İstek tamamlanamadı (kod ${response.status}).`;
+  if (!response.ok) throw Object.assign(new Error(body.error || fallback), { code: body.code ? String(body.code) : undefined, status: response.status });
   return body;
 }
 
@@ -2377,10 +2379,27 @@ function DigitalUploadForm({ visible, suspended = false, prefill, onClose, onSav
     if (merged.length > 5) Alert.alert("En fazla 5 dosya", "Etsy bir dijital ilana en fazla 5 dosya kabul eder. Fazla formatları (ör. Half Letter ve siyah-beyaz) tek bir ZIP dosyasında birleştirin.");
     setFiles(merged.slice(0, 5));
   };
-  const pickImages = async () => {
-    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ["images"], allowsMultipleSelection: true, selectionLimit: 10, quality: 0.7 });
-    if (!result.canceled) setImages(result.assets.slice(0, 10));
+  // Görseller iki yoldan seçilir: galeriden ya da dosyalardan (indirilenler/Drive). Seçilenler eskilerin üstüne eklenir,
+  // dosya adına göre doğal sırayla dizilir (1.jpg, 2.jpg … 10.jpg; listing-01 … listing-10) ve en fazla 10 tane tutulur.
+  const naturalName = (image: any) => String(image.fileName || image.name || "");
+  const mergeImages = (added: any[]) => {
+    const all = [...images, ...added].filter((image, index, list) => list.findIndex((other) => (naturalName(other) && naturalName(other) === naturalName(image)) || other.uri === image.uri) === index);
+    all.sort((a, b) => naturalName(a).localeCompare(naturalName(b), undefined, { numeric: true, sensitivity: "base" }));
+    if (all.length > 10) Alert.alert("En fazla 10 görsel", `Etsy bir ilana 10 görsel alır; ilk 10 tanesi (isim sırasıyla) tutuldu, ${all.length - 10} görsel çıkarıldı.`);
+    setImages(all.slice(0, 10));
   };
+  const pickImagesFromGallery = async () => {
+    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ["images"], allowsMultipleSelection: true, selectionLimit: 10, quality: 0.85 });
+    if (!result.canceled) mergeImages(result.assets);
+  };
+  const pickImagesFromFiles = async () => {
+    const result = await DocumentPicker.getDocumentAsync({ type: ["image/jpeg", "image/png"], multiple: true, copyToCacheDirectory: true });
+    if (result.canceled) return;
+    const tooBig = result.assets.filter((asset) => asset.size && asset.size > 8 * 1024 * 1024);
+    if (tooBig.length) Alert.alert("Görsel çok büyük", `${tooBig.map((asset) => asset.name).join(", ")}: görsel başına en fazla 8 MB.`);
+    mergeImages(result.assets.filter((asset) => !tooBig.includes(asset)).map((asset) => ({ uri: asset.uri, fileName: asset.name, mimeType: asset.mimeType || (/\.png$/i.test(asset.name) ? "image/png" : "image/jpeg") })));
+  };
+  const pickImages = pickImagesFromGallery;
   const save = () => {
     if (!name.trim() || !productType.trim() || !title.trim() || !description.trim()) return Alert.alert("Eksik bilgi", "Ürün adı, ürün türü, başlık ve açıklama gerekli. Önce Stüdyo'da ilanı hazırlayın.");
     if (prefill?.handoffName && !sameProduct(prefill.handoff || { name: prefill.handoffName, kind: prefill.kind, productType: prefill.productType }, { name, kind, productType })) return Alert.alert("Ürün kaydı değişti", "Ürün adı ve türü üretim kaydıyla aynı olmalı. Stüdyo’dan yeni paket hazırlayın.");
@@ -2452,7 +2471,9 @@ function DigitalUploadForm({ visible, suspended = false, prefill, onClose, onSav
       {files.map((file) => <View key={file.name} style={styles.fileRow}><Ionicons name={/\.zip$/i.test(file.name || "") ? "archive-outline" : "document-outline"} size={18} color="#56615C" /><Text style={[styles.small, { flex: 1 }]} numberOfLines={1}>{file.name} · {Math.round((file.size || 0) / 1024)} KB</Text><Pressable onPress={() => setFiles(files.filter((item) => item.name !== file.name))}><Ionicons name="close-circle-outline" size={20} color="#B4483A" /></Pressable></View>)}
       {!!files.length && <Text style={styles.formHint}>Hepsi tek seferde Etsy ilanına eklenir. Etsy en fazla 5 dosya alır; fazla formatları tek bir ZIP'te birleştirin.</Text>}
       <Pressable style={styles.uploadRow} onPress={pickImages}><Ionicons name="images-outline" size={22} color="#315B4C" /><Text style={[styles.rowTitle, { flex: 1 }]}>{images.length ? `${images.length} görsel seçildi` : kind === "pattern" ? "Bitmiş ürünün gerçek fotoğrafları (en fazla 10; ilki düzenlenmemiş)" : "İlan görselleri (en fazla 10; biri sayfaların önizlemesi)"}</Text></Pressable>
-      {!!images.length && <ScrollView horizontal style={{ marginBottom: 12 }}>{images.map((image) => <Image key={image.uri} source={{ uri: image.uri }} style={styles.thumb} />)}</ScrollView>}
+      {!!images.length && <ScrollView horizontal style={{ marginBottom: 4 }}>{images.map((image, index) => <View key={image.uri}><Image source={{ uri: image.uri }} style={styles.thumb} /><Text style={styles.small}>{index + 1}. {naturalName(image).slice(0, 14)}</Text></View>)}</ScrollView>}
+      <Pressable onPress={pickImagesFromFiles} style={{ marginBottom: 6 }}><Text style={styles.linkNote}>Dosyalardan seç (İndirilenler/Drive; adlarına göre 1, 2 … 10 sıralanır) →</Text></Pressable>
+      {!!images.length && <Pressable onPress={() => setImages([])} style={{ marginBottom: 12 }}><Text style={styles.linkNote}>{images.length}/10 görsel · hepsini temizle</Text></Pressable>}
       <Field label="Ürün adı" value={name} onChangeText={setName} editable={!prefill?.handoffName} />
       <Text style={styles.fieldLabel}>Ürün tipi</Text>
       {prefill?.handoffName ? <Text style={styles.formHint}>{PRINTABLE_KIND_OPTIONS.find(item => item.id === kind)?.label || kind} · Ürün türünü değiştirmek için Stüdyo’dan yeniden hazırlayın.</Text> : <ChipGroup options={[...PRINTABLE_KIND_OPTIONS, { id: "pattern", label: "El işi deseni (kendi deseniniz)" }]} value={kind} onChange={setKind} />}
@@ -2523,7 +2544,11 @@ function DigitalPanel({ online, active = true, shopReady, prefill, onPrefillUsed
   const auditFiles = async (product: any) => {
     setBusy(product.id);
     try { const report = await apiJson(`/api/digital/products/${product.id}/qa`, { headers: apiHeaders() }); setFileQa(current => ({ ...current, [product.id]: report })); }
-    catch (error) { Alert.alert("Dosya denetimi alınamadı", errorText(error)); }
+    catch (error: any) {
+      // Denetim sunucuda yarıda kaldıysa satıcı takılı kalmaz: dosyalar yüklemede zaten denetlendi, taslağa devam edilebilir.
+      if (!error?.code) setFileQa(current => ({ ...current, [product.id]: { ok: false, unavailable: true, files: [], missingFormats: [], noteTr: "Dosya denetimi bu kez sunucuda tamamlanamadı. Dosyalar yüklenirken format ve yapı denetiminden geçti; Etsy taslağına devam edebilirsiniz. Etsy'de taslağı açıp dosyanın ekli olduğunu kontrol edin." } }));
+      Alert.alert("Dosya denetimi alınamadı", `${errorText(error)}${!error?.code ? "\n\nEtsy taslağına yine de devam edebilirsiniz." : ""}`);
+    }
     finally { setBusy(undefined); }
   };
   const [publication, setPublication] = useState<Record<string, { state: string; checkedAt: string; url: string }>>({});
@@ -2584,12 +2609,12 @@ function DigitalPanel({ online, active = true, shopReady, prefill, onPrefillUsed
       </View>
       <Text style={styles.small} numberOfLines={2}>{product.listing?.title}</Text>
       <ListingGuide input={{ phase: "saved", files: product.files?.length || (product.fileName ? 1 : 0), images: product.images?.length || 0, etsy: product.etsy, verifiedState: publication[product.id]?.state, qaOk: fileQa[product.id]?.ok }}
-        actionLabel={fileQa[product.id]?.ok !== true ? "Goxi ile dosyaları denetle" : transferComplete(product) ? "Goxi ile Etsy durumunu doğrula" : "Goxi ile taslağı hazırla"}
-        onAction={() => fileQa[product.id]?.ok !== true ? auditFiles(product) : transferComplete(product) ? verifyPublication(product) : etsyDraft(product)} disabled={!online || busy === product.id} />
+        actionLabel={fileQa[product.id]?.ok !== true && !fileQa[product.id]?.unavailable ? "Goxi ile dosyaları denetle" : transferComplete(product) ? "Goxi ile Etsy durumunu doğrula" : "Goxi ile taslağı hazırla"}
+        onAction={() => fileQa[product.id]?.ok !== true && !fileQa[product.id]?.unavailable ? auditFiles(product) : transferComplete(product) ? verifyPublication(product) : etsyDraft(product)} disabled={!online || busy === product.id} />
       {publication[product.id] && <Text style={styles.small}>Etsy durumu: {publication[product.id].state === "active" ? "Yayında" : publication[product.id].state === "draft" ? "Taslak" : "Yayında değil"} · {new Date(publication[product.id].checkedAt).toLocaleString("tr-TR")}</Text>}
       {/* "Denendi" yalnız desen için anlamlıdır (Etsy kuralı); hazır dijital üründe uyarı gösterilmez. */}
       {fileQa[product.id] && <View style={styles.adviceBox}>
-        <Text style={styles.rowTitle}>{fileQa[product.id].ok ? "Dosya yapısı kontrolleri geçti" : "Dosya denetimi: düzeltme gerekli"}</Text>
+        <Text style={styles.rowTitle}>{fileQa[product.id].ok ? "Dosya yapısı kontrolleri geçti" : fileQa[product.id].unavailable ? "Dosya denetimi tamamlanamadı" : "Dosya denetimi: düzeltme gerekli"}</Text>
         {fileQa[product.id].files.map((row: any) => <Text key={row.name} style={row.ok ? styles.small : styles.warningText}>{row.name}: {row.ok ? `${row.entries} içerik, ${row.checks} yapısal kontrol` : row.error}</Text>)}
         {!!fileQa[product.id].missingFormats.length && <Text style={styles.warningText}>Eksik formatlar: {fileQa[product.id].missingFormats.join(", ")}</Text>}
         <Text style={styles.evidence}>{fileQa[product.id].noteTr}</Text>
