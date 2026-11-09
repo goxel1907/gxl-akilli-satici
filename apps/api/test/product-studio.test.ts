@@ -235,3 +235,13 @@ test("baby knitwear, bags and jewelry get the right audience, no clothing tags o
   assert.equal(plan("Gümüş kolye ay yıldız").tags.length, 13);
   assert.match(bag.description, /Estimated delivery to the US/);
 });
+
+test("Turkish slippers, booties and socks are recognized and fill 13 tags", async () => {
+  const { buildProductPlan, normalizeProductInput } = await import("../../worker/src/product-studio.js");
+  const plan = (titleTr: string) => buildProductPlan(normalizeProductInput({ titleTr, priceTry: 500, shippingTry: 400 }), [], [], { usdTryRate: 45 });
+  assert.match(plan("El örgüsü çetik").title, /Slippers/);
+  const booties = plan("Bebek patiği el örgüsü");
+  assert.match(booties.title, /Baby Booties/);
+  assert.equal(booties.tags.length, 13);
+  assert.match(plan("Kadın yün çorap el örgüsü").title, /Socks/);
+});
