@@ -75,20 +75,20 @@ test("the readiness list shows what is done, what the app can do, and what only 
   assert.match(withLogo.items.find((item) => item.id === "branding")!.titleTr, /^Logo yüklü/);
 });
 
-test("the shipping profile is free US shipping from Türkiye and is never created twice", async () => {
-  assert.deepEqual(normalizeShippingProfileInput({}), { minDeliveryDays: 7, maxDeliveryDays: 21, minProcessingDays: 1, maxProcessingDays: 3, postalCode: undefined });
-  assert.deepEqual(normalizeShippingProfileInput({ minDeliveryDays: 30, maxDeliveryDays: 10, maxProcessingDays: 40 }), { minDeliveryDays: 30, maxDeliveryDays: 30, minProcessingDays: 1, maxProcessingDays: 10, postalCode: undefined });
+test("the shipping profile charges the buyer the entered shipping cost and is never created twice", async () => {
+  assert.deepEqual(normalizeShippingProfileInput({}), { minDeliveryDays: 7, maxDeliveryDays: 21, minProcessingDays: 1, maxProcessingDays: 3, postalCode: undefined, costTry: undefined, additionalCostTry: undefined });
+  assert.deepEqual(normalizeShippingProfileInput({ minDeliveryDays: 30, maxDeliveryDays: 10, maxProcessingDays: 40 }), { minDeliveryDays: 30, maxDeliveryDays: 30, minProcessingDays: 1, maxProcessingDays: 10, postalCode: undefined, costTry: undefined, additionalCostTry: undefined });
   assert.throws(() => normalizeShippingProfileInput({ postalCode: "34-A" }), /5 rakam/);
   const env = await connected("shops_w");
   const posts: Array<{ path: string; body: URLSearchParams }> = [];
-  const created = await createShippingProfile(env, normalizeShippingProfileInput({ postalCode: "34000" }), etsy({ shop: { shop_id: 777 } }, posts));
+  const created = await createShippingProfile(env, normalizeShippingProfileInput({ postalCode: "34000", costTry: "650" }), etsy({ shop: { shop_id: 777 } }, posts));
   assert.deepEqual(created, { shippingProfileId: 501, alreadyExisted: false });
   const body = posts[0].body;
   assert.equal(posts[0].path, "/v3/application/shops/777/shipping-profiles");
   assert.equal(body.get("origin_country_iso"), "TR");
   assert.equal(body.get("destination_country_iso"), "US");
-  assert.equal(body.get("primary_cost"), "0");
-  assert.equal(body.get("secondary_cost"), "0");
+  assert.equal(body.get("primary_cost"), "650");
+  assert.equal(body.get("secondary_cost"), "325");
   assert.equal(body.get("min_delivery_days"), "7");
   assert.equal(body.get("max_delivery_days"), "21");
   assert.equal(body.get("origin_postal_code"), "34000");

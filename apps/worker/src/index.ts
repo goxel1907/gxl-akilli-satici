@@ -33,6 +33,7 @@ import {
   type ShopierRuntimeEnv,
   type ShopierWebhookEvent
 } from "./shopier.js";
+import { uploadEtsyListingVideo } from "./etsy-video.js";
 import { createEtsyConnectSession, EtsyIntegrationError, getConnectedShop, getEtsyStatus, handleEtsyCallback, type EtsyRuntimeEnv } from "./etsy.js";
 import { getTrendBoard, isTrendGroup, normalizeKeyword, readCached, scanTrend, type TrendResult, type TrendStore } from "./etsy-trends.js";
 import { seasonalBoard } from "./seasonal.js";
@@ -403,7 +404,7 @@ export async function handleRequest(request: Request, env: Env, context?: {waitU
       return json(200, {
         ok: true,
         service: "gxl-akilli-satici",
-        ai: env.GEMINI_API_KEY ? "gemini" : env.OPENAI_API_KEY ? "openai" : "not_configured",
+        ai: env.GEMINI_API_KEY ? "gemini" : env.OPENAI_API_KEY ? "openai" : (env as { AI?: unknown }).AI ? "workers_ai" : "not_configured",
         shopier: env.SHOPIER_ACCESS_TOKEN ? "configured" : "not_configured",
         shopierWebhooks: await shopierWebhooksConfigured(env) ? "verified" : "not_configured",
         productMedia: productMediaStorage(env) || "not_configured",
@@ -748,6 +749,13 @@ export async function handleRequest(request: Request, env: Env, context?: {waitU
       const blocked = requireConfirmedWrite(env, input, "Etsy ilanını yayınlama");
       if (blocked) return blocked;
       return json(200, await publishEtsyListing(env, Number(input.listingId)));
+    }
+    const videoMatch = url.pathname.match(/^\/api\/etsy\/listings\/(\d{5,15})\/video$/);
+    if (videoMatch && request.method === "POST") {
+      const form = await readMultipart(request);
+      const blocked = requireConfirmedWrite(env, { confirm: form.get("confirm") === "true" }, "Etsy ilanına video yükleme");
+      if (blocked) return blocked;
+      return json(201, await uploadEtsyListingVideo(env, Number(videoMatch[1]), form.get("video")));
     }
     if (request.method === "POST" && url.pathname === "/api/products/etsy-draft") {
       const input = await readBody(request);

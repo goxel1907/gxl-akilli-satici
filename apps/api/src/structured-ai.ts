@@ -6,6 +6,10 @@ export interface AiRuntimeEnv {
   OPENAI_API_KEY?: string;
   OPENAI_MODEL?: string;
   OPENAI_VISION_MODEL?: string;
+  // Cloudflare Workers AI bağlaması (wrangler.jsonc "ai"): anahtar gerektirmez, ücretsiz günlük kotayla çalışır.
+  AI?: { run(model: string, input: Record<string, unknown>): Promise<any> };
+  WORKERS_AI_VISION_MODEL?: string;
+  WORKERS_AI_TEXT_MODEL?: string;
 }
 
 interface StructuredRequest {
@@ -76,9 +80,30 @@ async function callOpenAI<T>(request: StructuredRequest, env: AiRuntimeEnv): Pro
   return JSON.parse(response.output_text) as T;
 }
 
+// Gemini veya OpenAI anahtarı yoksa Cloudflare Workers AI kullanılır (yeni hesap ya da anahtar gerekmez).
+// Görsel model tek fotoğrafa bakar; sonuç JSON olarak istenir ve ilk {...} bloğu okunur.
+async function callWorkersAi<T>(request: StructuredRequest, env: AiRuntimeEnv): Promise<T> {
+  const model = request.vision ? env.WORKERS_AI_VISION_MODEL || "@cf/meta/llama-3.2-11b-vision-instruct" : env.WORKERS_AI_TEXT_MODEL || "@cf/meta/llama-3.3-70b-instruct-fp8-fast";
+  const prompt = `${request.prompt}\n\nReturn ONLY one JSON object, no other text, matching this JSON schema:\n${JSON.stringify(request.schema)}`;
+  const input: Record<string, unknown> = { messages: [{ role: "user", content: prompt }], max_tokens: 1200, temperature: 0.2 };
+  if (request.vision && request.imageDataUrls?.length) input.image = Array.from(Uint8Array.from(atob(parseImageDataUrl(request.imageDataUrls[0]).data), (char) => char.charCodeAt(0)));
+  let result: any;
+  try { result = await env.AI!.run(model, input); }
+  catch (error) {
+    // Meta Llama görsel modeli hesap başına bir kez lisans onayı ister.
+    if (!/agree|license/i.test(String((error as Error)?.message || error))) throw error;
+    await env.AI!.run(model, { prompt: "agree" });
+    result = await env.AI!.run(model, input);
+  }
+  const text = typeof result?.response === "string" ? result.response : typeof result === "string" ? result : JSON.stringify(result?.response ?? "");
+  const match = text.match(/\{[\s\S]*\}/);
+  if (!match) throw new Error("EMPTY_ANALYSIS");
+  return JSON.parse(match[0]) as T;
+}
+
 export function hasAiProvider(overrides?: AiRuntimeEnv): boolean {
   const env = { ...nodeEnvironment(), ...overrides };
-  return Boolean(env.GEMINI_API_KEY || env.OPENAI_API_KEY);
+  return Boolean(env.GEMINI_API_KEY || env.OPENAI_API_KEY || env.AI);
 }
 
 export async function generateStructuredObject<T>(request: StructuredRequest, overrides?: AiRuntimeEnv): Promise<T> {
@@ -86,6 +111,7 @@ export async function generateStructuredObject<T>(request: StructuredRequest, ov
   try {
     if (env.GEMINI_API_KEY) return await callGemini<T>(request, env);
     if (env.OPENAI_API_KEY) return await callOpenAI<T>(request, env);
+    if (env.AI) return await callWorkersAi<T>(request, env);
     throw new Error("AI_PROVIDER_NOT_CONFIGURED");
   } catch (error) {
     const status = Number((error as { status?: number })?.status);

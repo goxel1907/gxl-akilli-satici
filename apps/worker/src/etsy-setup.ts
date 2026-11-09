@@ -81,7 +81,7 @@ export async function shopReadiness(env: EtsyRuntimeEnv, fetcher: Fetcher = fetc
     const [profiles, policies] = await Promise.all([shippingProfiles(env, shop.shopId, fetcher), returnPolicies(env, shop.shopId, fetcher)]);
     items.push(profiles.length
       ? { id: "shipping", titleTr: "Kargo profili var", state: "done", detailTr: `${profiles.length} kargo profili tanımlı.` }
-      : { id: "shipping", titleTr: "Kargo profili (yalnız fiziksel ürün)", state: "optional", detailTr: "Dijital ürün satıyorsanız gerekmez. Fiziksel ürün (tesbih, vintage, örgü) satacaksanız uygulama Türkiye'den ABD'ye ücretsiz kargolu profili sizin yerinize oluşturur; kargo bedeli fiyata zaten eklenir. Başka ülkelere göndermek isterseniz Etsy'de profile ülke ekleyebilirsiniz.", action: "create_shipping_profile" });
+      : { id: "shipping", titleTr: "Kargo profili (yalnız fiziksel ürün)", state: "optional", detailTr: "Dijital ürün satıyorsanız gerekmez. Fiziksel ürün (tesbih, vintage, örgü) satacaksanız uygulama Türkiye'den ABD'ye kargo profilini sizin yerinize oluşturur; kargo ücretini alıcı öder ve Etsy ilan sayfasında gösterir. Başka ülkelere göndermek isterseniz Etsy'de profile ülke ekleyebilirsiniz.", action: "create_shipping_profile" });
     items.push(policies.length
       ? { id: "returns", titleTr: "İade politikası var", state: "done", detailTr: policies[0].accepts_returns ? `İade kabul: ${policies[0].return_deadline || "?"} gün.` : "İade kabul edilmiyor." }
       : { id: "returns", titleTr: "İade politikası (yalnız fiziksel ürün)", state: "optional", detailTr: "Dijital ürün satıyorsanız gerekmez. Fiziksel ilanın yayına girmesi için gerekir; önerilen: 30 gün içinde iade ve değişim (iade kargosunu alıcı öder).", action: "create_return_policy" });
@@ -113,20 +113,22 @@ export function normalizeShippingProfileInput(raw: Record<string, unknown>) {
   const maxProcessingDays = Math.min(10, Math.max(minProcessingDays, int(raw.maxProcessingDays, 3)));
   const postalCode = String(raw.postalCode || "").replace(/\s+/g, "");
   if (postalCode && !/^\d{5}$/.test(postalCode)) throw new EtsyIntegrationError("VALIDATION_FAILED", "Posta kodu 5 rakam olmalı (ör. 34000).", 400);
-  return { minDeliveryDays, maxDeliveryDays, minProcessingDays, maxProcessingDays, postalCode: postalCode || undefined };
+  const money = (value: unknown) => { const amount = Math.round(Number(String(value ?? "").replace(",", ".")) * 100) / 100; return Number.isFinite(amount) && amount > 0 ? Math.min(amount, 100_000) : undefined; };
+  return { minDeliveryDays, maxDeliveryDays, minProcessingDays, maxProcessingDays, postalCode: postalCode || undefined, costTry: money(raw.costTry), additionalCostTry: money(raw.additionalCostTry) };
 }
 
-// Türkiye → ABD, ücretsiz kargo (kargo bedeli ürün fiyatına eklenir). Var olan profil varsa yenisi açılmaz.
+// Türkiye → ABD kargo profili; girilen kargo ücretini alıcı öder (Etsy ilan sayfasında gösterir). Var olan profil varsa yenisi açılmaz.
 export async function createShippingProfile(env: EtsyRuntimeEnv, input: ReturnType<typeof normalizeShippingProfileInput>, fetcher: Fetcher = fetch) {
   const shop = await getConnectedShop(env, fetcher);
   const existing = await shippingProfiles(env, shop.shopId, fetcher);
   if (existing.length) return { shippingProfileId: Number(existing[0].shipping_profile_id), alreadyExisted: true };
   const form = new URLSearchParams({
-    title: "Free shipping to the US from Türkiye",
+    title: input.costTry ? "Tracked shipping from Türkiye to the US" : "Free shipping to the US from Türkiye",
     origin_country_iso: "TR",
     destination_country_iso: "US",
-    primary_cost: "0",
-    secondary_cost: "0",
+    // Kargo alıcıya ait: girilen ücret (mağaza para birimi) Etsy'de ilan sayfasında ve ödemede alıcıya gösterilir.
+    primary_cost: String(input.costTry || 0),
+    secondary_cost: String(input.additionalCostTry ?? Math.round((input.costTry || 0) / 2)),
     min_delivery_days: String(input.minDeliveryDays),
     max_delivery_days: String(input.maxDeliveryDays),
     min_processing_time: String(input.minProcessingDays),
