@@ -74,6 +74,7 @@ import {
   stageDigitalUpload,
   createDigitalProduct,
   auditDigitalFiles,
+  deleteDigitalProduct,
   createEtsyDigitalDraft,
   createGrant,
   DigitalDeliveryError,
@@ -793,7 +794,12 @@ export async function handleRequest(request: Request, env: Env, context?: {waitU
       const store = digitalStore(env);
       return json(201, { product: await createDigitalProduct(store, form, url.origin, (key, bytes, mimeType) => putProductMedia(env, key, bytes, mimeType)) });
     }
-    const digitalProductMatch = url.pathname.match(/^\/api\/digital\/products\/([a-f0-9-]{36})(?:\/(grants|etsy-draft|etsy-status|qa))?$/);
+    const digitalProductMatch = url.pathname.match(/^\/api\/digital\/products\/([a-f0-9-]{36})(?:\/(grants|etsy-draft|etsy-status|qa|delete))?$/);
+    if (digitalProductMatch && request.method === "POST" && digitalProductMatch[2] === "delete") {
+      const blocked = requireConfirmedWrite(env, await readBody(request), "Dijital ürünü uygulamadan silme");
+      if (blocked) return blocked;
+      return json(200, await deleteDigitalProduct(digitalStore(env), digitalProductMatch[1]));
+    }
     if (digitalProductMatch && request.method === "GET" && !digitalProductMatch[2]) {
       const store = digitalStore(env);
       const product = await getDigitalProduct(store, digitalProductMatch[1]);

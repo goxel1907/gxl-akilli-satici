@@ -2541,6 +2541,16 @@ function DigitalPanel({ online, active = true, shopReady, prefill, onPrefillUsed
   const [details, setDetails] = useState<Record<string, any>>({});
   const [busy, setBusy] = useState<string>();
   const [fileQa, setFileQa] = useState<Record<string, any>>({});
+  // Başarısız ya da vazgeçilen ürün kafa karıştırmasın: uygulamadan silinir; Etsy'deki taslağa dokunulmaz.
+  const removeProduct = (product: any) => Alert.alert("Ürün uygulamadan silinsin mi?", `${product.name}: dosyaları ve kaydı uygulamadan silinir.${product.etsy?.listingId ? " Etsy'deki taslak veya ilan silinmez; onu Etsy'de Listings bölümünden siz silersiniz." : ""}`, [
+    { text: "Vazgeç", style: "cancel" },
+    { text: "Sil", style: "destructive", onPress: async () => {
+      setBusy(product.id);
+      try { await apiJson(`/api/digital/products/${product.id}/delete`, { method: "POST", headers: apiHeaders(true), body: JSON.stringify({ confirm: true }) }); setProducts((current) => current.filter((item) => item.id !== product.id)); }
+      catch (error) { Alert.alert("Silinemedi", errorText(error)); }
+      finally { setBusy(undefined); }
+    } }
+  ]);
   const auditFiles = async (product: any) => {
     setBusy(product.id);
     try { const report = await apiJson(`/api/digital/products/${product.id}/qa`, { headers: apiHeaders() }); setFileQa(current => ({ ...current, [product.id]: report })); }
@@ -2627,6 +2637,7 @@ function DigitalPanel({ online, active = true, shopReady, prefill, onPrefillUsed
         {!!product.etsy?.listingId && <Pressable style={[styles.secondaryButton, busy === product.id && styles.primaryDisabled]} disabled={busy === product.id} onPress={() => verifyPublication(product)}><Text style={styles.secondaryButtonText}>Yayın durumunu denetle</Text></Pressable>}
         <Pressable style={styles.secondaryButton} onPress={() => setGrantProduct(product)}><Text style={styles.secondaryButtonText}>Satış bağlantısı</Text></Pressable>
         <Pressable style={styles.secondaryButton} onPress={() => loadDetail(product.id)}><Text style={styles.secondaryButtonText}>Bağlantılar</Text></Pressable>
+        <Pressable style={styles.secondaryButton} disabled={busy === product.id} onPress={() => removeProduct(product)}><Text style={[styles.secondaryButtonText, { color: "#B4483A" }]}>Uygulamadan sil</Text></Pressable>
       </View>
       {(details[product.id]?.grants || []).map((grant: any) => <View style={styles.grantRow} key={grant.id}>
         <View style={{ flex: 1 }}><Text style={styles.rowTitle}>{grant.orderRef} · {grant.channel}</Text><Text style={styles.small}>{grant.revoked ? "Kapatıldı" : `${grant.downloads}/${grant.maxDownloads} indirme · ${new Date(grant.expiresAt).toLocaleDateString("tr-TR")} tarihine kadar`}</Text></View>

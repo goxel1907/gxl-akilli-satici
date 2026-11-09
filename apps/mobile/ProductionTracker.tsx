@@ -4,7 +4,7 @@ import {SafeAreaView} from "react-native-safe-area-context";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import ListingMascot from "./ListingMascot";
 import {PRINTABLE_WORKSPACE_KEY,parsePrintableWorkspace,type PrintableWorkspace} from "./workflow-state";
-import {PRODUCTION_TRACKER_KEY,PRODUCTION_STAGES,EXTERNAL_STAGES,productionId,readProductionRecords,rememberProduction,changeProduction,syncProductionProduct,parseProductionReceipt,productionTrackingPrompt,productionContinuation,savedConversationUrl,setProductionConversation,type ProductionRecord,type ProductionStage} from "./production-tracker";
+import {PRODUCTION_TRACKER_KEY,PRODUCTION_STAGES,EXTERNAL_STAGES,productionId,readProductionRecords,rememberProduction,changeProduction,syncProductionProduct,parseProductionReceipt,productionTrackingPrompt,productionContinuation,savedConversationUrl,setProductionConversation,removeProduction,type ProductionRecord,type ProductionStage} from "./production-tracker";
 
 const ACTIVE_KEY="gxl.productionActive.v1";
 const listeners=new Set<(rows:ProductionRecord[])=>void>();
@@ -23,6 +23,13 @@ export async function restoreProductions(){
     if(legacy&&!rows.some(row=>row.id===productionId(legacy)))return mutateProduction(current=>changeProduction(rememberProduction(current,legacy),productionId(legacy),"status_unknown","app"));
     return rows;
   });
+}
+// Çalışmayı telefondan kaldırır; açık çalışma buysa geri yüklenmesin diye o kayıt da silinir.
+export async function deleteProduction(id:string){
+  await mutateProduction(rows=>removeProduction(rows,id));
+  const legacy=parsePrintableWorkspace(await AsyncStorage.getItem(PRINTABLE_WORKSPACE_KEY));
+  if(legacy&&productionId(legacy)===id)await AsyncStorage.removeItem(PRINTABLE_WORKSPACE_KEY);
+  if(await AsyncStorage.getItem(ACTIVE_KEY)===id)await AsyncStorage.removeItem(ACTIVE_KEY);
 }
 export async function saveProductionWorkspace(workspace:PrintableWorkspace){
   await mutateProduction(rows=>rememberProduction(rows,workspace));
@@ -74,6 +81,7 @@ function SavedProductionDetails({record,onClose,onResume}:{record:ProductionReco
     <Text accessibilityRole="header" style={s.heading}>Kayıtlı çalışma açıldı</Text>
     <Text style={s.name}>{workspace.plan.brief.name}</Text><Text style={s.status}>{PRODUCTION_STAGES[record.stage]}</Text><Text style={s.small}>{sourceLabel(record)} · {new Date(record.updatedAt).toLocaleString("tr-TR")}</Text>
     <Text style={s.body}>Bu ürünün kayıtlı paketi açık. Başlık, açıklama, etiketler, fiyat ve kapsam aşağıda korunuyor.</Text>
+    <Pressable accessibilityRole="button" style={s.secondary} disabled={busy} onPress={()=>Alert.alert("Çalışma silinsin mi?","Bu ilan çalışması uygulamadaki listeden kaldırılır. Etsy'deki taslağa veya ilana dokunulmaz.",[{text:"Vazgeç",style:"cancel"},{text:"Sil",style:"destructive",onPress:()=>run(async()=>{await deleteProduction(record.id);onClose();})}])}><Text style={s.link}>Bu çalışmayı listeden sil</Text></Pressable>
     <Pressable accessibilityRole="button" style={s.primary} disabled={busy} onPress={()=>run(()=>Linking.openURL(conversation||(workspace.input.assistant==="claude"?"https://claude.ai/":"https://chatgpt.com/")))}><Text style={s.white}>{conversation?`Kaydedilmiş ${tool} sohbetini aç`:`${toolAcc} aç ve mevcut sohbetini seç`}</Text></Pressable>
     <Text style={s.small}>{conversation?"Bu bağlantı senin bu ürüne bağladığın sohbeti açar. Uygulama sohbeti otomatik okumaz.":`Bu ürünün özel sohbet bağlantısı henüz kayıtlı değil. ${tool} açıldığında mevcut ürün sohbetini geçmişinden seç. Aynı sohbete doğrudan dönmek için bağlantısını bir kez kaydedebilirsin.`}</Text>
     <Pressable accessibilityRole="button" style={s.secondary} disabled={busy} onPress={()=>setLinkEditing(!linkEditing)}><Text style={s.link}>{linkEditing?"Sohbet bağlantısı alanını kapat":conversation?"Kayıtlı sohbet bağlantısını değiştir":"Bu ürüne sohbet bağlantısı ekle"}</Text></Pressable>

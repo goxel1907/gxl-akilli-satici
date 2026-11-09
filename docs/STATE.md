@@ -14,7 +14,14 @@ Güncelleme: 9 Kasım 2026
 - Kaçış odası (christmas escape room) paketi hazır; ürün üretilmedi.
 - Bildirim (e-posta/WhatsApp) altyapısı var, gönderici bağlı değil (Codex #69).
 
+## Kalite güvenceleri (testlerde)
+- category-offers-sweep.test.ts: 19 dijital türde rakip örneklemi + öneriler; başlıkta yanlış format/marka/test verisi yok.
+- all-tabs-smoke.test.ts: uzman ve basit moddaki her sekme ve Etsy alt sekmesi hatasız açılıyor.
+
 ## Bu oturumda (Claude, 9 Kasım)
+- Silme: Dijital ürün kartında "Uygulamadan sil"; kayıtlı çalışmada "Bu çalışmayı listeden sil" (Etsy'ye dokunmaz).
+- Başlık: basılmayan ürünlerde (duvar kâğıdı, ikon, tablo, sunum, özgeçmiş) "printable pdf", sunum/tablo/ekran ürünlerinde kâğıt ölçüsü başlığa girmez.
+- Araştırma: arama türü söylemiyorsa tür kelimesi eklenir (sunum oyunu → "powerpoint"); "christmas trivia game" artık öneri alıyor.
 - Görsel seçimi: dosyalardan seçme + ada göre doğal sıralama + ekleyerek seçme + temizle.
 - Büyük dosyada (>2.5 MB) dosya denetimi hafif modda; sunucu düşerse taslağa devam edilebilir.
 - Sunucu hata mesajı kod numaralı ve anlaşılır.

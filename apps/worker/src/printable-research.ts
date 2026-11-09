@@ -44,8 +44,16 @@ export function matchesPrintableProduct(input: ResearchProduct, row: Record<stri
 
 // A fresh, product-specific sample. Never reuse the seed's old competition or mix
 // physical products into digital-product price recommendations.
+// Arama ifadesi ürün türünü söylemiyorsa (ör. sunum oyunu için "christmas trivia game") Etsy basılı ürünleri getirir
+// ve aynı türde rakip bulunamaz; türün alıcı kelimesi aramaya eklenir.
+const KIND_SEARCH_WORD: Partial<Record<string, string>> = { slides: "powerpoint", spreadsheet: "spreadsheet", digital_planner: "digital", wallpaper: "phone wallpaper", app_icons: "app icons", resume: "resume template" };
+function kindSearch(keyword: string, kind: string): string {
+  const word = KIND_SEARCH_WORD[kind];
+  return word && inferPrintableKind(keyword) !== kind ? `${keyword} ${word}`.slice(0, 80) : keyword;
+}
+
 export async function researchPrintableMarket(env: EtsyRuntimeEnv, input: ResearchProduct, fetcher: typeof fetch = fetch) {
-  const keyword = normalizeKeyword(input.keyword || input.productType);
+  const keyword = kindSearch(normalizeKeyword(input.keyword || input.productType), input.kind);
   const selectedIds = competitorIds(input.competitorLinks);
   const response = await etsyRequest<{ count?: number; results?: Array<Record<string, unknown>> }>(env, "/application/listings/active", {
     authenticated: false, query: { keywords: keyword, sort_on: "score", limit: 100, currency: "USD" }
