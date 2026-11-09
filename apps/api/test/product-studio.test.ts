@@ -12,6 +12,7 @@ import {
   ruleKeywordCandidates
 } from "../../worker/src/product-studio.js";
 import { handleRequest } from "../../worker/src/index.js";
+import { buildMarketStrategy } from "../../worker/src/market-strategy.js";
 
 function memoryKv() {
   const values = new Map<string, string>();
@@ -40,6 +41,7 @@ const silverTesbih = () => normalizeProductInput({
 function scan(keyword: string, score: number, activeListings: number, medianPriceUsd: number, tags: string[]): TrendResult {
   return {
     keyword,
+    strategy: buildMarketStrategy(keyword, [1,2,3].map(listing_id => ({ listing_id, title: `${keyword} example`, price: { amount: Math.round(medianPriceUsd * 100), divisor: 100, currency_code: "USD" } }))),
     group: "tesbih",
     score,
     verdict: "Talep zayıf",

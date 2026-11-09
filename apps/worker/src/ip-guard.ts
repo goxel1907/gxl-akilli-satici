@@ -8,7 +8,7 @@ const PROTECTED_TERMS = [
   "sailor moon", "studio ghibli", "totoro", "my little pony", "strawberry shortcake", "winnie the pooh", "looney tunes", "scooby doo", "sonic the hedgehog", "super mario", "zelda",
   // Rakip planlayıcı/defter markaları: PDF ürünlerinde en sık görülen marka ihlali bunlardır.
   "erin condren", "happy planner", "hobonichi", "passion planner", "clever fox", "moleskine", "filofax", "plum paper",
-  "labubu", "k-pop demon hunters", "bridgerton", "stranger things", "gilmore girls", "addams family",
+  "labubu", "k-pop demon hunters", "stray kids", "skzoo", "bridgerton", "stranger things", "gilmore girls", "addams family",
   // TV yarışması adları: sunum oyunlarında en sık görülen marka ihlali ("Jeopardy style" de markadır).
   "jeopardy", "family feud", "wheel of fortune", "who wants to be a millionaire", "kahoot", "the price is right", "deal or no deal"
 ];

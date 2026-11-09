@@ -1,3 +1,4 @@
+import { validPdf } from "./fixtures/valid-pdf.js";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { buildAdvice } from "../../worker/src/advice.js";
@@ -45,15 +46,15 @@ test("printable scans measure competitor formats, bundles, page counts and brand
   assert.equal(result.signals!.pageCountMedian, 35);
   assert.deepEqual(result.signals!.ipRisks, ["disney"]);
   assert.equal(result.advice![0].titleTr, "Marka / telif riski");
-  assert.ok(result.advice!.some((item) => item.titleTr === "Boşluk: US Letter"));
+  assert.ok(result.advice!.some((item) => item.titleTr === "Tasarım seçeneği: US Letter"));
   assert.ok(result.advice!.some((item) => item.titleTr === "Daha fazla değer ver" && item.detailTr.includes("42")));
 });
 
 test("advice reacts to standard formats and bundle-heavy niches", () => {
   const result = scoreTrend("adult coloring pages", { count: 20_000, results: Array.from({ length: 12 }, (_, index) => listing(`Mandala Coloring Bundle ${index} US Letter A4 50 pages`, ["adult coloring pages", "mandala coloring"], 300 + index, 40)) }, NOW);
   const advice = buildAdvice(result);
-  assert.ok(advice.some((item) => item.titleTr === "Bu formatlar artık standart" && item.detailTr.includes("US Letter")));
-  assert.ok(advice.some((item) => item.titleTr === "Paketler satıyor"));
+  assert.ok(advice.some((item) => item.titleTr === "Örneklemde sık belirtilen formatlar" && item.detailTr.includes("US Letter")));
+  assert.ok(advice.some((item) => item.titleTr === "Örneklemde set ilanları"));
 });
 
 test("printable seed fills kind, product, formats and a page count above competitors", () => {
@@ -81,7 +82,7 @@ test("printable brief gives a kind-specific print prompt, artwork prompts and ad
   assert.match(planner.pdfPrompt, /@page/);
   assert.match(planner.pdfPrompt, /Never use trademarked names/);
   assert.deepEqual(planner.artPrompts, []);
-  assert.equal(planner.adVisuals.length, 10);
+  assert.equal(planner.adVisuals.length, 12);
   assert.ok(planner.adVisuals.every((visual) => visual.useTr && visual.aspect && visual.prompt.includes("Do not add any new text")));
   assert.ok(planner.adVisuals.every((visual) => visual.prompt.includes("Never use another seller's images")));
   assert.ok(planner.adVisuals.some((visual) => /Pinterest/.test(visual.useTr) && visual.aspect.startsWith("2:3")));
@@ -91,11 +92,11 @@ test("printable brief gives a kind-specific print prompt, artwork prompts and ad
   assert.ok(planner.pins.every((pin) => !/disney/i.test(`${pin.title} ${pin.description}`)));
   assert.ok(planner.bundleIdea.items.includes("budget planner"));
 
-  // 30 sayfalık boyama kitabı: 8 açık konu + kalan 22 sayfa için aynı kurallı şablon (sayfa sayısı ile görsel sayısı tutar).
+  // Every coloring page has its own explicit artwork prompt.
   const coloring = buildPrintableBrief({ kind: "coloring", productType: "adult coloring pages", trendFeatures: ["mushroom", "cottagecore"], pageCount: 30, seed: "b" });
-  assert.equal(coloring.artPrompts.length, 9);
+  assert.equal(coloring.artPrompts.length, 30);
   assert.match(coloring.artPrompts[0], /fully closed/);
-  assert.match(coloring.artPrompts[8], /^Coloring pages 9-30: /);
+  assert.match(coloring.artPrompts[8], /^Coloring page 9: /);
   assert.match(coloring.pdfPrompt, /## Artwork prompts/);
   const wallArt = buildPrintableBrief({ kind: "wall_art", productType: "wall art", trendFeatures: ["boho"], pageCount: 3, seed: "c" });
   assert.equal(wallArt.artPrompts.length, 3);
@@ -121,7 +122,7 @@ test("printable listing leads with the buyer phrase, lists formats and drops bra
 
 test("pattern briefs also get placement-labelled ad visuals", () => {
   const brief = buildPatternBrief({ craft: "crochet", productType: "cardigan", seed: "x", trendFeatures: ["granny square"], colors: ["sage green"] });
-  assert.equal(brief.adVisuals.length, 10);
+  assert.equal(brief.adVisuals.length, 12);
   assert.match(brief.adVisuals[1].prompt, /cardigan/);
   assert.match(brief.adVisuals[0].prompt, /Follow the Design spec from step 1 of this chat/);
 });
@@ -146,7 +147,7 @@ test("printable plan endpoint and kind-aware digital products", async () => {
 
   const form = new FormData();
   form.set("metadata", JSON.stringify({ name: "Muthine Budget Planner", kind: "planner", productType: "budget planner", listing: { title: "Budget Planner Printable", description: "A printable budget planner.", tags: ["budget planner"], materials: ["pdf file"] }, prices: { usd: 6.5 } }));
-  form.set("pdf", new File([Buffer.concat([Buffer.from("%PDF-1.4\n"), Buffer.alloc(4_000, 32)])], "Budget.pdf", { type: "application/pdf" }));
+  form.set("pdf", new File([validPdf("Budget.pdf")], "Budget.pdf", { type: "application/pdf" }));
   const product = await createDigitalProduct(store, form, "https://gxl.example", async () => undefined);
   assert.equal(product.kind, "planner");
   assert.equal(product.craft, undefined);
@@ -166,7 +167,7 @@ test("studio auto-picks the strongest search for a kind and fills a competitive 
     listing("Halloween Junk Journal Kit 40 pages", ["junk journal kit", "halloween ephemera"], 62, 80, 373)
   ] };
   const junk = { ...scoreTrend("junk journal kit", junkPayload, Date.now(), "printables"), nicheId: "junk-journal", kind: "paper_craft" };
-  const paper = { ...scoreTrend("digital paper pack", { count: 90_000, results: [listing("Digital Paper Pack", ["digital paper"], 5, 900, 300)] }, Date.now(), "printables"), kind: "paper_craft" };
+  const paper = { ...scoreTrend("digital paper pack", { count: 90_000, results: [listing("Digital Paper Pack", ["digital paper"], 5, 900, 300), listing("Digital Paper Pack Blue", ["digital paper"], 4, 900, 300), listing("Digital Paper Pack Green", ["digital paper"], 3, 900, 300)] }, Date.now(), "printables"), kind: "paper_craft" };
   values.set("etsy:trend:junk-journal-kit", JSON.stringify(junk));
   values.set("etsy:trend:digital-paper-pack", JSON.stringify(paper));
 
@@ -179,8 +180,8 @@ test("studio auto-picks the strongest search for a kind and fills a competitive 
   assert.ok(first.competition.launchPriceUsd! < first.competition.medianPriceUsd!);
   assert.ok(first.competition.bundlePriceUsd! > first.competition.medianPriceUsd!);
   assert.ok(first.competition.ourPages! > first.competition.competitorPages!);
-  assert.ok(first.competition.planTr.some((line) => line.startsWith("Fiyat:")));
-  assert.match(first.referenceNotes, /To outsell the top listings/);
+  assert.ok(first.competition.planTr.some((line) => line.startsWith("Fiyat denemesi:")));
+  assert.match(first.referenceNotes, /Design options to evaluate \(no sales guarantee\)/);
   assert.ok(!first.formats.some((format) => /lisans/.test(format)));
   const second = await createPatternSeed({}, store, { studio: "printable", kind: "paper_craft" });
   assert.notEqual(second.keyword, first.keyword);

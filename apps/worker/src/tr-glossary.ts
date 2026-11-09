@@ -63,6 +63,9 @@ export function termsToEnglish(values: unknown, kind: "color" | "feature", limit
 
 // İngilizce ifade → Türkçe karşılık. Uzun ifadeler önce eşlenir ("gift for her" tek parça).
 const PHRASES: Record<string, string> = {
+  "bridal shower games": "gelin partisi oyunları", "wedding shower games": "düğün öncesi parti oyunları", "bridal party games": "gelin partisi oyunları",
+  "bridal shower bundle": "gelin partisi seti", "bridal game bundle": "gelin partisi oyun seti", "bride to be games": "gelin adayı için oyunlar", "bridal games": "gelin partisi oyunları",
+  "wedding shower": "düğün öncesi parti", "bride to be": "gelin adayı", "bridal": "gelin partisi", "groom": "damat",
   "prayer beads": "tesbih", "gift for her": "kadına hediye", "gift for him": "erkeğe hediye", "gift for mom": "anneye hediye",
   "unisex gift": "herkese uygun hediye", "for women": "kadınlar için", "for men": "erkekler için", "handmade in türkiye": "Türkiye'de el yapımı",
   "instant download": "anında indirme", "digital download": "dijital indirme", "habit tracker": "alışkanlık takip sayfası",

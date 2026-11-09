@@ -1,6 +1,8 @@
+import { compareTrendEvidence, trendFreshness } from "../../mobile/trend-priority.js";
 import { buildAdvice, type TrendAdvice } from "./advice.js";
 import { etsyRequest, EtsyIntegrationError, type EtsyRuntimeEnv } from "./etsy.js";
 import { findIpRisks } from "./ip-guard.js";
+import { buildMarketStrategy, type MarketStrategy } from "./market-strategy.js";
 
 type Fetcher = typeof fetch;
 
@@ -159,6 +161,7 @@ export interface TrendExample {
 }
 
 export interface TrendResult {
+  strategy?: MarketStrategy;
   keyword: string;
   group: TrendGroup;
   nicheId?: string;
@@ -282,7 +285,7 @@ export function normalizeKeyword(value: string): string {
   return value.toLowerCase().replace(/[^\p{L}\p{Nd}\s'-]/gu, " ").replace(/\s+/g, " ").trim().slice(0, 60);
 }
 
-export function scoreTrend(keyword: string, payload: { count?: number; results?: unknown[] }, now = Date.now(), group: TrendGroup = inferTrendGroup(keyword)): TrendResult {
+export function scoreTrend(keyword: string, payload: { count?: number; results?: unknown[] }, now = Date.now(), group: TrendGroup = inferTrendGroup(keyword), scope: MarketStrategy["scope"] = "search_sample"): TrendResult {
   const profile = TREND_GROUPS[group];
   const listings = (Array.isArray(payload.results) ? payload.results : []).filter((row): row is EtsyListingRow => Boolean(row && typeof row === "object"));
   const activeListings = Math.max(0, Number(payload.count || listings.length));
@@ -353,9 +356,9 @@ export function scoreTrend(keyword: string, payload: { count?: number; results?:
 
   const signals = computeSignals(pageOne, topTags);
   const reasons = [
-    `Üst sıradaki ilanlar ayda ortanca ${favoritesPerMonth.toFixed(1)} favori, öne çıkan çeyrek ise ${leaderFavoritesPerMonth.toFixed(1)} favori alıyor (talep göstergesi).`,
+    `İlan yaşına göre aylık ortalama favori göstergesi: ortanca ${favoritesPerMonth.toFixed(1)}, öne çıkan çeyrek ${leaderFavoritesPerMonth.toFixed(1)}. Bu, son ayın gerçek artışı veya satış adedi değildir.`,
     `${activeListings.toLocaleString("tr-TR")} aktif ilanla rekabet ediliyor.`,
-    `İlk ${pageOne.length} ilanın %${Math.round(newcomerShare * 100)} kadarı son 6 ayda açılmış; yeni mağazanın öne çıkma şansı buna bağlı.`,
+    `İlk ${pageOne.length} ilanın %${Math.round(newcomerShare * 100)} kadarı son 6 ayda açılmış; bu, yeni ilanların örneklemdeki payıdır; mağaza yaşı veya satış başarısı ölçülmez.`,
     medianPriceUsd === undefined ? "Fiyat verisi alınamadı." : `Üst sıradaki ilanların ortanca fiyatı ${medianPriceUsd.toFixed(2)} USD.`,
     ...(digitalMismatch && profile.expectsDigital ? [`Bu aramada dijital desen payı yalnızca %${Math.round(digitalShare * 100)}; alıcılar çoğunlukla bitmiş ürün arıyor.`] : []),
     ...(digitalMismatch && profile.expectsDigital === false ? [`Bu aramadaki ilanların %${Math.round(digitalShare * 100)} kadarı dijital ürün; fiziksel ürün için arama ifadesini daraltın.`] : []),
@@ -368,6 +371,7 @@ export function scoreTrend(keyword: string, payload: { count?: number; results?:
     : "Zor";
 
   const result: TrendResult = {
+    strategy: buildMarketStrategy(keyword, pageOne.filter(row => profile.expectsDigital === undefined || (profile.expectsDigital ? row.listing_type === "download" || row.listing_type === "both" : row.listing_type === "physical")), now, scope),
     keyword,
     group,
     ...(group === "printables" ? { kind: inferPrintableKind(keyword) } : {}),
@@ -428,7 +432,7 @@ export async function scanTrend(
   const cached = await readCached(store, keyword);
   if (cached) {
     const age = now - Date.parse(cached.scannedAt);
-    if (age < CACHE_TTL_SECONDS * 1000 && (!input.force || age < FORCE_REFRESH_AFTER_MS)) return { ...cached, cached: true };
+    if (cached.strategy?.version === 1 && age >= -300_000 && age < CACHE_TTL_SECONDS * 1000 && (!input.force || age < FORCE_REFRESH_AFTER_MS)) return { ...cached, cached: true };
   }
 
   const payload = await etsyRequest<{ count?: number; results?: unknown[] }>(env, "/application/listings/active", {
@@ -449,7 +453,7 @@ export async function getTrendBoard(env: EtsyRuntimeEnv, store: TrendStore | und
     configured: Boolean(env.ETSY_API_KEY && env.ETSY_SHARED_SECRET),
     cacheHours: CACHE_TTL_SECONDS / 3600,
     groups: (["printables", "patterns", "tesbih", "vintage"] as const).map((id) => ({ id, labelTr: TREND_GROUPS[id].labelTr })),
-    niches: results.sort((a, b) => (b.result?.score ?? -1) - (a.result?.score ?? -1)),
-    method: "Etsy resmî aramasında üst sıradaki ilanların favori hızı, rekabet hacmi, yeni ilan payı ve fiyat bandı puanlanır. Etsy satış adedini API ile paylaşmadığı için puan tahmindir."
+    niches: results.map(row => ({ ...row, freshness: trendFreshness(row.result) })).sort((a, b) => compareTrendEvidence(a.result, b.result)),
+    method: "Etsy resmî aramasında üst sıradaki ilanların favori hızı, rekabet hacmi, yeni ilan payı ve fiyat bandı puanlanır. Puan bir satış veya dikkat çekme olasılığı değildir. Sıralamada son 6 saatte tarananlar önce gelir; eski veriler yeniden taranmalıdır."
   };
 }

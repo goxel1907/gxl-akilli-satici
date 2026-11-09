@@ -181,6 +181,16 @@ async function shopierRequest<T>(
   return await response.json() as T;
 }
 
+async function allPages<T>(env: ShopierRuntimeEnv, path: string, query: Record<string, string | number>, fetcher: Fetcher): Promise<T[]> {
+  const result: T[] = [];
+  for (let page = 1; page <= 100; page++) {
+    const batch = asArray<T>(await shopierRequest<unknown>(env, path, { query: { ...query, limit: 50, page } }, fetcher));
+    result.push(...batch);
+    if (batch.length < 50) return result;
+  }
+  throw new ShopierIntegrationError("UPSTREAM_FAILED", 502, path, "pagination", "Çok fazla kayıt var; eksik toplam gösterilmedi.");
+}
+
 function decimal(value: unknown, field: string): string {
   const normalized = String(value ?? "").trim().replace(",", ".");
   if (!/^\d+(?:\.\d{1,2})?$/.test(normalized) || Number(normalized) < 0) {
@@ -303,8 +313,8 @@ export async function getShopierSnapshot(env: ShopierRuntimeEnv, fetcher: Fetche
   const dateEnd = isoWithoutMilliseconds(new Date());
   const dateStart = isoWithoutMilliseconds(new Date(Date.now() - 30 * 24 * 60 * 60 * 1000));
   const [productPayload, orderPayload] = await Promise.all([
-    shopierRequest<unknown>(env, "/products", { query: { limit: 50, page: 1, sort: "dateDesc" } }, fetcher),
-    shopierRequest<unknown>(env, "/orders", { query: { dateStart, dateEnd, limit: 50, page: 1, sort: "dateDesc" } }, fetcher)
+    allPages<ShopierProduct>(env, "/products", { sort: "dateDesc" }, fetcher),
+    allPages<ShopierOrder>(env, "/orders", { dateStart, dateEnd, sort: "dateDesc" }, fetcher)
   ]);
   const products = asArray<ShopierProduct>(productPayload);
   const orders = asArray<ShopierOrder>(orderPayload);
@@ -320,7 +330,7 @@ export async function getShopierSnapshot(env: ShopierRuntimeEnv, fetcher: Fetche
 }
 
 export async function listShopierProducts(env: ShopierRuntimeEnv, fetcher: Fetcher = fetch) {
-  const payload = await shopierRequest<unknown>(env, "/products", { query: { limit: 50, page: 1, sort: "dateDesc" } }, fetcher);
+  const payload = await allPages<ShopierProduct>(env, "/products", { sort: "dateDesc" }, fetcher);
   return asArray<ShopierProduct>(payload).map(normalizeProduct);
 }
 
@@ -343,7 +353,7 @@ export async function updateShopierProduct(env: ShopierRuntimeEnv, id: string, i
 export async function listRedactedShopierOrders(env: ShopierRuntimeEnv, fetcher: Fetcher = fetch) {
   const dateEnd = isoWithoutMilliseconds(new Date());
   const dateStart = isoWithoutMilliseconds(new Date(Date.now() - 30 * 24 * 60 * 60 * 1000));
-  const payload = await shopierRequest<unknown>(env, "/orders", { query: { dateStart, dateEnd, limit: 50, page: 1, sort: "dateDesc" } }, fetcher);
+  const payload = await allPages<ShopierOrder>(env, "/orders", { dateStart, dateEnd, sort: "dateDesc" }, fetcher);
   return asArray<ShopierOrder>(payload).map((order) => ({
     id: String(order.id || ""),
     status: order.status,

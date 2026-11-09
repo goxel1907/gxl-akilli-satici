@@ -1,13 +1,23 @@
-import { approvals, leads, messages, products } from "../../api/src/data.js";
+import { ownerStore, ownerNotificationStatus, enqueueOwnerDraft, processOwnerNotifications, type OwnerNotificationEnv } from "./owner-notifications.js";
+import { readProductIdeas } from "./product-ideas.js";
+import { canRankTrend } from "../../mobile/trend-priority.js";
+import { readEtsyListingStatus } from "./etsy-listing-status.js";
+import { crmRequest, CrmStorageError, isCrmRoute, readCrmSnapshot, type CrmEnv } from "./crm-store.js";
+export { CrmStore } from "./crm-store.js";
+import { registerProductHandoff } from "./product-handoff.js";
+import { recommendProduct } from "./product-recommendation.js";
+import { acceptListingOffer, createListingOffers } from "./listing-offers.js";
+import { rememberProduct, type IdeaStore } from "./product-memory.js";
+import { researchPrintableMarket } from "./printable-research.js";
+import { products } from "../../api/src/data.js";
 import { patternPolicyIssues, patternPolicyMessage } from "./etsy-policy.js";
 import { generateListingPack } from "../../api/src/listing-agent.js";
 import { evaluateMarketplacePolicies, type ProductOrigin, type RiskFlag } from "../../api/src/marketplace-policy.js";
 import { buildOpportunityCenter, replyToAgent, type OpportunityContext } from "../../api/src/opportunity-agent.js";
-import { canStartConversation } from "../../api/src/policy.js";
 import { analyzeProductImages } from "../../api/src/product-analyzer.js";
 import { scoreProspect, type ProspectSignal } from "../../api/src/prospecting.js";
 import type { AiRuntimeEnv } from "../../api/src/structured-ai.js";
-import type { Channel, Lead } from "../../api/src/types.js";
+import type { Channel } from "../../api/src/types.js";
 import {
   createShopierProduct,
   createShopierWebhookSubscription,
@@ -61,7 +71,9 @@ import {
   type PinterestStore
 } from "./pinterest.js";
 import {
+  stageDigitalUpload,
   createDigitalProduct,
+  auditDigitalFiles,
   createEtsyDigitalDraft,
   createGrant,
   DigitalDeliveryError,
@@ -74,7 +86,7 @@ import {
   type DigitalStore
 } from "./digital-delivery.js";
 
-interface Env extends AiRuntimeEnv, ShopierRuntimeEnv, EtsyRuntimeEnv, PinterestRuntimeEnv {
+interface Env extends CrmEnv, OwnerNotificationEnv, AiRuntimeEnv, ShopierRuntimeEnv, EtsyRuntimeEnv, PinterestRuntimeEnv {
   APP_ACCESS_TOKEN?: string;
   PRODUCT_MEDIA?: {
     get(key: string): Promise<{ body: ReadableStream; httpEtag?: string } | null>;
@@ -167,7 +179,7 @@ function digitalStore(env: Env): DigitalStore {
 
 async function readMultipart(request: Request): Promise<FormData> {
   const contentLength = Number(request.headers.get("content-length") || 0);
-  if (contentLength > 45_000_000) throw new Error("PAYLOAD_TOO_LARGE");
+  if (contentLength > 120_000_000) throw new Error("PAYLOAD_TOO_LARGE");
   if (!(request.headers.get("content-type") || "").includes("multipart/form-data")) {
     throw new DigitalDeliveryError("VALIDATION_FAILED", "Dosya yüklemesi multipart/form-data olarak gönderilmelidir.");
   }
@@ -306,23 +318,6 @@ async function shopierCenter(env: Env) {
   };
 }
 
-function dashboard() {
-  return {
-    metrics: {
-      activeLeads: leads.filter((lead) => lead.stage === "active").length,
-      pendingApprovals: approvals.filter((approval) => approval.status === "pending").length,
-      catalogProducts: products.length,
-      conversations: new Set(messages.map((message) => message.leadId)).size
-    },
-    leads,
-    approvals,
-    products,
-    messages: messages.slice(-20)
-  };
-}
-
-const channels = new Set<Channel>(["whatsapp", "instagram", "facebook", "shopier", "letgo", "etsy", "email"]);
-
 function sourceName(channel: Channel): string {
   const names: Record<Channel, string> = {
     whatsapp: "WhatsApp",
@@ -337,6 +332,7 @@ function sourceName(channel: Channel): string {
 }
 
 async function opportunityContext(env: Env): Promise<OpportunityContext> {
+  const { leads } = await readCrmSnapshot(env);
   let shopier: OpportunityContext["shopier"];
   try {
     const snapshot = await getShopierSnapshot(env);
@@ -353,6 +349,7 @@ async function opportunityContext(env: Env): Promise<OpportunityContext> {
 
   return {
     shopier,
+    productIdeas: await readProductIdeas(env.ETSY_OAUTH as unknown as TrendStore | undefined),
     etsy: await getEtsyStatus(env),
     catalogProducts: products.map((product) => ({
       id: product.id,
@@ -370,7 +367,7 @@ async function opportunityContext(env: Env): Promise<OpportunityContext> {
         ? `Müşteri ${new Date(lead.lastInboundAt).toLocaleDateString("tr-TR")} tarihinde görüşmeyi kendisi başlattı.`
         : "Açık iletişim izni ve doğrulanmış ürün ilgisi mevcut.",
       score: lead.score,
-      contactAllowed: lead.consent
+      contactAllowed: lead.consent && lead.stage !== "blocked"
     }))
   };
 }
@@ -393,11 +390,11 @@ async function storeListingPhoto(env: Env, form: FormData, origin: string): Prom
 }
 
 function authorized(request: Request, env: Env): boolean {
-  if (!env.APP_ACCESS_TOKEN) return true;
+  if (!env.APP_ACCESS_TOKEN?.trim()) return false;
   return request.headers.get("authorization") === `Bearer ${env.APP_ACCESS_TOKEN}`;
 }
 
-export async function handleRequest(request: Request, env: Env): Promise<Response> {
+export async function handleRequest(request: Request, env: Env, context?: {waitUntil(task:Promise<unknown>):void}): Promise<Response> {
   try {
     if (request.method === "OPTIONS") return json(204, {});
     const url = new URL(request.url);
@@ -521,7 +518,7 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
       const manual = (from: string) => from === "elle arandı";
       const tr = await turkishForPhrases([...items.map((item) => item.keyword), ...items.filter((item) => !manual(item.from)).map((item) => item.from)], env, store);
       return json(200, {
-        autopilot: await autopilotStatus(store),
+        autopilot: await autopilotStatus(store, Boolean(env.ETSY_API_KEY && env.ETSY_SHARED_SECRET)),
         items: items.map((item) => ({ ...item, keywordTr: turkishFor(tr, item.keyword), fromTr: manual(item.from) ? undefined : turkishFor(tr, item.from) }))
       });
     }
@@ -529,7 +526,7 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
     if (request.method === "POST" && url.pathname === "/api/patterns/seed") {
       const input = await readBody(request);
       const text = (value: unknown) => value ? String(value) : undefined;
-      return json(200, await createPatternSeed(env, env.ETSY_OAUTH as unknown as TrendStore | undefined, { keyword: text(input.keyword), craft: text(input.craft), group: text(input.group), kind: text(input.kind), studio: text(input.studio) }));
+      return json(200, await createPatternSeed(env, env.ETSY_OAUTH as unknown as TrendStore | undefined, { keyword: text(input.keyword), craft: text(input.craft), group: text(input.group), kind: text(input.kind), studio: text(input.studio), avoidKeyword: text(input.avoidKeyword) }));
     }
     // Etsy 22 Ekim 2026: yapay zekâ deseni yasak. Yapay zekâya desen yazdıran talimat paketi artık üretilmez;
     // yalnız satıcının kendi yazdığı ve denediği desen için ilan metni (başlık, etiket, açıklama) hazırlanır.
@@ -546,14 +543,46 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
       return json(200, guardDigitalListing(listing));
     }
 
+    if (request.method === "POST" && url.pathname === "/api/printables/suggestions") {
+      return json(200,await createListingOffers(env,env.ETSY_OAUTH as unknown as Parameters<typeof createListingOffers>[1],await readBody(request)));
+    }
+
+    if (request.method === "POST" && url.pathname === "/api/printables/research") {
+      const raw = await readBody(request);
+      const input = normalizePrintablePlanInput(raw);
+      // Read-only research: no generated name, handoff, product or Etsy draft.
+      const research = await researchPrintableMarket(env, input);
+      const recommendation = await recommendProduct(input,research,env.ETSY_OAUTH as unknown as IdeaStore | undefined);
+      if (raw.autoScope === true) recommendation.contentBudget.effective = recommendation.contentBudget.suggested;
+      return json(200, { research: { ...research,recommendation } });
+    }
+
     if (request.method === "POST" && url.pathname === "/api/printables/plan") {
-      const input = normalizePrintablePlanInput(await readBody(request));
+      const raw = await readBody(request);
+      if (raw.suggestionId) return json(200,await acceptListingOffer(env.ETSY_OAUTH as unknown as Parameters<typeof acceptListingOffer>[0],String(raw.suggestionId)));
+      let input = normalizePrintablePlanInput(raw);
+      const research = raw.research === true ? await researchPrintableMarket(env, input) : undefined;
+      const recommendation = research ? await recommendProduct(input,research,env.ETSY_OAUTH as unknown as IdeaStore | undefined) : undefined;
+      if (recommendation?.requiresNewTopic) return json(422,{error:"Bu konuda önerilen içerik yaklaşımları daha önce hazırlanmış. Aynı ürünü yeniden adlandırmak yerine farklı bir konu veya hedef Etsy araması seçin.",code:"PRODUCT_IDEA_EXHAUSTED"});
+      if (recommendation) {
+        const budget = recommendation.contentBudget;
+        input = { ...input, pageCount: raw.autoScope === true ? budget.suggested : budget.effective, creativeDirection: recommendation.directionEn };
+        budget.effective = input.pageCount!;
+        recommendation.productionBriefEn = recommendation.productionBriefEn.replace(/Core scope: \d+/,`Core scope: ${input.pageCount}`);
+      }
+      if (research) input = { ...input, priceUsd: research.competition.launchPriceUsd, trendTags: research.trendTags, referenceNotes: `${research.marketBriefEn}${input.referenceNotes && !/^(?:Etsy market brief|Fresh product-matched Etsy sample)/i.test(input.referenceNotes.trim()) ? `\nSeller design notes (not independent market evidence): ${input.referenceNotes}` : ""}` };
       const store = env.ETSY_OAUTH as unknown as TrendStore | undefined;
       const usedNames = await readUsedNames(store);
       const brief = buildPrintableBrief({ ...input, avoidNames: usedNames });
       await rememberName(store, brief.name, usedNames);
-      const listing = await createPrintableListing(input, brief.name, env);
-      return json(200, guardPrintablePlan(brief, listing, { kind: input.kind, formats: input.formats }));
+      const listing = await createPrintableListing(input, brief.name, env, research?.strategy);
+      const handoff = store ? await registerProductHandoff(store, { name: brief.name, kind: input.kind, productType: input.productType }) : undefined;
+      const guarded = guardPrintablePlan(brief, listing, { kind: input.kind, formats: input.formats });
+      if (recommendation) guarded.brief.masterPrompt += `\n\n## Product recommendation and originality checks\n${recommendation.productionBriefEn}`;
+      if (research) guarded.brief.masterPrompt += `\n\n## Evidence-based market strategy\n${research.strategy.productionBriefEn}\n\n## Authoritative listing metadata\n${JSON.stringify({ productName: brief.name, title: guarded.listing.title, description: guarded.listing.description, tags: guarded.listing.tags, priceUsd: brief.priceUsd }, null, 2)}\nKeep this listing metadata aligned with the final product. If any claimed deliverable cannot be produced, report FAIL and ask the seller to regenerate the package rather than silently changing the product or claims. Do not publish the listing.`;
+      const finalPlan = guardPrintablePlan(guarded.brief, guarded.listing, { kind: input.kind, formats: input.formats });
+      if (finalPlan.quality.ok && recommendation) await rememberProduct(env.ETSY_OAUTH as unknown as IdeaStore | undefined,{kind:input.kind,keyword:research!.keyword,productType:input.productType,name:brief.name,title:finalPlan.listing.title,direction:recommendation.directionEn,pageCount:input.pageCount,createdAt:new Date().toISOString(),state:"prepared"});
+      return json(200, { ...finalPlan, ...(research ? { research: { ...research, ...(recommendation ? { recommendation } : {}) } } : {}), ...(recommendation ? { contentBudget: recommendation.contentBudget } : {}), ...(handoff ? { handoff } : {}) });
     }
 
     if (request.method === "GET" && url.pathname === "/api/pinterest/status") return json(200, await getPinterestStatus(env));
@@ -651,8 +680,30 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
     if (request.method === "POST" && url.pathname === "/api/etsy/orders/tracking") {
       return json(200, { order: await addEtsyTracking(env, normalizeTrackingInput(await readBody(request))) });
     }
+    if(url.pathname.startsWith("/api/owner-notifications")){
+      if(request.method==="GET"&&url.pathname==="/api/owner-notifications")return json(200,await ownerNotificationStatus(env));
+      if(request.method==="POST"){
+        const input=await readBody(request),blocked=requireConfirmedWrite(env,input,"Size özel bildirim ayarı veya gönderimi");if(blocked)return blocked;
+        if(url.pathname==="/api/owner-notifications/settings"){try{await ownerStore(env,"settings",input);return json(200,await ownerNotificationStatus(env));}catch(error){return json((error as any).status||503,{error:(error as Error).message});}}
+        if(url.pathname==="/api/owner-notifications/process"){
+          if(typeof input.id!=="string"||!/^[a-f0-9-]{36}$/.test(input.id))return json(400,{error:"Bir bildirim seçin."});
+          await processOwnerNotifications(env,{id:input.id,retry:true});return json(200,await ownerNotificationStatus(env));
+        }
+        if(url.pathname==="/api/owner-notifications/test"){
+          const result=await enqueueOwnerDraft(env,{text:"Where can I download my files?",productName:"GXL bağlantı testi"},{translationTr:"Dosyalarımı nereden indirebilirim?",intentTr:"İndirme yardımı",replyEn:"You can download your files from Purchases and reviews on Etsy.com. Thank you!",replyTr:"Dosyalarınızı Etsy.com üzerindeki Purchases and reviews bölümünden indirebilirsiniz. Teşekkür ederiz!",warningsTr:[],aiUsed:true},`Size özel bağlantı testi · ${crypto.randomUUID()}`);
+          if(result.id)await processOwnerNotifications(env,{id:result.id,retry:false});return json(200,{...await ownerNotificationStatus(env),test:result});
+        }
+      }
+      return json(404,{error:"Bildirim işlemi bulunamadı."});
+    }
     if (request.method === "POST" && url.pathname === "/api/messages/assist") {
-      return json(200, await assistBuyerMessage(normalizeMessageInput(await readBody(request)), env));
+      const input=normalizeMessageInput(await readBody(request)),result=await assistBuyerMessage(input,env);
+      let notification:any;
+      if(env.CRM_STORE&&result.aiUsed){
+        try{notification=await enqueueOwnerDraft(env,input,result);if(notification.id&&context)context.waitUntil(processOwnerNotifications(env,{id:notification.id}).catch(()=>undefined));}
+        catch{notification={queued:false,reasonTr:"Cevap hazır, ancak size özel bildirim kaydedilemedi. Bildirim bölümünü kontrol edin."};}
+      }
+      return json(200,{...result,...(notification?{notification}:{} )});
     }
     if (request.method === "POST" && url.pathname === "/api/marketing/plan") {
       const input = normalizeMarketingInput(await readBody(request));
@@ -680,7 +731,7 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
       let inlineScans = 0;
       for (const keyword of keywords) {
         const cached = await readCached(store, keyword);
-        if (cached) scans.push(cached);
+        if (cached && cached.strategy?.version === 1 && canRankTrend(cached)) scans.push(cached);
         else if (inlineScans < 2 && env.ETSY_API_KEY && env.ETSY_SHARED_SECRET) {
           inlineScans += 1;
           scans.push(await scanTrend(env, { keyword }, store));
@@ -724,6 +775,15 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
     if (request.method === "GET" && url.pathname === "/api/digital/products") {
       return json(200, { products: await listDigitalProducts(digitalStore(env)) });
     }
+    if (request.method === "POST" && url.pathname === "/api/digital/upload-part") {
+      const form = await readMultipart(request);
+      const blocked = requireConfirmedWrite(env, { confirm: form.get("confirm") === "true" }, "Dosya yükleme");
+      if (blocked) return blocked;
+      const asset = form.get("asset");
+      const role = form.get("role");
+      if (!asset || typeof asset === "string" || (role !== "file" && role !== "image")) return json(400, { error: "Dosya ve tür gerekli." });
+      return json(201, await stageDigitalUpload(digitalStore(env), asset, role));
+    }
     if (request.method === "POST" && url.pathname === "/api/digital/products") {
       const form = await readMultipart(request);
       let metadata: Record<string, unknown> = {};
@@ -733,12 +793,18 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
       const store = digitalStore(env);
       return json(201, { product: await createDigitalProduct(store, form, url.origin, (key, bytes, mimeType) => putProductMedia(env, key, bytes, mimeType)) });
     }
-    const digitalProductMatch = url.pathname.match(/^\/api\/digital\/products\/([a-f0-9-]{36})(?:\/(grants|etsy-draft))?$/);
+    const digitalProductMatch = url.pathname.match(/^\/api\/digital\/products\/([a-f0-9-]{36})(?:\/(grants|etsy-draft|etsy-status|qa))?$/);
     if (digitalProductMatch && request.method === "GET" && !digitalProductMatch[2]) {
       const store = digitalStore(env);
       const product = await getDigitalProduct(store, digitalProductMatch[1]);
       const grants = (await listGrants(store, product.id)).map((grant) => ({ ...grant, url: `${url.origin}/d/${grant.id}` }));
       return json(200, { product, grants });
+    }
+    if (digitalProductMatch && request.method === "GET" && digitalProductMatch[2] === "qa") return json(200, await auditDigitalFiles(digitalStore(env), digitalProductMatch[1]));
+    if (digitalProductMatch && request.method === "GET" && digitalProductMatch[2] === "etsy-status") {
+      const product = await getDigitalProduct(digitalStore(env), digitalProductMatch[1]);
+      if (!product.etsy?.listingId) return json(409, { error: "Önce Etsy taslağını oluşturun." });
+      return json(200, await readEtsyListingStatus(env, product.etsy.listingId));
     }
     if (digitalProductMatch && request.method === "POST" && digitalProductMatch[2] === "grants") {
       const input = await readBody(request);
@@ -814,10 +880,11 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
       return json(200, await shopierCenter(env));
     }
 
-    if (request.method === "GET" && url.pathname === "/api/dashboard") return json(200, dashboard());
+    if (isCrmRoute(request)) {
+      const response = await crmRequest(env, request);
+      return json(response.status, await response.json());
+    }
     if (request.method === "GET" && url.pathname === "/api/products") return json(200, products);
-    if (request.method === "GET" && url.pathname === "/api/leads") return json(200, leads);
-    if (request.method === "GET" && url.pathname === "/api/approvals") return json(200, approvals);
 
     if (request.method === "GET" && url.pathname === "/api/opportunities") {
       return json(200, buildOpportunityCenter(await opportunityContext(env)));
@@ -828,103 +895,12 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
       const message = String(input.message || "").trim();
       if (!message) return json(400, { error: "Ajana sorulacak mesaj gerekli." });
       if (message.length > 2_000) return json(400, { error: "Mesaj en fazla 2.000 karakter olabilir." });
-      return json(200, await replyToAgent(message, await opportunityContext(env), env));
-    }
-
-    if (request.method === "POST" && url.pathname === "/api/prospects/intake") {
-      const input = await readBody(request);
-      const channel = String(input.channel || "") as Channel;
-      const displayName = String(input.displayName || "").trim();
-      const handle = String(input.handle || "").trim();
-      const signals = Array.isArray(input.signals) ? input.signals as ProspectSignal[] : [];
-      if (!channels.has(channel) || !displayName || !handle || !signals.length) {
-        return json(400, { error: "Kaynak, görünen ad, kanal kimliği ve gerçek etkileşim sinyali gerekli." });
-      }
-      const scored = scoreProspect(signals, products.flatMap((product) => product.tags));
-      if (!scored.canDraftFirstContact) {
-        return json(202, { stored: false, classification: "market_signal", scored, reason: "Açık iletişim izni veya müşterinin başlattığı talep yok." });
-      }
-      const lastInboundAt = signals
-        .filter((signal) => signal.type === "inbound_message")
-        .map((signal) => signal.occurredAt)
-        .sort()
-        .at(-1);
-      let lead = leads.find((item) => item.channel === channel && item.handle === handle);
-      if (lead) {
-        lead.displayName = displayName;
-        lead.consent = true;
-        lead.interests = scored.matchedInterests;
-        lead.score = scored.score;
-        lead.stage = "qualified";
-        lead.lastInboundAt = lastInboundAt || lead.lastInboundAt;
-      } else {
-        lead = {
-          id: crypto.randomUUID(),
-          displayName,
-          channel,
-          handle,
-          stage: "qualified",
-          consent: true,
-          interests: scored.matchedInterests,
-          score: scored.score,
-          lastInboundAt,
-          autoReplyAllowed: false
-        } satisfies Lead;
-        leads.push(lead);
-      }
-      return json(201, { stored: true, classification: lastInboundAt ? "real_customer" : "permissioned_prospect", lead, scored });
-    }
-
-    if (request.method === "POST" && url.pathname === "/api/approvals") {
-      const input = await readBody(request);
-      const lead = leads.find((item) => item.id === String(input.leadId || ""));
-      if (!lead) return json(404, { error: "Müşteri adayı bulunamadı." });
-      if (!canStartConversation(lead)) return json(409, { error: "İzin/engelleme kuralı nedeniyle ilk temas oluşturulamaz." });
-      const approval = {
-        id: crypto.randomUUID(),
-        leadId: lead.id,
-        channel: lead.channel,
-        draft: String(input.draft || "").trim(),
-        productIds: Array.isArray(input.productIds) ? input.productIds.map(String) : [],
-        status: "pending" as const,
-        createdAt: new Date().toISOString()
-      };
-      if (!approval.draft) return json(400, { error: "Onaya sunulacak mesaj taslağı gerekli." });
-      approvals.push(approval);
-      lead.stage = "contact_pending";
-      return json(201, approval);
-    }
-
-    const approvalMatch = url.pathname.match(/^\/api\/approvals\/([^/]+)\/(approve|reject)$/);
-    if (request.method === "POST" && approvalMatch) {
-      const approval = approvals.find((item) => item.id === approvalMatch[1]);
-      if (!approval) return json(404, { error: "Onay kaydı bulunamadı." });
-      if (approval.status !== "pending") return json(409, { error: "Bu kayıt daha önce sonuçlandırıldı." });
-      approval.status = approvalMatch[2] === "approve" ? "approved" : "rejected";
-      approval.decidedAt = new Date().toISOString();
-      const lead = leads.find((item) => item.id === approval.leadId);
-      if (lead && approval.status === "approved") {
-        lead.stage = "active";
-        lead.autoReplyAllowed = true;
-        messages.push({
-          id: crypto.randomUUID(),
-          leadId: lead.id,
-          channel: lead.channel,
-          direction: "outbound",
-          text: approval.draft,
-          mediaUrls: [],
-          createdAt: new Date().toISOString(),
-          automated: false
-        });
-      }
-      return json(200, {
-        approval,
-        delivery: {
-          accepted: false,
-          mode: "manual_handoff",
-          reason: approval.status === "approved" ? "Kanal gönderim anahtarı bağlı değil; onaylı taslak uygulamada paylaşılmalı." : "Taslak reddedildi."
-        }
+      const history = (Array.isArray(input.history) ? input.history : []).slice(-10).flatMap(item => {
+        if (!item || typeof item !== "object") return [];
+        const row = item as Record<string, unknown>;
+        return row.role === "owner" || row.role === "agent" ? [{ role: String(row.role), text: String(row.text || "").slice(0, 1500) }] : [];
       });
+      return json(200, await replyToAgent(message, await opportunityContext(env), env, history));
     }
 
     if (request.method === "POST" && url.pathname === "/api/products/analyze-images") {
@@ -984,14 +960,21 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
     return json(404, { error: "Endpoint bulunamadı." });
   } catch (error) {
     console.error(error);
+    if (error instanceof CrmStorageError) return json(503, { error: error.message, code: "CRM_STORAGE_UNAVAILABLE" });
     const code = error instanceof Error ? error.message : "";
     if (code === "PAYLOAD_TOO_LARGE") return json(413, { error: "İstek çok büyük; her dosya (PDF veya ZIP) en fazla 20 MB olmalı ve görseller sıkıştırılmış olmalıdır." });
-    if (code === "AI_PROVIDER_NOT_CONFIGURED") return json(503, { error: "Gemini anahtarı henüz sunucuya eklenmedi." });
-    if (code === "AI_FREE_QUOTA_EXCEEDED") return json(429, { error: "Ücretsiz Gemini kotası doldu. Kota yenilenince tekrar deneyin; ücretli işlem yapılmadı." });
-    if (code === "AI_PROVIDER_REQUEST_FAILED") return json(502, { error: "Gemini geçici olarak yanıt vermedi. Bir süre sonra tekrar deneyin." });
+    if (code === "AI_PROVIDER_NOT_CONFIGURED") return json(503, { error: "Sunucuda yapay zekâ API bağlantısı yok. Sohbet aboneliği API bağlantısından ayrıdır." });
+    if (code === "AI_FREE_QUOTA_EXCEEDED") return json(429, { error: "Sunucudaki yapay zekâ API kotası veya hız sınırı aşıldı. ChatGPT / Claude sohbetini kullanabilir ya da sonra tekrar deneyebilirsiniz." });
+    if (code === "AI_PROVIDER_INVALID_REQUEST") return json(502, { error: "Yapay zekâ servisi sunucunun istek biçimini kabul etmedi. Bu bir bağlantı ayarı hatasıdır; tekrar denemek yerine sohbetten analiz aktarabilirsiniz." });
+    if (code === "AI_PROVIDER_ACCESS_DENIED") return json(503, { error: "Sunucudaki yapay zekâ API erişimi doğrulanamadı. ChatGPT / Claude sohbetinden analiz aktarabilirsiniz." });
+    if (code === "AI_PROVIDER_REQUEST_FAILED") return json(502, { error: "Sunucudaki yapay zekâ servisine ulaşılamadı. Sohbetten analiz aktarabilir veya sonra tekrar deneyebilirsiniz." });
+    if (code === "AI_PROVIDER_TIMEOUT") return json(504, { error: "Sunucudaki yapay zekâ analizi zaman aşımına uğradı. Bilgileriniz korunur; sohbetten analiz aktarabilir veya sonra tekrar deneyebilirsiniz." });
+    if (code === "AI_PROVIDER_INVALID_RESPONSE") return json(502, { error: "Yapay zekâ yanıtı okunamadı. Bilgileri elle girebilir veya sohbetten analiz aktarabilirsiniz." });
     if (code === "INVALID_IMAGE_INPUT") return json(400, { error: "Görsel biçimi veya boyutu uygun değil." });
     if (code === "PATTERN_CRAFT_INVALID") return json(400, { error: "El işi türünü seçin." });
     if (code === "PRODUCT_TITLE_REQUIRED") return json(400, { error: "Ürün adı gerekli." });
+    if (code === "CALENDAR_YEAR_CONFLICT") return json(400, { error: "Ürün ve arama farklı takvim yılları içeriyor. Tek bir yıl seçin." });
+    if (code === "PRINTABLE_FORMAT_INVALID") return json(400, { error: "Format tanınmadı. US Letter, A4, A5 veya ürünün desteklenen dosya formatlarını kullanın." });
     if (code === "PRINTABLE_KIND_INVALID") return json(400, { error: "Ürün türünü seçin." });
     if (code === "PATTERN_KEYWORD_REQUIRED") return json(400, { error: "Desen için bir Etsy araması seçin." });
     if (code === "PATTERN_PRODUCT_REQUIRED") return json(400, { error: "Ürün türünü yazın (ör. doily, slippers)." });
@@ -1026,11 +1009,12 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
 
 // Cron: Etsy trend otopilotu ve zamanı gelmiş Pinterest pini aynı tetiklemede çalışır.
 export async function handleScheduled(env: Env) {
-  const [autopilot, pinterest] = await Promise.all([
+  const [autopilot, pinterest, ownerNotifications] = await Promise.all([
     runAutopilot(env, env.ETSY_OAUTH as unknown as TrendStore | undefined),
-    processPinQueue(env, env.ETSY_OAUTH as unknown as PinterestStore | undefined).catch((error) => ({ error: error instanceof Error ? error.message : "Pinterest kuyruğu çalışmadı." }))
+    processPinQueue(env, env.ETSY_OAUTH as unknown as PinterestStore | undefined).catch((error) => ({ error: error instanceof Error ? error.message : "Pinterest kuyruğu çalışmadı." })),
+    processOwnerNotifications(env).catch(()=>({error:"Size özel bildirim kuyruğu işlenemedi."}))
   ]);
-  return { autopilot, pinterest };
+  return { autopilot, pinterest, ownerNotifications };
 }
 
 export default {

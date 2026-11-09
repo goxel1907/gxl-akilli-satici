@@ -1,0 +1,7 @@
+import type { SandboxStore } from "./sandbox.js";
+
+export function browserStore(): SandboxStore & {clear():Promise<void>} {
+  const open=new Promise<IDBDatabase>((resolve,reject)=>{const request=indexedDB.open("gxl-web-sandbox-v1",1);request.onupgradeneeded=()=>request.result.createObjectStore("kv");request.onsuccess=()=>resolve(request.result);request.onerror=()=>reject(Error("Web test deposu açılamadı."));});
+  async function operation<T>(mode:IDBTransactionMode,run:(store:IDBObjectStore)=>IDBRequest<T>):Promise<T>{const db=await open;return new Promise((resolve,reject)=>{const transaction=db.transaction("kv",mode),request=run(transaction.objectStore("kv"));transaction.oncomplete=()=>resolve(request.result);transaction.onerror=()=>reject(Error("Web test kaydı tamamlanamadı."));transaction.onabort=()=>reject(Error("Web test kaydı iptal edildi."));});}
+  return {async get(key,type){const row=await operation<any>("readonly",store=>store.get(key));if(!row || row.expires && row.expires<Date.now())return null;return type==="arrayBuffer" ? row.value instanceof ArrayBuffer?row.value:null:typeof row.value==="string"?row.value:null;},async put(key,value,options){await operation("readwrite",store=>store.put({value,expires:options?.expirationTtl?Date.now()+options.expirationTtl*1000:0},key));},async delete(key){await operation("readwrite",store=>store.delete(key));},async clear(){await operation("readwrite",store=>store.clear());}};
+}

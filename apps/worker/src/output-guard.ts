@@ -100,7 +100,7 @@ const STYLE_ONLY = /^(cozy|bold|easy|bold and easy|simple|boho|vintage|modern|cu
 
 function productFamilies(prompt: string): ThemeFamily[] {
   // Ürünü tanımlayan bölümler: özellikler, tema satırı ve Brief B konuları (kurallardaki "başka bayram yok" cümleleri hariç).
-  const lines = prompt.split("\n").filter((line) => /^- Buyer-favored features:|^- Theme:|^B\d+\./.test(line));
+  const lines = prompt.split("\n").filter((line) => /^- Buyer-favored features:|^- Selected design terms[^:]*:|^- Theme:|^B\d+\./.test(line));
   return [...new Set(lines.flatMap((line) => [...themeFamilies(line.replace(/nothing from other seasons, holidays or moods/g, "").replace(/;\s*add (nothing|no)\b[^;]*$/, ""))]))];
 }
 
@@ -127,6 +127,12 @@ function lintPrompt(c: Collector, field: string, fullPrompt: string, context: Pr
     find(c, field, requestTr, /^- STEP \d+|write next to continue|^## How we will work/m, "english_request", "Paketin istek kısmında İngilizce adım kaldı; adımlar Türkçe olmalı.");
   }
   lintText(c, field, prompt, { english: true, prose: false });
+  find(c, field, prompt, /buyer-favored features|most competing bundles do not offer|top-ranking [a-z -]+ lack/gi, "unsupported_market_claim", "Gözlenen kelimeler alıcı tercihi veya rakipte olmayan özellik olarak sunulmuş.");
+
+  const medianValues = [...prompt.matchAll(/(?:median price|comparable USD median)\s*:?\s*(\d+(?:\.\d+)?)\s*USD/gi)].map(match => Number(match[1]));
+  medianValues.push(...[...prompt.matchAll(/Observed USD price quartiles:\s*[\d.]+,\s*([\d.]+),/g)].map(match => Number(match[1])));
+  c.checks += 1;
+  if (new Set(medianValues).size > 1) c.issues.push({ code: "conflicting_market_median", field, severity: "error", messageTr: "Pakette farklı rakip fiyat ortancaları var. Eski özeti yeni analizle değiştirin." });
   const ruleFree = prompt.split("\n").filter((line) => !/^-?\s*(Never|- Never)|^\d+\.\s*Never|Never offer or mention/.test(line.trim())).join("\n");
   find(c, field, ruleFree, /commercial[- ]use license option|offer[^.\n]*commercial[- ]use|state them clearly on the cover/i, "license_conflict", "Talimat ticari lisans sunmayı istiyor ama lisans 'yalnız kişisel kullanım'.");
   find(c, field, ruleFree, /\bvideo tutorial\b|\bshort video\b/i, "impossible_video", "Talimat yapay zekânın yapamayacağı bir video istiyor.");
@@ -279,7 +285,7 @@ function report(c: Collector, fixed: string[]): GuardReport {
 
 interface PinLike { title: string; description: string; overlay: string }
 
-export function guardPrintablePlan<B extends { masterPrompt: string; pdfPrompt: string; pins: PinLike[]; artSubjects?: string[] }, L extends ListingLike>(brief: B, listing: L, context: { kind: PrintableKind; formats?: string[] }) {
+export function guardPrintablePlan<B extends { name?: string; masterPrompt: string; pdfPrompt: string; pins: PinLike[]; artSubjects?: string[] }, L extends ListingLike>(brief: B, listing: L, context: { kind: PrintableKind; formats?: string[] }) {
   const c: Collector = { issues: [], checks: 0 };
   const fixed: string[] = [];
   const masterPrompt = repairPrompt(brief.masterPrompt);
@@ -290,10 +296,15 @@ export function guardPrintablePlan<B extends { masterPrompt: string; pdfPrompt: 
     if (description !== pin.description) fixed.push(`pin${index + 1}`);
     return { ...pin, description };
   });
+  c.checks += 1;
+  const item = /- Item: ([^\n]+)/.exec(brief.pdfPrompt)?.[1] || "";
+  if (/\bwinery\b/i.test(brief.name || "") && !/\b(winery|wine|alcohol|tasting)\b/i.test(item)) c.issues.push({ code: "unintended_name_meaning", field: "name", severity: "error", messageTr: "Ürün adında konuya ait olmayan Winery (şaraphane) anlamı oluşmuş. Yeni bir adla hazırlayın." });
   const safeListing = repairListing(listing, fixed, "listing");
   lintPrompt(c, "masterPrompt", masterPrompt, { studio: "printable", kind: context.kind, formats: context.formats, subjects: brief.artSubjects });
   pins.forEach((pin, index) => {
     lintText(c, `pin${index + 1}`, `${pin.title}\n${pin.description}`, { english: true, prose: true });
+    if (context.kind === "party") find(c, `pin${index + 1}`, pin.description, /with a ["“](?:Wedding|Party|Groom)["”] game/i, "invented_game_claim", "Genel arama kelimesi doğrulanmış oyun adı gibi pin açıklamasına yazılmış.");
+
     // Kesilmiş açıklama yarım cümleyle biter.
     c.checks += 1;
     if (!/[.!?)]$/.test(pin.description.trim())) c.issues.push({ code: "cut_text", field: `pin${index + 1}`, severity: "error", messageTr: "Pin açıklaması yarım cümleyle bitiyor (metin kesilmiş)." });

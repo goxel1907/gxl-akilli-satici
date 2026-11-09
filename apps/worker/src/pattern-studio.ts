@@ -397,7 +397,7 @@ const NAME_FUNCTION_WORDS = new Set(["daily", "weekly", "monthly", "yearly", "an
 // Türetilen sözcük kaba, olumsuz veya tıbbi bir kelimeye ya da gerçek bir İngilizce kelimeye denk gelmemeli
 // ("Semen", "Sullen", "Linen" gibi); denk gelirse yeni sözcük türetilir.
 const BAD_NAME_PARTS = /(semen|penis|anal|anus|porn|sex|cum|slut|whore|nazi|rape|kill|dead|die|hate|tit|fag|nig|cock|dick|puss|vagin|bitch|damn|hell|shit|fuck|crap|piss|poop|turd|sull|gloom|doom|grim|scab|vomit|ugly|drug|meth|opium|weed|satan|demon|devil|cult|corpse|tumor|cancer|herpes|virus|toxic|venom|panic|manic|lunat|psych|retard|moron|idiot|stupid|dumb|loser|nasty|filth|smut|lewd|nude|naked|bomb|gun|war|blood)/i;
-const REAL_WORDS = new Set(["salon", "lemon", "melon", "seven", "women", "linen", "siren", "raven", "haven", "woven", "given", "fallen", "pollen", "stolen", "lumen", "omen", "toxin", "robin", "satin", "cabin", "basin", "resin", "rosin", "tenor", "manor", "minor", "donor", "major", "sonata", "stamina", "retina", "marina", "glamor", "rumor", "humor", "honor", "valor", "color", "molar", "solar", "polar", "lunar", "sugar", "cedar", "radar", "viral", "moral", "coral", "feral", "floral", "mural", "rural", "naval", "fatal", "vital", "total", "penal", "renal", "banal", "canal", "final", "tonal", "zonal", "sinus", "venus", "bonus", "lotus", "famine", "ravine", "marine", "saline", "feline", "canine", "bovine", "sardine", "tennis", "dennis", "lily", "molly", "sally", "silly", "belly", "jelly", "bully", "folly", "tally", "dolly", "gully", "rally", "valley", "galley", "alley", "volley", "nanny", "funny", "bunny", "penny", "sunny", "honey", "money", "doll", "bell", "mall", "pill", "fill"]);
+const REAL_WORDS = new Set(["winery", "wine", "brewery", "vodka", "booze", "liquor", "salon", "lemon", "melon", "seven", "women", "linen", "siren", "raven", "haven", "woven", "given", "fallen", "pollen", "stolen", "lumen", "omen", "toxin", "robin", "satin", "cabin", "basin", "resin", "rosin", "tenor", "manor", "minor", "donor", "major", "sonata", "stamina", "retina", "marina", "glamor", "rumor", "humor", "honor", "valor", "color", "molar", "solar", "polar", "lunar", "sugar", "cedar", "radar", "viral", "moral", "coral", "feral", "floral", "mural", "rural", "naval", "fatal", "vital", "total", "penal", "renal", "banal", "canal", "final", "tonal", "zonal", "sinus", "venus", "bonus", "lotus", "famine", "ravine", "marine", "saline", "feline", "canine", "bovine", "sardine", "tennis", "dennis", "lily", "molly", "sally", "silly", "belly", "jelly", "bully", "folly", "tally", "dolly", "gully", "rally", "valley", "galley", "alley", "volley", "nanny", "funny", "bunny", "penny", "sunny", "honey", "money", "doll", "bell", "mall", "pill", "fill"]);
 // Ada yalnız renk ve stil girer; hastalık, durum ve etkinlik adları ("ADHD Fona Planner", "Bachelorette ...") ürün adına girmez.
 const NAME_BANNED_ACCENTS = new Set(["ipad", "iphone", "android", "tablet", "goodnotes", "notability", "digital", "printable", "hyperlinked", "adhd", "ocd", "autism", "autistic", "anxiety", "depression", "mental", "health", "therapy", "grief", "trauma", "bachelorette", "funeral", "memorial", "sympathy", "cancer", "sobriety", "recovery", "divorce", "pregnancy", "ivf", "fertility", "shadow", "self", "care", "black", "charcoal"]);
 
@@ -468,7 +468,7 @@ function trendOriginalityRules(input: PatternPlanInput): { tr: string[]; en: str
     input.colors?.length ? `Renk paleti: ${input.colors.join(", ")}.` : "Renk paletini yapay zekâ özgün olarak önerecek."
   ];
   const en = [
-    `Build ${features ? `the buyer-favored features (${features})` : "what these buyers want"} into one coherent design with a single theme, your own proportions, layout and construction order.`,
+    `Build ${features ? `the selected design terms (observations, not verified buyer preferences) (${features})` : "what these buyers want"} into one coherent design with a single theme, your own proportions, layout and construction order.`,
     "Add one signature detail that the top-ranking listings do not have (a motif, a construction trick or a finishing detail) and name it in the cover promise.",
     input.colors?.length ? `Use this palette: ${input.colors.join(", ")}.` : "Propose a fresh 3-color palette with color names and hex codes."
   ];
@@ -719,6 +719,8 @@ function enforceOnce(value: string, characters: string[]): string {
 export function normalizeEtsyTitle(value: string): string {
   let title = value.replace(TITLE_DISALLOWED, "").replace(/\s+/g, " ").trim();
   title = enforceOnce(title, ["%", ":", "&", "+"]).replace(/\s+/g, " ").trim();
+  const phrases = new Set<string>();
+  title = title.split(",").map(part => part.trim()).filter(part => { const key=part.toLowerCase();if(!key || phrases.has(key))return false;phrases.add(key);return true; }).join(", ");
   if (title.length > 140) title = title.slice(0, 140).replace(/[\s,|-]+\S*$/, "").trim();
   return title.replace(/[\s,|-]+$/, "");
 }

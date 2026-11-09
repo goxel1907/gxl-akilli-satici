@@ -1,3 +1,4 @@
+import { trendFreshness } from "../../mobile/trend-priority.js";
 import {
   generateStructuredObject,
   hasAiProvider,
@@ -39,6 +40,11 @@ export interface OpportunityContext {
     connected: boolean;
     shopId?: number | string;
     shopName?: string;
+  };
+  productIdeas?: {
+    checkedAt: string;
+    method: string;
+    items: Array<{ keyword: string; labelTr?: string; group: string; kind?: string; score: number; scannedAt: string; sampleSize?: number; medianPriceUsd?: number; reason: string }>;
   };
   catalogProducts?: CatalogProduct[];
   prospects?: Array<{
@@ -164,12 +170,12 @@ export function buildOpportunitySources(context: OpportunityContext): Opportunit
       id: "search_trends",
       name: "Arama eğilimleri",
       category: "Talep araştırması",
-      status: "planned",
+      status: context.productIdeas?.items.length ? "live" : context.productIdeas ? "ready" : "planned",
       kind: "market_signal",
-      evidenceMode: "Toplu arama hacmi ve anahtar kelime eğilimi",
+      evidenceMode: "Etsy arama örneklemindeki favori ilgisi, rekabet, yeni ilan payı ve fiyat",
       canMessage: false,
       approvalRequired: false,
-      note: "Ürün ve SEO fırsatı üretir; kişi listesi üretmez.",
+      note: "Güncel fırsat puanları ürün fikri verir; gerçek arama hacmi veya satış olasılığı ölçülmez.",
     },
     {
       id: "community_signals",
@@ -242,6 +248,13 @@ export function buildOpportunityCenter(context: OpportunityContext): Opportunity
     });
   }
 
+  for (const idea of (context.productIdeas?.items || []).filter(item => trendFreshness(item) === "fresh").sort((a, b) => b.score - a.score)) {
+    opportunities.push({ id: `trend-${idea.keyword}`, kind: "market_signal", sourceId: "search_trends", sourceName: "Etsy trend araştırması",
+      title: `Ürün fikri: ${idea.labelTr || idea.keyword}`, evidence: `${idea.keyword}: ${idea.score}/100 fırsat puanı; tarama ${idea.scannedAt}; örneklem ${idea.sampleSize ?? "bilinmiyor"}. ${idea.reason}`,
+      confidence: idea.sampleSize !== undefined && idea.sampleSize >= 20 ? "medium" : "low",
+      nextAction: `${idea.keyword} aramasıyla ürün türüne özel rakip analizi yap; ardından özgün ürün paketini hazırla.`, contactAllowed: false, approvalRequired: false });
+  }
+
   if (shopier?.connected && (shopier.productCount ?? 0) > 0) {
     opportunities.push({
       id: "shopier-demand-test",
@@ -296,7 +309,7 @@ export function buildOpportunityCenter(context: OpportunityContext): Opportunity
     sourceId: "permissioned_email_forms",
     sourceName: "İzinli e-posta ve formlar",
     title: "Ürün talep ve haber verme formu oluştur",
-    evidence: "Henüz doğrulanmış izinli aday kaydı yok.",
+    evidence: context.prospects?.some(item => item.kind === "permissioned_prospect" && item.contactAllowed) ? "İzinli aday kayıtları mevcut; yeni talepler için izin kapsamı açık bir form kullanılabilir." : "Henüz doğrulanmış izinli aday kaydı yok.",
     confidence: "high",
     nextAction: "İlgilendiği ürün türü ve iletişim izni alan kısa bir form yayınla; yalnızca onay verenleri puanla.",
     contactAllowed: false,
@@ -336,6 +349,18 @@ function fallbackReply(message: string, context: OpportunityContext): AgentReply
     };
   }
 
+  if (/(trend|ürün fikri|hangi ürün|ne sat|fırsat|öncelik|yeni ürün)/i.test(normalized)) {
+    const items = (context.productIdeas?.items || []).filter(item => trendFreshness(item) === "fresh");
+    const group = /tesbih|gümüş/.test(normalized) ? "tesbih" : /vintage/.test(normalized) ? "vintage" : /örgü|desen/.test(normalized) ? "patterns" : "printables";
+    const ideas = items.filter(item => item.group === group).sort((a, b) => b.score - a.score).slice(0, 5);
+    return {
+      reply: ideas.length ? `Güncel taranan adaylar içinde öncelik sırası: ${ideas.map((item, index) => `${index + 1}) ${item.labelTr || item.keyword}: ${item.score}/100`).join("; ")}. Puan satış veya dikkat çekme olasılığı değildir; en güçlü aramadan ürün türüne özel rakip analiziyle başlayın.` : "Bu grupta son 6 saatte doğrulanmış ürün fikri yok. Etsy → Trendler bölümünde aramaları yeniden tarayın; eski veya taranmamış fikirleri en güçlü fırsat diye sıralamıyorum.",
+      basis: ideas.map(item => `${item.keyword} · ${item.scannedAt} · ${item.sampleSize ?? "bilinmeyen"} ilanlık örneklem`),
+      warnings: ["Favori ilgisi satış değildir; görselin dikkat çekmesini ve dönüşümü ancak gerçek ilan deneyiyle ölçebiliriz."],
+      suggestedActions: ideas.length ? ideas.slice(0, 3).map(item => `${item.keyword} için rakip analizi hazırla`) : ["Etsy → Trendler bölümünde seçili grubu tara"], requiresApproval: false
+    };
+  }
+
   const asksStatus = /(durum|shopier|hazır|bağlı|kaç ürün|sipariş)/i.test(normalized);
   if (asksStatus) {
     const shopierLine = shopier?.connected
@@ -372,7 +397,9 @@ export async function replyToAgent(
   message: string,
   context: OpportunityContext,
   env?: AiRuntimeEnv,
+  history: Array<{ role: string; text: string }> = [],
 ): Promise<AgentReply> {
+  if (/(hangi (yeni )?ürün|ürün (fikri|fikirleri|önerileri)|ne sat|fırsatları.*sırala|trend.*sırala)/i.test(message.toLocaleLowerCase("tr-TR"))) return fallbackReply(message, context);
   if (!env || !hasAiProvider(env)) return fallbackReply(message, context);
 
   try {
@@ -380,11 +407,12 @@ export async function replyToAgent(
       prompt: [
         "Sen GXL işletme sahibinin satış ajanısın.",
         "Yalnızca verilen canlı bağlamı gerçek veri say.",
+        "Ürün fikirlerini productIdeas içindeki güncel puan sırasıyla öner; örneklem ve tarama zamanını belirt. Eski/taranmamış veriden en güçlü fikir veya satış/dikkat çekme olasılığı uydurma. Puan başarı yüzdesi değildir. Google Trends bağlantısı arama hacmi verisi sayılmaz.",
         "real_customer, permissioned_prospect ve market_signal kavramlarını asla birbirine karıştırma.",
         "Kişisel veri kazıma, izinsiz toplu mesaj, sahte etkileşim veya platform kuralı ihlali önerme.",
         "İlk dış temas her zaman işletme sahibi onayı gerektirir.",
         "Kısa, açık ve Türkçe cevap ver.",
-        JSON.stringify({ message, context, opportunityCenter: buildOpportunityCenter(context) }),
+        JSON.stringify({ message, history, context, opportunityCenter: buildOpportunityCenter(context) }),
       ].join("\n"),
       schemaName: "gxl_owner_agent_reply",
       schema: {

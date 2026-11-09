@@ -5,7 +5,7 @@ import type { PatternCraft, PrintableKind } from "./etsy-trends.js";
 // Bu protokol kontrolü göze değil koda bağlar: dosyaları açan bir betik yazılır, çıktısı yapıştırılır, FAIL kalmadan adım bitmez.
 // Her ürün türü yalnız kendisine uyan kontrolleri alır (boyama kitabına saat sırası, kâğıt kitine sekme bağlantısı sorulmaz).
 export type QaInput =
-  | { type: "printable"; name: string; kind: PrintableKind; formats: string[]; pages: number; pagesNote?: string; papersOnly?: boolean; escapeRoom?: boolean }
+  | { type: "printable"; name: string; kind: PrintableKind; formats: string[]; pages: number; pagesNote?: string; papersOnly?: boolean; escapeRoom?: boolean; year?: number; alphabet?: boolean }
   | { type: "pattern"; name: string; craft?: PatternCraft; terms: string; unit: string; sizes?: string };
 
 // Sayfa ölçüsü tablosu yalnız ürünün gerçek formatlarından kurulur.
@@ -146,7 +146,7 @@ export function qaProtocol(input: QaInput): string[] {
   const intro = [
     `Write ONE Python script (${input.type === "printable" && input.kind === "slides" ? "python-pptx for the .pptx and pypdf or pdfplumber for the PDF" : input.type === "printable" && input.kind === "resume" ? "python-docx for the .docx files and pypdf or pdfplumber for the PDFs" : input.type === "printable" && input.kind === "spreadsheet" ? "openpyxl for the .xlsx and pypdf or pdfplumber for the PDF" : "pypdf or pdfplumber; PyMuPDF if available"}) that opens every delivered file and prints a PASS/FAIL table, one line per check below.`,
     "Paste the script output itself, not a summary. A step is not done while any line says FAIL: fix the files and run the script again.",
-    "Saying \"checked\" without the script output does not count. Only if you cannot run code at all: give one PASS/FAIL line per check with the evidence you looked at."
+    "Saying \"checked\" without the script output does not count. If you cannot run code, mark automated checks UNVERIFIED, provide manual evidence separately, and do not call the files ready for sale."
   ];
   // Cilt payı yalnız deliği/cildi olan sayfalarda: planlayıcı, günlük, tarif dosyası sayfaları ve desen PDF'i (kartlarda yok).
   const binding = input.type === "printable" && ["planner", "journal"].includes(input.kind);
@@ -168,7 +168,7 @@ export function qaProtocol(input: QaInput): string[] {
       : input.type === "printable" && input.kind === "spreadsheet"
       ? "MARGINS — in the quick-start PDF every word's bounding box is at least 6 mm from each page edge; in the workbook no text is cut off in its cell at 100% zoom."
       : `MARGINS — every word's bounding box is at least 6 mm from each page edge${binding ? " (19 mm on the binding side of print editions)" : input.type === "printable" && input.kind === "recipe" ? " (19 mm on the binding side of the binder pages)" : ""}; nothing is clipped.`,
-    `AMERICAN ENGLISH — list every word in the files and file names that is not in an American English dictionary and fix the real typos (the product name "${input.name}" is a coined word: keep it); also list and fix any British spelling or word (\"colour\", \"favourite\", \"organise\", \"grey\", \"centre\", \"Mum\", \"maths\") and any Turkish word or Turkish-only letter (c-cedilla, g-breve, dotless i, o-umlaut, s-cedilla, u-umlaut).`,
+    `AMERICAN ENGLISH — list every word in the files and file names that is not in an American English dictionary and fix the real typos (the exact product name "${input.name}" is a declared proper-name allowlist entry: keep it); also list and fix any British spelling or word (\"colour\", \"favourite\", \"organise\", \"grey\", \"centre\", \"Mum\", \"maths\") and any Turkish word or Turkish-only letter (c-cedilla, g-breve, dotless i, o-umlaut, s-cedilla, u-umlaut).`,
     "VISUAL — render every page to a contact-sheet image, look at it and list anything empty, crowded, cut off or inconsistent."
   ];
   if (input.type === "printable") {
@@ -207,7 +207,8 @@ export function qaProtocol(input: QaInput): string[] {
         ? "THEME — every template uses the same fonts, accent color and heading style from the Product spec."
         : "THEME — list every page title; none names a different holiday, season or mood than the theme in the Product spec.",
       ...(textKind || input.kind === "calendar" || input.kind === "cards" ? ["LEGIBILITY — body text at least 9 pt, labels at least 7 pt, label color contrast at least 4.5:1 on white."] : []),
-      ...(KIND_CHECKS[input.kind] || []),
+      ...(KIND_CHECKS[input.kind] || []).map(line => input.kind === "calendar" && input.year ? line.replace(String(calendarYear()), String(input.year)) : line),
+      ...(input.alphabet ? ["ALPHABET — exactly 26 letter pages, A-Z once each, correct letter-to-animal mapping, and a Colored by signature line on each page; all letters and animal names are real text added in code."] : []),
       // Kaçış odası oyununda her bulmacanın tek cevabı kodla çözülerek doğrulanır; cevap oyuncu sayfasına sızmaz.
       ...(input.kind === "party" && input.escapeRoom ? [
         "PUZZLES — solve every puzzle in code from the same data used to draw it (decode the cipher with its key, walk the maze with a path search, compute the math path, brute-force the logic grid) and assert it has exactly one answer, that the answer matches the solutions page, and that it gives the right part of the final code; then assert the final code is the parts in order. Print one PASS/FAIL line per puzzle.",
