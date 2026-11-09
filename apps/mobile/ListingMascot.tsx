@@ -35,10 +35,10 @@ export default function ListingMascot({ title, instruction, step = 1, complete =
       </View>
     </View>
     <Text style={s.instruction}>{instruction}</Text>
-    {tasks.map((task, index) => <View style={s.task} key={task}><Text style={s.number}>{index + 1}.</Text><Text style={s.taskText}>{task}</Text></View>)}
+    {expanded && tasks.map((task, index) => <View style={s.task} key={task}><Text style={s.number}>{index + 1}.</Text><Text style={s.taskText}>{task}</Text></View>)}
     {!!onAction && !!actionLabel && <Pressable accessibilityRole="button" accessibilityState={{ disabled: Boolean(disabled) }} disabled={disabled} onPress={onAction} style={[s.action, disabled && s.disabled]}><Text style={s.actionText}>{actionLabel}</Text></Pressable>}
     {!!onSecondary && !!secondaryLabel && <Pressable accessibilityRole="button" disabled={disabled} onPress={onSecondary} style={[s.secondary, disabled && s.disabled]}><Text style={s.secondaryText}>{secondaryLabel}</Text></Pressable>}
-    <Pressable accessibilityRole="button" accessibilityState={{ expanded }} onPress={() => setExpanded(!expanded)} style={s.roadmapButton}><Text style={s.roadmapText}>{expanded ? "Adım listesini kapat" : "İlanın tüm adımlarını göster"}</Text></Pressable>
+    <Pressable accessibilityRole="button" accessibilityState={{ expanded }} onPress={() => setExpanded(!expanded)} style={s.roadmapButton}><Text style={s.roadmapText}>{expanded ? "Ayrıntıları kapat" : "Ayrıntılar ve tüm adımlar"}</Text></Pressable>
     {expanded && <View style={s.roadmap}>{roadmap.map((label, index) => <Text key={label} style={[s.roadmapLine, index + 1 === step && s.current]}>{index + 1}. {label}{index + 1 === step ? complete ? " · doğrulandı" : " · buradasın" : ""}</Text>)}</View>}
   </View>;
 }

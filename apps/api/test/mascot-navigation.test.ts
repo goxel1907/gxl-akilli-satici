@@ -13,7 +13,7 @@ test("Goxi starts the listing journey from Home before the seller chooses a prod
     assert.ok(shown(renderer, "Merhaba, ben Goxi"));
     await tap(renderer, /^İlan açmaya başlayalım$/);
     assert.deepEqual(routes, ["choose"]);
-    await tap(renderer, /^İlanın tüm adımlarını göster$/);
+    await tap(renderer, /^Ayrıntılar ve tüm adımlar$/);
     assert.ok(shown(renderer, "5. Etsy kontrolü ve yayın doğrulaması"));
   } finally { await unmount(renderer); }
 });

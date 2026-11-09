@@ -90,6 +90,7 @@ const MAX_PDF_BYTES = 20 * 1024 * 1024;
 const MAX_FILES = 5;
 const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
 const MAX_IMAGES = 10;
+const LIGHT_QA_BYTES = 2.5 * 1024 * 1024;
 const DAY_MS = 24 * 60 * 60 * 1000;
 const CRAFTS = new Set<PatternCraft>(["crochet", "knitting", "embroidery", "cross_stitch", "sewing", "macrame", "punch_needle"]);
 const TAXONOMY_WORDS: Record<PatternCraft, string[]> = {
@@ -251,7 +252,11 @@ export async function auditDigitalFiles(store: DigitalStore, productId: string) 
       if (!bytes) throw new Error("Dosya depoda bulunamadı.");
       const hash=await sha256(bytes);if(hashes.has(hash)) throw new Error("Aynı içerik başka bir dosyada tekrar ediyor.");hashes.add(hash);
       let names=[meta.name],checks=1;
-      if(new Uint8Array(bytes)[0]===0x25) await validateDigitalPdf(bytes,meta.name);
+      // Büyük dosyada açma ve PDF ayrıştırma sunucunun işlem süresi sınırını aşar ("İstek tamamlanamadı").
+      // 2.5 MB üstünde yalnız ZIP içerik listesi ve PDF imzası denetlenir; ayrıntılı denetim yüklemede yapılmıştır.
+      const light = bytes.byteLength > LIGHT_QA_BYTES;
+      if(new Uint8Array(bytes)[0]===0x25) { if(!light) await validateDigitalPdf(bytes,meta.name); }
+      else if(light) { names=zipEntryNames(bytes); if(!names.length) throw new Error("ZIP içerik listesi okunamadı; dosyayı yeniden dışa aktarın."); }
       else {const archive=await validateArchive(bytes,meta.name);names=archive.names;checks=archive.checks;}
       for(const name of names) for(const format of formatsOfText(name)) covered.add(format);
       rows.push({name:meta.name,ok:true,checks,entries:names.length});
