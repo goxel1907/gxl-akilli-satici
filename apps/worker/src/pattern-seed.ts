@@ -1,4 +1,4 @@
-import { canRankTrend, compareTrendEvidence, trendFreshness } from "../../mobile/trend-priority.js";
+import { canRankTrend, compareTrendEvidence, hasBuyerDemand, trendFreshness } from "../../mobile/trend-priority.js";
 import { printableSearches } from "./printable-searches.js";
 import { contentBudget } from "./content-budget.js";
 import { ideaKey, readProductMemory, topicKey } from "./product-memory.js";
@@ -68,7 +68,7 @@ export interface SearchSelection {
   totalCandidates: number;
   avoidedCount?: number;
   noteTr: string;
-  candidates: Array<{ keyword: string; state: "fresh" | "stale" | "unscanned" | "failed"; score?: number; sampleSize?: number; scannedAt?: string; errorTr?: string; usedBefore?: boolean }>;
+  candidates: Array<{ keyword: string; state: "fresh" | "stale" | "unscanned" | "failed"; score?: number; sampleSize?: number; scannedAt?: string; errorTr?: string; usedBefore?: boolean; verdict?: string; demand?: boolean }>;
 }
 
 interface Row { tokens: string[]; weight: number; rising: boolean }
@@ -803,7 +803,9 @@ export async function pickBestKeyword(store: TrendStore | undefined, input: { st
     }
   }
   const ranking = available.sort((a, b) => compareTrendEvidence(a.result, b.result, now));
-  const fresh = ranking.filter(item => canRankTrend(item.result, now));
+  // Alıcı ilgisi zayıf aramalar, ilgisi olan bir arama varken önerilmez.
+  const rankable = ranking.filter(item => canRankTrend(item.result, now));
+  const fresh = rankable.some(item => hasBuyerDemand(item.result)) ? rankable.filter(item => hasBuyerDemand(item.result)) : rankable;
   const choice = fresh.slice(0,5).find(item=>item.keyword!==avoid && item.result!.score>=fresh[0].result!.score-10 && !recentTopics.has(topicKey(item.keyword)))
     || fresh.slice(0, 5).find(item => item.keyword !== avoid && !recent.includes(item.keyword))
     || fresh.find(item => item.keyword !== avoid)
@@ -814,14 +816,14 @@ export async function pickBestKeyword(store: TrendStore | undefined, input: { st
     await store.put("studio:last-suggestions:v1",JSON.stringify([choice.keyword,...globalRecent.filter(item=>item!==choice.keyword)].slice(0,20)));
   }
   const reason = choice.result && canRankTrend(choice.result, now)
-    ? `Otomatik seçilen arama: "${choice.keyword}" (${fresh.length} güncel örneklem arasında; ${choice.result.score} puan, ${choice.result.verdict}; satış sıralaması değildir)`
+    ? `Otomatik seçilen arama: "${choice.keyword}" (${fresh.length} güncel örneklem arasında; ${choice.result.score} puan, ${choice.result.verdict}; satış sıralaması değildir)${hasBuyerDemand(choice.result) ? "" : ". Uyarı: bu türdeki güncel aramaların hepsinde alıcı ilgisi zayıf; başka bir tür veya arama denemeniz önerilir"}`
     : `Otomatik seçilen arama: "${choice.keyword}" (araştırılacak fikir; güncel karşılaştırma doğrulanamadı)`;
   const displayed = [choice, ...ranking.filter(item => item !== choice)].slice(0, 8);
   const selection: SearchSelection = { checkedAt: new Date(now).toISOString(), selectedKeyword: choice.keyword, comparedCount: fresh.length, totalCandidates: scored.length, avoidedCount:scored.length-available.length,
     noteTr: fresh.length >= 2 ? "Puanlar güncel arama örneklemlerini karşılaştırır; satış olasılığı veya Bestseller sıralaması değildir. Önceki hazırlanmış/yüklenmiş konular ve kullanılan aramalar otomatik öneriden çıkarılır; yakın puanlı yeni konulara öncelik verilir."
       : "En az iki güncel arama örneklemi yok; kategori karşılaştırması yetersiz. Listelenen fikirler ölçülmüş kazananlar değildir.",
     candidates: displayed.map(item => ({ keyword: item.keyword, state: errors.has(item.keyword) ? "failed" : trendFreshness(item.result, now),
-      ...(canRankTrend(item.result, now) ? { score: item.result!.score } : {}),
+      ...(canRankTrend(item.result, now) ? { score: item.result!.score, verdict: item.result!.verdict, demand: hasBuyerDemand(item.result) } : {}),
       ...(item.result ? { scannedAt: item.result.scannedAt, sampleSize: item.result.metrics.sampleSize } : {}),
       ...(errors.has(item.keyword) ? { errorTr: errors.get(item.keyword) } : {}) })) };
   return { keyword: choice.keyword, reason, group, selection, result: choice.result };

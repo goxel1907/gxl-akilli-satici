@@ -31,3 +31,8 @@ Güncelleme: 9 Kasım 2026
 - Sunucu hata mesajı kod numaralı ve anlaşılır.
 - Goxi kartı sade (görev listesi "Ayrıntılar" altında).
 - Paket: adımlar arası onay beklenmez; kapak/görsel için rakipten sıyrılma kuralları.
+- Talep önce: hasBuyerDemand (trend-priority.ts). Trend, Keşif, Sezon listelerinde, otomatik arama seçiminde, ilan önerilerinde
+  ve ajan ürün fikirlerinde "Talep zayıf" aramalar önerilmez; listede "Talebi zayıf N … göster" düğmesiyle açılır.
+- Goxi metinleri gerçek düğme adlarıyla yeniden yazıldı (dijital: dosya/görsel/denetim/taslak/video; fiziksel: otomatik doldur,
+  alıcı öder kargo, kargo profili). Basit fiziksel sihirbazda "Fotoğraftan otomatik doldur" düğmesi var (yalnız basınca çalışır);
+  ChatGPT/Claude sohbet kutusu katlı.
