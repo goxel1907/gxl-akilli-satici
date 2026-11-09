@@ -21,6 +21,8 @@ Güncelleme: 9 Kasım 2026
 ## Bu oturumda (Claude, 9 Kasım)
 - Silme: Dijital ürün kartında "Uygulamadan sil"; kayıtlı çalışmada "Bu çalışmayı listeden sil" (Etsy'ye dokunmaz).
 - Başlık: basılmayan ürünlerde (duvar kâğıdı, ikon, tablo, sunum, özgeçmiş) "printable pdf", sunum/tablo/ekran ürünlerinde kâğıt ölçüsü başlığa girmez.
+- Fiziksel ürün: bebek/çocuk algılanır ("for women/gift for her" yerine baby…, CPSIA uyarısı); çanta/battaniyeye giyim etiketi yok; takıda 13 etiket dolar; açıklamada ABD teslim süresi (7-21 gün); "ay yıldız"/"nazar" çevirisi.
+- Bilinen eksik: fiziksel ilanda video Etsy'ye yüklenmiyor (elle eklenir); fotoğraf analizi GEMINI_API_KEY ister (yoksa ChatGPT/Claude yolu).
 - Araştırma: arama türü söylemiyorsa tür kelimesi eklenir (sunum oyunu → "powerpoint"); "christmas trivia game" artık öneri alıyor.
 - Görsel seçimi: dosyalardan seçme + ada göre doğal sıralama + ekleyerek seçme + temizle.
 - Büyük dosyada (>2.5 MB) dosya denetimi hafif modda; sunucu düşerse taslağa devam edilebilir.

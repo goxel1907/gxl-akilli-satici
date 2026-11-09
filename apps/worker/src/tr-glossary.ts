@@ -18,6 +18,7 @@ const COLORS: Record<string, string> = {
 };
 
 const FEATURES: Record<string, string> = {
+  "ay yıldız": "crescent moon", "ay yıldızlı": "crescent moon", "hilal": "crescent moon", "nazar": "evil eye", "nazarlık": "evil eye",
   "oversize": "oversized", "bol kesim": "oversized", "kalın": "chunky", "kalın örgü": "chunky", "ince": "lightweight",
   "burgu": "cable knit", "burgulu": "cable knit", "saç örgü": "cable knit", "kare motif": "granny square",
   "dantel": "lace", "dantelli": "lace", "çiçekli": "floral", "çiçek motifli": "floral", "püskül": "tassel",

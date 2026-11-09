@@ -218,3 +218,16 @@ test("product endpoints suggest phrases and build a plan from cached scans", asy
   const draft = await handleRequest(new Request("https://gxl.example/api/products/etsy-draft", { method: "POST", headers, body: JSON.stringify({ product, listing: {} }) }), env);
   assert.equal(draft.status, 409);
 });
+
+test("baby knitwear, bags and jewelry get the right audience, no clothing tags on bags, and a full tag set", async () => {
+  const { buildProductPlan, normalizeProductInput } = await import("../../worker/src/product-studio.js");
+  const plan = (titleTr: string) => buildProductPlan(normalizeProductInput({ titleTr, priceTry: 1000, shippingTry: 400 }), [], [], { usdTryRate: 45 });
+  const baby = plan("El örgüsü bebek hırka");
+  assert.match(baby.title, /Baby Cardigan/);
+  assert.ok(!baby.tags.some((tag) => /for women|gift for her/.test(tag)), baby.tags.join(", "));
+  assert.ok(baby.warnings.some((line) => /CPSIA/.test(line)));
+  const bag = plan("El yapımı çanta tığ işi");
+  assert.ok(!bag.tags.some((tag) => /clothing/.test(tag)), bag.tags.join(", "));
+  assert.equal(plan("Gümüş kolye ay yıldız").tags.length, 13);
+  assert.match(bag.description, /Estimated delivery to the US/);
+});

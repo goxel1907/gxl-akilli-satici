@@ -72,6 +72,8 @@ export type CareOption = "hand_wash" | "machine_gentle" | "dry_clean";
 interface MaterialInfo { en: string; short: string; precious: boolean }
 
 export interface ProductSignals {
+  // Bebek ya da çocuk ürünü: etiket ve başlık "for women / gift for her" olmaz; ABD çocuk ürünü kuralları uyarılır.
+  young?: "baby" | "kids";
   isTesbih: boolean;
   isVintage: boolean;
   isKnitwear: boolean;
@@ -340,7 +342,10 @@ export function detectProductSignals(input: ProductPlanInput): ProductSignals {
     ...ATTRIBUTES.filter((item) => hasStem(words, item.stems) && (!item.knitOnly || isKnitwear)).map((item) => item.en),
     ...input.attributesEn
   ])].filter((value) => !noun.includes(value)).slice(0, 4);
-  return { isTesbih, isVintage, isKnitwear, craft: isKnitwear ? craft : undefined, material, ...(extraMaterials.length ? { extraMaterials } : {}), noun, attributes };
+  const young = hasStem(words, ["bebek", "baby", "yenidoğan", "yenidogan", "newborn"]) ? "baby" as const : hasStem(words, ["çocuk", "cocuk", "kids", "kid", "toddler"]) ? "kids" as const : undefined;
+  // "hand knit cardigan" → "hand knit baby cardigan": arama ve başlık ürünün kime olduğunu söyler.
+  if (young && noun !== "item" && !noun.includes(young)) { const parts = noun.split(" "); noun = [...parts.slice(0, -1), young, parts.at(-1)].join(" "); }
+  return { isTesbih, isVintage, isKnitwear, craft: isKnitwear ? craft : undefined, material, ...(extraMaterials.length ? { extraMaterials } : {}), noun, attributes, ...(young ? { young } : {}) };
 }
 
 export function ruleKeywordCandidates(input: ProductPlanInput, signals = detectProductSignals(input)): string[] {
@@ -509,6 +514,8 @@ function relevantVocabulary(signals: ProductSignals, keywords: string[], colors:
   return words;
 }
 
+const WEARABLE_KNITS = /^(sweater|cardigan|pullover|top|dress|vest|beanie|hat|scarf|shawl|cowl|poncho|mittens|gloves|socks?|skirt|romper|bonnet|booties|jumpsuit|shorts|pants)$/;
+const JEWELRY = /^(necklace|bracelet|ring|earrings?|pendant|anklet|brooch|charm|choker)$/;
 function buildTags(input: ProductPlanInput, signals: ProductSignals, primary: string, scans: TrendResult[], candidates: string[]): string[] {
   const vocabulary = relevantVocabulary(signals, candidates, input.colors);
   const counts = new Map<string, number>();
@@ -529,8 +536,8 @@ function buildTags(input: ProductPlanInput, signals: ProductSignals, primary: st
       ...input.colors.map((color) => `${color} ${lastNoun}`),
       ...signals.attributes.map((attribute) => `${attribute} ${lastNoun}`),
       signals.material ? `${signals.material.short} ${lastNoun}` : "",
-      input.audience === "men" ? `${lastNoun} for men` : input.audience === "unisex" ? `unisex ${lastNoun}` : `${lastNoun} for women`,
-      input.audience === "men" ? "gift for him" : input.audience === "unisex" ? "unisex gift" : "gift for her",
+      signals.young ? `${signals.young} ${lastNoun}` : input.audience === "men" ? `${lastNoun} for men` : input.audience === "unisex" ? `unisex ${lastNoun}` : `${lastNoun} for women`,
+      signals.young === "baby" ? "baby shower gift" : signals.young ? "gift for kids" : input.audience === "men" ? "gift for him" : input.audience === "unisex" ? "unisex gift" : "gift for her",
       signals.craft === "crochet" ? "crochet gift" : "knitted gift"
     ] : []),
     `turkish ${signals.noun}`,
@@ -560,14 +567,19 @@ function buildTags(input: ProductPlanInput, signals: ProductSignals, primary: st
   ] : signals.isKnitwear ? [
     input.colors[1] ? `${input.colors[1]} ${lastNoun}` : "",
     signals.attributes[1] ? `${signals.attributes[1]} ${lastNoun}` : "",
-    signals.craft === "crochet" ? "crochet clothing" : "hand knit clothing",
-    "handmade clothing", WARM_KNITS.has(lastNoun) ? `cozy ${lastNoun}` : "", "slow fashion", "handmade gift",
-    input.audience === "women" ? "gift for mom" : "",
+    // Giyim etiketi yalnız giyilen ürünlerde (çanta, battaniye, oyuncak giyim değildir).
+    ...(WEARABLE_KNITS.test(lastNoun) ? [signals.young ? `${signals.young} clothes` : signals.craft === "crochet" ? "crochet clothing" : "hand knit clothing", signals.young ? "" : "handmade clothing"] : [`handmade ${lastNoun}`, `${signals.craft === "crochet" ? "crochet" : "knitted"} ${lastNoun}`, `${lastNoun} gift`, "turkish handmade", signals.young || input.audience === "men" ? "" : "gift for mom", "unique gift"]),
+    WARM_KNITS.has(lastNoun) ? `cozy ${lastNoun}` : "", signals.young ? "" : "slow fashion", "handmade gift",
+    ...(signals.young === "baby" ? ["new baby gift", "newborn gift", "baby knitwear"] : signals.young ? ["kids knitwear"] : []),
+    input.audience === "women" && !signals.young ? "gift for mom" : "",
     ...(/\b(beanie|hat)\b/.test(lastNoun) ? ["winter hat", "knit hat", "warm hat", "handmade hat"] : []),
     ...(/\b(sweater|cardigan|pullover)\b/.test(lastNoun) ? ["knit sweater", "handmade knitwear"] : [])
   ] : [
     input.origin === "made_by_seller" && signals.noun !== "item" ? `handmade ${lastNoun}` : "",
-    signals.noun !== "item" ? `${lastNoun} gift` : "", "turkish gift", "unique gift", "gift idea"
+    signals.noun !== "item" ? `${lastNoun} gift` : "",
+    // Takıda 13 etiketin boş kalmaması için alıcının yazdığı genel takı ifadeleri.
+    ...(JEWELRY.test(lastNoun) ? [signals.material ? `${signals.material.short} jewelry` : "", input.audience === "men" ? `${lastNoun} for men` : `${lastNoun} for women`, "jewelry gift", input.audience === "men" ? "gift for him" : "gift for her", "turkish jewelry", "birthday gift", "anniversary gift"] : []),
+    "turkish gift", "unique gift", "gift idea"
   ];
   return normalizeEtsyTags(withoutFalseAntique(input, [primary, ...candidates, ...ranked, ...generated, ...fillers].filter(Boolean)));
 }
@@ -690,6 +702,7 @@ function buildDescription(input: ProductPlanInput, signals: ProductSignals, elig
     "",
     "SHIPPING",
     `• Ships from Türkiye with tracking. ${input.readyToShip ? "Ready to ship." : "Prepared to order; see the processing time on this listing."}`,
+    "• Estimated delivery to the US: usually 7 to 21 days after shipping (international tracked mail); the exact estimate is shown at checkout.",
     // Ücretsiz kargo yalnız kargo bedeli fiyata eklendiyse yazılır; aksi hâlde Etsy kargo ücretini kendisi gösterir.
     ...(input.shippingTry ? ["• Free shipping: the delivery cost is included in the price."] : []),
     "• Import duties or taxes may apply depending on your country.",
@@ -744,6 +757,7 @@ export function buildProductPlan(input: ProductPlanInput, phrases: string[], sca
     ...(!scans.length ? ["Etsy araması yapılamadı; başlık ve etiketler yalnızca kurallarla üretildi."] : []),
     ...(!input.weightGrams && signals.material?.precious ? ["Ağırlık girilmedi; gümüş ve altın ürünlerde ağırlık alıcı için önemli bir bilgidir."] : []),
     ...(!input.shippingTry ? ["ABD kargo ücreti girilmedi; önerilen fiyat kargo hariç hesaplandı."] : []),
+    ...(signals.young ? ["Bebek/çocuk ürünü: ABD'de 12 yaş altı ürünler çocuk ürünü güvenlik kurallarına (CPSIA) tabidir. Düğme, ponpon gibi küçük parçalar için açıklamaya boğulma uyarısı ekleyin; ürünü \"for children\" olarak listelemeden önce Etsy'nin çocuk ürünü kurallarını okuyun."] : []),
     ...(input.priceTry && !context.usdTryRate ? ["Dolar kuru alınamadı; kuru elle girin."] : []),
     ...(signals.noun === "item" ? ["Ürünün İngilizce adı anlaşılamadı; 'İngilizce ürün adı' alanını doldurun."] : []),
     ...(signals.isKnitwear && !/\b(beanie|hat|scarf|shawl|cowl|socks?|mittens|gloves|blanket|bag|tote)\b/.test(signals.noun) && (!input.size || !input.chestCm || !input.lengthCm) ? ["Beden, göğüs genişliği ve boy girilmedi; giyimde alıcılar ölçüye bakıp karar verir, iade de çoğunlukla bu yüzden olur."] : []),
