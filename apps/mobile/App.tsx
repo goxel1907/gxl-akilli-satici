@@ -1,6 +1,6 @@
 import { addLocalWhatsapp, localWhatsappLink } from "./marketing-local";
 import { photoAssistantPrompt, parsePhotoAssistant } from "./photo-assistant";
-import { canRankTrend, compareTrendEvidence, trendFreshness } from "./trend-priority";
+import { canRankTrend, compareTrendEvidence, hasBuyerDemand, trendFreshness } from "./trend-priority";
 import { listingProgress, listingTasks, physicalListingProgress, etsyTransferComplete, type ListingProgressInput } from "./listing-progress";
 import ListingMascot, { type ListingMascotProps } from "./ListingMascot";
 import LiveCheckPanel from "./LiveCheckPanel";
@@ -1296,6 +1296,7 @@ function SeasonalPanel({ online, active = true, onUse }: any) {
   const [loading, setLoading] = useState(false);
   const [scanning, setScanning] = useState<string>();
   const [expanded, setExpanded] = useState<string>();
+  const [showWeak, setShowWeak] = useState<Record<string, boolean>>({});
   const load = async () => {
     setLoading(true);
     try { setBoard(await apiJson("/api/etsy/seasonal", { headers: apiHeaders() })); }
@@ -1333,7 +1334,9 @@ function SeasonalPanel({ online, active = true, onUse }: any) {
     {loading && <ActivityIndicator color="#C88B47" />}
     {(board?.events || []).map((event: any) => {
       const scanned = event.keywords.filter((item: any) => item.result);
-      const best = [...scanned].filter((row: any) => canRankTrend(row.result)).sort((a: any, b: any) => compareTrendEvidence(a.result, b.result))[0];
+      const best = [...scanned].filter((row: any) => canRankTrend(row.result) && hasBuyerDemand(row.result)).sort((a: any, b: any) => compareTrendEvidence(a.result, b.result))[0];
+      const weakRows = scanned.filter((row: any) => !hasBuyerDemand(row.result));
+      const shown = showWeak[event.id] ? event.keywords : event.keywords.filter((row: any) => !weakRows.includes(row) || expanded === `${event.id}:${row.keyword}`);
       return <View style={styles.card} key={event.id}>
         <View style={styles.shopierProductTop}>
           <View style={{ flex: 1 }}><Text style={styles.cardTitle}>{event.nameTr}</Text><Text style={styles.small}>{dateText(event.date)}{event.approximate ? " (yaklaşık)" : ""} · {event.daysUntil} gün kaldı</Text></View>
@@ -1343,7 +1346,9 @@ function SeasonalPanel({ online, active = true, onUse }: any) {
         <Text style={styles.analysisLine}>Fiziksel ürün hazırlık hedefi: {dateText(event.listByProducts)} · Desen hazırlık hedefi: {dateText(event.listByPatterns)}</Text>
         {event.listByDigital && <Text style={styles.analysisLine}>Hazır dijital ürün hazırlık hedefi: {dateText(event.listByDigital)} · Bu tarihler yaklaşık; kargo ve satış garantisi değildir.</Text>}
         {best && <Text style={styles.trendVerdict}>En güçlü arama: {best.keywordTr || best.keyword} ({best.result.score} puan)</Text>}
-        {event.keywords.map((item: any) => <TrendCard key={item.keyword} title={item.keywordTr || item.keyword} keyword={item.keyword} onScan={() => scanOne(event, item)} group={item.group} result={item.result} trendsRange="today 5-y" canScan={online && !scanning} scanning={scanning === `${event.id}:${item.keyword}`} expanded={expanded === `${event.id}:${item.keyword}`} onToggle={() => setExpanded(expanded === `${event.id}:${item.keyword}` ? undefined : `${event.id}:${item.keyword}`)} onUse={() => onUse({ keyword: item.keyword, group: item.group }, item.result)} />)}
+        {!best && scanned.length > 0 && scanned.length === weakRows.length && <Text style={styles.warningText}>Bu dönemin taranan aramalarında alıcı ilgisi zayıf; bu dönem için ürün hazırlamayı erteleyin.</Text>}
+        {shown.map((item: any) => <TrendCard key={item.keyword} title={item.keywordTr || item.keyword} keyword={item.keyword} onScan={() => scanOne(event, item)} group={item.group} result={item.result} trendsRange="today 5-y" canScan={online && !scanning} scanning={scanning === `${event.id}:${item.keyword}`} expanded={expanded === `${event.id}:${item.keyword}`} onToggle={() => setExpanded(expanded === `${event.id}:${item.keyword}` ? undefined : `${event.id}:${item.keyword}`)} onUse={() => onUse({ keyword: item.keyword, group: item.group }, item.result)} />)}
+        {!!weakRows.length && <Pressable style={[styles.secondaryButton, { alignSelf: "flex-start", marginBottom: 6 }]} onPress={() => setShowWeak(current => ({ ...current, [event.id]: !current[event.id] }))}><Text style={styles.secondaryButtonText}>{showWeak[event.id] ? "Talebi zayıf aramaları gizle" : `Talebi zayıf ${weakRows.length} aramayı göster`}</Text></Pressable>}
         <Pressable style={[styles.addButton, { alignSelf: "flex-start" }, (!online || Boolean(scanning)) && styles.primaryDisabled]} disabled={!online || Boolean(scanning)} onPress={() => scanSeason(event)}><Ionicons name="pulse" size={16} color="white" /><Text style={styles.addButtonText}>{scanned.length ? "Yeniden tara" : "Bu sezonu tara"}</Text></Pressable>
       </View>;
     })}
@@ -1361,7 +1366,11 @@ function TrendPanel({ online, active = true, onUse }: any) {
   const groups = [...(board?.groups || [{ id: "printables", labelTr: "Dijital ürünler" }, { id: "patterns", labelTr: "Hobi desenleri" }, { id: "tesbih", labelTr: "Tesbih ve gümüş" }, { id: "vintage", labelTr: "Vintage" }]), { id: "discovered", labelTr: "Keşfedilenler" }, { id: "season", labelTr: "Sezon fırsatları" }];
   const visibleNiches = [...(board?.niches || [])].filter((row: any) => (row.group || "patterns") === group).sort((a: any, b: any) => compareTrendEvidence(a.result, b.result));
   // En yüksek puanlar seçili grubun içinden gelir (Dijital ürünler seçiliyken örgü deseni gösterilmez).
-  const topOverall = visibleNiches.filter((row: any) => canRankTrend(row.result)).sort((a: any, b: any) => compareTrendEvidence(a.result, b.result)).slice(0, 5);
+  // Yalnız alıcı ilgisi olan (talebi zayıf olmayan) ürünler öne çıkar; talebi zayıf olanlar listenin altında, kapalı durur.
+  const topOverall = visibleNiches.filter((row: any) => canRankTrend(row.result) && hasBuyerDemand(row.result)).sort((a: any, b: any) => compareTrendEvidence(a.result, b.result)).slice(0, 5);
+  const [showWeak, setShowWeak] = useState(false);
+  const weakNiches = visibleNiches.filter((row: any) => trendFreshness(row.result) !== "unscanned" && !hasBuyerDemand(row.result));
+  const listedNiches = showWeak ? visibleNiches : visibleNiches.filter((row: any) => !weakNiches.includes(row) || expanded === row.id);
   const sortNiches = (rows: any[]) => [...rows].sort((a, b) => compareTrendEvidence(a.result, b.result));
   const load = async () => {
     setLoading(true);
@@ -1433,13 +1442,14 @@ function TrendPanel({ online, active = true, onUse }: any) {
     <View style={group === "discovered" ? undefined : styles.hidden}><DiscoveryPanel online={online} active={active && group === "discovered"} onUse={use} /></View>
     <View style={group !== "season" && group !== "discovered" ? undefined : styles.hidden}>
     {!!topOverall.length && <View style={styles.analysisCard}>
-      <Text style={styles.cardTitle}>Güncel taramalarda en yüksek puanlar</Text><Text style={styles.small}>Son 6 saatlik örneklem içindir; satış veya dikkat çekme olasılığı değildir.</Text>
+      <Text style={styles.cardTitle}>Alıcı ilgisi olan en iyi fırsatlar</Text><Text style={styles.small}>Talebi zayıf aramalar bu listede yok. Son 6 saatlik Etsy örneklemi içindir; satış adedi değildir.</Text>
       {topOverall.map((row: any) => <Text style={styles.analysisLine} key={row.id}>{row.result.score} · {row.labelTr} ({row.result.verdict})</Text>)}
     </View>}
-    <InterestRanking rows={visibleNiches} />
+    <InterestRanking rows={visibleNiches.filter((row: any) => !weakNiches.includes(row))} />
     <View style={styles.sectionHeading}><Text style={styles.sectionTitle}>{groups.find((item: any) => item.id === group)?.labelTr || "Nişler"}</Text><Pressable style={[styles.addButton, (!online || !board?.configured || Boolean(scanning)) && styles.primaryDisabled]} disabled={!online || !board?.configured || Boolean(scanning)} onPress={scanAll}><Ionicons name="pulse" size={16} color="white" /><Text style={styles.addButtonText}>{scanning ? "Taranıyor…" : "Tümünü tara"}</Text></Pressable></View>
     {loading && <ActivityIndicator color="#C88B47" />}
-    {visibleNiches.map((row: any) => <TrendCard key={row.id} title={row.labelTr} keyword={row.keyword} onScan={() => scanOne(row)} canScan={online && !scanning} group={row.group} result={row.result} scanning={scanning === row.id} expanded={expanded === row.id} onToggle={() => setExpanded(expanded === row.id ? undefined : row.id)} onUse={() => use(row, row.result)} />)}
+    {listedNiches.map((row: any) => <TrendCard key={row.id} title={row.labelTr} keyword={row.keyword} onScan={() => scanOne(row)} canScan={online && !scanning} group={row.group} result={row.result} scanning={scanning === row.id} expanded={expanded === row.id} onToggle={() => setExpanded(expanded === row.id ? undefined : row.id)} onUse={() => use(row, row.result)} />)}
+    {!!weakNiches.length && <Pressable style={[styles.secondaryButton, { alignSelf: "flex-start", marginTop: 6 }]} onPress={() => setShowWeak(!showWeak)}><Text style={styles.secondaryButtonText}>{showWeak ? "Talebi zayıf aramaları gizle" : `Talebi zayıf ${weakNiches.length} aramayı göster`}</Text></Pressable>}
     </View>
   </>;
 }
@@ -1490,6 +1500,7 @@ function DiscoveryPanel({ online, active = true, onUse }: any) {
   const [results, setResults] = useState<Record<string, any>>({});
   const [scanning, setScanning] = useState<string>();
   const [expanded, setExpanded] = useState<string>();
+  const [showWeak, setShowWeak] = useState(false);
   const load = async () => {
     setLoading(true);
     try { setData(await apiJson("/api/etsy/discoveries", { headers: apiHeaders() })); }
@@ -1503,7 +1514,10 @@ function DiscoveryPanel({ online, active = true, onUse }: any) {
     const summary = all.find((row: any) => row.keyword === keyword)?.summary;
     return !summary?.scannedAt || Date.parse(result.scannedAt) >= Date.parse(summary.scannedAt);
   }));
-  const items = [...all].filter((item: any) => filter === "all" || item.group === filter).sort((a: any, b: any) => compareTrendEvidence(currentResults[a.keyword] || a.summary, currentResults[b.keyword] || b.summary));
+  const sorted = [...all].filter((item: any) => filter === "all" || item.group === filter).sort((a: any, b: any) => compareTrendEvidence(currentResults[a.keyword] || a.summary, currentResults[b.keyword] || b.summary));
+  // Alıcı ilgisi zayıf çıkan keşifler öneri olarak gösterilmez; istenirse açılır.
+  const weak = sorted.filter((item: any) => { const evidence = currentResults[item.keyword] || item.summary; return Boolean(evidence) && !hasBuyerDemand(evidence); });
+  const items = showWeak ? sorted : sorted.filter((item: any) => !weak.includes(item) || expanded === item.keyword);
   const filters = [{ id: "all", label: "Tümü" }, ...["printables", "patterns", "tesbih", "vintage", "other"].filter((id) => all.some((item: any) => item.group === id)).map((id) => ({ id, label: GROUP_LABELS[id] }))];
   const autopilot = data?.autopilot;
   const toggle = (key: string) => setExpanded(expanded === key ? undefined : key);
@@ -1527,7 +1541,8 @@ function DiscoveryPanel({ online, active = true, onUse }: any) {
     </View>
     {filters.length > 2 && <ChipGroup options={filters} value={filter} onChange={setFilter} />}
     {loading && <ActivityIndicator color="#C88B47" />}
-    {!loading && !items.length && <Empty icon="compass-outline" title="Henüz keşif yok" text="İlk keşifler otomatik taramalarla birkaç saat içinde gelir. Hızlandırmak için diğer gruplarda 'Tümünü tara' düğmesine basın." />}
+    {!loading && !items.length && !!weak.length && <Text style={styles.formHint}>Bu gruptaki keşiflerin hepsinde alıcı ilgisi zayıf çıktı; yenileri otomatik taramayla gelir.</Text>}
+    {!loading && !items.length && !weak.length && <Empty icon="compass-outline" title="Henüz keşif yok" text="İlk keşifler otomatik taramalarla birkaç saat içinde gelir. Hızlandırmak için diğer gruplarda 'Tümünü tara' düğmesine basın." />}
     {items.map((item: any) => currentResults[item.keyword]
       ? <TrendCard key={item.keyword} title={item.keywordTr || item.keyword} group={item.group} result={currentResults[item.keyword]} canScan={online && !scanning} scanning={scanning === item.keyword} onScan={() => open(item, true)} expanded={expanded === item.keyword} onToggle={() => toggle(item.keyword)} onUse={() => onUse({ keyword: item.keyword, group: item.group }, currentResults[item.keyword])} />
       : <Pressable key={item.keyword} style={styles.card} disabled={!online || Boolean(scanning)} onPress={() => open(item)}>
@@ -1544,6 +1559,7 @@ function DiscoveryPanel({ online, active = true, onUse }: any) {
           ? <><Text style={styles.trendVerdict}>{item.summary.verdict}</Text><Text style={styles.small}>Rakip: {Number(item.summary.activeListings).toLocaleString("tr-TR")} ilan · Talep: {demandText(item.summary)}{item.summary.medianPriceUsd ? ` · Ortanca ${item.summary.medianPriceUsd} USD` : ""} · {timeAgo(item.summary.scannedAt)}</Text></>
           : <Text style={styles.small}>Henüz puanlanmadı · dokunun, Etsy'de taransın.</Text>}
       </Pressable>)}
+    {!!weak.length && <Pressable style={[styles.secondaryButton, { alignSelf: "flex-start", marginTop: 6 }]} onPress={() => setShowWeak(!showWeak)}><Text style={styles.secondaryButtonText}>{showWeak ? "Talebi zayıf keşifleri gizle" : `Talebi zayıf ${weak.length} keşfi göster`}</Text></Pressable>}
   </>;
 }
 
@@ -2863,12 +2879,12 @@ const ETSY_GUIDE: Array<{ id: string; title: string; icon: any; steps: string[] 
   ] },
   { id: "physical", title: "Elimdeki ürünü fotoğrafla satmak (tesbih, vintage, örgü)", icon: "camera-outline", steps: [
     "Etsy → Stüdyo → 'Elimdeki ürün (fotoğraf)'. 'Fotoğraf çek' veya 'Galeriden seç' ile 5–10 fotoğraf ekleyin; kapak yapmak istediğinize dokunun. Shopier'e eklemeniz gerekmez.",
-    "'Fotoğraflara bak, alanları doldur': sistem ürün türünü, İngilizce adını, rengini, öne çıkan özelliklerini ve görünen kusurları bulur; sizin doğrulamanız gerekenleri listeler.",
+    "'Fotoğraftan otomatik doldur': sistem ürün türünü, İngilizce adını, rengini, öne çıkan özelliklerini ve görünen kusurları bulur; sizin doğrulamanız gerekenleri listeler.",
     "Örgü/tığ işi: kimin ördüğünü, tekniği, bedeni, göğüs genişliği ile boyu, iplik içeriğini (ör. %100 pamuk) ve yıkama şeklini seçin. Ailenizden biri örüyorsa 'mağaza üyesi' seçin ve Etsy'de o kişiyi Shop members bölümüne ekleyin.",
     "Tesbih: kim yaptı, gram, tane sayısı, uzunluk. 925 damgası veya belge yoksa ilanda 'gümüş' yazılmaz. Hazır alınıp yeniden satılan tesbih Etsy'de yasaktır; sistem yayınlamaz.",
     "Vintage: yaklaşık üretim yılı (en az 20 yıl önce), ölçüler ve durum notu. Yıl girilmeden vintage ilan açılmaz.",
-    "'Elinize geçecek (TL)' ve 'ABD'ye kargo (TL)' yazın → 'Etsy'de araştır ve ilanı hazırla'. Sistem alıcıların aramalarını tarar; başlık, 13 etiket, İngilizce açıklama ve kesintiler ile kargo dahil dolar fiyatını hazırlar.",
-    "Başlığı, etiketleri ve fiyatı isterseniz düzeltin → 'Etsy taslağı oluştur' (fotoğraflar bu adımda yüklenir) → 'Taslağı kontrol et' → 'Etsy'de yayınla'. Yayınlamada Etsy 0,20 USD ilan ücreti keser.",
+    "'Elinize geçecek (TL)' ve 'ABD'ye kargo (TL)' yazın → 'Etsy'de araştır ve ilanı hazırla'. Sistem alıcıların aramalarını tarar; başlık, 13 etiket, İngilizce açıklama ve kesintiler dahil dolar fiyatını hazırlar. Kargo alıcıya ait: fiyata eklenmez; uygulama Etsy kargo profiline yazılacak tutarı söyler (profil yoksa Mağaza hazırlığı → 'Kargo profili oluştur').",
+    "Başlığı, etiketleri ve fiyatı isterseniz düzeltin → 'Etsy taslağı oluştur' (fotoğraflar bu adımda yüklenir) → isterseniz 'Video ekle (5-15 sn)' → 'Taslağı kontrol et' → 'Etsy'de yayınla'. Yayınlamada Etsy 0,20 USD ilan ücreti keser.",
     "Shopier'de zaten olan ürünler için Shopier sekmesindeki 'Etsy ilanı hazırla' da aynı motoru kullanır."
   ] },
   { id: "delivery", title: "Dosya teslimi ve koruma", icon: "lock-closed-outline", steps: [
@@ -3767,8 +3783,8 @@ function HelpScreen({ online, channels, onExpert, onSell }: any) {
 // "İleri" eksik bilgiyi söyler. Uzman modda form tek sayfadır.
 const WIZARD_STEPS = ["Fotoğraflar", "Ürün bilgisi", "Renk ve özellikler", "Fiyat ve kargo", "Önizleme ve gönder"];
 const WIZARD_HINTS = [
-  "Ürünün 1–10 gerçek fotoğrafını çekin veya galeriden seçin. ChatGPT/Claude sohbet analizi isteğe bağlıdır; İleri düğmesi kendiliğinden analiz başlatmaz.",
-  "Ürün türünü, adını ve doğruladığınız bilgileri yazın. Sohbet analizinden aktardıysanız önerileri kontrol edin; emin olmadığınız bilgiyi yazmayın.",
+  "Ürünün 1–10 gerçek fotoğrafını çekin veya galeriden seçin (5+ önerilir). İsterseniz 'Fotoğraftan otomatik doldur' ile tür ve adı önerdirin; İleri düğmesi kendiliğinden analiz yapmaz.",
+  "Ürün türünü, adını ve doğruladığınız bilgileri yazın. Otomatik doldurma veya sohbet analizi öneri getirdiyse kontrol edin; emin olmadığınız bilgiyi yazmayın.",
   "Renkleri ve öne çıkan özellikleri Türkçe yazabilirsiniz; sistem İngilizceye çevirir. Bu adım isteğe bağlıdır.",
   "Satıştan elinize geçmesini istediğiniz tutarı ve ABD'ye kargo ücretini yazın. Etsy kesintileri fiyata eklenir; kargoyu alıcı öder ve ilan sayfasında görür.",
   "Uygulama Etsy'de alıcıların aramalarını tarar; İngilizce başlık, 13 etiket, açıklama ve fiyatı hazırlar. Türkçe karşılığına bakıp Etsy'ye gönderin."
@@ -3989,6 +4005,7 @@ function PhotoListingStudio({ online, etsyReady, wizard, onStepChange }: any) {
     setPriceTry(""); setShippingTry(""); setQuantity("1"); setReadyToShip(true); setAnalysis(undefined); setRiskFlags([]); setPlan(undefined); setPayload(undefined);
   };
 
+  const [showChat, setShowChat] = useState(false);
   const photoGuide = physicalListingProgress({ wizardStep: wizard ? step : undefined, photos: photos.length, kind, name: nameTr, price: parseAmount(priceTry), shipping: parseAmount(shippingTry) });
   return <>
     {!currentPlan && <ListingMascot {...photoGuide}
@@ -4002,7 +4019,7 @@ function PhotoListingStudio({ online, etsyReady, wizard, onStepChange }: any) {
     </View>}
     {!wizard && <View style={styles.analysisCard}>
       <Text style={styles.cardTitle}>Elinizdeki ürünü Etsy'de satın</Text>
-      <Text style={styles.analysisLine}>Fotoğrafları çekin ve ürün türünü seçin. Fotoğraf bilgilerini ChatGPT / Claude sohbetinden aktarabilir, sunucu analizini deneyebilir veya elle girebilirsiniz. Uygulama Etsy'de alıcıların aramalarını tarar; başlık, 13 etiket, İngilizce açıklama ve fiyatı hazırlar. Shopier gerekmez.</Text>
+      <Text style={styles.analysisLine}>Fotoğrafları çekin ve ürün türünü seçin. Bilgileri 'Fotoğraftan otomatik doldur' ile önerdirebilir, ChatGPT / Claude sohbetinden aktarabilir veya elle girebilirsiniz. Uygulama Etsy'de alıcıların aramalarını tarar; başlık, 13 etiket, İngilizce açıklama ve fiyatı hazırlar. Shopier gerekmez.</Text>
     </View>}
     {show(1) && <>
     <Text style={styles.fieldLabel}>Fotoğraflar ({photos.length}/{MAX_LISTING_PHOTOS}) · kapak yapmak için fotoğrafa dokunun</Text>
@@ -4018,15 +4035,17 @@ function PhotoListingStudio({ online, etsyReady, wizard, onStepChange }: any) {
       <Pressable style={styles.secondaryButton} onPress={() => addPhotos(false)}><Text style={styles.secondaryButtonText}>Galeriden seç</Text></Pressable>
     </View>
     <Text style={styles.formHint}>Gün ışığında, sade zeminde çekin: önden, arkadan, doku veya damga yakın planı ve ölçü gösteren bir kare. Ön, arka ve detay fotoğraflarıyla ürünü açıkça gösterin.</Text>
-    <View style={styles.analysisCard}>
+    {(!wizard || photos.length > 0) && <Pressable style={[styles.analyzeButton, (analyzing || !online) && styles.primaryDisabled]} disabled={analyzing || !online} onPress={analyze}>{analyzing ? <ActivityIndicator color="white" /> : <Ionicons name="sparkles" size={18} color="white" />}<Text style={styles.primaryText}>{analyzing ? "Fotoğraflar inceleniyor…" : "Fotoğraftan otomatik doldur"}</Text></Pressable>}
+    {wizard && photos.length > 0 && <Text style={styles.formHint}>Tür, ad, renk ve malzeme önerilir; hepsini bir sonraki adımda kontrol edersiniz.</Text>}
+    {wizard && !showChat && <Pressable onPress={() => setShowChat(true)} style={{ marginBottom: 8 }}><Text style={styles.linkNote}>ChatGPT / Claude sohbetiyle analiz (isteğe bağlı) →</Text></Pressable>}
+    {(!wizard || showChat) && <View style={styles.analysisCard}>
       <Text style={styles.cardTitle}>ChatGPT / Claude sohbetiyle analiz</Text>
       <Text style={styles.formHint}>Plus / ücretli sohbet hesabınızı kendi uygulamasında kullanın. Burada API çağrısı yapılmaz. Talimatı paylaşın, fotoğrafları sohbete ayrıca ekleyin; JSON yanıtını buraya yapıştırın. Hiçbir ilan otomatik yayınlanmaz.</Text>
       <ChipGroup options={[{ id: "chatgpt", label: "ChatGPT" }, { id: "claude", label: "Claude" }]} value={photoAssistant} onChange={setPhotoAssistant} />
       <Pressable style={styles.secondaryButton} onPress={sharePhotoPrompt}><Text style={styles.secondaryButtonText}>{photoAssistant === "claude" ? "Claude için analiz talimatını paylaş" : "ChatGPT için analiz talimatını paylaş"}</Text></Pressable>
       <Field label="Sohbetten gelen analiz JSON'u" value={assistantReply} onChangeText={setAssistantReply} multiline autoCapitalize="none" />
       <Pressable style={styles.secondaryButton} onPress={importPhotoAnalysis}><Text style={styles.secondaryButtonText}>Analiz yanıtını uygula</Text></Pressable>
-    </View>
-    {!wizard && <Pressable style={[styles.analyzeButton, (analyzing || !online) && styles.primaryDisabled]} disabled={analyzing || !online} onPress={analyze}>{analyzing ? <ActivityIndicator color="white" /> : <Ionicons name="sparkles" size={18} color="white" />}<Text style={styles.primaryText}>{analyzing ? "Fotoğraflar inceleniyor…" : "Sunucuyla otomatik analiz (ayrı API)"}</Text></Pressable>}
+    </View>}
     {wizard && analyzing && <Text style={styles.formHint}>Yapay zekâ fotoğrafa bakıyor…</Text>}
     </>}
     {show(2) && <>
@@ -4091,7 +4110,7 @@ function PhotoListingStudio({ online, etsyReady, wizard, onStepChange }: any) {
       <View style={{ width: 70 }}><Field label="Adet" value={quantity} onChangeText={setQuantity} keyboardType="number-pad" /></View>
     </View>
     <Toggle label="Hazır, hemen gönderilebilir" value={readyToShip} onChange={setReadyToShip} />
-    {wizard && <Text style={styles.formHint}>Elinize geçecek: Etsy kesintileri ve kargo düşüldükten sonra size kalacak tutar. Etsy fiyatı buna göre hesaplanır. ABD'ye kargo: paketli ağırlığı PTT'ye ya da kargo firmasına söyleyip sorun. "Hazır" kapalıysa ürün sipariş gelince yapılır demektir.</Text>}
+    {wizard && <Text style={styles.formHint}>Elinize geçecek: Etsy kesintileri düşüldükten sonra size kalacak tutar; Etsy fiyatı buna göre hesaplanır. ABD'ye kargo: paketli ürünü göndermenin size maliyeti (paketli ağırlığı PTT'ye ya da kargo firmasına söyleyip sorun). Kargoyu alıcı öder; fiyata eklenmez, uygulama kargo profiline yazılacak tutarı hesaplar. "Hazır" kapalıysa ürün sipariş gelince yapılır demektir.</Text>}
     </>}
     {show(5) && <>
     <Pressable style={[styles.analyzeButton, { marginTop: 12 }, (Boolean(progress) || !online) && styles.primaryDisabled]} disabled={Boolean(progress) || !online} onPress={prepare}>{progress ? <ActivityIndicator color="white" /> : <Ionicons name="search" size={18} color="white" />}<Text style={styles.primaryText}>{plan ? "Yeniden araştır" : "Etsy'de araştır ve ilanı hazırla"}</Text></Pressable>

@@ -49,7 +49,10 @@ export async function createListingOffers(env:EtsyRuntimeEnv,store:OfferStore|un
       const picked=await pickBestKeyword(store,{studio:"printable",kind},now,{env,fetcher:requestFetch});
       const fresh=picked.selection.candidates.filter(row=>row.state==="fresh");
       if(!fresh.length&&picked.selection.candidates.some(row=>row.state==="failed"&&row.errorTr?.includes("istek sınırı")))throw new EtsyIntegrationError("RATE_LIMITED","Etsy istek sınırına ulaşıldı. Biraz sonra yeniden araştırın.",429);
-      candidates.push(...fresh.map(row=>({keyword:row.keyword,score:row.score})));
+      // Yalnız alıcı ilgisi olan aramalardan öneri hazırlanır; hepsi zayıfsa satıcıya açıkça söylenir.
+      const demanded=fresh.filter(row=>(row as {demand?:boolean}).demand!==false);
+      if(!demanded.length&&fresh.length)throw new EtsyIntegrationError("VALIDATION_FAILED","Bu türdeki güncel aramalarda alıcı ilgisi zayıf görünüyor. Trend sekmesinde 'Yüksek fırsat' ya da 'Denenebilir' görünen bir arama seçin veya başka bir tür deneyin.",400);
+      candidates.push(...demanded.map(row=>({keyword:row.keyword,score:row.score})));
     } catch(error){if(!candidates.length)throw error;}
   }
   const unique=[...new Map(candidates.map(row=>[ideaKey(kind,row.keyword),row])).values()].sort((a,b)=>(b.score??-1)-(a.score??-1));

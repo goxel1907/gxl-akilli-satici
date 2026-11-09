@@ -47,6 +47,9 @@ test("agent receives measured product rankings, excluding stale and tiny samples
   values.set(key("adult coloring pages"), JSON.stringify(result("adult coloring pages", 99, 7 * 3600000)));
   const tiny = result("recipe cards printable", 100); tiny.metrics.sampleSize = 1;
   values.set(key(tiny.keyword), JSON.stringify(tiny));
+  const weak = { ...result("ocean coloring pages", 30), verdict: "Talep zayıf" };
+  values.set(key(weak.keyword), JSON.stringify(weak));
+  values.set("etsy:discovered", JSON.stringify([...JSON.parse(values.get("etsy:discovered")!), { keyword: weak.keyword, group: "printables", from: "manual", rising: false, discoveredAt: new Date(now).toISOString() }]));
   const productIdeas = await readProductIdeas(store, now);
   assert.deepEqual(productIdeas.items.map(item => item.keyword), ["animal coloring pages", "budget planner printable"]);
   const context = { productIdeas };

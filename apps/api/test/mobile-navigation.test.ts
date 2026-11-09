@@ -384,3 +384,37 @@ test("resuming a saved workspace prevents a late preparation response from repla
     assert.equal(buttons(renderer, /^Dosyalar hazırsa yükle →$/).length, 1);
   } finally { await unmount(renderer); }
 });
+
+test("Trend lists searches with buyer demand first and hides weak-demand ones until asked", async context => {
+  const rows = [
+    { id: "w", labelTr: "Zayıf talepli ürün", keyword: "weak demand item", group: "printables", kind: "planner", result: { ...sample("weak demand item", "printables", 30), verdict: "Talep zayıf" } },
+    { id: "s", labelTr: "İlgi gören ürün", keyword: "strong demand item", group: "printables", kind: "planner", result: sample("strong demand item", "printables", 70) }
+  ];
+  context.mock.method(globalThis, "fetch", router(path => path === "/api/etsy/trends" ? Response.json({ configured: true, groups: [{ id: "printables", labelTr: "Dijital ürünler" }], niches: rows }) : Response.json({ items: [], events: [] })));
+  const renderer = await mount(screens.TrendPanel, { online: true, onUse: () => {} });
+  try {
+    await waitFor(() => renderer.root.findAllByType("Text" as any).some(node => visible(node) && text(node) === "Alıcı ilgisi olan en iyi fırsatlar"));
+    const shown = () => renderer.root.findAllByType("Text" as any).filter(node => visible(node)).map(node => text(node)).join(" | ");
+    assert.match(shown(), /İlgi gören ürün/);
+    assert.doesNotMatch(shown(), /Zayıf talepli ürün/);
+    await tap(renderer, /^Talebi zayıf 1 aramayı göster$/);
+    assert.match(shown(), /Zayıf talepli ürün/);
+  } finally { await unmount(renderer); }
+});
+
+test("Discovery hides searches whose buyer demand is weak until the seller asks to see them", async context => {
+  const summary = (score: number, verdict: string) => ({ score, verdict, activeListings: 500, favoritesPerMonth: 3, scannedAt: new Date().toISOString() });
+  const items = [
+    { keyword: "weak discovery item", group: "printables", from: "x", rising: false, discoveredAt: new Date().toISOString(), summary: summary(30, "Talep zayıf") },
+    { keyword: "strong discovery item", group: "printables", from: "x", rising: false, discoveredAt: new Date().toISOString(), summary: summary(70, "Yüksek fırsat") }
+  ];
+  context.mock.method(globalThis, "fetch", router(path => path === "/api/etsy/discoveries" ? Response.json({ items, autopilot: { enabled: true, runs: 1, tracked: 2 } }) : Response.json({})));
+  const renderer = await mount(screens.DiscoveryPanel, { online: true, onUse: () => {} });
+  try {
+    const shown = () => renderer.root.findAllByType("Text" as any).filter(node => visible(node)).map(node => text(node)).join(" | ");
+    await waitFor(() => shown().includes("strong discovery item"));
+    assert.doesNotMatch(shown(), /weak discovery item/);
+    await tap(renderer, /^Talebi zayıf 1 keşfi göster$/);
+    assert.match(shown(), /weak discovery item/);
+  } finally { await unmount(renderer); }
+});

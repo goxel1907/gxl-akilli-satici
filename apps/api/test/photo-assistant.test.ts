@@ -94,12 +94,32 @@ test("simple photo wizard requires photos but does not silently invoke a separat
     assert.equal(field(renderer, /^Ürün adı \(Türkçe\)$/).props.value, "Püsküllü tesbih");
   } finally { await unmount(renderer); ui.pickImages = async () => ({ canceled: true }); }
 });
+test("simple photo wizard offers an explicit free auto-fill and keeps the chat option folded", async context => {
+  const paths: string[] = [];
+  context.mock.method(globalThis, "fetch", async (url: unknown) => { paths.push(new URL(String(url)).pathname); return Response.json({ analysis: answer.analysis }); });
+  ui.alerts.length = 0;
+  ui.pickImages = async () => ({ canceled: false, assets: [{ uri: "local:auto", width: 100, height: 100, base64: "AAAA" }] });
+  const renderer = await mount(screens.PhotoListingStudio, { online: true, wizard: true });
+  try {
+    assert.equal(buttons(renderer, /^Fotoğraftan otomatik doldur$/).length, 0);
+    assert.equal(buttons(renderer, /^Analiz yanıtını uygula$/).length, 0);
+    await tap(renderer, /^Galeriden seç$/);
+    assert.equal(paths.length, 0);
+    await tap(renderer, /^Fotoğraftan otomatik doldur$/);
+    await waitFor(() => paths.includes("/api/products/photo-analyze"));
+    await tap(renderer, /^İleri$/);
+    await waitFor(() => field(renderer, /^Ürün adı \(Türkçe\)$/).props.value === answer.analysis.nameTr);
+    await tap(renderer, /^← Geri$/);
+    await tap(renderer, /^ChatGPT \/ Claude sohbetiyle analiz \(isteğe bağlı\) →$/);
+    assert.equal(buttons(renderer, /^Analiz yanıtını uygula$/).length, 1);
+  } finally { await unmount(renderer); ui.pickImages = async () => ({ canceled: true }); }
+});
 test("a late automatic photo response cannot overwrite changed form fields", async context => {
   let finish!: (response: Response) => void;
   context.mock.method(globalThis, "fetch", () => new Promise(resolve => { finish = resolve; }));
   const renderer = await photoScreen();
   try {
-    await act(async () => { void buttons(renderer, /^Sunucuyla otomatik analiz/)[0].props.onPress(); });
+    await act(async () => { void buttons(renderer, /^Fotoğraftan otomatik doldur/)[0].props.onPress(); });
     await waitFor(() => Boolean(finish));
     await type(renderer, /^Ürün adı \(Türkçe\)$/, "Benim seçtiğim ürün");
     await act(async () => finish(Response.json({ analysis: answer.analysis })));
