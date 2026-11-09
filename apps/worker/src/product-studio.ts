@@ -192,6 +192,10 @@ const NOUNS: Array<{ stems: string[]; en: string; knit?: boolean }> = [
   { stems: ["ayna", "mirror"], en: "mirror" },
   { stems: ["lamba", "lamp"], en: "lamp" },
   { stems: ["çanta", "canta", "bag"], en: "bag" },
+  { stems: ["patik", "patiğ", "patig", "booties", "bootie"], en: "booties", knit: true },
+  { stems: ["çetik", "çetiğ", "cetik", "cetig", "terlik", "slipper", "slippers"], en: "slippers", knit: true },
+  { stems: ["çorap", "corap", "socks"], en: "socks", knit: true },
+  { stems: ["oyuncak", "amigurumi"], en: "amigurumi toy", knit: true },
   { stems: ["şal", "shawl"], en: "shawl" },
   { stems: ["saat", "watch"], en: "watch" },
   // Örgü giyim: bu adlar tek başına da örgü ürünü sayılır; şal, çanta, battaniye gibi adlar ise yalnız tığ/örgü geçerse.
@@ -520,7 +524,7 @@ function relevantVocabulary(signals: ProductSignals, keywords: string[], colors:
   return words;
 }
 
-const WEARABLE_KNITS = /^(sweater|cardigan|pullover|top|dress|vest|beanie|hat|scarf|shawl|cowl|poncho|mittens|gloves|socks?|skirt|romper|bonnet|booties|jumpsuit|shorts|pants)$/;
+const WEARABLE_KNITS = /^(sweater|cardigan|pullover|top|dress|vest|beanie|hat|scarf|shawl|cowl|poncho|mittens|gloves|socks?|skirt|romper|bonnet|booties|slippers|jumpsuit|shorts|pants)$/;
 const JEWELRY = /^(necklace|bracelet|ring|earrings?|pendant|anklet|brooch|charm|choker)$/;
 function buildTags(input: ProductPlanInput, signals: ProductSignals, primary: string, scans: TrendResult[], candidates: string[]): string[] {
   const vocabulary = relevantVocabulary(signals, candidates, input.colors);
@@ -555,7 +559,7 @@ function buildTags(input: ProductPlanInput, signals: ProductSignals, primary: st
   // doğru ve alıcının yazdığı genel ifadelerle doldurulur (sona eklenir; yalnız yer kalırsa kullanılır).
   const decade = signals.isVintage && input.yearMade ? `${Math.floor(input.yearMade / 10) * 10}s` : "";
   // "cozy" yalnız sıcak tutan örgüler için doğru bir sözdür (yazlık bluz için değil).
-  const WARM_KNITS = new Set(["sweater", "cardigan", "beanie", "scarf", "shawl", "blanket", "poncho", "vest", "mittens"]);
+  const WARM_KNITS = new Set(["sweater", "cardigan", "beanie", "scarf", "shawl", "blanket", "poncho", "vest", "mittens", "slippers", "socks", "booties"]);
   // "Mid century" alıcı dilinde 1945-1969 dönemidir.
   const midCentury = signals.isVintage && input.yearMade && input.yearMade >= 1945 && input.yearMade <= 1969;
   const fillers = signals.isTesbih ? [
@@ -579,7 +583,10 @@ function buildTags(input: ProductPlanInput, signals: ProductSignals, primary: st
     ...(signals.young === "baby" ? ["new baby gift", "newborn gift", "baby knitwear"] : signals.young ? ["kids knitwear"] : []),
     input.audience === "women" && !signals.young ? "gift for mom" : "",
     ...(/\b(beanie|hat)\b/.test(lastNoun) ? ["winter hat", "knit hat", "warm hat", "handmade hat"] : []),
-    ...(/\b(sweater|cardigan|pullover)\b/.test(lastNoun) ? ["knit sweater", "handmade knitwear"] : [])
+    ...(/\b(sweater|cardigan|pullover)\b/.test(lastNoun) ? ["knit sweater", "handmade knitwear"] : []),
+    ...(lastNoun === "slippers" ? ["house slippers", "knit slippers", "winter slippers", "warm slippers"] : []),
+    ...(lastNoun === "socks" ? ["knit socks", "winter socks", "warm socks", "handmade socks"] : []),
+    ...(lastNoun === "booties" ? ["knit baby booties", "baby shoes", "crib shoes", "baby slippers"] : [])
   ] : [
     input.origin === "made_by_seller" && signals.noun !== "item" ? `handmade ${lastNoun}` : "",
     signals.noun !== "item" ? `${lastNoun} gift` : "",
