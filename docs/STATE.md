@@ -22,7 +22,9 @@ Güncelleme: 9 Kasım 2026
 - Silme: Dijital ürün kartında "Uygulamadan sil"; kayıtlı çalışmada "Bu çalışmayı listeden sil" (Etsy'ye dokunmaz).
 - Başlık: basılmayan ürünlerde (duvar kâğıdı, ikon, tablo, sunum, özgeçmiş) "printable pdf", sunum/tablo/ekran ürünlerinde kâğıt ölçüsü başlığa girmez.
 - Fiziksel ürün: bebek/çocuk algılanır ("for women/gift for her" yerine baby…, CPSIA uyarısı); çanta/battaniyeye giyim etiketi yok; takıda 13 etiket dolar; açıklamada ABD teslim süresi (7-21 gün); "ay yıldız"/"nazar" çevirisi.
-- Bilinen eksik: fiziksel ilanda video Etsy'ye yüklenmiyor (elle eklenir); fotoğraf analizi GEMINI_API_KEY ister (yoksa ChatGPT/Claude yolu).
+- Video: taslaktan sonra "Video ekle (5-15 sn)" → POST /api/etsy/listings/:id/video → Etsy (sunucuda saklanmaz).
+- Fotoğraf analizi: Gemini → OpenAI → yoksa ücretsiz Cloudflare Workers AI (wrangler "ai" bağlaması, llama-3.2-11b-vision, lisans 'agree' otomatik).
+- Kargo ALICIYA AİT (kullanıcı kararı): fiyata eklenmez; kargo profiline kesintiyi karşılayan tutar (buyerShippingTry) yazılır, Etsy alıcıya gösterir. Not: Etsy ABD'de 35$+ ücretsiz kargoyu aramada öne alır.
 - Araştırma: arama türü söylemiyorsa tür kelimesi eklenir (sunum oyunu → "powerpoint"); "christmas trivia game" artık öneri alıyor.
 - Görsel seçimi: dosyalardan seçme + ada göre doğal sıralama + ekleyerek seçme + temizle.
 - Büyük dosyada (>2.5 MB) dosya denetimi hafif modda; sunucu düşerse taslağa devam edilebilir.

@@ -2289,6 +2289,33 @@ function StudioPanel({ online, active, seed, onUpload, onOpenProduct, etsyReady,
   </>;
 }
 
+// Etsy ilanına video: 5-15 saniyelik MP4/MOV, en fazla 100 MB. Videolu ilanlar Etsy'de daha çok tıklanır.
+function EtsyVideoUpload({ listingId }: { listingId: number }) {
+  const [state, setState] = useState<"idle" | "uploading" | "done">("idle");
+  const pick = async () => {
+    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ["videos"], allowsEditing: true, videoMaxDuration: 15, quality: 1 });
+    if (result.canceled || !result.assets[0]) return;
+    const video = result.assets[0];
+    const seconds = (video.duration || 0) / 1000;
+    if (seconds && (seconds < 5 || seconds > 15.5)) return Alert.alert("Video süresi", `Etsy 5-15 saniyelik video kabul eder; bu video ${Math.round(seconds)} saniye. Kırpıp tekrar seçin.`);
+    if (video.fileSize && video.fileSize > 100 * 1024 * 1024) return Alert.alert("Video çok büyük", "Etsy en fazla 100 MB kabul eder.");
+    setState("uploading");
+    try {
+      const form = new FormData();
+      form.append("confirm", "true");
+      form.append("video", { uri: video.uri, name: video.fileName || "listing-video.mp4", type: video.mimeType || "video/mp4" } as any);
+      const response = await fetch(`${API_URL}/api/etsy/listings/${listingId}/video`, { method: "POST", headers: apiHeaders(), body: form });
+      const body = await response.json().catch(() => ({})) as any;
+      if (!response.ok) throw new Error(body.error || `Video yüklenemedi (kod ${response.status}).`);
+      setState("done");
+      Alert.alert("Video Etsy'ye gönderildi", "Etsy videoyu birkaç dakika içinde işler; sonra taslakta Photo & Video bölümünde görünür.");
+    } catch (error) { setState("idle"); Alert.alert("Video yüklenemedi", errorText(error)); }
+  };
+  return <Pressable style={[styles.secondaryButton, { alignSelf: "flex-start", marginTop: 6 }, state === "uploading" && styles.primaryDisabled]} disabled={state === "uploading"} onPress={pick}>
+    <Text style={styles.secondaryButtonText}>{state === "uploading" ? "Video yükleniyor…" : state === "done" ? "Video gönderildi · değiştir" : "Video ekle (5-15 sn)"}</Text>
+  </Pressable>;
+}
+
 function ListingGuide({ input, ...actions }: { input: ListingProgressInput } & Pick<ListingMascotProps, "onAction" | "actionLabel" | "disabled" | "onSecondary" | "secondaryLabel">) {
   const guide = listingProgress(input);
   return <ListingMascot {...guide} tasks={listingTasks(input)} {...actions} />;
@@ -2637,6 +2664,7 @@ function DigitalPanel({ online, active = true, shopReady, prefill, onPrefillUsed
         {!!product.etsy?.listingId && <Pressable style={[styles.secondaryButton, busy === product.id && styles.primaryDisabled]} disabled={busy === product.id} onPress={() => verifyPublication(product)}><Text style={styles.secondaryButtonText}>Yayın durumunu denetle</Text></Pressable>}
         <Pressable style={styles.secondaryButton} onPress={() => setGrantProduct(product)}><Text style={styles.secondaryButtonText}>Satış bağlantısı</Text></Pressable>
         <Pressable style={styles.secondaryButton} onPress={() => loadDetail(product.id)}><Text style={styles.secondaryButtonText}>Bağlantılar</Text></Pressable>
+        {!!product.etsy?.listingId && <EtsyVideoUpload listingId={product.etsy.listingId} />}
         <Pressable style={styles.secondaryButton} disabled={busy === product.id} onPress={() => removeProduct(product)}><Text style={[styles.secondaryButtonText, { color: "#B4483A" }]}>Uygulamadan sil</Text></Pressable>
       </View>
       {(details[product.id]?.grants || []).map((grant: any) => <View style={styles.grantRow} key={grant.id}>
@@ -3240,7 +3268,7 @@ function EtsyPlanResult({ plan, payload, etsyReady, priceSourceLabel, preparePro
         <Text style={styles.cardTitle}>Fiyat analizi</Text>
         <Text style={styles.analysisLine}>{priceSourceLabel}: {pricing.priceTry} TL ≈ {pricing.targetNetUsd} USD (kur {pricing.usdTryRate})</Text>
         <Text style={styles.analysisLine}>Etsy kesintileri: %{pricing.feePercent} + {pricing.fixedFeesUsd} USD sabit</Text>
-        <Text style={styles.analysisLine}>ABD kargosu (fiyata dahil): {pricing.shippingUsd} USD</Text>
+        <Text style={styles.analysisLine}>ABD kargosu alıcıya ait: kargo profiline {pricing.buyerShippingTry ? `${pricing.buyerShippingTry} TL (≈${pricing.buyerShippingUsd} USD)` : "kargo ücretinizi"} yazın; alıcı ilan sayfasında ve ödemede görür.</Text>
         <Text style={styles.analysisLine}>Başabaş Etsy fiyatı: {pricing.breakEvenUsd} USD</Text>
         <Text style={styles.analysisLine}>Etsy ortancası: {pricing.medianUsd ?? "—"} USD</Text>
         <Text style={styles.listingTitle}>Önerilen: {pricing.recommendedUsd} USD ≈ {pricing.recommendedTry} TL · elinize ≈ {pricing.netAtRecommendedTry} TL</Text>
@@ -3267,6 +3295,7 @@ function EtsyPlanResult({ plan, payload, etsyReady, priceSourceLabel, preparePro
         <Text style={styles.policyName}>ETSY İLANI #{draft.listingId}</Text>
         <Text style={styles.policyLabel}>{published ? "Yayında" : "Taslak hazır · henüz yayında değil"}</Text>
         <Pressable style={[styles.secondaryButton, { alignSelf: "flex-start", marginTop: 6 }]} onPress={() => published ? openUrl(published.url, "Etsy ilanı") : openUrl(draft.editUrl, "Etsy taslak ilanı")}><Text style={styles.secondaryButtonText}>{published ? "İlanı aç" : "Taslağı kontrol et"}</Text></Pressable>
+        {!published && <EtsyVideoUpload listingId={draft.listingId} />}
         {!published && <Pressable style={[styles.analyzeButton, { marginTop: 12 }, publishing && styles.primaryDisabled]} disabled={publishing} onPress={publish}>{publishing ? <ActivityIndicator color="white" /> : <Ionicons name="rocket-outline" size={18} color="white" />}<Text style={styles.primaryText}>Etsy'de yayınla</Text></Pressable>}
       </View>}
   </>;
@@ -3378,6 +3407,7 @@ function ShopReadinessCard({ online, onSell }: any) {
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState<string>();
   const [postal, setPostal] = useState("");
+  const [shipCost, setShipCost] = useState("");
   const [minDays, setMinDays] = useState("7");
   const [maxDays, setMaxDays] = useState("21");
   const [processing, setProcessing] = useState("3");
@@ -3430,8 +3460,9 @@ function ShopReadinessCard({ online, onSell }: any) {
         {item.state !== "done" && !!item.action && <Ionicons name="chevron-forward" size={18} color="#748079" />}
       </Pressable>
       {item.id === "shipping" && form === "shipping" && <View style={styles.adviceBox}>
-        <Text style={styles.rowTitle}>Kargo profili: Türkiye → ABD, ücretsiz kargo</Text>
-        <Text style={styles.small}>Kargo bedeli ürün fiyatına eklendiği için alıcıya "ücretsiz kargo" görünür. Teslim süresini kargo firmanıza sorun; PTT ile genelde 1–3 hafta, hızlı kargoyla birkaç gün.</Text>
+        <Text style={styles.rowTitle}>Kargo profili: Türkiye → ABD, kargo alıcıya ait</Text>
+        <Text style={styles.small}>Alıcı kargo ücretini ilan sayfasında ve ödemede görür ve öder. Etsy kargo ücretinden de kesinti alır; ilan planındaki "kargo profiline yazın" tutarını kullanın. Teslim süresini kargo firmanıza sorun; PTT ile genelde 1–3 hafta, hızlı kargoyla birkaç gün.</Text>
+        <Field label="Alıcının ödeyeceği kargo ücreti (TL, ilk ürün)" value={shipCost} onChangeText={setShipCost} keyboardType="decimal-pad" placeholder="650" />
         <View style={{ flexDirection: "row", gap: 10 }}>
           <View style={{ flex: 1 }}><Field label="Teslim en az (iş günü)" value={minDays} onChangeText={setMinDays} keyboardType="number-pad" /></View>
           <View style={{ flex: 1 }}><Field label="Teslim en çok (iş günü)" value={maxDays} onChangeText={setMaxDays} keyboardType="number-pad" /></View>
@@ -3440,7 +3471,7 @@ function ShopReadinessCard({ online, onSell }: any) {
           <View style={{ flex: 1 }}><Field label="Kargoya veriş (en çok gün)" value={processing} onChangeText={setProcessing} keyboardType="number-pad" /></View>
           <View style={{ flex: 1 }}><Field label="Posta kodunuz (önerilir)" value={postal} onChangeText={setPostal} keyboardType="number-pad" placeholder="34000" /></View>
         </View>
-        <Pressable style={[styles.primary, { marginTop: 10, marginBottom: 0 }, (busy || !online) && styles.primaryDisabled]} disabled={busy || !online} onPress={() => post("/api/etsy/shipping-profile", { postalCode: postal.trim() || undefined, minDeliveryDays: Number(minDays), maxDeliveryDays: Number(maxDays), maxProcessingDays: Number(processing) }, "Kargo profili Etsy'de oluşturuldu.")}>{busy ? <ActivityIndicator color="white" /> : <Ionicons name="cube" size={18} color="white" />}<Text style={styles.primaryText}>Kargo profilini oluştur</Text></Pressable>
+        <Pressable style={[styles.primary, { marginTop: 10, marginBottom: 0 }, (busy || !online) && styles.primaryDisabled]} disabled={busy || !online} onPress={() => (Number(shipCost.replace(",", ".")) > 0 ? undefined : Alert.alert("Kargo ücreti", "Alıcının ödeyeceği kargo ücretini TL olarak girin.")) ?? post("/api/etsy/shipping-profile", { postalCode: postal.trim() || undefined, costTry: Number(shipCost.replace(",", ".")), minDeliveryDays: Number(minDays), maxDeliveryDays: Number(maxDays), maxProcessingDays: Number(processing) }, "Kargo profili Etsy'de oluşturuldu.")}>{busy ? <ActivityIndicator color="white" /> : <Ionicons name="cube" size={18} color="white" />}<Text style={styles.primaryText}>Kargo profilini oluştur</Text></Pressable>
       </View>}
       {item.id === "returns" && form === "returns" && <View style={styles.adviceBox}>
         <Text style={styles.rowTitle}>İade politikası</Text>
@@ -3739,7 +3770,7 @@ const WIZARD_HINTS = [
   "Ürünün 1–10 gerçek fotoğrafını çekin veya galeriden seçin. ChatGPT/Claude sohbet analizi isteğe bağlıdır; İleri düğmesi kendiliğinden analiz başlatmaz.",
   "Ürün türünü, adını ve doğruladığınız bilgileri yazın. Sohbet analizinden aktardıysanız önerileri kontrol edin; emin olmadığınız bilgiyi yazmayın.",
   "Renkleri ve öne çıkan özellikleri Türkçe yazabilirsiniz; sistem İngilizceye çevirir. Bu adım isteğe bağlıdır.",
-  "Satıştan elinize geçmesini istediğiniz tutarı ve ABD'ye kargo ücretini yazın. Etsy kesintileri ve kargo fiyata eklenir.",
+  "Satıştan elinize geçmesini istediğiniz tutarı ve ABD'ye kargo ücretini yazın. Etsy kesintileri fiyata eklenir; kargoyu alıcı öder ve ilan sayfasında görür.",
   "Uygulama Etsy'de alıcıların aramalarını tarar; İngilizce başlık, 13 etiket, açıklama ve fiyatı hazırlar. Türkçe karşılığına bakıp Etsy'ye gönderin."
 ];
 
@@ -3942,7 +3973,7 @@ function PhotoListingStudio({ online, etsyReady, wizard, onStepChange }: any) {
     }
     if (step === 4) {
       if (!parseAmount(priceTry)) return Alert.alert("Elinize geçecek tutar", "Bu üründen elinize geçmesini istediğiniz tutarı TL olarak yazın.");
-      if (!parseAmount(shippingTry)) return Alert.alert("ABD'ye kargo ücreti", "Kargo ücretini yazmazsanız fiyata eklenmez ve zarar edersiniz. Bilmiyorsanız ürünü paketleyip tartın; PTT'ye ya da kargo firmasına ağırlığı söyleyip ABD fiyatını sorun.");
+      if (!parseAmount(shippingTry)) return Alert.alert("ABD'ye kargo ücreti", "Kargo ücretini yazın; alıcının ödeyeceği tutarı (Etsy kesintisi dahil) hesaplayıp kargo profiline yazmanızı söyleyeceğim. Bilmiyorsanız ürünü paketleyip tartın; PTT'ye ya da kargo firmasına ağırlığı söyleyip ABD fiyatını sorun.");
     }
     goTo(Math.min(WIZARD_STEPS.length, step + 1));
   };

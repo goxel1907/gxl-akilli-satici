@@ -108,6 +108,9 @@ export interface ProductPricing {
   medianUsd?: number;
   positioning: "below" | "aligned" | "above" | "unknown";
   netAtRecommendedTry: number;
+  // Kargo alıcıya ait: Etsy kargo ücretinden de kesinti aldığı için kargo profiline yazılacak tutar bu kesintiyi karşılar.
+  buyerShippingUsd?: number;
+  buyerShippingTry?: number;
   note: string;
 }
 
@@ -444,7 +447,9 @@ export function computePricing(input: { priceTry?: number; shippingTry?: number;
   const fixedFeesUsd = fees.listingFeeUsd + fees.processingFixedTry / rate;
   const targetNetUsd = input.priceTry / rate;
   const shippingUsd = (input.shippingTry || 0) / rate;
-  const breakEvenUsd = (targetNetUsd + shippingUsd + fixedFeesUsd) / (1 - feePercent);
+  // Kargo alıcıya ait: ürün fiyatına eklenmez; alıcı kargoyu ilan sayfasında görüp ödeme ekranında öder.
+  const breakEvenUsd = (targetNetUsd + fixedFeesUsd) / (1 - feePercent);
+  const buyerShippingUsd = shippingUsd ? Math.ceil(shippingUsd / (1 - feePercent) * 100) / 100 : 0;
   let recommended = breakEvenUsd;
   let positioning: ProductPricing["positioning"] = "unknown";
   let note = "Etsy ortanca fiyatı bulunamadı; başabaş fiyat önerildi.";
@@ -463,7 +468,7 @@ export function computePricing(input: { priceTry?: number; shippingTry?: number;
     }
   }
   const recommendedUsd = roundPrice(recommended);
-  const netAtRecommendedUsd = recommendedUsd * (1 - feePercent) - fixedFeesUsd - shippingUsd;
+  const netAtRecommendedUsd = recommendedUsd * (1 - feePercent) - fixedFeesUsd;
   return {
     usdTryRate: rate,
     priceTry: input.priceTry,
@@ -477,7 +482,8 @@ export function computePricing(input: { priceTry?: number; shippingTry?: number;
     medianUsd: input.medianUsd,
     positioning,
     netAtRecommendedTry: Math.round(netAtRecommendedUsd * rate),
-    note: `${note} Kargo fiyata dahil edildi (alıcıya ücretsiz kargo).`
+    ...(buyerShippingUsd ? { buyerShippingUsd, buyerShippingTry: Math.ceil(buyerShippingUsd * rate) } : {}),
+    note: `${note} Kargo alıcıya ait ve fiyata eklenmedi.${buyerShippingUsd ? ` Kargo profiline ${Math.ceil(buyerShippingUsd * rate)} TL (≈${buyerShippingUsd} USD) yazın; Etsy kargo ücretinden de kesinti aldığı için bu tutar kesintiyi karşılar. Alıcı kargo ücretini ilan sayfasında ve ödemede görür.` : " Kargo ücretinizi girin; kargo profiline yazılacak tutarı hesaplayayım."}`
   };
 }
 
@@ -703,8 +709,8 @@ function buildDescription(input: ProductPlanInput, signals: ProductSignals, elig
     "SHIPPING",
     `• Ships from Türkiye with tracking. ${input.readyToShip ? "Ready to ship." : "Prepared to order; see the processing time on this listing."}`,
     "• Estimated delivery to the US: usually 7 to 21 days after shipping (international tracked mail); the exact estimate is shown at checkout.",
-    // Ücretsiz kargo yalnız kargo bedeli fiyata eklendiyse yazılır; aksi hâlde Etsy kargo ücretini kendisi gösterir.
-    ...(input.shippingTry ? ["• Free shipping: the delivery cost is included in the price."] : []),
+    // Kargo alıcıya ait: ücreti Etsy ilan sayfasında ve ödemede kendisi gösterir.
+    "• Shipping is paid by the buyer: the shipping cost to your country is shown on this listing and at checkout.",
     "• Import duties or taxes may apply depending on your country.",
     ...(care ? ["", "CARE", care] : [])
   ].join("\n");

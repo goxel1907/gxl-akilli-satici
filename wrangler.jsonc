@@ -7,6 +7,7 @@
   "durable_objects": { "bindings": [{ "name": "CRM_STORE", "class_name": "CrmStore" }] },
   "migrations": [{ "tag": "crm-sqlite-v1", "new_sqlite_classes": ["CrmStore"] }],
   "observability": { "enabled": true },
+  "ai": { "binding": "AI" },
   "triggers": { "crons": ["*/30 * * * *"] },
   "kv_namespaces": [
     {

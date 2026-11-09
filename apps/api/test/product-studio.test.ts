@@ -90,16 +90,20 @@ test("Etsy gate blocks resale and requires partner, hallmark or vintage proof", 
   assert.equal(etsyEligibility(normalizeProductInput({ titleTr: "Tesbih", origin: "unknown" })).status, "review");
 });
 
-test("pricing converts TRY, adds Etsy Turkey fees and shipping, and compares with the Etsy median", () => {
+test("pricing converts TRY, adds Etsy Turkey fees, leaves shipping to the buyer, and compares with the Etsy median", () => {
   const aligned = computePricing({ priceTry: 5000, shippingTry: 1200, usdTryRate: 40, shopCurrency: "USD", medianUsd: 159 })!;
   assert.equal(aligned.targetNetUsd, 125);
   assert.equal(aligned.shippingUsd, 30);
   assert.equal(aligned.feePercent, 17.77);
-  assert.equal(aligned.breakEvenUsd, 189.16);
+  // Kargo alıcıya ait: fiyata eklenmez; kargo profiline Etsy kesintisini karşılayan tutar önerilir.
+  assert.equal(aligned.breakEvenUsd, 152.68);
   assert.equal(aligned.positioning, "aligned");
-  assert.equal(aligned.recommendedUsd, 189.99);
-  assert.equal(aligned.recommendedTry, 7600);
+  assert.equal(aligned.recommendedUsd, 152.99);
+  assert.equal(aligned.recommendedTry, 6120);
   assert.ok(aligned.netAtRecommendedTry >= 5000);
+  assert.equal(aligned.buyerShippingUsd, 36.49);
+  assert.equal(aligned.buyerShippingTry, 1460);
+  assert.match(aligned.note, /Kargo alıcıya ait/);
 
   const below = computePricing({ priceTry: 2000, shippingTry: 1200, usdTryRate: 40, shopCurrency: "USD", medianUsd: 159 })!;
   assert.equal(below.positioning, "below");
