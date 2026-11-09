@@ -242,6 +242,17 @@ export function productFiles(product: DigitalProduct): DigitalFile[] {
   return product.files?.length ? product.files : [{ name: product.fileName, size: product.fileSize, mimeType: "application/pdf" }];
 }
 
+// Başarısız ya da vazgeçilen dijital ürün uygulamadan silinir: kayıt, dosyalar ve listedeki yeri.
+// Etsy'deki taslak veya ilan silinmez; satıcı onu Etsy'de kendisi siler.
+export async function deleteDigitalProduct(store: DigitalStore, productId: string) {
+  const product = await getDigitalProduct(store, productId);
+  for (const [index] of productFiles(product).entries()) await store.delete(fileKey(productId, index));
+  await store.delete(`${PRODUCT_PREFIX}${productId}`);
+  const list = (await readJson<string[]>(store, PRODUCT_INDEX)) || [];
+  await store.put(PRODUCT_INDEX, JSON.stringify(list.filter((id) => id !== productId)));
+  return { deleted: true, etsyListingId: product.etsy?.listingId };
+}
+
 export async function auditDigitalFiles(store: DigitalStore, productId: string) {
   const product = await getDigitalProduct(store, productId);
   const rows: Array<{ name: string; ok: boolean; checks: number; entries: number; error?: string }> = [];

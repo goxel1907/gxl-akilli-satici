@@ -512,3 +512,16 @@ test("a TL shop gets the USD price converted at today's rate when no TL price wa
   // 6.99 × 45 = 314.55 → 314.99 TL
   assert.equal(listingForm?.get("price"), "314.99");
 });
+
+test("a failed digital product can be deleted from the app without touching Etsy", async () => {
+  const kv = memoryKv();
+  const env = { APP_ACCESS_TOKEN: "app-token", ETSY_OAUTH: kv.store };
+  const created = await handleRequest(new Request("https://gxl.example/api/digital/products", { method: "POST", headers: { authorization: "Bearer app-token" }, body: uploadForm() }), env);
+  const { product } = await created.json() as { product: { id: string } };
+  const del = (body: unknown) => handleRequest(new Request(`https://gxl.example/api/digital/products/${product.id}/delete`, { method: "POST", headers: { authorization: "Bearer app-token", "content-type": "application/json" }, body: JSON.stringify(body) }), env);
+  assert.notEqual((await del({})).status, 200, "deleting needs confirm=true");
+  assert.equal((await del({ confirm: true })).status, 200);
+  const list = await (await handleRequest(new Request("https://gxl.example/api/digital/products", { headers: { authorization: "Bearer app-token" } }), env)).json() as { products: Array<{ id: string }> };
+  assert.ok(!list.products.some((item) => item.id === product.id));
+  assert.equal(await kv.store.get(`digital:product:${product.id}`), null);
+});

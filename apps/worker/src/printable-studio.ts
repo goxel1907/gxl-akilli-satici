@@ -447,7 +447,7 @@ export function normalizePrintablePlanInput(raw: Record<string, unknown>): Print
     competitorLinks: cleanText(raw.competitorLinks, 2500) || undefined,
     referenceNotes: cleanText(raw.referenceNotes, 1000) || undefined,
     creativeDirection: cleanText(raw.creativeDirection, 1000) || undefined,
-    trendFeatures: cleanList(raw.trendFeatures, 6, 40).map((item) => item.toLowerCase()).filter((item) => !isIpRisky(item)),
+    trendFeatures: cleanList(raw.trendFeatures, 6, 40).map((item) => item.toLowerCase()).filter((item) => !isIpRisky(item) && !/\b(test|sample)\b/.test(item)),
     trendTags: cleanList(raw.trendTags, 20, 40).map((item) => item.toLowerCase()).filter((item) => !isIpRisky(item)),
     colors: cleanList(raw.colors, 6, 30),
     formats: cleanList(raw.formats, 6, 50),
@@ -1317,7 +1317,11 @@ function relevantTrendTags(prepared: Prepared, art?: ArtPlan): string[] {
   const features = input.trendFeatures || [];
   const rank = (tag: string) => { const index = features.findIndex((feature) => tag.includes(feature)); return index === -1 ? features.length : index; };
   return (input.trendTags || [])
+    // Basılmayan ürünlerde (duvar kâğıdı, ikon, tablo, sunum, özgeçmiş) "printable pdf" gibi rakip etiketleri başlığa ve etikete girmez.
     .filter((tag) => !isIpRisky(tag) && !hasBrandName(tag) && !misleadingFor(input.kind).test(tag) && fitsTheme(tag, themes) && !["instant download", "digital download", "printable", "pdf"].includes(tag)
+      && !(NO_PRINT_TAGS.has(input.kind) && /\b(printables?|pdf)\b/.test(tag)) && !/\b(test|sample)\b/.test(tag)
+      // Kâğıt ölçüsü yalnız basılan ya da ölçülü teslim edilen üründe başlığa girer (sunum oyununda "A4" yanlış vaat).
+      && !(["slides", "spreadsheet", "wallpaper", "app_icons"].includes(input.kind) && /\b(us letter|letter|a4|a5|half letter|\d+x\d+)\b/.test(tag))
       && tag.split(/\s+/).every((word) => TAG_FILLERS.has(word) || vocabulary.has(word) || vocabulary.has(singular(word))))
     .map((tag, index) => ({ tag, index }))
     .sort((a, b) => rank(a.tag) - rank(b.tag) || a.index - b.index)

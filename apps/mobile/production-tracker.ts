@@ -36,6 +36,10 @@ export function rememberProduction(rows: ProductionRecord[], workspace: Printabl
   if(rows.length>=50)throw new Error("50 çalışma kaydı doldu. Yeni ürün hazırlamadan önce mevcut çalışmalarınızı tamamlayın.");
   return [{id,workspace,stage:"package_ready",source:"app",updatedAt:now,history:[{stage:"package_ready",at:now,source:"app"}]} as ProductionRecord,...rows];
 }
+// Başarısız ya da vazgeçilen çalışma listeden kaldırılır (Etsy'deki taslağa veya ilana dokunulmaz).
+export function removeProduction(rows: ProductionRecord[], id: string): ProductionRecord[] {
+  return rows.filter((row) => row.id !== id);
+}
 export function changeProduction(rows:ProductionRecord[],id:string,stage:ProductionStage,source:ProductionRecord["source"],now=new Date().toISOString()):ProductionRecord[]{
   if(!Object.hasOwn(PRODUCTION_STAGES,stage) || source!=="app"&&!EXTERNAL_STAGES.includes(stage))throw new Error("Bu aşama uygulama sonucu ile doğrulanmalıdır.");
   return rows.map(row=>{
