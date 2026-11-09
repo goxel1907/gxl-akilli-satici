@@ -9,6 +9,7 @@ Güncelleme: 9 Kasım 2026
   ile ürün ZIP'i indirilemedi; elde 9 görsel var (listing-07 eksik). Görseller zayıf (küçük yazı, kırpılmış başlık).
 
 ## Açık işler
+- Cream Uflevia Word Search (49 sayfa, US Letter + A4) ChatGPT'de üretiliyor; 9 Kasım 23:52'de 36/49 sayfa.
 - 1. ilan: "Christmas" kişiselleştirme kutusu kaldırıldı mı, Holiday=Christmas seçildi mi — doğrulanmadı.
 - Mağaza Headline virgül sonrası boşluk ("Calm, practical ...") — doğrulanmadı.
 - Kaçış odası (christmas escape room) paketi hazır; ürün üretilmedi.
@@ -36,3 +37,7 @@ Güncelleme: 9 Kasım 2026
 - Goxi metinleri gerçek düğme adlarıyla yeniden yazıldı (dijital: dosya/görsel/denetim/taslak/video; fiziksel: otomatik doldur,
   alıcı öder kargo, kargo profili). Basit fiziksel sihirbazda "Fotoğraftan otomatik doldur" düğmesi var (yalnız basınca çalışır);
   ChatGPT/Claude sohbet kutusu katlı.
+- Ekran kaydı (9 Kasım 23:48) incelendi: ChatGPT her 4 sayfada durup 'devam' bekliyordu. Paket artık parçaları aynı yanıtta
+  art arda çalıştırır (her sayfayı elle değil, tek betikle üretir); GXL_PROGRESS JSON'u yalnız adım bitince eklenir.
+- Trend: 45 altı puan "en iyi fırsat" sayılmaz; gruptaki tüm aramalar zayıfsa açıklama kartı çıkar (Tesbih/Vintage böyleydi).
+- Not: Google Drive indirmesi için ortam ağına drive.google.com ve drive.usercontent.google.com eklendi.

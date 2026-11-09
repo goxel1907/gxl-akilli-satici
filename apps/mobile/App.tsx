@@ -1368,6 +1368,7 @@ function TrendPanel({ online, active = true, onUse }: any) {
   // En yüksek puanlar seçili grubun içinden gelir (Dijital ürünler seçiliyken örgü deseni gösterilmez).
   // Yalnız alıcı ilgisi olan (talebi zayıf olmayan) ürünler öne çıkar; talebi zayıf olanlar listenin altında, kapalı durur.
   const topOverall = visibleNiches.filter((row: any) => canRankTrend(row.result) && hasBuyerDemand(row.result)).sort((a: any, b: any) => compareTrendEvidence(a.result, b.result)).slice(0, 5);
+  const strongTop = topOverall.filter((row: any) => row.result.score >= 45);
   const [showWeak, setShowWeak] = useState(false);
   const weakNiches = visibleNiches.filter((row: any) => trendFreshness(row.result) !== "unscanned" && !hasBuyerDemand(row.result));
   const listedNiches = showWeak ? visibleNiches : visibleNiches.filter((row: any) => !weakNiches.includes(row) || expanded === row.id);
@@ -1442,8 +1443,14 @@ function TrendPanel({ online, active = true, onUse }: any) {
     <View style={group === "discovered" ? undefined : styles.hidden}><DiscoveryPanel online={online} active={active && group === "discovered"} onUse={use} /></View>
     <View style={group !== "season" && group !== "discovered" ? undefined : styles.hidden}>
     {!!topOverall.length && <View style={styles.analysisCard}>
-      <Text style={styles.cardTitle}>Alıcı ilgisi olan en iyi fırsatlar</Text><Text style={styles.small}>Talebi zayıf aramalar bu listede yok. Son 6 saatlik Etsy örneklemi içindir; satış adedi değildir.</Text>
-      {topOverall.map((row: any) => <Text style={styles.analysisLine} key={row.id}>{row.result.score} · {row.labelTr} ({row.result.verdict})</Text>)}
+      {strongTop.length
+        ? <><Text style={styles.cardTitle}>Alıcı ilgisi olan en iyi fırsatlar</Text><Text style={styles.small}>Yalnız 45 ve üstü puanlı (Denenebilir / Yüksek fırsat) aramalar. Son 6 saatlik Etsy örneklemi içindir; satış adedi değildir.</Text></>
+        : <><Text style={styles.cardTitle}>Bu grupta şu an güçlü fırsat yok</Text><Text style={styles.small}>45 ve üstü puanlı arama çıkmadı. Aşağıdakiler alıcı ilgisi olan en yakın adaylardır ama rekabet yoğun ya da zor; Keşfedilenler ve Sezon fırsatları sekmelerine de bakın.</Text></>}
+      {(strongTop.length ? strongTop : topOverall.slice(0, 3)).map((row: any) => <Text style={styles.analysisLine} key={row.id}>{row.result.score} · {row.labelTr} ({row.result.verdict})</Text>)}
+    </View>}
+    {!loading && !scanning && !!weakNiches.length && weakNiches.length === visibleNiches.filter((row: any) => trendFreshness(row.result) !== "unscanned").length && !visibleNiches.some((row: any) => trendFreshness(row.result) === "unscanned") && <View style={styles.analysisCard}>
+      <Text style={styles.cardTitle}>Bu gruptaki aramaların hepsinde alıcı ilgisi zayıf</Text>
+      <Text style={styles.small}>Etsy'de bu gruptaki {weakNiches.length} aramada şu an az alıcı ilgisi var; burada yeni ürün hazırlamayı erteleyin. Keşfedilenler ve Sezon fırsatları sekmelerine bakın ya da yukarıdan kendi aramanızı tarayın. Yine de görmek isterseniz aşağıdan açabilirsiniz.</Text>
     </View>}
     <InterestRanking rows={visibleNiches.filter((row: any) => !weakNiches.includes(row))} />
     <View style={styles.sectionHeading}><Text style={styles.sectionTitle}>{groups.find((item: any) => item.id === group)?.labelTr || "Nişler"}</Text><Pressable style={[styles.addButton, (!online || !board?.configured || Boolean(scanning)) && styles.primaryDisabled]} disabled={!online || !board?.configured || Boolean(scanning)} onPress={scanAll}><Ionicons name="pulse" size={16} color="white" /><Text style={styles.addButtonText}>{scanning ? "Taranıyor…" : "Tümünü tara"}</Text></Pressable></View>
@@ -4035,7 +4042,7 @@ function PhotoListingStudio({ online, etsyReady, wizard, onStepChange }: any) {
       <Pressable style={styles.secondaryButton} onPress={() => addPhotos(false)}><Text style={styles.secondaryButtonText}>Galeriden seç</Text></Pressable>
     </View>
     <Text style={styles.formHint}>Gün ışığında, sade zeminde çekin: önden, arkadan, doku veya damga yakın planı ve ölçü gösteren bir kare. Ön, arka ve detay fotoğraflarıyla ürünü açıkça gösterin.</Text>
-    {(!wizard || photos.length > 0) && <Pressable style={[styles.analyzeButton, (analyzing || !online) && styles.primaryDisabled]} disabled={analyzing || !online} onPress={analyze}>{analyzing ? <ActivityIndicator color="white" /> : <Ionicons name="sparkles" size={18} color="white" />}<Text style={styles.primaryText}>{analyzing ? "Fotoğraflar inceleniyor…" : "Fotoğraftan otomatik doldur"}</Text></Pressable>}
+    {(!wizard || photos.length > 0) && <Pressable style={[styles.analyzeButton, (analyzing || !online || !photos.length) && styles.primaryDisabled]} disabled={analyzing || !online || !photos.length} onPress={analyze}>{analyzing ? <ActivityIndicator color="white" /> : <Ionicons name="sparkles" size={18} color="white" />}<Text style={styles.primaryText}>{analyzing ? "Fotoğraflar inceleniyor…" : "Fotoğraftan otomatik doldur"}</Text></Pressable>}
     {wizard && photos.length > 0 && <Text style={styles.formHint}>Tür, ad, renk ve malzeme önerilir; hepsini bir sonraki adımda kontrol edersiniz.</Text>}
     {wizard && !showChat && <Pressable onPress={() => setShowChat(true)} style={{ marginBottom: 8 }}><Text style={styles.linkNote}>ChatGPT / Claude sohbetiyle analiz (isteğe bağlı) →</Text></Pressable>}
     {(!wizard || showChat) && <View style={styles.analysisCard}>
