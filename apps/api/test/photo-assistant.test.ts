@@ -167,3 +167,38 @@ test("the photo-enhancing prompt keeps the real item unchanged and bans misleadi
   }
   assert.match(photoEnhancePrompt("claude", "x"), /You cannot generate or repaint photos/);
 });
+
+test("a chat-written physical listing is validated, keeps the app's shipping sections and refuses risky text", async () => {
+  const { listingChatPrompt, parseListingChat, mergeListingAbout } = await import("../../mobile/photo-assistant.js");
+  const prompt = listingChatPrompt("chatgpt", { nameTr: "Seramik kase", titleEn: "Ceramic Bowl", tags: ["ceramic bowl"], primaryKeyword: "ceramic bowl", competitorTitles: ["Handmade Ceramic Bowl"], facts: ["handmade by the seller in Türkiye"], materialVerified: false }, "req-1");
+  assert.match(prompt, /GXL_PHYSICAL_LISTING_V1/); assert.match(prompt, /req-1/); assert.match(prompt, /NOT verified/);
+  const tags = ["ceramic bowl", "handmade bowl", "pottery bowl", "serving bowl", "turkish ceramic", "kitchen decor", "housewarming gift", "blue bowl", "rustic bowl", "stoneware bowl", "fruit bowl", "home decor", "unique gift"];
+  const good = { version: "GXL_PHYSICAL_LISTING_V1", requestId: "req-1", title: "Handmade Ceramic Bowl, Blue Pottery Serving Bowl, Rustic Kitchen Decor", tags, aboutEn: "A hand-thrown ceramic bowl with a soft blue glaze and gentle ripples that catch the light on any table." };
+  const parsed = parseListingChat("```json\n" + JSON.stringify(good) + "\n```", "req-1", false);
+  assert.equal(parsed.tags.length, 13);
+  const merged = mergeListingAbout("A ceramic bowl, made by hand in Türkiye.\n\nDETAILS\n• Shipping is paid by the buyer.", parsed.aboutEn);
+  assert.match(merged, /^A hand-thrown ceramic bowl/); assert.match(merged, /Shipping is paid by the buyer/); assert.doesNotMatch(merged, /made by hand in Türkiye\./);
+  assert.throws(() => parseListingChat(JSON.stringify({ ...good, requestId: "other" }), "req-1", false), /başka bir talimata/);
+  assert.throws(() => parseListingChat(JSON.stringify({ ...good, tags: tags.slice(0, 12) }), "req-1", false), /13 farklı etiket/);
+  assert.throws(() => parseListingChat(JSON.stringify({ ...good, title: "Sterling Silver Bowl" }), "req-1", false), /Doğrulanmamış malzeme/);
+  assert.throws(() => parseListingChat(JSON.stringify({ ...good, aboutEn: good.aboutEn + " Free shipping today!" }), "req-1", false), /free shipping/);
+});
+
+test("the physical plan screen applies a ChatGPT listing reply to the title, tags and description", async context => {
+  context.mock.method(globalThis, "fetch", async () => Response.json({ score: 80, checks: [] }));
+  const product = normalizeProductInput({ titleTr: "Seramik kase", productKind: "other", origin: "made_by_seller", priceTry: 1500, usdTryRate: 40, imageUrls: ["https://local.invalid/a.jpg"] });
+  const plan = buildProductPlan(product, ["ceramic bowl"], [], { usdTryRate: 40 });
+  ui.alerts.length = 0; ui.shares.length = 0;
+  const renderer = await mount(screens.EtsyPlanResult, { plan, payload: { titleTr: "Seramik kase", origin: "made_by_seller", materialVerified: false }, etsyReady: true, priceSourceLabel: "Elinize geçecek tutar", photoCount: 6 });
+  try {
+    await tap(renderer, /^İlan metni talimatını paylaş$/);
+    const message = (ui.shares.at(-1) as { message: string }).message;
+    const requestId = JSON.parse(message.split("\n").at(-1)!).requestId;
+    const tags = ["ceramic bowl", "handmade bowl", "pottery bowl", "serving bowl", "turkish ceramic", "kitchen decor", "housewarming gift", "blue bowl", "rustic bowl", "stoneware bowl", "fruit bowl", "home decor", "unique gift"];
+    await type(renderer, /^Sohbetten gelen ilan JSON'u$/, JSON.stringify({ version: "GXL_PHYSICAL_LISTING_V1", requestId, title: "Handmade Ceramic Bowl, Blue Pottery Serving Bowl", tags, aboutEn: "A hand-thrown ceramic bowl with a soft blue glaze that brightens any table." }));
+    await tap(renderer, /^İlan metnini uygula$/);
+    assert.equal(field(renderer, /^Başlık \(/).props.value, "Handmade Ceramic Bowl, Blue Pottery Serving Bowl");
+    assert.equal(field(renderer, /^Etiketler \(13 adet\)$/).props.value, tags.join(", "));
+    assert.ok(ui.alerts.some(alert => alert.title === "Uygulandı"), JSON.stringify(ui.alerts));
+  } finally { await unmount(renderer); }
+});

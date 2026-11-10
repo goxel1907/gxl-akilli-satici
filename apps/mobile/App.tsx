@@ -1,5 +1,5 @@
 import { addLocalWhatsapp, localWhatsappLink } from "./marketing-local";
-import { photoAssistantPrompt, photoEnhancePrompt, parsePhotoAssistant } from "./photo-assistant";
+import { photoAssistantPrompt, photoEnhancePrompt, parsePhotoAssistant, listingChatPrompt, parseListingChat, mergeListingAbout } from "./photo-assistant";
 import { canRankTrend, compareTrendEvidence, hasBuyerDemand, trendFreshness } from "./trend-priority";
 import { listingProgress, listingTasks, physicalListingProgress, etsyTransferComplete, type ListingProgressInput } from "./listing-progress";
 import ListingMascot, { type ListingMascotProps } from "./ListingMascot";
@@ -3175,7 +3175,8 @@ function TurkishGloss({ title, tags }: { title: string; tags: string[] }) {
     setGloss(undefined);
     if (!title) return;
     apiJson("/api/explain-tr", { method: "POST", headers: apiHeaders(true), body: JSON.stringify({ title, tags }) })
-      .then((result) => { if (alive) setGloss(result); })
+      // Beklenmedik yanıt ekranı çökertmez: yalnız başlık ve etiket listesi varsa gösterilir.
+      .then((result) => { if (alive && result && typeof result.titleTr === "string" && Array.isArray(result.tags)) setGloss(result); })
       .catch(() => { /* açıklama yalnız yardımcıdır; alınamazsa ilan yine hazırlanır */ });
     return () => { alive = false; };
   }, [title, tagKey]);
@@ -3194,6 +3195,12 @@ function EtsyPlanResult({ plan, payload, etsyReady, priceSourceLabel, preparePro
   const [scoring, setScoring] = useState(false);
   const [title, setTitle] = useState(plan.title);
   const [tags, setTags] = useState(plan.tags.join(", "));
+  const [description, setDescription] = useState(plan.description);
+  const [chatAssistant, setChatAssistant] = useState<"chatgpt" | "claude">("chatgpt");
+  const [chatReply, setChatReply] = useState("");
+  const [chatRequest, setChatRequest] = useState("");
+  // Türkçe karşılık kutusu planın ya da sohbetten uygulanan son başlık/etiketlerin çevirisini gösterir (her tuşta değil).
+  const [gloss, setGlossSource] = useState<{ title: string; tags: string[] }>({ title: plan.title, tags: plan.tags });
   const [priceUsd, setPriceUsd] = useState(plan.pricing ? String(plan.pricing.recommendedUsd) : "");
   const [saving, setSaving] = useState(false);
   const [savingText, setSavingText] = useState("");
@@ -3203,17 +3210,52 @@ function EtsyPlanResult({ plan, payload, etsyReady, priceSourceLabel, preparePro
   useEffect(() => {
     setTitle(plan.title);
     setTags(plan.tags.join(", "));
+    setDescription(plan.description);
+    setChatReply(""); setChatRequest(""); setGlossSource({ title: plan.title, tags: plan.tags });
     setPriceUsd(plan.pricing ? String(plan.pricing.recommendedUsd) : "");
     setDraft(undefined);
     setPublished(undefined);
     rescore(plan.title, plan.tags.join(", "), plan.pricing ? String(plan.pricing.recommendedUsd) : "");
   }, [plan]);
   // İlan karnesi: başlık, etiket, açıklama, fotoğraf ve fiyat sunucuda açık eşiklerle puanlanır.
-  const rescore = async (nextTitle = title, nextTags = tags, nextPrice = priceUsd): Promise<any> => {
+  // Sohbet asistanına gidecek doğrulanmış bilgiler: yalnız satıcının girdiği ve onayladığı ölçü/malzeme/köken.
+  const chatFacts = (() => {
+    const product = payload || {};
+    return [
+      product.material ? `material: ${product.material}${product.materialVerified ? " (verified)" : " (not verified)"}` : "",
+      product.beadCount ? `${product.beadCount} beads` : "",
+      product.weightGrams ? `weight ${product.weightGrams} g` : "",
+      product.lengthCm ? `length ${product.lengthCm} cm` : "",
+      product.widthCm ? `width ${product.widthCm} cm` : "",
+      product.chestCm ? `chest width ${product.chestCm} cm` : "",
+      product.fiber ? `yarn: ${product.fiber}` : "",
+      product.origin === "made_by_seller" ? "handmade by the seller in Türkiye" : product.origin === "designed_by_seller" ? "designed by the seller in Türkiye" : "",
+      product.yearMade ? `made around ${product.yearMade}` : "",
+      ...(product.colors || []).length ? [`colors: ${(product.colors || []).join(", ")}`] : []
+    ].filter(Boolean);
+  })();
+  const shareListingChat = async () => {
+    const id = `listing-${Date.now()}`;
+    try {
+      await Share.share({ message: listingChatPrompt(chatAssistant, { nameTr: payload?.titleTr || "", titleEn: title, tags: tags.split(",").map((tag: string) => tag.trim()).filter(Boolean), primaryKeyword: plan.primaryKeyword, competitorTitles: (plan.competitors || []).map((item: any) => item.title).filter(Boolean), facts: chatFacts, materialVerified: Boolean(payload?.materialVerified) }, id) });
+      setChatRequest(id); setChatReply("");
+    } catch (error) { Alert.alert("Paylaşılamadı", errorText(error)); }
+  };
+  const applyListingChat = () => {
+    if (!chatRequest) return Alert.alert("Önce talimatı paylaş", "'İlan metni talimatını paylaş' ile talimatı gönder; gelen JSON'u buraya yapıştır.");
+    try {
+      const imported = parseListingChat(chatReply, chatRequest, Boolean(payload?.materialVerified));
+      const nextTags = imported.tags.join(", "), nextDescription = mergeListingAbout(plan.description, imported.aboutEn);
+      setTitle(imported.title); setTags(nextTags); setDescription(nextDescription); setGlossSource({ title: imported.title, tags: imported.tags });
+      rescore(imported.title, nextTags, priceUsd, nextDescription);
+      Alert.alert("Uygulandı", "Başlık, 13 etiket ve tanıtım paragrafı güncellendi. Fiyat, kargo, teslim süresi ve zorunlu açıklama bölümleri uygulamanın hesabıyla kaldı. Karneyi kontrol edip taslağa geç.");
+    } catch (error) { Alert.alert("Yanıt uygulanamadı", errorText(error)); }
+  };
+  const rescore = async (nextTitle = title, nextTags = tags, nextPrice = priceUsd, nextDescription = description): Promise<any> => {
     setScoring(true);
     try {
       const card = await apiJson("/api/listings/scorecard", { method: "POST", headers: apiHeaders(true), body: JSON.stringify({
-        title: nextTitle, tags: nextTags.split(",").map((tag: string) => tag.trim()).filter(Boolean), description: plan.description,
+        title: nextTitle, tags: nextTags.split(",").map((tag: string) => tag.trim()).filter(Boolean), description: nextDescription,
         photoCount: typeof photoCount === "number" ? photoCount : undefined, priceUsd: Number(String(nextPrice).replace(",", ".")) || undefined,
         medianPriceUsd: plan.pricing?.medianUsd, primaryKeyword: plan.primaryKeyword
       }) });
@@ -3241,7 +3283,7 @@ function EtsyPlanResult({ plan, payload, etsyReady, priceSourceLabel, preparePro
         try {
           const product = prepareProduct ? await prepareProduct(payload, setSavingText) : payload;
           setSavingText("Etsy taslağı oluşturuluyor…");
-          const result = await apiJson("/api/products/etsy-draft", { method: "POST", headers: apiHeaders(true), body: JSON.stringify({ confirm: true, product, listing: { title, tags: tags.split(",").map((tag: string) => tag.trim()).filter(Boolean), description: plan.description, materials: plan.materials, priceUsd: Number(priceUsd.replace(",", ".")) } }) });
+          const result = await apiJson("/api/products/etsy-draft", { method: "POST", headers: apiHeaders(true), body: JSON.stringify({ confirm: true, product, listing: { title, tags: tags.split(",").map((tag: string) => tag.trim()).filter(Boolean), description, materials: plan.materials, priceUsd: Number(priceUsd.replace(",", ".")) } }) });
           setDraft(result);
           Alert.alert(result.alreadyCreated ? "Taslak zaten var" : "Etsy taslağı hazır", [...(result.warnings || []), "Taslağı kontrol ettikten sonra 'Etsy'de yayınla' düğmesine basın.", ...(result.pinsQueued ? [`Pinterest: ${result.pinsQueued} pin planlandı; ilan yayına girince satış linkiyle otomatik atılacak.`] : [])].join("\n"), [{ text: "Taslağı aç", onPress: () => openUrl(result.editUrl, "Etsy taslak ilanı") }, { text: "Tamam" }]);
         } catch (error) { Alert.alert("Taslak oluşturulamadı", errorText(error)); }
@@ -3271,7 +3313,7 @@ function EtsyPlanResult({ plan, payload, etsyReady, priceSourceLabel, preparePro
   return <>
       <ListingMascot step={published?.state === "active" || draft ? 5 : 4} complete={published?.state === "active"}
         title={published?.state === "active" ? "Etsy’de yayında olduğu doğrulandı" : draft ? "Taslağını Etsy’de kontrol et" : eligibility.status !== "allowed" ? "Önce kural kontrolündeki eksikleri düzelt" : "İlanı incele, sonra Etsy taslağına geç"}
-        instruction={published?.state === "active" ? "Alıcıya görünen ilanı aç; gerçek fotoğrafları, fiyatı ve kargoyu son kez kontrol et." : draft ? "Taslak henüz yayında ilan değildir. İstersen aşağıdan ‘Video ekle (5-15 sn)’ ile kısa video ekle. Fotoğraf, fiyat, kategori, kargo ve gerekli üretim ortağı bilgilerini Etsy’de kontrol et; ardından aşağıdaki ‘Etsy\'de yayınla’ düğmesini kullan." : "Aşağıdaki başlık, açıklama, 13 etiket, fiyat ve kural kontrolünü gerçek ürününle karşılaştır. Eksik veya yanlış bilgiyi düzelt; uygunsa taslak oluştur."}
+        instruction={published?.state === "active" ? "Alıcıya görünen ilanı aç; gerçek fotoğrafları, fiyatı ve kargoyu son kez kontrol et." : draft ? "Taslak henüz yayında ilan değildir. İstersen aşağıdan ‘Video ekle (5-15 sn)’ ile kısa video ekle. Fotoğraf, fiyat, kategori, kargo ve gerekli üretim ortağı bilgilerini Etsy’de kontrol et; ardından aşağıdaki ‘Etsy\'de yayınla’ düğmesini kullan." : "Aşağıdaki başlık, açıklama, 13 etiket, fiyat ve kural kontrolünü gerçek ürününle karşılaştır. İstersen ‘İlan metni talimatını paylaş’ ile ChatGPT/Claude’a metni güçlendirt. Eksik veya yanlış bilgiyi düzelt; uygunsa taslak oluştur."}
         roadmap={["Ürün ve fotoğraflar", "Gerçek bilgiler ve köken", "Fiyat ve kargo", "İlan kontrolü ve taslak", "Etsy kontrolü ve yayın doğrulaması"]}
         actionLabel={published?.state === "active" ? "Goxi ile yayındaki ilanı aç" : draft ? "Goxi ile Etsy taslağını aç" : "Goxi ile fiziksel ürün taslağını hazırla"}
         onAction={() => published?.state === "active" ? openUrl(published.url, "Etsy ilanı") : draft ? openUrl(draft.editUrl, "Etsy taslağı") : createDraft()} disabled={eligibility.status !== "allowed" || saving || publishing || !etsyReady} />
@@ -3300,12 +3342,20 @@ function EtsyPlanResult({ plan, payload, etsyReady, priceSourceLabel, preparePro
       <QualityNote quality={plan.quality} />
       <Field label={`Başlık (${title.length}/140)`} value={title} onChangeText={setTitle} multiline />
       <Field label="Etiketler (13 adet)" value={tags} onChangeText={setTags} multiline autoCapitalize="none" />
-      <TurkishGloss title={plan.title} tags={plan.tags} />
+      <TurkishGloss title={gloss.title} tags={gloss.tags} />
       <Field label="Etsy fiyatı (USD)" value={priceUsd} onChangeText={setPriceUsd} keyboardType="decimal-pad" />
       <ScorecardView card={scorecard} busy={scoring} onRefresh={() => rescore()} />
       <View style={styles.analysisCard}>
-        <View style={styles.shopierProductTop}><Text style={[styles.cardTitle, { flex: 1 }]}>Açıklama (İngilizce)</Text><Pressable style={styles.secondaryButton} onPress={() => Share.share({ message: `${title}\n\n${plan.description}\n\nTags: ${tags}` })}><Text style={styles.secondaryButtonText}>Kopyala</Text></Pressable></View>
-        <Text style={styles.promptText} numberOfLines={12}>{plan.description}</Text>
+        <View style={styles.shopierProductTop}><Text style={[styles.cardTitle, { flex: 1 }]}>Açıklama (İngilizce)</Text><Pressable style={styles.secondaryButton} onPress={() => Share.share({ message: `${title}\n\n${description}\n\nTags: ${tags}` })}><Text style={styles.secondaryButtonText}>Kopyala</Text></Pressable></View>
+        <Text style={styles.promptText} numberOfLines={12}>{description}</Text>
+      </View>
+      <View style={styles.analysisCard}>
+        <Text style={styles.cardTitle}>ChatGPT / Claude ile ilan metnini güçlendir (isteğe bağlı)</Text>
+        <Text style={styles.formHint}>Plus üyeliğini kullanır. Talimata uygulamanın Etsy rakip verisi eklenir; asistan başlık, 13 etiket ve tanıtım paragrafı yazar. Fotoğrafları sohbete ekle, gelen JSON'u buraya yapıştır. Fiyat, kargo ve teslim süresini uygulama hesaplar; yanıt Etsy kurallarına göre denetlenir.</Text>
+        <ChipGroup options={[{ id: "chatgpt", label: "ChatGPT" }, { id: "claude", label: "Claude" }]} value={chatAssistant} onChange={(value: any) => setChatAssistant(value)} />
+        <Pressable style={styles.secondaryButton} onPress={shareListingChat}><Text style={styles.secondaryButtonText}>İlan metni talimatını paylaş</Text></Pressable>
+        <Field label="Sohbetten gelen ilan JSON'u" value={chatReply} onChangeText={setChatReply} multiline autoCapitalize="none" />
+        <Pressable style={styles.secondaryButton} onPress={applyListingChat}><Text style={styles.secondaryButtonText}>İlan metnini uygula</Text></Pressable>
       </View>
       {!!plan.competitors.length && <View style={styles.analysisCard}>
         <Text style={styles.cardTitle}>Öne çıkan rakip ilanlar</Text>
