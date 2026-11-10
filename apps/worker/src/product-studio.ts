@@ -163,7 +163,21 @@ const MATERIALS: Array<{ stems: string[]; info: MaterialInfo }> = [
   { stems: ["keten", "linen"], info: { en: "linen", short: "linen", precious: false } },
   { stems: ["bambu", "bamboo"], info: { en: "bamboo", short: "bamboo", precious: false } },
   { stems: ["ipek", "silk"], info: { en: "silk", short: "silk", precious: false } },
-  { stems: ["deri", "leather"], info: { en: "leather", short: "leather", precious: false } }
+  { stems: ["deri", "leather"], info: { en: "leather", short: "leather", precious: false } },
+  // El yapımı ev ve hediye ürünlerinde sık malzemeler. "tas" bilerek yok: "tasarım" ile karışır; yalnız "taş".
+  { stems: ["seramik", "ceramic"], info: { en: "ceramic", short: "ceramic", precious: false } },
+  { stems: ["porselen", "porcelain"], info: { en: "porcelain", short: "porcelain", precious: false } },
+  { stems: ["ahşap", "ahsap", "tahta", "wooden", "wood"], info: { en: "wood", short: "wooden", precious: false } },
+  // "Zeytinyağlı sabun" zeytin ağacı değildir: önce zeytinyağı aranır.
+  { stems: ["zeytinyağ", "zeytinyag"], info: { en: "olive oil", short: "olive oil", precious: false } },
+  { stems: ["zeytin"], info: { en: "olive wood", short: "olive wood", precious: false } },
+  { stems: ["keçe", "kece", "felt"], info: { en: "felt", short: "felt", precious: false } },
+  { stems: ["taş", "stone"], info: { en: "natural stone", short: "stone", precious: false } },
+  { stems: ["mermer", "marble"], info: { en: "marble", short: "marble", precious: false } },
+  { stems: ["reçine", "recine", "epoksi", "epoxy", "resin"], info: { en: "resin", short: "resin", precious: false } },
+  { stems: ["jüt", "jut", "jute"], info: { en: "jute", short: "jute", precious: false } },
+  { stems: ["hasır", "hasir", "rattan"], info: { en: "rattan", short: "rattan", precious: false } },
+  { stems: ["soya", "soy"], info: { en: "soy wax", short: "soy", precious: false } }
 ];
 
 const NOUNS: Array<{ stems: string[]; en: string; knit?: boolean }> = [
@@ -198,6 +212,25 @@ const NOUNS: Array<{ stems: string[]; en: string; knit?: boolean }> = [
   { stems: ["oyuncak", "amigurumi"], en: "amigurumi toy", knit: true },
   { stems: ["şal", "shawl"], en: "shawl" },
   { stems: ["saat", "watch"], en: "watch" },
+  { stems: ["kaşık", "kasik", "spoon"], en: "spoon" },
+  { stems: ["cüzdan", "cuzdan", "wallet"], en: "wallet" },
+  { stems: ["kartlık", "kartlik", "kartvizitlik"], en: "card holder" },
+  { stems: ["kemer", "belt"], en: "belt" },
+  { stems: ["anahtarlık", "anahtarlik", "keychain"], en: "keychain" },
+  { stems: ["mumluk"], en: "candle holder" },
+  { stems: ["mum"], en: "candle" },
+  { stems: ["sabun", "soap"], en: "soap" },
+  { stems: ["makrome", "macrame"], en: "macrame wall hanging" },
+  { stems: ["nazarlık", "nazarlik"], en: "evil eye wall hanging" },
+  { stems: ["duvar"], en: "wall hanging" },
+  { stems: ["kupa", "mug"], en: "mug" },
+  { stems: ["peştemal", "pestemal", "havlu", "towel"], en: "turkish towel" },
+  { stems: ["seccade"], en: "prayer rug" },
+  { stems: ["örtü", "ortu", "tablecloth"], en: "tablecloth" },
+  { stems: ["çini", "cini", "tile"], en: "turkish tile" },
+  { stems: ["toka"], en: "hair clip" },
+  { stems: ["magnet", "mıknatıs", "miknatis"], en: "fridge magnet" },
+  { stems: ["tablo", "painting"], en: "painting" },
   // Örgü giyim: bu adlar tek başına da örgü ürünü sayılır; şal, çanta, battaniye gibi adlar ise yalnız tığ/örgü geçerse.
   { stems: ["kazak", "süveter", "suveter", "sweater", "pullover"], en: "sweater", knit: true },
   { stems: ["hırka", "hirka", "cardigan"], en: "cardigan", knit: true },
@@ -335,7 +368,11 @@ export function detectProductSignals(input: ProductPlanInput): ProductSignals {
   const craft = input.craft || (hasStem(words, CROCHET_STEMS) ? "crochet" : hasStem(words, KNIT_STEMS) ? "knit" : undefined);
   const isKnitwear = input.productKind === "knitwear" || Boolean(nounMatch && (nounMatch.knit || (craft && KNIT_CAPABLE.has(nounMatch.en))));
   // Örgüde "altın sarısı", "gümüş gri" renktir; değerli maden iddiası sayılmaz.
-  const found = MATERIALS.filter((item) => hasStem(words, item.stems) && !(isKnitwear && item.info.precious)).map((item) => item.info);
+  const found = MATERIALS.filter((item) => hasStem(words, item.stems) && !(isKnitwear && item.info.precious)).map((item) => item.info)
+    // "zeytinyağlı" kelimesi "zeytin" kökünü de taşır; zeytinyağı varsa ayrıca zeytin ağacı sayılmaz.
+    .filter((item, _, all) => !(item.short === "olive wood" && all.some((other) => other.short === "olive oil") && !hasStem(words, ["ağaç", "agac", "wood"])))
+    // "Oltu taşı", "akik taşı": taşın adı zaten belli; ayrıca "natural stone" yazılmaz.
+    .filter((item, _, all) => !(item.short === "stone" && all.some((other) => other !== item && /stone|agate|onyx|obsidian|marble|amber/.test(other.en.toLowerCase()))));
   const material = found[0];
   const extraMaterials = isKnitwear ? [] : found.slice(1).filter((item) => item.short !== material?.short && !item.precious);
   const isTesbih = input.productKind === "tesbih" || nounMatch?.en === "prayer beads" || input.productNounEn === "prayer beads";
@@ -374,10 +411,11 @@ export function ruleKeywordCandidates(input: ProductPlanInput, signals = detectP
   } else {
     if (material) list.push(`${material.short} ${noun}`);
     if (signals.attributes[0]) list.push(`${signals.attributes[0]} ${noun}`);
-    list.push(`turkish ${noun}`, noun);
+    list.push(noun.includes("turkish") ? "" : `turkish ${noun}`, noun);
     if (input.origin === "made_by_seller") list.push(`handmade ${noun}`);
   }
-  return withoutFalseAntique(input, [...new Set(list.map((value) => value.replace(/\s+/g, " ").trim()).filter((value) => value.length >= 3 && value !== "item"))]);
+  // Ürün adı anlaşılmadıysa "handmade item" gibi kimsenin aramadığı ifade önerilmez.
+  return withoutFalseAntique(input, [...new Set(list.map((value) => value.replace(/\s+/g, " ").trim()).filter((value) => value.length >= 3 && !/\bitem\b/.test(value)))]);
 }
 
 export async function keywordCandidates(input: ProductPlanInput, env: AiRuntimeEnv): Promise<{ candidates: string[]; signals: ProductSignals; source: "rules" | "ai" }> {
@@ -588,8 +626,17 @@ function buildTags(input: ProductPlanInput, signals: ProductSignals, primary: st
     ...(lastNoun === "socks" ? ["knit socks", "winter socks", "warm socks", "handmade socks"] : []),
     ...(lastNoun === "booties" ? ["knit baby booties", "baby shoes", "crib shoes", "baby slippers"] : [])
   ] : [
-    input.origin === "made_by_seller" && signals.noun !== "item" ? `handmade ${lastNoun}` : "",
-    signals.noun !== "item" ? `${lastNoun} gift` : "",
+    // Çok kelimeli ürünün son kelimesi tek başına anlamsızdır ("pot gift", "handmade holder"); tam ad sığmazsa yazılmaz.
+    input.origin === "made_by_seller" && signals.noun !== "item" ? (`handmade ${signals.noun}`.length <= 20 ? `handmade ${signals.noun}` : signals.noun.includes(" ") ? "" : `handmade ${lastNoun}`) : "",
+    signals.noun !== "item" && `${signals.noun} gift`.length <= 20 ? `${signals.noun} gift` : "",
+    ...(/\b(bowl|vase|plate|tray|candle holder|lantern|mirror|lamp|box|wall hanging|painting|tile|candle|rug|pillow cover|tablecloth)\b/.test(signals.noun) ? ["home decor", "housewarming gift", "turkish home decor"] : []),
+    ...(/\b(spoon|bowl|plate|mug|coffee cup|coffee pot|teapot|tablecloth)\b/.test(signals.noun) ? ["kitchen decor", "kitchen gift"] : []),
+    ...(/\b(wallet|belt|card holder|keychain)\b/.test(signals.noun) ? [signals.material ? `${signals.material.short} gift` : "", "gift for him", "gift for dad"] : []),
+    ...(/\b(soap|turkish towel|candle)\b/.test(signals.noun) ? ["self care gift", "spa gift", "gift for her"] : []),
+    ...(signals.noun === "bag" ? [signals.material ? `${signals.material.short} handbag` : "", "handbag", "everyday bag", "gift for her"] : []),
+    ...(/\bwall hanging\b/.test(signals.noun) ? ["wall decor", "boho wall decor", "wall hanging", /macrame/.test(signals.noun) ? "macrame decor" : ""] : []),
+    ...(signals.noun === "turkish coffee pot" ? ["cezve", "turkish cezve", signals.material ? `${signals.material.short} cezve` : "", "coffee pot", "coffee lover gift"] : []),
+    ...(/\bpillow cover\b/.test(signals.noun) ? ["pillow cover", "throw pillow cover", "cushion cover", "boho pillow cover"] : []),
     // Takıda 13 etiketin boş kalmaması için alıcının yazdığı genel takı ifadeleri.
     ...(JEWELRY.test(lastNoun) ? [signals.material ? `${signals.material.short} jewelry` : "", input.audience === "men" ? `${lastNoun} for men` : `${lastNoun} for women`, "jewelry gift", input.audience === "men" ? "gift for him" : "gift for her", "turkish jewelry", "birthday gift", "anniversary gift"] : []),
     "turkish gift", "unique gift", "gift idea"
@@ -734,7 +781,7 @@ function openingSentence(input: ProductPlanInput, signals: ProductSignals, prima
     ...(signals.isKnitwear ? signals.attributes.slice(0, 2) : []),
     signals.isVintage && !/\bvintage\b/.test(noun) ? "vintage" : "",
     input.colors[0] && signals.isKnitwear ? input.colors[0].toLowerCase() : "",
-    signals.material && !noun.includes(signals.material.short) ? [signals.material.en, ...(signals.extraMaterials || []).map((item) => item.en)].join(" and ") : "",
+    signals.material && !noun.includes(signals.material.short) ? [signals.material.en === "wood" ? "wooden" : signals.material.en, ...(signals.extraMaterials || []).map((item) => item.en)].join(" and ") : "",
     noun
   ].filter(Boolean);
   const phrase = words.join(" ");

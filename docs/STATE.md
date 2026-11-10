@@ -50,3 +50,7 @@ Güncelleme: 9 Kasım 2026
 - Fotoğraf analizi hatası (10 Kasım 21:03, tesbih): Gemini anahtarı tanımlı ama hata veriyordu; yedeğe geçilmiyordu.
   Artık sağlayıcılar sırayla denenir (Gemini → OpenAI → ücretsiz Workers AI). Gemini hatasının nedeni Cloudflare loglarında
   "AI provider gemini failed" satırında görünür.
+- Fiziksel ürün kapsamı (10 Kasım): kaşık, cüzdan, kartlık, kemer, anahtarlık, mum, mumluk, sabun, makrome, nazarlık, duvar süsü,
+  kupa, peştemal, seccade, örtü, çini, toka, magnet, tablo; malzeme: seramik, porselen, ahşap, zeytin ağacı/zeytinyağı, keçe, taş,
+  mermer, reçine, jüt, hasır, soya. "item" içeren arama ve "pot gift" gibi kopuk etiket yok. 1. adımda "ChatGPT/Claude ile
+  güzelleştir" (ürün değişmez; ışık, renk, kırpma, arka plan).

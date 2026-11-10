@@ -155,3 +155,15 @@ test("physical and Shopier listing results are invalidated when their inputs cha
     assert.equal(shopier.root.findAllByType(screens.EtsyPlanResult).length, 0);
   } finally { await unmount(shopier); }
 });
+
+test("the photo-enhancing prompt keeps the real item unchanged and bans misleading additions for both assistants", async () => {
+  const { photoEnhancePrompt } = await import("../../mobile/photo-assistant.js");
+  for (const assistant of ["chatgpt", "claude"] as const) {
+    const prompt = photoEnhancePrompt(assistant, "Gümüş tesbih");
+    assert.match(prompt, /never redraw, repaint, replace or generate the item/);
+    assert.match(prompt, /listing-01 \(cover\)/);
+    assert.match(prompt, /Never add logos, brand names, people's faces, prices, discounts/);
+    assert.match(prompt, /never claim a material/);
+  }
+  assert.match(photoEnhancePrompt("claude", "x"), /You cannot generate or repaint photos/);
+});
