@@ -223,7 +223,7 @@ test("one ChatGPT reply fills every physical field, converts the suggested US pr
     await tap(renderer, /^Galeriden seç$/);
     await tap(renderer, /^Tüm ilan talimatını paylaş$/);
     const message = (ui.shares.at(-1) as { message: string }).message;
-    assert.match(message, /50 US states/); assert.match(message, /Alaska and Hawaii/); assert.match(message, /never redraw, repaint, replace or generate it/);
+    assert.match(message, /50 US states/); assert.match(message, /Alaska and Hawaii/); assert.match(message, /ONLY with Python code/); assert.match(message, /never use an image generation or image editing tool/); assert.match(message, /ONLY in American English/);
     const requestId = JSON.parse(message.split("\n").at(-1)!).requestId;
     const tags = ["ceramic bowl", "handmade bowl", "pottery bowl", "serving bowl", "turkish ceramic", "kitchen decor", "housewarming gift", "blue bowl", "rustic bowl", "stoneware bowl", "fruit bowl", "home decor", "unique gift"];
     const reply = { version: "GXL_PHYSICAL_FULL_V1", requestId,
@@ -260,4 +260,15 @@ test("the suggested US price converts to the seller's net and back to the same E
   assert.throws(() => parseFullListing(JSON.stringify({ ...ok, requestId: "z" }), "r"), /başka bir talimata/);
   assert.throws(() => parseFullListing(JSON.stringify({ ...ok, product: { ...ok.product, productKind: "car" } }), "r"), /Ürün türü/);
   assert.throws(() => parseFullListing(JSON.stringify({ ...ok, listing: { ...ok.listing, tags: ["a"] } }), "r"), /13 farklı etiket/);
+});
+
+test("a Turkish title or tags from the chat are refused and weights are not imported as features", async () => {
+  const { parseFullListing, listingTextProblems } = await import("../../mobile/photo-assistant.js");
+  const tags = Array.from({ length: 13 }, (_, i) => `prayer beads ${i}`);
+  assert.ok(listingTextProblems("925 Damgalı El İşçiliği Gümüş Tesbih", tags, "A handmade string of prayer beads with oval beads.", true).some(line => /İngilizce/.test(line)));
+  assert.ok(listingTextProblems("Prayer Beads, Handmade in Türkiye", tags, "A handmade string of prayer beads with oval beads.", true).length === 0, "Türkiye alone is allowed");
+  assert.ok(listingTextProblems("Prayer Beads", [...tags.slice(0, 12), "gümüş tesbih"], "A handmade string of prayer beads with oval beads.", true).some(line => /İngilizce/.test(line)));
+  const reply = { version: "GXL_PHYSICAL_FULL_V1", requestId: "r", product: { productKind: "tesbih", nameTr: "Gümüş tesbih", origin: "made_by_seller", attributesEn: ["diamond cut beads", "braided tassel", "0.81 oz (23 g) item weight"] }, listing: { title: "Diamond Cut Prayer Beads", tags, aboutEn: "Oval diamond-cut beads that sparkle in the light, finished with a braided tassel." }, pricing: {}, shipping: {}, questionsTr: [] };
+  assert.deepEqual(parseFullListing(JSON.stringify(reply), "r").product.attributesEn, ["diamond cut beads", "braided tassel"]);
+  assert.throws(() => parseFullListing(JSON.stringify({ ...reply, listing: { ...reply.listing, title: "Gümüş Tesbih, El Yapımı" } }), "r"), /İngilizce/);
 });
