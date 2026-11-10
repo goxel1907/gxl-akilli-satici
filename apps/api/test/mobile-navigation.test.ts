@@ -288,7 +288,7 @@ test("real screen buttons drive Trend → Studio → Digital → draft → verif
     await tap(renderer, /^Goxi ile dosyaları denetle$/);
     assert.ok(renderer.root.findAllByType("Text" as any).some(node => visible(node) && text(node) === "Dosya yapısı kontrolleri geçti"));
     assert.equal(draftWrites + imageWrites + fileWrites + publishWrites, 0, "Read-only file QA must not send a listing to Etsy");
-    await tap(renderer, /^Goxi ile taslağı hazırla$/); await confirm(/^Etsy'de taslak/, /^Taslak oluştur$/);
+    await tap(renderer, /^Goxi ile Etsy taslağını oluştur$/); await confirm(/^Etsy'de taslak/, /^Taslak oluştur$/);
     await waitFor(() => buttons(renderer, /^Yayın durumunu denetle$/).length === 1);
     assert.equal(draftWrites, 1); assert.equal(imageWrites, 1); assert.equal(fileWrites, 2);
     assert.equal(sent?.get("title"), plan.listing.title); assert.equal(sent?.get("description"), plan.listing.description);

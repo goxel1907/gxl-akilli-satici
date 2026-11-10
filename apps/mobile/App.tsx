@@ -2355,7 +2355,7 @@ function testLabel(kind: string): string {
   if (kind === "spreadsheet") return "Tablo Excel ve Google Sheets'te açılıp denendi";
   if (kind === "wallpaper" || kind === "app_icons") return "Telefonda kurulup denendi";
   if (kind === "digital_planner") return "Tablette (GoodNotes / Notability) açılıp bağlantılar denendi";
-  return "Test baskısı alındı (Letter ve A4)";
+  return "Test baskısı alındı (satılan her ölçüde)";
 }
 
 function testWarning(kind: string): string {
@@ -2660,7 +2660,7 @@ function DigitalPanel({ online, active = true, shopReady, prefill, onPrefillUsed
     <View style={styles.guardrail}><Ionicons name="lock-closed-outline" size={20} color="#315B4C" /><Text style={[styles.guardrailText, { flex: 1 }]}>Dosyalar herkese açık değildir. Etsy'de dosyayı Etsy yalnızca ödeme yapan alıcıya verir. Shopier ve doğrudan satışlarda her sipariş için sınırlı indirmeli, süreli ve kapatılabilir özel bağlantı oluşturulur.</Text></View>
     <View style={styles.sectionHeading}><Text style={styles.sectionTitle}>Dijital ürünler</Text><Pressable style={[styles.addButton, !online && styles.primaryDisabled]} disabled={!online} onPress={() => setFormVisible(true)}><Ionicons name="add" size={18} color="white" /><Text style={styles.addButtonText}>Dosya yükle</Text></Pressable></View>
     {loading && <ActivityIndicator color="#C88B47" />}
-    {!loading && !products.length && <ListingMascot title="Önce ilan paketini hazırlayalım" instruction="Stüdyo’da ürününü seçip ilanı hazırla. ChatGPT/Claude’dan son dosyaları telefonuna indirdikten sonra aynı çalışmanın yükleme düğmesini kullan; ilan bilgileri birlikte gelir." actionLabel="Stüdyo’da ürün hazırlamaya geç" onAction={onPrepare} />}
+    {!loading && !products.length && <ListingMascot title="Önce ilan paketini hazırlayalım" instruction="Stüdyo’da ürününü seçip ilanı hazırla. ChatGPT/Claude’dan son dosyaları telefonuna indirdikten sonra Stüdyo’daki aynı çalışmada ‘Dosyalarım hazır, yüklemeye geç’e bas; ilan bilgileri birlikte gelir." actionLabel="Stüdyo’da ürün hazırlamaya geç" onAction={onPrepare} />}
     {!loading && !products.length && <Empty icon="document-text-outline" title="Henüz dijital ürün yok" text="Stüdyo'da ilanı hazırlayın; yapay zekânın verdiği dosyaları ve ilan görsellerini buradan yükleyin." />}
     {products.map((product) => <View style={styles.card} key={product.id}>
       <View style={styles.shopierProductTop}>
@@ -2669,7 +2669,7 @@ function DigitalPanel({ online, active = true, shopReady, prefill, onPrefillUsed
       </View>
       <Text style={styles.small} numberOfLines={2}>{product.listing?.title}</Text>
       <ListingGuide input={{ phase: "saved", files: product.files?.length || (product.fileName ? 1 : 0), images: product.images?.length || 0, etsy: product.etsy, verifiedState: publication[product.id]?.state, qaOk: fileQa[product.id]?.ok }}
-        actionLabel={fileQa[product.id]?.ok !== true && !fileQa[product.id]?.unavailable ? "Goxi ile dosyaları denetle" : transferComplete(product) ? "Goxi ile Etsy durumunu doğrula" : "Goxi ile taslağı hazırla"}
+        actionLabel={fileQa[product.id]?.ok !== true && !fileQa[product.id]?.unavailable ? "Goxi ile dosyaları denetle" : transferComplete(product) ? "Goxi ile Etsy durumunu doğrula" : product.etsy?.listingId ? "Goxi ile Etsy yüklemesini tamamla" : "Goxi ile Etsy taslağını oluştur"}
         onAction={() => fileQa[product.id]?.ok !== true && !fileQa[product.id]?.unavailable ? auditFiles(product) : transferComplete(product) ? verifyPublication(product) : etsyDraft(product)} disabled={!online || busy === product.id} />
       {publication[product.id] && <Text style={styles.small}>Etsy durumu: {publication[product.id].state === "active" ? "Yayında" : publication[product.id].state === "draft" ? "Taslak" : "Yayında değil"} · {new Date(publication[product.id].checkedAt).toLocaleString("tr-TR")}</Text>}
       {/* "Denendi" yalnız desen için anlamlıdır (Etsy kuralı); hazır dijital üründe uyarı gösterilmez. */}
@@ -2890,7 +2890,7 @@ const ETSY_GUIDE: Array<{ id: string; title: string; icon: any; steps: string[] 
     "Örgü/tığ işi: kimin ördüğünü, tekniği, bedeni, göğüs genişliği ile boyu, iplik içeriğini (ör. %100 pamuk) ve yıkama şeklini seçin. Ailenizden biri örüyorsa 'mağaza üyesi' seçin ve Etsy'de o kişiyi Shop members bölümüne ekleyin.",
     "Tesbih: kim yaptı, gram, tane sayısı, uzunluk. 925 damgası veya belge yoksa ilanda 'gümüş' yazılmaz. Hazır alınıp yeniden satılan tesbih Etsy'de yasaktır; sistem yayınlamaz.",
     "Vintage: yaklaşık üretim yılı (en az 20 yıl önce), ölçüler ve durum notu. Yıl girilmeden vintage ilan açılmaz.",
-    "'Elinize geçecek (TL)' ve 'ABD'ye kargo (TL)' yazın → 'Etsy'de araştır ve ilanı hazırla'. Sistem alıcıların aramalarını tarar; başlık, 13 etiket, İngilizce açıklama ve kesintiler dahil dolar fiyatını hazırlar. Kargo alıcıya ait: fiyata eklenmez; uygulama Etsy kargo profiline yazılacak tutarı söyler (profil yoksa Mağaza hazırlığı → 'Kargo profili oluştur').",
+    "'Elinize geçecek (TL)' ve 'ABD'ye kargo (TL)' yazın → 'Etsy'de araştır ve ilanı hazırla'. Sistem alıcıların aramalarını tarar; başlık, 13 etiket, İngilizce açıklama ve kesintiler dahil dolar fiyatını hazırlar. Kargo alıcıya ait: fiyata eklenmez; uygulama Etsy kargo profiline yazılacak tutarı söyler (profil yoksa Mağaza hazırlığı → Kargo profili → 'Kargo profilini oluştur').",
     "Başlığı, etiketleri ve fiyatı isterseniz düzeltin → 'Etsy taslağı oluştur' (fotoğraflar bu adımda yüklenir) → isterseniz 'Video ekle (5-15 sn)' → 'Taslağı kontrol et' → 'Etsy'de yayınla'. Yayınlamada Etsy 0,20 USD ilan ücreti keser.",
     "Shopier'de zaten olan ürünler için Shopier sekmesindeki 'Etsy ilanı hazırla' da aynı motoru kullanır."
   ] },
@@ -2947,7 +2947,7 @@ const ETSY_GUIDE: Array<{ id: string; title: string; icon: any; steps: string[] 
     "6) Set up billing (Faturalama): Etsy ücretleri için kart. İlan ücreti ilan başına 0,20 USD; Etsy açılış ücreti isterse ekranda yazar. Bu adım sizindir.",
     "7) Shop security (Güvenlik): iki adımlı doğrulamayı açın. Etsy kimlik doğrulaması isterse kimliğinizi yalnız Etsy'nin ekranında yükleyin.",
     "8) 'Open your shop' (Mağazayı aç). Sonra uygulamada Etsy bağlantısını yenileyin; ilk ilan yayına girince Durum kartında 'Mağaza açık' yazar.",
-    "9) Bir kez yapılacak ayarlar: Mağaza hazırlığı listesinde 'Kargo profili oluştur' ve 'İade politikası oluştur' (fiziksel ürün için), 'Mağaza metinlerini uygula' (başlık, duyuru, teşekkür mesajı, bölümler). Ustaya yaptırılan ürün için Shop Manager → Settings → Production partners."
+    "9) Bir kez yapılacak ayarlar: Mağaza hazırlığı listesinde 'Kargo profilini oluştur' ve 'İade politikasını oluştur' (fiziksel ürün için); 'Mağaza vitrini' kartında 'Etsy'ye uygula' (başlık, duyuru, teşekkür mesajı, bölümler). Ustaya yaptırılan ürün için Shop Manager → Settings → Production partners."
   ] },
   { id: "safe", title: "Etsy'den engellenmemek için", icon: "shield-outline", steps: [
     "Tek kişi, tek hesap: ikinci mağaza açmayın, kapatılmış bir hesaba aynı telefondan veya ağdan girmeyin, VPN kullanmayın.",
@@ -3271,7 +3271,7 @@ function EtsyPlanResult({ plan, payload, etsyReady, priceSourceLabel, preparePro
   return <>
       <ListingMascot step={published?.state === "active" || draft ? 5 : 4} complete={published?.state === "active"}
         title={published?.state === "active" ? "Etsy’de yayında olduğu doğrulandı" : draft ? "Taslağını Etsy’de kontrol et" : eligibility.status !== "allowed" ? "Önce kural kontrolündeki eksikleri düzelt" : "İlanı incele, sonra Etsy taslağına geç"}
-        instruction={published?.state === "active" ? "Alıcıya görünen ilanı aç; gerçek fotoğrafları, fiyatı ve kargoyu son kez kontrol et." : draft ? "Taslak henüz yayında ilan değildir. Fotoğraf, fiyat, kategori, kargo ve gerekli üretim ortağı bilgilerini Etsy’de kontrol et; ardından aşağıdaki yayınlama düğmesini kullan." : "Aşağıdaki başlık, açıklama, 13 etiket, fiyat ve kural kontrolünü gerçek ürününle karşılaştır. Eksik veya yanlış bilgiyi düzelt; uygunsa taslak oluştur."}
+        instruction={published?.state === "active" ? "Alıcıya görünen ilanı aç; gerçek fotoğrafları, fiyatı ve kargoyu son kez kontrol et." : draft ? "Taslak henüz yayında ilan değildir. İstersen aşağıdan ‘Video ekle (5-15 sn)’ ile kısa video ekle. Fotoğraf, fiyat, kategori, kargo ve gerekli üretim ortağı bilgilerini Etsy’de kontrol et; ardından aşağıdaki ‘Etsy\'de yayınla’ düğmesini kullan." : "Aşağıdaki başlık, açıklama, 13 etiket, fiyat ve kural kontrolünü gerçek ürününle karşılaştır. Eksik veya yanlış bilgiyi düzelt; uygunsa taslak oluştur."}
         roadmap={["Ürün ve fotoğraflar", "Gerçek bilgiler ve köken", "Fiyat ve kargo", "İlan kontrolü ve taslak", "Etsy kontrolü ve yayın doğrulaması"]}
         actionLabel={published?.state === "active" ? "Goxi ile yayındaki ilanı aç" : draft ? "Goxi ile Etsy taslağını aç" : "Goxi ile fiziksel ürün taslağını hazırla"}
         onAction={() => published?.state === "active" ? openUrl(published.url, "Etsy ilanı") : draft ? openUrl(draft.editUrl, "Etsy taslağı") : createDraft()} disabled={eligibility.status !== "allowed" || saving || publishing || !etsyReady} />
@@ -3916,7 +3916,7 @@ function PhotoListingStudio({ online, etsyReady, wizard, onStepChange }: any) {
     if (nameTr.trim().length < 3) return Alert.alert("Ürün adı", "Ürünün Türkçe adını yazın; fotoğraf analizi de önerebilir.");
     if (!knit && origin === "unknown") return Alert.alert("Üretim bilgisi", "Bu ürünü kim yaptı sorusunu yanıtlayın. Uygulama ürünü sizin yaptığınızı veya tasarladığınızı varsaymaz.");
     const net = parseAmount(priceTry);
-    if (!net) return Alert.alert("Elinize geçecek tutar", "Bu üründen elinize geçmesini istediğiniz tutarı TL olarak yazın. Etsy fiyatı, kesintiler ve kargo eklenerek buna göre hesaplanır.");
+    if (!net) return Alert.alert("Elinize geçecek tutar", "Bu üründen elinize geçmesini istediğiniz tutarı TL olarak yazın. Etsy fiyatı, Etsy kesintileri eklenerek buna göre hesaplanır; kargoyu alıcı ayrıca öder.");
     const list = (text: string) => text.split(",").map((item) => item.trim()).filter(Boolean);
     const vintage = kind === "vintage" || origin === "vintage";
     const base: any = {
@@ -3990,6 +3990,8 @@ function PhotoListingStudio({ online, etsyReady, wizard, onStepChange }: any) {
     if (step === 2) {
       if (!kind) return Alert.alert("Ürün türü", "Ürünün türünü seçin: örgü giyim, tesbih, vintage ya da diğer.");
       if (nameTr.trim().length < 3) return Alert.alert("Ürün adı", "Ürünün Türkçe adını yazın (ör. 925 gümüş tesbih).");
+      // "Kim yaptı?" sorusu bu adımda yanıtlanır; son adımda geri gönderilmez.
+      if (!knit && origin === "unknown") return Alert.alert("Üretim bilgisi", "Bu ürünü kim yaptı sorusunu yanıtlayın. Uygulama ürünü sizin yaptığınızı veya tasarladığınızı varsaymaz.");
       const vintage = kind === "vintage" || origin === "vintage";
       const year = Number(yearMade);
       if (vintage && !(year >= 1800 && year <= new Date().getFullYear() - 20)) return Alert.alert("Üretim yılı", "Vintage ürün en az 20 yıllık olmalı. Yaklaşık üretim yılını yazın (ör. 1975).");
@@ -4016,8 +4018,8 @@ function PhotoListingStudio({ online, etsyReady, wizard, onStepChange }: any) {
   const photoGuide = physicalListingProgress({ wizardStep: wizard ? step : undefined, photos: photos.length, kind, name: nameTr, price: parseAmount(priceTry), shipping: parseAmount(shippingTry) });
   return <>
     {!currentPlan && <ListingMascot {...photoGuide}
-      roadmap={WIZARD_STEPS} actionLabel={!photos.length || wizard && step === 1 ? "Goxi ile galeriden fotoğraf seç" : wizard && step < 5 ? "Goxi ile sonraki adıma geç" : "Goxi ile Etsy araştırmasını başlat"}
-      onAction={!photos.length || wizard && step === 1 ? () => addPhotos(false) : wizard && step < 5 ? next : photoGuide.step === 5 ? prepare : undefined} disabled={analyzing || Boolean(progress) || (!online && photos.length > 0)} />}
+      roadmap={WIZARD_STEPS} actionLabel={!photos.length ? "Goxi ile galeriden fotoğraf seç" : wizard && step < 5 ? "Goxi ile sonraki adıma geç" : "Goxi ile Etsy araştırmasını başlat"}
+      onAction={!photos.length ? () => addPhotos(false) : wizard && step < 5 ? next : photoGuide.step === 5 ? prepare : undefined} disabled={analyzing || Boolean(progress) || (!online && photos.length > 0)} />}
     {wizard && <View style={styles.analysisCard}>
       <View style={styles.stepBar}>{WIZARD_STEPS.map((label, index) => <View key={label} style={[styles.stepDot, index < step && styles.stepDotActive]} />)}</View>
       <Text style={styles.small}>Adım {step}/{WIZARD_STEPS.length}</Text>

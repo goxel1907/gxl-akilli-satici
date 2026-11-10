@@ -305,3 +305,16 @@ test("the description lists formats once and only the formats actually chosen", 
     assert.equal((description.match(/Formats:/g) || []).length, 1, kind);
   }
 });
+
+test("every digital category always gets 13 unique tags of at most 20 characters and a title within 140", async () => {
+  const { PRINTABLE_KINDS } = await import("../../worker/src/printable-studio.js");
+  const extra: Record<string, string[]> = { cards: ["christmas cards", "greeting cards", "thank you cards"], party: ["christmas trivia game", "bridal shower games", "bingo cards"], puzzles: ["word search", "sudoku"], planner: ["wedding planner", "budget planner"] };
+  for (const kind of Object.keys(PRINTABLE_KINDS)) for (const productType of [kind.replace(/_/g, " "), ...(extra[kind] || [])]) for (const seed of ["a", "b"]) {
+    const input = normalizePrintablePlanInput({ kind, productType, keyword: productType, seed });
+    const { title, tags } = buildPrintableListing(input, buildPrintableBrief(input).name);
+    assert.equal(tags.length, 13, `${kind}/${productType}: ${tags.join(", ")}`);
+    assert.equal(new Set(tags.map(tag => tag.toLowerCase())).size, 13, `${kind}/${productType}`);
+    assert.ok(tags.every(tag => tag.length <= 20), `${kind}/${productType}`);
+    assert.ok(title.length <= 140, `${kind}/${productType}`);
+  }
+});

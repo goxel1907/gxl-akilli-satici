@@ -299,7 +299,7 @@ export const PRINTABLE_KINDS: Record<PrintableKind, KindProfile> = {
     textRuleEn: "US English spelling, no typos. Card sheets carry no footer or page number; the front artwork carries no text drawn by the image tool (any front greeting is set in code); only the cover, how-to-print, thank-you and license pages carry other text.",
     signatureEn: "a design detail (for example a matching back-of-card motif) designed for this product",
     includedEn: [],
-    tagStems: ["greeting card", "printable card", "folded card", "card printable", "gift tags", "printable gift tags", "holiday card", "card pdf", "folded greeting card", "card set", "card bundle", "gift tag printable", "printable stationery"],
+    tagStems: ["greeting card", "printable card", "folded card", "card printable", "gift tags", "printable gift tags", "holiday card", "card pdf", "folded greeting card", "card set", "card bundle", "gift tag printable", "printable stationery", "5x7 card", "diy greeting card", "printable notecard", "print at home card"],
     vocabulary: ["card", "cards", "greeting", "folded", "gift", "tags", "tag", "printable", "holiday", "envelope"],
     pageWord: "designs"
   },

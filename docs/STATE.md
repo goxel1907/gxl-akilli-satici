@@ -44,3 +44,6 @@ Güncelleme: 9 Kasım 2026
 - Kapak kuralları (10 Kasım, kullanıcı isteği): her kategoride kapak rakiplerden daha dikkat çekici. Dev başlık (%12+),
   temalı zengin zemin, en fazla 3 rozet (biri büyük sayı rozeti). Rakip hataları yasak: logo/uygulama adı, marka ve ünlü adı,
   insan fotoğrafı, kalabalık rozet, fiyat/indirim yazısı, abartılı sayı. Varsayılan palet artık bej değil.
+- Goxi denetimi (10 Kasım): 4 fiziksel tür Goxi düğmesiyle uçtan uca, 19 dijital türün yükleme rehberi testte.
+  Düzeltilenler: sihirbazda "kim yaptı" 2. adımda soruluyor; fotoğraftan sonra Goxi "sonraki adım" diyor; yarım aktarımda
+  "Etsy yüklemesini tamamla"; test onayı "satılan her ölçüde"; kart türü 13 etiket; kargo yazıları alıcı öder ile uyumlu.
