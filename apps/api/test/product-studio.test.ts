@@ -245,3 +245,26 @@ test("Turkish slippers, booties and socks are recognized and fill 13 tags", asyn
   assert.equal(booties.tags.length, 13);
   assert.match(plan("Kadın yün çorap el örgüsü").title, /Socks/);
 });
+
+test("any handmade item from a photo gets a real product name, its material and buyer tags, not 'item' or broken tags", () => {
+  const cases: Array<[string, RegExp, RegExp?]> = [
+    ["Seramik kase", /^Ceramic Bowl/],
+    ["Bakır cezve", /^Copper Turkish Coffee Pot/, /cezve/],
+    ["Ahşap kaşık", /^Wooden Spoon/],
+    ["El yapımı deri cüzdan", /^Leather Wallet/],
+    ["Makrome duvar süsü", /Macrame Wall Hanging/],
+    ["Soya mum", /^Soy Candle/],
+    ["Zeytinyağlı sabun", /^Olive Oil Soap,/],
+    ["Taş küpe", /^Stone Earrings/],
+    ["Keçe çanta", /^Felt Bag/]
+  ];
+  for (const [titleTr, title, tag] of cases) {
+    const input = normalizeProductInput({ titleTr, productKind: "other", origin: "made_by_seller", priceTry: 1500, shippingTry: 800, usdTryRate: 40, imageUrls: ["https://local.invalid/a.jpg"] });
+    const plan = buildProductPlan(input, ruleKeywordCandidates(input), [], { usdTryRate: 40 });
+    assert.match(plan.title, title, `${titleTr}: ${plan.title}`);
+    assert.ok(plan.tags.length >= 10, `${titleTr}: ${plan.tags.join(", ")}`);
+    assert.ok(!plan.tags.some(value => /\bitem\b|^(pot|holder|cover|hanging) gift$|^handmade (pot|holder|cover|hanging)$/.test(value)), `${titleTr}: ${plan.tags.join(", ")}`);
+    assert.doesNotMatch(plan.description, /\bwood spoon\b|olive wood soap/i, titleTr);
+    if (tag) assert.ok(plan.tags.some(value => tag.test(value)), `${titleTr}: ${plan.tags.join(", ")}`);
+  }
+});

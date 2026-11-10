@@ -1,5 +1,5 @@
 import { addLocalWhatsapp, localWhatsappLink } from "./marketing-local";
-import { photoAssistantPrompt, parsePhotoAssistant } from "./photo-assistant";
+import { photoAssistantPrompt, photoEnhancePrompt, parsePhotoAssistant } from "./photo-assistant";
 import { canRankTrend, compareTrendEvidence, hasBuyerDemand, trendFreshness } from "./trend-priority";
 import { listingProgress, listingTasks, physicalListingProgress, etsyTransferComplete, type ListingProgressInput } from "./listing-progress";
 import ListingMascot, { type ListingMascotProps } from "./ListingMascot";
@@ -4044,6 +4044,15 @@ function PhotoListingStudio({ online, etsyReady, wizard, onStepChange }: any) {
       <Pressable style={styles.secondaryButton} onPress={() => addPhotos(false)}><Text style={styles.secondaryButtonText}>Galeriden seç</Text></Pressable>
     </View>
     <Text style={styles.formHint}>Gün ışığında, sade zeminde çekin: önden, arkadan, doku veya damga yakın planı ve ölçü gösteren bir kare. Ön, arka ve detay fotoğraflarıyla ürünü açıkça gösterin.</Text>
+    {photos.length > 0 && <View style={styles.analysisCard}>
+      <Text style={styles.cardTitle}>Fotoğrafları güzelleştir (isteğe bağlı)</Text>
+      <Text style={styles.formHint}>Talimatı ChatGPT veya Claude'a gönder, fotoğrafları sohbete ekle. Ürün değiştirilmeden ışık, renk, kırpma ve arka plan düzeltilir; Etsy fotoğrafın gerçek ürünü göstermesini ister. Hazır fotoğrafları indirip buradaki eski fotoğrafları silerek yenilerini ekle, sonra devam et.</Text>
+      <View style={styles.inlineActions}>
+        <Pressable style={styles.secondaryButton} onPress={() => Share.share({ message: photoEnhancePrompt("chatgpt", nameTr) }).catch(() => undefined)}><Text style={styles.secondaryButtonText}>ChatGPT ile güzelleştir</Text></Pressable>
+        <Pressable style={styles.secondaryButton} onPress={() => Share.share({ message: photoEnhancePrompt("claude", nameTr) }).catch(() => undefined)}><Text style={styles.secondaryButtonText}>Claude ile güzelleştir</Text></Pressable>
+      </View>
+      <Pressable onPress={() => setPhotos([])}><Text style={styles.linkNote}>Tüm fotoğrafları kaldır ({photos.length})</Text></Pressable>
+    </View>}
     {(!wizard || photos.length > 0) && <Pressable style={[styles.analyzeButton, (analyzing || !online || !photos.length) && styles.primaryDisabled]} disabled={analyzing || !online || !photos.length} onPress={analyze}>{analyzing ? <ActivityIndicator color="white" /> : <Ionicons name="sparkles" size={18} color="white" />}<Text style={styles.primaryText}>{analyzing ? "Fotoğraflar inceleniyor…" : "Fotoğraftan otomatik doldur"}</Text></Pressable>}
     {wizard && photos.length > 0 && <Text style={styles.formHint}>Tür, ad, renk ve malzeme önerilir; hepsini bir sonraki adımda kontrol edersiniz.</Text>}
     {wizard && !showChat && <Pressable onPress={() => setShowChat(true)} style={{ marginBottom: 8 }}><Text style={styles.linkNote}>ChatGPT / Claude sohbetiyle analiz (isteğe bağlı) →</Text></Pressable>}
