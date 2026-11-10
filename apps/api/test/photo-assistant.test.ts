@@ -56,7 +56,8 @@ test("photo Studio shares a subscription prompt and imports the same product wit
   const renderer = await photoScreen();
   try {
     assert.equal(field(renderer, /^Ürün adı \(Türkçe\)$/).props.placeholder, "ör. Arpa kesim püsküllü tesbih");
-    await tap(renderer, /^Claude$/); await tap(renderer, /^Claude için analiz talimatını paylaş$/);
+    // Tam ilan kutusu ve analiz kutusu aynı asistan seçimini paylaşır; ikisinden biri yeterlidir.
+    await act(async () => { buttons(renderer, /^Claude$/)[0].props.onPress(); }); await tap(renderer, /^Claude için analiz talimatını paylaş$/);
     const message = (ui.shares.at(-1) as { message: string }).message;
     const template = JSON.parse(message.split("\n").at(-1)!);
     await type(renderer, /^Sohbetten gelen analiz JSON'u$/, JSON.stringify({ ...answer, requestId: template.requestId }));
@@ -201,4 +202,62 @@ test("the physical plan screen applies a ChatGPT listing reply to the title, tag
     assert.equal(field(renderer, /^Etiketler \(13 adet\)$/).props.value, tags.join(", "));
     assert.ok(ui.alerts.some(alert => alert.title === "Uygulandı"), JSON.stringify(ui.alerts));
   } finally { await unmount(renderer); }
+});
+
+test("one ChatGPT reply fills every physical field, converts the suggested US price and carries the listing text to the plan", async context => {
+  const { buildProductPlan: build, normalizeProductInput: normalize } = await import("../../worker/src/product-studio.js");
+  const paths: string[] = [];
+  let planBody: any;
+  context.mock.method(globalThis, "fetch", async (url: unknown, init?: RequestInit) => {
+    const path = new URL(String(url)).pathname; paths.push(path);
+    if (path.endsWith("/net-from-price")) return Response.json({ priceUsd: 89, usdTryRate: 40, netTry: 2850 });
+    if (path.endsWith("/etsy-keywords")) return Response.json({ candidates: ["ceramic bowl"] });
+    if (path.endsWith("/etsy-plan")) { planBody = JSON.parse(String(init?.body)); const product = normalize({ ...planBody.product, usdTryRate: 40 }); return Response.json({ plan: build(product, ["ceramic bowl"], [], { usdTryRate: 40 }) }); }
+    if (path.endsWith("/explain-tr")) return Response.json({ titleTr: "Seramik kase", tags: [] });
+    return Response.json({ score: 80, checks: [] });
+  });
+  ui.alerts.length = 0; ui.shares.length = 0;
+  ui.pickImages = async () => ({ canceled: false, assets: [{ uri: "local:bowl", width: 100, height: 100 }] });
+  const renderer = await mount(screens.PhotoListingStudio, { online: true, etsyReady: true, wizard: true });
+  try {
+    await tap(renderer, /^Galeriden seç$/);
+    await tap(renderer, /^Tüm ilan talimatını paylaş$/);
+    const message = (ui.shares.at(-1) as { message: string }).message;
+    assert.match(message, /50 US states/); assert.match(message, /Alaska and Hawaii/); assert.match(message, /never redraw, repaint, replace or generate it/);
+    const requestId = JSON.parse(message.split("\n").at(-1)!).requestId;
+    const tags = ["ceramic bowl", "handmade bowl", "pottery bowl", "serving bowl", "turkish ceramic", "kitchen decor", "housewarming gift", "blue bowl", "rustic bowl", "stoneware bowl", "fruit bowl", "home decor", "unique gift"];
+    const reply = { version: "GXL_PHYSICAL_FULL_V1", requestId,
+      product: { productKind: "other", nameTr: "El yapımı seramik kase", productNounEn: "ceramic bowl", origin: "made_by_seller", craft: "none", audience: "unknown", materialTr: "seramik", colors: ["blue"], attributesEn: ["glazed"], conditionNoteEn: "", yearMade: 0, weightGrams: 450, lengthCm: 18, widthCm: 18, chestCm: 0, beadCount: 0 },
+      listing: { title: "Handmade Ceramic Bowl, Blue Glazed Pottery Serving Bowl", tags, aboutEn: "A hand-thrown ceramic bowl with a deep blue glaze that pools softly at the rim." },
+      pricing: { suggestedPriceUsd: 89, competitorLowUsd: 45, competitorHighUsd: 140, reasonTr: "Benzer kaseler 45-140 USD." },
+      shipping: { estimatedUsShippingTry: 950, packageWeightGrams: 900, processingDays: 3, noteTr: "Tahmin." }, questionsTr: ["Kaseyi bulaşık makinesinde denediniz mi?"] };
+    await type(renderer, /^Sohbetten gelen tam ilan JSON'u$/, JSON.stringify(reply));
+    await tap(renderer, /^Tüm boşlukları doldur$/);
+    await waitFor(() => ui.alerts.some(alert => alert.title === "Boşluklar dolduruldu"));
+    assert.ok(paths.some(path => path.endsWith("/net-from-price")));
+    assert.equal(field(renderer, /^Ürün adı \(Türkçe\)$/).props.value, "El yapımı seramik kase");
+    await tap(renderer, /^İleri$/); await tap(renderer, /^İleri/);
+    assert.equal(field(renderer, /^Elinize geçecek \(TL\)$/).props.value, "2850");
+    assert.equal(field(renderer, /^ABD'ye kargo \(TL\)$/).props.value, "950");
+    await tap(renderer, /^İleri$/);
+    await tap(renderer, /^Etsy'de araştır ve ilanı hazırla$/);
+    await waitFor(() => renderer.root.findAllByType(screens.EtsyPlanResult).length === 1);
+    assert.equal(planBody.product.material, "seramik"); assert.equal(planBody.product.weightGrams, 450);
+    await waitFor(() => field(renderer, /^Başlık \(/).props.value === reply.listing.title);
+    assert.equal(field(renderer, /^Etiketler \(13 adet\)$/).props.value, tags.join(", "));
+  } finally { await unmount(renderer); ui.pickImages = async () => ({ canceled: true }); }
+});
+
+test("the suggested US price converts to the seller's net and back to the same Etsy price; bad full replies are refused", async () => {
+  const { netTryFromPriceUsd, computePricing } = await import("../../worker/src/product-studio.js");
+  const { parseFullListing } = await import("../../mobile/photo-assistant.js");
+  const net = netTryFromPriceUsd(89, 40, "TRY");
+  const back = computePricing({ priceTry: net, usdTryRate: 40, shopCurrency: "TRY" })!;
+  assert.ok(Math.abs(back.breakEvenUsd - 89) < 0.5, `${net} TL → ${back.breakEvenUsd} USD`);
+  const ok = { version: "GXL_PHYSICAL_FULL_V1", requestId: "r", product: { productKind: "other", nameTr: "Seramik kase", origin: "" }, listing: { title: "Ceramic Bowl", tags: Array.from({ length: 13 }, (_, i) => `bowl tag ${i}`), aboutEn: "A hand-thrown ceramic bowl with a deep blue glaze." }, pricing: {}, shipping: {}, questionsTr: [] };
+  assert.equal(parseFullListing(JSON.stringify(ok), "r").product.nameTr, "Seramik kase");
+  assert.throws(() => parseFullListing(JSON.stringify({ ...ok, version: "X" }), "r"), /tam ilan JSON/);
+  assert.throws(() => parseFullListing(JSON.stringify({ ...ok, requestId: "z" }), "r"), /başka bir talimata/);
+  assert.throws(() => parseFullListing(JSON.stringify({ ...ok, product: { ...ok.product, productKind: "car" } }), "r"), /Ürün türü/);
+  assert.throws(() => parseFullListing(JSON.stringify({ ...ok, listing: { ...ok.listing, tags: ["a"] } }), "r"), /13 farklı etiket/);
 });
