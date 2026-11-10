@@ -3965,8 +3965,10 @@ function PhotoListingStudio({ online, etsyReady, wizard, onStepChange }: any) {
       "Ürün bilgisi, ölçüler, renkler, başlık, 13 etiket ve tanıtım paragrafı aktarıldı.",
       priceLine,
       result.shipping.estimatedUsShippingTry ? `Kargo tahmini ${Math.round(result.shipping.estimatedUsShippingTry)} TL: PTT ya da kargo firmasından gerçek fiyatı sorup düzeltin.` : "Kargo ücretini yazın.",
-      "Kontrol edin: 'Bu ürünü kim yaptı?' yanıtı, malzeme damgası/belge kutusu (işaretlemeden gümüş/altın yazılmaz) ve ölçüler.",
-      "Asistanın hazırladığı kapak ve görselleri indirip 1. adımdaki fotoğrafların yerine ekleyin (kapak ilk sırada).",
+      /gümüş|gumus|925|altın|altin|silver|gold/i.test(item.materialTr + item.nameTr) ? "Malzeme gümüş/altın: üründe 925 gibi ayar damgası ya da belge varsa 'Ayar damgası veya malzeme belgesi var' kutusunu işaretleyin; işaretlenmezse ilan Etsy'ye gönderilmez." : "",
+      "Kontrol edin: 'Bu ürünü kim yaptı?' yanıtı ve ölçüler.",
+      "Asistanın görselleri sizin ürününüzle birebir aynı olmalı. Farklı bir ürün çizdiyse o görseli kullanmayın; kendi fotoğraflarınızla devam edin.",
+      "Görseller sizinkiyle aynıysa indirip 1. adımdaki fotoğrafların yerine ekleyin (kapak ilk sırada).",
       ...result.questionsTr.map((question) => `• ${question}`)
     ].filter(Boolean).join("\n"));
   };

@@ -60,3 +60,5 @@ Güncelleme: 9 Kasım 2026
 - Fiziksel tam ilan sohbetten (GXL_PHYSICAL_FULL_V1): 1. adımda "Tüm ilan talimatını paylaş" → ChatGPT/Claude fotoğraf+video,
   birkaç soru, araştırma, başlık/13 etiket/tanıtım, ABD fiyatı, kargo tahmini, kapak ve görseller → JSON "Tüm boşlukları doldur".
   USD öneri /api/products/net-from-price ile "Elinize geçecek" TL'ye çevrilir. Metin ilan ekranında malzeme onayıyla yeniden denetlenir.
+- 10 Kasım 22:58 hatası: ChatGPT Türkçe başlık verdi ve görsel aracı başka bir tesbih çizdi. Artık başlık/etiket/tanıtım
+  İngilizce değilse reddedilir ("Türkiye" serbest); fiziksel ürün görselleri yalnız Python koduyla düzenlenir (görsel aracı yasak).
