@@ -883,7 +883,7 @@ export async function createEtsyPhysicalDraft(
   }
 
   const shippingProfile = (await shippingProfiles(env, shop.shopId, fetcher))[0];
-  if (!shippingProfile) throw new EtsyIntegrationError("VALIDATION_FAILED", "Etsy'de kargo profili yok. Mağaza hazırlığı listesindeki 'Kargo profili oluştur' ile tek dokunuşla oluşturun (basit modda Yardım, uzman modda Etsy → Kılavuz; ABD'ye ücretsiz kargo, kargo bedeli fiyata dahil).", 400);
+  if (!shippingProfile) throw new EtsyIntegrationError("VALIDATION_FAILED", "Etsy'de kargo profili yok. Mağaza hazırlığı listesinde Kargo profili satırına dokunup 'Kargo profilini oluştur' ile oluşturun (basit modda Yardım, uzman modda Etsy → Kılavuz). Kargo ücretini alıcı öder; ilan planındaki 'kargo profiline yazın' tutarını girin.", 400);
 
   // Fiziksel ilanın yayına girmesi için iade politikası gerekir; yoksa taslak yine açılır, satıcıya söylenir.
   const draftWarnings: string[] = [];
