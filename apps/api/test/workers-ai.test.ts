@@ -21,3 +21,22 @@ test("without Gemini or OpenAI keys, photo analysis runs on the free Cloudflare 
   assert.ok(Array.isArray(calls.at(-1)!.input.image), "the photo goes to the model as bytes");
   assert.ok(agreed, "the one-time model license is accepted automatically");
 });
+
+test("when the configured Gemini key fails, photo analysis falls back to the free Workers AI instead of stopping", async context => {
+  let geminiCalls = 0;
+  context.mock.method(globalThis, "fetch", async (url: unknown) => {
+    if (String(url).includes("generativelanguage.googleapis.com")) { geminiCalls++; return Response.json({ error: { message: "model not found" } }, { status: 404 }); }
+    throw Error(`Unexpected request ${url}`);
+  });
+  const AI = { run: async () => ({ response: '{"productKind":"tesbih","nameTr":"Gümüş tesbih","productNounEn":"prayer beads","craft":"none","audience":"unknown","materialGuessTr":"","colors":["silver"],"attributesEn":["tassel"],"conditionNoteEn":"","riskFlags":[],"questionsTr":[],"confidence":0.8}' }) };
+  const result = await analyzeListingPhotos({ imageDataUrls: [PNG] }, { GEMINI_API_KEY: "test-key", AI } as any);
+  assert.equal(geminiCalls, 1);
+  assert.equal(result.productKind, "tesbih");
+  assert.equal(result.productNounEn, "prayer beads");
+});
+
+test("if every provider fails the seller still gets the clear provider error", async context => {
+  context.mock.method(globalThis, "fetch", async () => Response.json({}, { status: 503 }));
+  const AI = { run: async () => { throw Object.assign(new Error("Workers AI unavailable"), { status: 503 }); } };
+  await assert.rejects(analyzeListingPhotos({ imageDataUrls: [PNG] }, { GEMINI_API_KEY: "test-key", AI } as any), /AI_PROVIDER_REQUEST_FAILED/);
+});

@@ -108,18 +108,28 @@ export function hasAiProvider(overrides?: AiRuntimeEnv): boolean {
 
 export async function generateStructuredObject<T>(request: StructuredRequest, overrides?: AiRuntimeEnv): Promise<T> {
   const env = { ...nodeEnvironment(), ...overrides };
-  try {
-    if (env.GEMINI_API_KEY) return await callGemini<T>(request, env);
-    if (env.OPENAI_API_KEY) return await callOpenAI<T>(request, env);
-    if (env.AI) return await callWorkersAi<T>(request, env);
-    throw new Error("AI_PROVIDER_NOT_CONFIGURED");
-  } catch (error) {
+  // Sağlayıcılar sırayla denenir: biri hata verirse (kota, kapalı model, ağ) sonrakine geçilir; ücretsiz
+  // Cloudflare Workers AI en sonda yedektir. Yalnız hepsi başarısız olursa son hata kullanıcıya gösterilir.
+  const providers: Array<[string, (request: StructuredRequest, env: AiRuntimeEnv) => Promise<T>]> = [
+    ...(env.GEMINI_API_KEY ? [["gemini", callGemini<T>] as [string, typeof callGemini<T>]] : []),
+    ...(env.OPENAI_API_KEY ? [["openai", callOpenAI<T>] as [string, typeof callOpenAI<T>]] : []),
+    ...(env.AI ? [["workers_ai", callWorkersAi<T>] as [string, typeof callWorkersAi<T>]] : [])
+  ];
+  if (!providers.length) throw new Error("AI_PROVIDER_NOT_CONFIGURED");
+  let lastError: unknown;
+  for (const [name, call] of providers) {
+    try { return await call(request, env); }
+    catch (error) { lastError = error; console.error(`AI provider ${name} failed: ${error instanceof Error ? error.message : String(error)}`); }
+  }
+  try { throw lastError; } catch (error) {
     const status = Number((error as { status?: number })?.status);
     if (error instanceof Error && (error.name === "TimeoutError" || error.name === "APIConnectionTimeoutError")) throw new Error("AI_PROVIDER_TIMEOUT");
     if (error instanceof SyntaxError || error instanceof Error && error.message === "EMPTY_ANALYSIS") throw new Error("AI_PROVIDER_INVALID_RESPONSE");
     if (status === 429) throw new Error("AI_FREE_QUOTA_EXCEEDED");
     if (status === 400) throw new Error("AI_PROVIDER_INVALID_REQUEST");
     if (status === 401 || status === 403) throw new Error("AI_PROVIDER_ACCESS_DENIED");
-    throw error;
+    if (error instanceof Error && /^AI_[A-Z_]+$/.test(error.message)) throw error;
+    // Bilinmeyen sağlayıcı hatası (ör. Workers AI iç hatası) kullanıcıya anlaşılır "ulaşılamadı" mesajıyla döner.
+    throw new Error("AI_PROVIDER_REQUEST_FAILED");
   }
 }

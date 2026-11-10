@@ -47,3 +47,6 @@ Güncelleme: 9 Kasım 2026
 - Goxi denetimi (10 Kasım): 4 fiziksel tür Goxi düğmesiyle uçtan uca, 19 dijital türün yükleme rehberi testte.
   Düzeltilenler: sihirbazda "kim yaptı" 2. adımda soruluyor; fotoğraftan sonra Goxi "sonraki adım" diyor; yarım aktarımda
   "Etsy yüklemesini tamamla"; test onayı "satılan her ölçüde"; kart türü 13 etiket; kargo yazıları alıcı öder ile uyumlu.
+- Fotoğraf analizi hatası (10 Kasım 21:03, tesbih): Gemini anahtarı tanımlı ama hata veriyordu; yedeğe geçilmiyordu.
+  Artık sağlayıcılar sırayla denenir (Gemini → OpenAI → ücretsiz Workers AI). Gemini hatasının nedeni Cloudflare loglarında
+  "AI provider gemini failed" satırında görünür.
