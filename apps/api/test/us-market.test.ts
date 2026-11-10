@@ -130,3 +130,20 @@ test("every package decorates its listing images in code with the product's own 
   // Başka bir bayramın süsü girmez.
   assert.doesNotMatch(christmas, /pumpkins|shamrocks|pastel eggs/);
 });
+
+test("every category's package asks for an eye-catching cover and bans the competitor mistakes", async () => {
+  const { PRINTABLE_KINDS } = await import("../../worker/src/printable-studio.js");
+  for (const kind of Object.keys(PRINTABLE_KINDS)) {
+    for (const assistant of ["chatgpt", "claude"]) {
+      const brief = buildPrintableBrief(normalizePrintablePlanInput({ kind, productType: kind.replace(/_/g, " "), keyword: kind.replace(/_/g, " "), seed: "cover", assistant }));
+      const prompt = brief.masterPrompt;
+      assert.match(prompt, /Cover goal \(every category, every listing\): the cover \(C1\) must be highly eye-catching/, `${kind}/${assistant}`);
+      assert.match(prompt, /Up to three badges/, kind);
+      assert.match(prompt, /No logos or app icons of any kind/, kind);
+      assert.match(prompt, /No photos of people \(real or AI-made\) as the hero/, kind);
+      assert.match(prompt, /No inflated or vague numbers/, kind);
+      assert.match(prompt, /rich, saturated themed backdrop/, kind);
+      assert.doesNotMatch(prompt, /soft neutral tones/, kind);
+    }
+  }
+});

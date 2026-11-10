@@ -41,3 +41,6 @@ Güncelleme: 9 Kasım 2026
   art arda çalıştırır (her sayfayı elle değil, tek betikle üretir); GXL_PROGRESS JSON'u yalnız adım bitince eklenir.
 - Trend: 45 altı puan "en iyi fırsat" sayılmaz; gruptaki tüm aramalar zayıfsa açıklama kartı çıkar (Tesbih/Vintage böyleydi).
 - Not: Google Drive indirmesi için ortam ağına drive.google.com ve drive.usercontent.google.com eklendi.
+- Kapak kuralları (10 Kasım, kullanıcı isteği): her kategoride kapak rakiplerden daha dikkat çekici. Dev başlık (%12+),
+  temalı zengin zemin, en fazla 3 rozet (biri büyük sayı rozeti). Rakip hataları yasak: logo/uygulama adı, marka ve ünlü adı,
+  insan fotoğrafı, kalabalık rozet, fiyat/indirim yazısı, abartılı sayı. Varsayılan palet artık bej değil.
