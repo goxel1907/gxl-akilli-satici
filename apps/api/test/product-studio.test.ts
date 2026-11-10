@@ -268,3 +268,28 @@ test("any handmade item from a photo gets a real product name, its material and 
     if (tag) assert.ok(plan.tags.some(value => tag.test(value)), `${titleTr}: ${plan.tags.join(", ")}`);
   }
 });
+
+test("a physical draft refuses chat-written brand names and unverified silver or gold claims, but allows 'gold tone'", async () => {
+  const kv = memoryKv();
+  await kv.store.put("etsy:tokens", JSON.stringify({ accessToken: "123.token", refreshToken: "r", expiresAt: Date.now() + 3_600_000, scope: "listings_w", userId: "123" }));
+  const env = { ETSY_API_KEY: "key", ETSY_SHARED_SECRET: "secret", ETSY_OAUTH: kv.store };
+  let created = 0;
+  const fetcher = (async (input: string | URL | Request) => {
+    const url = new URL(String(input));
+    if (url.pathname === "/v3/application/users/123/shops") return Response.json({ shop_id: 777, currency_code: "USD" });
+    if (url.pathname.endsWith("/shipping-profiles")) return Response.json({ results: [{ shipping_profile_id: 55, is_deleted: false }] });
+    if (url.pathname.endsWith("/policies/return")) return Response.json({ results: [{ return_policy_id: 66 }] });
+    if (url.pathname.endsWith("/readiness-state-definitions")) return Response.json({ results: [{ readiness_state_id: 9, readiness_state: "ready_to_ship" }] });
+    if (url.pathname === "/v3/application/seller-taxonomy/nodes") return Response.json({ results: [{ id: 2, name: "Brooches", children: [] }] });
+    if (url.pathname === "/v3/application/shops/777/listings") { created++; return Response.json({ listing_id: 902 }, { status: 201 }); }
+    return Response.json({}, { status: 500 });
+  }) as typeof fetch;
+  const product = normalizeProductInput({ titleTr: "Pirinç broş", productKind: "other", origin: "made_by_seller", priceTry: 900, usdTryRate: 40 });
+  const plan = buildProductPlan(product, ruleKeywordCandidates(product), [], { usdTryRate: 40, shopCurrency: "USD" });
+  const base = { title: plan.title, tags: plan.tags, description: plan.description, materials: plan.materials, priceUsd: 25 };
+  await assert.rejects(createEtsyPhysicalDraft(env, kv.store, product, { ...base, title: "Sterling Silver Brooch, Handmade" }, fetcher), /gümüş\/altın iddiası/);
+  await assert.rejects(createEtsyPhysicalDraft(env, kv.store, product, { ...base, description: `Inspired by Disney. ${base.description}` }, fetcher), /Marka veya telif/);
+  assert.equal(created, 0);
+  const ok = await createEtsyPhysicalDraft(env, kv.store, product, { ...base, description: `A gold tone brass brooch. ${base.description}` }, fetcher);
+  assert.equal(ok.listingId, 902);
+});

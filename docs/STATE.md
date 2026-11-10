@@ -54,3 +54,6 @@ Güncelleme: 9 Kasım 2026
   kupa, peştemal, seccade, örtü, çini, toka, magnet, tablo; malzeme: seramik, porselen, ahşap, zeytin ağacı/zeytinyağı, keçe, taş,
   mermer, reçine, jüt, hasır, soya. "item" içeren arama ve "pot gift" gibi kopuk etiket yok. 1. adımda "ChatGPT/Claude ile
   güzelleştir" (ürün değişmez; ışık, renk, kırpma, arka plan).
+- Fiziksel ilan sonucu ekranında "ChatGPT / Claude ile ilan metnini güçlendir": talimata Etsy rakip verisi gider, yanıt
+  (GXL_PHYSICAL_LISTING_V1: başlık, 13 etiket, tanıtım paragrafı) denetlenip uygulanır; fiyat/kargo/teslim bölümleri uygulamada kalır.
+  Sunucu taslakta marka/telif adı ve doğrulanmamış gümüş/altın iddiasını engeller ("gold tone" serbest).

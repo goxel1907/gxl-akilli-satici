@@ -8,6 +8,7 @@ import { returnPolicies, shippingProfiles } from "./etsy-setup.js";
 import type { TrendResult } from "./etsy-trends.js";
 import { normalizeEtsyTags, normalizeEtsyTitle, validateEtsyListingText } from "./pattern-studio.js";
 import { termsToEnglish } from "./tr-glossary.js";
+import { findIpRisks } from "./ip-guard.js";
 
 type Fetcher = typeof fetch;
 
@@ -910,6 +911,17 @@ export async function createEtsyPhysicalDraft(
   const check = validateEtsyListingText({ title, tags, materials: listing.materials });
   if (check.issues.some((issue) => !issue.startsWith("Etsy 13 etiket"))) throw new EtsyIntegrationError("VALIDATION_FAILED", check.issues.join(" "), 400);
   if (!(listing.priceUsd > 0)) throw new EtsyIntegrationError("VALIDATION_FAILED", "Etsy fiyatı gerekli.", 400);
+  // Başlık, etiket ve açıklama sohbetten de gelebilir: marka/telif adı ve doğrulanmamış değerli maden iddiası Etsy'ye gitmez.
+  const ipRisks = findIpRisks([title, ...tags, listing.description].join(" \n "));
+  if (ipRisks.length) throw new EtsyIntegrationError("VALIDATION_FAILED", `Marka veya telif riski olan ifade var: ${ipRisks.join(", ")}. Başlık, etiket ve açıklamadan çıkarın.`, 400);
+  if (!input.materialVerified && !signals.isKnitwear) {
+    const strongClaim = /\b(sterling|925|14k|18k|22k|24k|(solid|genuine|real|pure) (gold|silver))\b/i;
+    // "gold tone", "silver color" maden iddiası değildir.
+    const metalWord = /\b(silver|gold)\b(?![\s-]*(tone|toned|color|colored|colour|finish))/i;
+    if ([title, ...tags].some((text) => strongClaim.test(text) || metalWord.test(text)) || strongClaim.test(listing.description)) {
+      throw new EtsyIntegrationError("VALIDATION_FAILED", "Başlık, etiket veya açıklamada gümüş/altın iddiası var ama malzeme doğrulanmadı. 'Ayar damgası veya malzeme belgesi var' kutusunu işaretleyin ya da bu kelimeleri çıkarın.", 400);
+    }
+  }
 
   const mappingKey = input.sourceId ? `etsy:physical:${input.sourceId}` : undefined;
   const existing = mappingKey ? await store.get(mappingKey) : null;
