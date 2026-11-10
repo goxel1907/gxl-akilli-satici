@@ -108,23 +108,35 @@ export function buildMasterPrompt(input: MasterPromptInput): string {
     lines.push("", "## Brief R - product renders (one image per reply)", input.renderPrompt.trim());
   }
   lines.push("", "## Brief C - listing images and separate marketing visuals (one per reply, in this order)",
-    // Etsy'de en çok tıklanan kapaklar: tek net ürün, 3-6 kelimelik fayda başlığı, küçük bir sayı rozeti, sade arka plan.
+    // Kapak rakiplerden daha dikkat çekici olur (dev başlık, büyük sayı rozeti, temalı zengin zemin), ama rakiplerin
+    // hataları yapılmaz: logo/marka/ünlü adı, sahte insan fotoğrafı, 5-6 rozetle kalabalık, okunmayan minik yazı, abartılı sayı.
     "Channel and delivery map: C1-C10 are the ten Etsy gallery images. Upload them in this order: C1, C4, C2, C3, C5, C6, C7, C8, C9, C10. Name them listing-01.jpg through listing-10.jpg in that upload order. C11 is the Pinterest reference and C12 is the social ad; save marketing assets separately, never as Etsy buyer download files or gallery substitutes.",
+    "Cover goal (every category, every listing): the cover (C1) must be highly eye-catching for this exact product and stop the scroll; it must look better than the best covers in the Etsy search results for this product, never plainer. If you can browse, open the Etsy search for the target query, note the three most common cover looks (colors, layout, badges) and make C1 clearly different from them while following every rule below.",
     "Headline rules (every image that has a headline):",
-    "- Make the image first with no text at all, then add the headline in code (Python Pillow) in the clean area the prompt leaves for it; never let the image tool draw letters.",
-    "- Use the bold heading font from the spec, exactly the words given, in capital letters; the headline height is at least 7% of the image height so it reads on a phone thumbnail.",
-    "- Use a palette color with at least 4.5:1 contrast, or place it on a soft rounded band in a palette color; at most one small badge (for example a page or question count) besides it.",
-    "- Stand out from competitors at thumbnail size: on the cover (C1) the headline is 2-5 words and at least 10% of the image height, the real product pages fill at least 55% of the frame (a fanned stack or a large screen, never small papers in a big empty scene), and the background is one bold palette color, not beige-on-beige. No text anywhere in an image is smaller than 3% of the image height; if a line would be smaller, cut the words instead. Never crop a page title or headline at an edge.",
-    "- Before you hand over the images, put all of them side by side at 400 px wide and check each one: the headline reads at that size, the product is the biggest thing, every count matches the files, and no two images look alike. Redo any image that fails.",
-    "- Keep the composition uncluttered: one clear hero, real product visible, no stickers, arrows or extra words. Treat this as a thumbnail-readability goal, not a proven sales claim.",
+    "- Make the image first with no text at all, then add the headline in code (Python Pillow), and every badge too, in the clean areas the prompt leaves for them; never let the image tool draw letters. Use the bold heading font from the spec and exactly the words given.",
+    "Cover (C1) layout:",
+    "- A big, heavy display headline of 2-5 words across the top 25-35% of the image, at least 12% of the image height per line, in capital letters; give it punch with a second palette color on the key word, a thick outline or a soft drop shadow so it reads on any background.",
+    "- The real product fills at least 55% of the frame: a fanned stack, an angled spread or a large screen, with one page or card shown large enough that its real content is readable at 400 px wide.",
+    "- A rich, themed background that fits the product and season (for example deep green or red with ornaments and soft bokeh for Christmas, confetti for a party, soft florals for a wedding), never beige-on-beige and never an empty desk.",
+    "- Up to three badges, each a bold circle, burst or ribbon in a contrasting palette color: one big count badge with the real number as the largest word (for example \"50 CARDS\" or \"30 PUZZLES\"), plus at most two short fact badges such as \"INSTANT DOWNLOAD\", \"US LETTER + A4\", \"PRINT 1 OR 2 PER PAGE\" or a real included bonus. Each badge has at most four words, its smallest text is at least 4% of the image height, and no badge covers the headline or the readable page.",
+    "- If the C1 headline given below has a count after the separator (for example \"WORD SEARCH · 30 PAGES\"), put the words before it in the headline and the count in the big count badge, so the number is not written twice.",
+    "Gallery images (C2-C10): each has one headline band and at most one badge, the same palette and fonts as the cover so the gallery looks like one set, and the real pages as the biggest thing.",
+    "Never repeat these competitor mistakes:",
+    "- No logos or app icons of any kind, and no names of music-streaming, video or presentation apps or brands; say \"playlist\" or \"slides\" in plain words only when it is really included.",
+    "- No trademarked TV game-show or toy names, no singer, band, celebrity or character names, and no song lyrics in any image.",
+    "- No photos of people (real or AI-made) as the hero; hands holding a page are fine. The product is always the hero.",
+    "- No more than three badges on the cover, no stickers on top of the product, no price, discount, \"% off\" or \"FREE\" claim in an image, and no text smaller than 3% of the image height anywhere; if a line would be smaller, cut the words.",
+    "- No inflated or vague numbers (\"1,200 cards\", \"lifetime access\", \"bestseller\"); every number matches the files.",
+    "- Never crop a page title, headline or badge at an edge.",
+    "- Before you hand over the images, put all of them side by side at 400 px wide and check each one: the headline reads at that size, the product is the biggest thing, every count matches the files, the cover pops more than a typical search result, and no two images look alike. Redo any image that fails.",
     "- If the headline needs two lines, break it at the separator (\"·\" or \"|\") and drop the separator; no line starts or ends with a separator.",
     "- Never draw a software or brand logo or an app icon (for example the PowerPoint, Word, Excel or PDF reader icons); program names appear only as plain text.",
     "- Every number in a headline or badge matches the files exactly (questions, bonus questions, slides, pages); count them in the files before writing it.",
     "- After adding it, read the headline back with OCR and fix any spelling difference.");
   if (input.decor) lines.push(
     "Decorations (every listing image, drawn in code with Pillow after the headline is placed):",
-    `- Draw ${input.decor} as simple flat shapes in the spec palette, only along the edges and in the corners; the cover (C1) gets the fullest set, the other images small corner accents.`,
-    "- Decorations never cover the product, the headline, a badge or any text; they take at most about 15% of the image, and the real product stays the hero, unchanged.",
+    `- Draw ${input.decor} in the spec palette around the product: on the cover (C1) a rich, layered set (up to about 25% of the image, with some soft depth or bokeh) so it feels festive and full; the other images get lighter corner accents.`,
+    "- Decorations never cover the product, the headline, a badge or any text, and the real product stays the hero, unchanged.",
     "- No characters, mascots, animals, logos, app icons or words in the decorations; check the finished image at thumbnail size and remove any decoration that touches the product or the text.");
   for (const visual of input.adVisuals) {
     lines.push(`### C${visual.slot}. ${visual.titleEn} - ${aspectEn(visual.aspect)}`, `Used for: ${visual.useEn}${visual.overlay ? `. Headline (add in code): "${visual.overlay}"` : ""}`, visual.prompt, "");
