@@ -38,7 +38,7 @@ import { createEtsyConnectSession, EtsyIntegrationError, getConnectedShop, getEt
 import { getTrendBoard, isTrendGroup, normalizeKeyword, readCached, scanTrend, type TrendResult, type TrendStore } from "./etsy-trends.js";
 import { seasonalBoard } from "./seasonal.js";
 import { autopilotStatus, listDiscoveries, recordScan, runAutopilot } from "./discovery.js";
-import { buildProductPlan, createEtsyPhysicalDraft, detectProductSignals, getUsdTryRate, keywordCandidates, normalizeProductInput, publishEtsyListing, type KeyValueStore } from "./product-studio.js";
+import { buildProductPlan, createEtsyPhysicalDraft, detectProductSignals, getUsdTryRate, netTryFromPriceUsd, keywordCandidates, normalizeProductInput, publishEtsyListing, type KeyValueStore } from "./product-studio.js";
 import { analyzeListingPhotos, PhotoListingError } from "./photo-listing.js";
 import { buildMarketingPlan, MarketingPlanError, normalizeMarketingInput } from "./marketing-plan.js";
 import { addEtsyTracking, listEtsyOrders, listShippingCarriers, normalizeTrackingInput } from "./etsy-orders.js";
@@ -743,6 +743,16 @@ export async function handleRequest(request: Request, env: Env, context?: {waitU
       let shopCurrency: string | undefined;
       try { shopCurrency = (await getConnectedShop(env)).currencyCode; } catch { shopCurrency = undefined; }
       return json(200, { ...guardProductPlan(buildProductPlan(product, keywords, scans, { usdTryRate, shopCurrency, signals: detectProductSignals(product) })), shopCurrency });
+    }
+    if (request.method === "POST" && url.pathname === "/api/products/net-from-price") {
+      const input = await readBody(request);
+      const priceUsd = Number(input.priceUsd);
+      if (!(priceUsd > 0 && priceUsd < 100_000)) return json(400, { error: "Geçerli bir USD fiyatı gerekli." });
+      const usdTryRate = await getUsdTryRate(env.ETSY_OAUTH as unknown as KeyValueStore | undefined, fetch);
+      if (!usdTryRate) return json(503, { error: "Güncel dolar kuru alınamadı. 'Elinize geçecek' tutarını elle yazın." });
+      let shopCurrency: string | undefined;
+      try { shopCurrency = (await getConnectedShop(env)).currencyCode; } catch { shopCurrency = undefined; }
+      return json(200, { priceUsd, usdTryRate, netTry: netTryFromPriceUsd(priceUsd, usdTryRate, shopCurrency) });
     }
     if (request.method === "POST" && url.pathname === "/api/products/etsy-publish") {
       const input = await readBody(request);

@@ -530,6 +530,15 @@ export function computePricing(input: { priceTry?: number; shippingTry?: number;
   };
 }
 
+// Sohbetin önerdiği Etsy fiyatından satıcının eline geçecek tutar: computePricing'in tersidir (aynı kesintiler).
+export function netTryFromPriceUsd(priceUsd: number, usdTryRate: number, shopCurrency?: string): number {
+  const fees = ETSY_TR_FEES;
+  const feePercent = fees.transactionRate + fees.processingRate + fees.regulatoryRate + (shopCurrency && shopCurrency !== "TRY" ? fees.conversionRate : 0);
+  const fixedFeesUsd = fees.listingFeeUsd + fees.processingFixedTry / usdTryRate;
+  const net = (priceUsd * (1 - feePercent) - fixedFeesUsd) * usdTryRate;
+  return Math.max(0, Math.floor(net / 10) * 10);
+}
+
 export async function getUsdTryRate(store: KeyValueStore | undefined, fetcher: Fetcher = fetch, override?: number): Promise<number | undefined> {
   if (override) return override;
   const cached = Number(await store?.get("fx:USD:TRY"));

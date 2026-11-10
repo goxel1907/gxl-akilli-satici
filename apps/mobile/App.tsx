@@ -1,5 +1,5 @@
 import { addLocalWhatsapp, localWhatsappLink } from "./marketing-local";
-import { photoAssistantPrompt, photoEnhancePrompt, parsePhotoAssistant, listingChatPrompt, parseListingChat, mergeListingAbout } from "./photo-assistant";
+import { photoAssistantPrompt, photoEnhancePrompt, parsePhotoAssistant, listingChatPrompt, parseListingChat, mergeListingAbout, fullListingPrompt, parseFullListing, listingTextProblems, type ImportedListingText } from "./photo-assistant";
 import { canRankTrend, compareTrendEvidence, hasBuyerDemand, trendFreshness } from "./trend-priority";
 import { listingProgress, listingTasks, physicalListingProgress, etsyTransferComplete, type ListingProgressInput } from "./listing-progress";
 import ListingMascot, { type ListingMascotProps } from "./ListingMascot";
@@ -3190,7 +3190,7 @@ function TurkishGloss({ title, tags }: { title: string; tags: string[] }) {
 }
 
 // Planın sonucu, taslak ve yayın: iki akışta da aynı. prepareProduct taslaktan hemen önce çalışır (ör. fotoğrafları yükler).
-function EtsyPlanResult({ plan, payload, etsyReady, priceSourceLabel, prepareProduct, photoCount }: any) {
+function EtsyPlanResult({ plan, payload, etsyReady, priceSourceLabel, prepareProduct, photoCount, initialText }: any) {
   const [scorecard, setScorecard] = useState<any>();
   const [scoring, setScoring] = useState(false);
   const [title, setTitle] = useState(plan.title);
@@ -3199,6 +3199,7 @@ function EtsyPlanResult({ plan, payload, etsyReady, priceSourceLabel, preparePro
   const [chatAssistant, setChatAssistant] = useState<"chatgpt" | "claude">("chatgpt");
   const [chatReply, setChatReply] = useState("");
   const [chatRequest, setChatRequest] = useState("");
+  const [chatNote, setChatNote] = useState("");
   // Türkçe karşılık kutusu planın ya da sohbetten uygulanan son başlık/etiketlerin çevirisini gösterir (her tuşta değil).
   const [gloss, setGlossSource] = useState<{ title: string; tags: string[] }>({ title: plan.title, tags: plan.tags });
   const [priceUsd, setPriceUsd] = useState(plan.pricing ? String(plan.pricing.recommendedUsd) : "");
@@ -3215,7 +3216,17 @@ function EtsyPlanResult({ plan, payload, etsyReady, priceSourceLabel, preparePro
     setPriceUsd(plan.pricing ? String(plan.pricing.recommendedUsd) : "");
     setDraft(undefined);
     setPublished(undefined);
-    rescore(plan.title, plan.tags.join(", "), plan.pricing ? String(plan.pricing.recommendedUsd) : "");
+    // Tam ilan sohbetinden gelen metin, satıcının güncel malzeme onayıyla yeniden denetlenip uygulanır.
+    const problems = initialText ? listingTextProblems(initialText.title, initialText.tags, initialText.aboutEn, Boolean(payload?.materialVerified)) : [];
+    if (initialText && !problems.length) {
+      const nextTags = initialText.tags.join(", "), nextDescription = mergeListingAbout(plan.description, initialText.aboutEn);
+      setTitle(initialText.title); setTags(nextTags); setDescription(nextDescription); setGlossSource({ title: initialText.title, tags: initialText.tags });
+      setChatNote("Başlık, 13 etiket ve tanıtım paragrafı ChatGPT/Claude yanıtından uygulandı; fiyat ve kargo uygulamanın hesabıdır.");
+      rescore(initialText.title, nextTags, plan.pricing ? String(plan.pricing.recommendedUsd) : "", nextDescription);
+    } else {
+      setChatNote(initialText ? `Sohbetten gelen metin uygulanmadı: ${problems.join(" ")}` : "");
+      rescore(plan.title, plan.tags.join(", "), plan.pricing ? String(plan.pricing.recommendedUsd) : "");
+    }
   }, [plan]);
   // İlan karnesi: başlık, etiket, açıklama, fotoğraf ve fiyat sunucuda açık eşiklerle puanlanır.
   // Sohbet asistanına gidecek doğrulanmış bilgiler: yalnız satıcının girdiği ve onayladığı ölçü/malzeme/köken.
@@ -3340,6 +3351,7 @@ function EtsyPlanResult({ plan, payload, etsyReady, priceSourceLabel, preparePro
         <Text style={styles.warningText}>{pricing.note}</Text>
       </View>}
       <QualityNote quality={plan.quality} />
+      {!!chatNote && <Text style={chatNote.startsWith("Sohbetten gelen metin uygulanmadı") ? styles.warningText : styles.formHint}>{chatNote}</Text>}
       <Field label={`Başlık (${title.length}/140)`} value={title} onChangeText={setTitle} multiline />
       <Field label="Etiketler (13 adet)" value={tags} onChangeText={setTags} multiline autoCapitalize="none" />
       <TurkishGloss title={gloss.title} tags={gloss.tags} />
@@ -3840,7 +3852,7 @@ function HelpScreen({ online, channels, onExpert, onSell }: any) {
 // "İleri" eksik bilgiyi söyler. Uzman modda form tek sayfadır.
 const WIZARD_STEPS = ["Fotoğraflar", "Ürün bilgisi", "Renk ve özellikler", "Fiyat ve kargo", "Önizleme ve gönder"];
 const WIZARD_HINTS = [
-  "Ürünün 1–10 gerçek fotoğrafını çekin veya galeriden seçin (5+ önerilir). İsterseniz 'Fotoğraftan otomatik doldur' ile tür ve adı önerdirin; İleri düğmesi kendiliğinden analiz yapmaz.",
+  "Ürünün 1–10 gerçek fotoğrafını çekin veya galeriden seçin (5+ önerilir). En kolay yol: 'Tüm ilan talimatını paylaş' ile fotoğrafları ve kısa videoyu ChatGPT/Claude'a gönderin, gelen JSON ile 'Tüm boşlukları doldur'. İleri düğmesi kendiliğinden analiz yapmaz.",
   "Ürün türünü, adını ve doğruladığınız bilgileri yazın. Otomatik doldurma veya sohbet analizi öneri getirdiyse kontrol edin; emin olmadığınız bilgiyi yazmayın.",
   "Renkleri ve öne çıkan özellikleri Türkçe yazabilirsiniz; sistem İngilizceye çevirir. Bu adım isteğe bağlıdır.",
   "Satıştan elinize geçmesini istediğiniz tutarı ve ABD'ye kargo ücretini yazın. Etsy kesintileri fiyata eklenir; kargoyu alıcı öder ve ilan sayfasında görür.",
@@ -3887,6 +3899,9 @@ function PhotoListingStudio({ online, etsyReady, wizard, onStepChange }: any) {
   const [photoAssistant, setPhotoAssistant] = useState("chatgpt");
   const [assistantReply, setAssistantReply] = useState("");
   const [externalRequest, setExternalRequest] = useState<{ id: string; key: string }>();
+  const [fullRequest, setFullRequest] = useState("");
+  const [fullReply, setFullReply] = useState("");
+  const [chatText, setChatText] = useState<ImportedListingText>();
   const knit = kind === "knitwear";
   const inputKey = generationKey({ sourceId, photos, kind, origin, maker, craft, audience, nameTr, productNounEn, material, materialVerified, size, chestCm, lengthCm, widthCm, fiber, care, colors, attributes, weightGrams, beadCount, yearMade, conditionNote, conditionLevel, priceTry, shippingTry, quantity, readyToShip, riskFlags });
   const liveInputKey = useRef(inputKey); liveInputKey.current = inputKey;
@@ -3905,6 +3920,55 @@ function PhotoListingStudio({ online, etsyReady, wizard, onStepChange }: any) {
     if (result.audience !== "unknown") setAudience(result.audience);
     setRiskFlags(current => [...new Set([...current, ...result.riskFlags])]);
     setPlan(undefined);
+  };
+  // Tam ilan sohbetten: istek ürüne (sourceId) bağlıdır, fotoğraflara değil; asistanın hazırladığı kapak ve
+  // görseller eklenince eski fotoğraflar değişeceği için yanıt yine uygulanabilir.
+  const shareFullPrompt = async () => {
+    const id = `${sourceId}-full-${Date.now()}`;
+    try {
+      await Share.share({ message: fullListingPrompt(photoAssistant === "claude" ? "claude" : "chatgpt", { kind, nameTr }, id) });
+      setFullRequest(id); setFullReply("");
+    } catch (error) { Alert.alert("Paylaşılamadı", errorText(error)); }
+  };
+  const importFull = async () => {
+    if (!fullRequest) return Alert.alert("Önce talimatı paylaş", "'Tüm ilan talimatını paylaş' ile talimatı ChatGPT veya Claude'a gönder; gelen JSON'u buraya yapıştır.");
+    let result;
+    try { result = parseFullListing(fullReply, fullRequest); } catch (error) { return Alert.alert("Yanıt uygulanamadı", errorText(error)); }
+    const item = result.product;
+    setKind(item.productKind);
+    setOrigin(item.origin || (item.productKind === "vintage" ? "vintage" : item.productKind === "knitwear" ? "made_by_seller" : "unknown"));
+    setNameTr(item.nameTr); setProductNounEn(item.productNounEn);
+    if (item.craft !== "none") setCraft(item.craft);
+    if (item.audience !== "unknown") setAudience(item.audience);
+    if (item.materialTr) { if (item.productKind === "knitwear") setFiber(item.materialTr); else setMaterial(item.materialTr); }
+    setMaterialVerified(false);
+    setColors(item.colors.join(", ")); setAttributes(item.attributesEn.join(", "));
+    if (item.conditionNoteEn) setConditionNote(item.conditionNoteEn);
+    if (item.yearMade) setYearMade(String(item.yearMade));
+    if (item.weightGrams) setWeightGrams(String(item.weightGrams));
+    if (item.lengthCm) setLengthCm(String(item.lengthCm));
+    if (item.widthCm) setWidthCm(String(item.widthCm));
+    if (item.chestCm) setChestCm(String(item.chestCm));
+    if (item.beadCount) setBeadCount(String(item.beadCount));
+    if (result.shipping.estimatedUsShippingTry) setShippingTry(String(Math.round(result.shipping.estimatedUsShippingTry)));
+    setChatText(result.listing); setPlan(undefined);
+    let priceLine = "";
+    if (result.pricing.suggestedPriceUsd) {
+      try {
+        const net = await apiJson("/api/products/net-from-price", { method: "POST", headers: apiHeaders(true), body: JSON.stringify({ priceUsd: result.pricing.suggestedPriceUsd }) });
+        if (net.netTry > 0) { setPriceTry(String(net.netTry)); priceLine = `Fiyat önerisi ${result.pricing.suggestedPriceUsd} USD → Etsy kesintilerinden sonra elinize ≈ ${net.netTry} TL ('Elinize geçecek' alanına yazıldı).`; }
+      } catch { priceLine = `Fiyat önerisi ${result.pricing.suggestedPriceUsd} USD. Kur alınamadı; 'Elinize geçecek' tutarını elle yazın.`; }
+    }
+    setFullReply("");
+    if (wizard) goTo(2);
+    Alert.alert("Boşluklar dolduruldu", [
+      "Ürün bilgisi, ölçüler, renkler, başlık, 13 etiket ve tanıtım paragrafı aktarıldı.",
+      priceLine,
+      result.shipping.estimatedUsShippingTry ? `Kargo tahmini ${Math.round(result.shipping.estimatedUsShippingTry)} TL: PTT ya da kargo firmasından gerçek fiyatı sorup düzeltin.` : "Kargo ücretini yazın.",
+      "Kontrol edin: 'Bu ürünü kim yaptı?' yanıtı, malzeme damgası/belge kutusu (işaretlemeden gümüş/altın yazılmaz) ve ölçüler.",
+      "Asistanın hazırladığı kapak ve görselleri indirip 1. adımdaki fotoğrafların yerine ekleyin (kapak ilk sırada).",
+      ...result.questionsTr.map((question) => `• ${question}`)
+    ].filter(Boolean).join("\n"));
   };
   const sharePhotoPrompt = async () => {
     if (!photos.length) return Alert.alert("Fotoğraf gerekli", "Önce bu ürünün fotoğraflarını seçin.");
@@ -4061,7 +4125,7 @@ function PhotoListingStudio({ online, etsyReady, wizard, onStepChange }: any) {
     setPhotos([]); setKind(""); setOrigin("made_by_seller"); setMaker("me"); setCraft(""); setAudience("women");
     setNameTr(""); setProductNounEn(""); setMaterial(""); setMaterialVerified(false); setSize(""); setChestCm(""); setLengthCm(""); setWidthCm("");
     setFiber(""); setCare("hand_wash"); setColors(""); setAttributes(""); setWeightGrams(""); setBeadCount(""); setYearMade(""); setConditionNote(""); setConditionLevel("");
-    setPriceTry(""); setShippingTry(""); setQuantity("1"); setReadyToShip(true); setAnalysis(undefined); setRiskFlags([]); setPlan(undefined); setPayload(undefined);
+    setPriceTry(""); setShippingTry(""); setQuantity("1"); setReadyToShip(true); setAnalysis(undefined); setRiskFlags([]); setPlan(undefined); setPayload(undefined); setChatText(undefined); setFullRequest(""); setFullReply("");
   };
 
   const [showChat, setShowChat] = useState(false);
@@ -4094,6 +4158,15 @@ function PhotoListingStudio({ online, etsyReady, wizard, onStepChange }: any) {
       <Pressable style={styles.secondaryButton} onPress={() => addPhotos(false)}><Text style={styles.secondaryButtonText}>Galeriden seç</Text></Pressable>
     </View>
     <Text style={styles.formHint}>Gün ışığında, sade zeminde çekin: önden, arkadan, doku veya damga yakın planı ve ölçü gösteren bir kare. Ön, arka ve detay fotoğraflarıyla ürünü açıkça gösterin.</Text>
+    <View style={[styles.analysisCard, { borderColor: "#315B4C", borderWidth: 1 }]}>
+      <Text style={styles.cardTitle}>ChatGPT / Claude ile tüm ilanı hazırla (önerilen)</Text>
+      <Text style={styles.formHint}>Plus üyeliğini kullanır. 1) Talimatı paylaş; sohbete fotoğrafları ve kısa videoyu ekle. 2) Asistan sorduğu birkaç bilgiyi yanıtla. 3) Araştırma, başlık, 13 etiket, açıklama, ABD fiyatı, kargo tahmini ve ilgi çekici kapak hazırlanır. 4) Gelen JSON'u buraya yapıştır; boşluklar dolar. Kapak ve görselleri indirip fotoğrafların yerine ekle.</Text>
+      <ChipGroup options={[{ id: "chatgpt", label: "ChatGPT" }, { id: "claude", label: "Claude" }]} value={photoAssistant} onChange={setPhotoAssistant} />
+      <Pressable style={styles.secondaryButton} onPress={shareFullPrompt}><Text style={styles.secondaryButtonText}>Tüm ilan talimatını paylaş</Text></Pressable>
+      <Field label="Sohbetten gelen tam ilan JSON'u" value={fullReply} onChangeText={setFullReply} multiline autoCapitalize="none" />
+      <Pressable style={styles.secondaryButton} onPress={importFull}><Text style={styles.secondaryButtonText}>Tüm boşlukları doldur</Text></Pressable>
+      {!!chatText && <Text style={styles.formHint}>Sohbetten gelen başlık ve 13 etiket hazır; 'Etsy'de araştır ve ilanı hazırla' adımında ilana uygulanacak.</Text>}
+    </View>
     {photos.length > 0 && <View style={styles.analysisCard}>
       <Text style={styles.cardTitle}>Fotoğrafları güzelleştir (isteğe bağlı)</Text>
       <Text style={styles.formHint}>Talimatı ChatGPT veya Claude'a gönder, fotoğrafları sohbete ekle. Ürün değiştirilmeden ışık, renk, kırpma ve arka plan düzeltilir; Etsy fotoğrafın gerçek ürünü göstermesini ister. Hazır fotoğrafları indirip buradaki eski fotoğrafları silerek yenilerini ekle, sonra devam et.</Text>
@@ -4183,7 +4256,7 @@ function PhotoListingStudio({ online, etsyReady, wizard, onStepChange }: any) {
     {show(5) && <>
     <Pressable style={[styles.analyzeButton, { marginTop: 12 }, (Boolean(progress) || !online) && styles.primaryDisabled]} disabled={Boolean(progress) || !online} onPress={prepare}>{progress ? <ActivityIndicator color="white" /> : <Ionicons name="search" size={18} color="white" />}<Text style={styles.primaryText}>{plan ? "Yeniden araştır" : "Etsy'de araştır ve ilanı hazırla"}</Text></Pressable>
     {!!progress && <Text style={styles.formHint}>{progress}</Text>}
-    {currentPlan && <EtsyPlanResult key={currentPlan.inputKey} plan={currentPlan} payload={payload} etsyReady={etsyReady} priceSourceLabel="Elinize geçecek tutar" prepareProduct={uploadPhotos} photoCount={photos.length} />}
+    {currentPlan && <EtsyPlanResult key={currentPlan.inputKey} plan={currentPlan} payload={payload} etsyReady={etsyReady} priceSourceLabel="Elinize geçecek tutar" initialText={chatText} prepareProduct={uploadPhotos} photoCount={photos.length} />}
     </>}
     {wizard && <View style={styles.wizardNav}>
       {step > 1 && <Pressable style={styles.secondaryButton} onPress={() => goTo(step - 1)}><Text style={styles.secondaryButtonText}>← Geri</Text></Pressable>}

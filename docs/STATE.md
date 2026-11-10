@@ -57,3 +57,6 @@ Güncelleme: 9 Kasım 2026
 - Fiziksel ilan sonucu ekranında "ChatGPT / Claude ile ilan metnini güçlendir": talimata Etsy rakip verisi gider, yanıt
   (GXL_PHYSICAL_LISTING_V1: başlık, 13 etiket, tanıtım paragrafı) denetlenip uygulanır; fiyat/kargo/teslim bölümleri uygulamada kalır.
   Sunucu taslakta marka/telif adı ve doğrulanmamış gümüş/altın iddiasını engeller ("gold tone" serbest).
+- Fiziksel tam ilan sohbetten (GXL_PHYSICAL_FULL_V1): 1. adımda "Tüm ilan talimatını paylaş" → ChatGPT/Claude fotoğraf+video,
+  birkaç soru, araştırma, başlık/13 etiket/tanıtım, ABD fiyatı, kargo tahmini, kapak ve görseller → JSON "Tüm boşlukları doldur".
+  USD öneri /api/products/net-from-price ile "Elinize geçecek" TL'ye çevrilir. Metin ilan ekranında malzeme onayıyla yeniden denetlenir.
