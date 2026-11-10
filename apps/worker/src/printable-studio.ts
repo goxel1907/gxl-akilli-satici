@@ -151,7 +151,7 @@ export const PRINTABLE_KINDS: Record<PrintableKind, KindProfile> = {
     designEn: [PRINT_SAFE, "Line art at 300 dpi, with the art filling the page inside the safe margins", "Generous coloring areas suited to the stated audience (bold and simple for kids, intricate for adults)"],
     textRuleEn: "US English spelling, no typos; each coloring page carries only a small page number and © line in the bottom margin, outside the art, and the cover carries none.",
     signatureEn: "a theme twist or interactive element (hidden objects, a story thread across pages, or a matching colored reference) designed for this product",
-    includedEn: ["Single-sided pages", "US Letter + A4", "Color test page"],
+    includedEn: ["Single-sided pages", "Color test page"],
     tagStems: ["coloring book", "coloring sheets", "printable coloring", "coloring pdf", "relaxing coloring", "coloring pages", "coloring gift", "line art coloring", "coloring bundle", "coloring activity", "coloring for adults", "simple coloring"],
     vocabulary: ["coloring", "colouring", "book", "pages", "sheets", "relaxing", "adult", "adults"],
     pageWord: "designs"
@@ -314,7 +314,7 @@ export const PRINTABLE_KINDS: Record<PrintableKind, KindProfile> = {
     designEn: [PRINT_SAFE, INK, "Large print: grid letters at least 18 pt, word lists at least 14 pt, high-contrast black on white"],
     textRuleEn: TEXT_PAGES,
     signatureEn: "a themed twist (for example a hidden message spelled by the leftover letters) designed for this product",
-    includedEn: ["Large-print puzzles", "Answer keys", "US Letter + A4"],
+    includedEn: ["Large-print puzzles", "Answer keys"],
     tagStems: ["word search", "large print puzzles", "puzzle book", "printable puzzles", "sudoku printable", "word find", "brain games", "puzzle pages", "puzzles for adults", "activity pages", "word puzzles", "puzzles with answers", "large print games"],
     vocabulary: ["puzzle", "puzzles", "word", "words", "search", "sudoku", "large", "print", "book", "games", "brain", "find", "seniors", "adults", "activity"],
     pageWord: "pages"
@@ -417,7 +417,7 @@ export const PRINTABLE_KINDS: Record<PrintableKind, KindProfile> = {
     designEn: ["Margins between 0.5 and 1 in; the name at 24-36 pt, section headings at 12-14 pt and body text at 10-11 pt", "Fonts that come with Word and Google Docs (for example Arial, Georgia or Garamond)", "One accent color from the palette; black text on white so it prints well and screening software reads it"],
     textRuleEn: "US English spelling, no typos; the resume, cover letter and references pages carry no page numbers, footer or product name, and only the quick-start guide carries the license line.",
     signatureEn: "a useful extra (for example a matching thank-you letter template or a second skills layout) designed for this product",
-    includedEn: ["One-page and two-page resume", "Cover letter and references page", "US Letter and A4"],
+    includedEn: ["One-page and two-page resume", "Cover letter and references page"],
     tagStems: ["resume template", "cover letter", "modern resume", "professional resume", "simple resume", "resume docx", "one page resume", "resume design", "minimalist resume", "creative resume", "job resume", "resume bundle", "editable resume", "cv template"],
     vocabulary: ["resume", "resumes", "template", "templates", "cover", "letter", "cv", "professional", "modern", "simple", "minimalist", "creative", "job", "docx", "editable", "references", "page"],
     pageWord: "templates"

@@ -7,7 +7,7 @@ import { inferPrintableKind, scoreTrend, TREND_NICHES } from "../../worker/src/e
 import { findIpRisks } from "../../worker/src/ip-guard.js";
 import { buildPatternSeed } from "../../worker/src/pattern-seed.js";
 import { buildPatternBrief } from "../../worker/src/pattern-studio.js";
-import { buildPrintableBrief, buildPrintableListing } from "../../worker/src/printable-studio.js";
+import { buildPrintableBrief, buildPrintableListing, normalizePrintablePlanInput } from "../../worker/src/printable-studio.js";
 import { handleRequest } from "../../worker/src/index.js";
 
 const NOW = Date.parse("2026-10-08T12:00:00Z");
@@ -295,4 +295,13 @@ test("every package carries a scripted QA protocol tuned to its product type", (
   assert.match(doily.masterPrompt, /computed count must equal the stated count/);
   assert.match(doily.masterPrompt, /ABBREVIATIONS — .*Craft Yarn Council/);
   assert.ok(!/11 AM, 12 PM/.test(doily.masterPrompt), "pattern packages do not get planner-only checks");
+});
+
+test("the description lists formats once and only the formats actually chosen", () => {
+  for (const [kind, productType] of [["puzzles", "word search"], ["resume", "resume template"], ["coloring", "coloring book"]] as const) {
+    const input = normalizePrintablePlanInput({ kind, productType, keyword: productType, formats: ["US Letter"] } as any);
+    const description = buildPrintableListing(input, buildPrintableBrief(input).name).description;
+    assert.doesNotMatch(description, /US Letter \+ A4|US Letter and A4/, kind);
+    assert.equal((description.match(/Formats:/g) || []).length, 1, kind);
+  }
 });
