@@ -3312,8 +3312,8 @@ function EtsyPlanResult({ plan, payload, etsyReady, priceSourceLabel, preparePro
         try {
           const result = await apiJson("/api/products/etsy-publish", { method: "POST", headers: apiHeaders(true), body: JSON.stringify({ confirm: true, listingId: draft.listingId }) });
           setPublished(result);
-          Alert.alert("İlan yayında", "Etsy ilanı alıcılara açıldı.", [{ text: "İlanı aç", onPress: () => openUrl(result.url, "Etsy ilanı") }, { text: "Tamam" }]);
-        } catch (error) { Alert.alert("Yayınlanamadı", `${errorText(error)}\nTaslağı Etsy'de açıp eksik alanı tamamlayın, sonra tekrar deneyin.`); }
+          Alert.alert("İlan yayında", `Etsy ilanı alıcılara açıldı.${result.completed?.length ? ` Yayından önce uygulama Etsy'de eksik olanları tamamladı: ${result.completed.join(", ")}.` : ""}`, [{ text: "İlanı aç", onPress: () => openUrl(result.url, "Etsy ilanı") }, { text: "Tamam" }]);
+        } catch (error) { Alert.alert("Yayınlanamadı", `${errorText(error)}\nUygulama tamamlayabildiği alanları (iade politikası, hazırlık süresi, kargo profili) kendisi ekledi. Yukarıda adı geçen eksik varsa Etsy'de taslağı açıp yalnız onu tamamlayın, sonra buradan yeniden 'Etsy'de yayınla'ya basın.`); }
         finally { setPublishing(false); }
       } }
     ]);
@@ -3939,7 +3939,8 @@ function PhotoListingStudio({ online, etsyReady, wizard, onStepChange }: any) {
     if (item.craft !== "none") setCraft(item.craft);
     if (item.audience !== "unknown") setAudience(item.audience);
     if (item.materialTr) { if (item.productKind === "knitwear") setFiber(item.materialTr); else setMaterial(item.materialTr); }
-    setMaterialVerified(false);
+    // Satıcı sohbette damga/belge olduğunu söylediyse kutu işaretli gelir (uyarıda yazılır; yanlışsa kaldırılır).
+    setMaterialVerified(Boolean(item.hallmarkConfirmed));
     setColors(item.colors.join(", ")); setAttributes(item.attributesEn.join(", "));
     if (item.conditionNoteEn) setConditionNote(item.conditionNoteEn);
     if (item.yearMade) setYearMade(String(item.yearMade));
@@ -3963,8 +3964,9 @@ function PhotoListingStudio({ online, etsyReady, wizard, onStepChange }: any) {
       "Ürün bilgisi, ölçüler, renkler, başlık, 13 etiket ve tanıtım paragrafı aktarıldı.",
       priceLine,
       result.shipping.estimatedUsShippingTry ? `Kargo ${Math.round(result.shipping.estimatedUsShippingTry)} TL: Shipentegra 'Fiyat Hesapla' ile gerçek fiyatı kontrol edin; kargo fiyata eklenir, alıcı ücretsiz kargo görür.` : "Kargo maliyetinizi yazın.",
-      /gümüş|gumus|925|altın|altin|silver|gold/i.test(item.materialTr + item.nameTr) ? "Malzeme gümüş/altın: üründe 925 gibi ayar damgası ya da belge varsa 'Ayar damgası veya malzeme belgesi var' kutusunu işaretleyin; işaretlenmezse ilan Etsy'ye gönderilmez." : "",
-      "Kontrol edin: 'Bu ürünü kim yaptı?' yanıtı ve ölçüler.",
+      !item.origin && item.productKind !== "knitwear" && item.productKind !== "vintage" ? "⚠ 'Bu ürünü kim yaptı?' sorusu yanıtsız: 2. adımda seçin (Etsy bunu zorunlu tutar)." : "",
+      /gümüş|gumus|925|altın|altin|silver|gold/i.test(item.materialTr + item.nameTr) ? (item.hallmarkConfirmed ? "Sohbette 925 damgası/belge olduğunu söylediğiniz için 'Ayar damgası veya malzeme belgesi var' kutusu işaretlendi; yanlışsa kaldırın." : "⚠ Malzeme gümüş/altın: damga ya da belge varsa 'Ayar damgası veya malzeme belgesi var' kutusunu işaretleyin; işaretlenmezse ilan Etsy'ye gönderilmez.") : "",
+      "Kontrol edin: ölçüler ve tane sayısı.",
       "Asistanın görselleri sizin ürününüzle birebir aynı olmalı. Farklı bir ürün çizdiyse o görseli kullanmayın; kendi fotoğraflarınızla devam edin.",
       "Görseller sizinkiyle aynıysa indirip 1. adımdaki fotoğrafların yerine ekleyin (kapak ilk sırada).",
       ...result.questionsTr.map((question) => `• ${question}`)
@@ -4129,7 +4131,7 @@ function PhotoListingStudio({ online, etsyReady, wizard, onStepChange }: any) {
   };
 
   const [showChat, setShowChat] = useState(false);
-  const photoGuide = physicalListingProgress({ wizardStep: wizard ? step : undefined, photos: photos.length, kind, name: nameTr, price: parseAmount(priceTry), shipping: parseAmount(shippingTry) });
+  const photoGuide = physicalListingProgress({ wizardStep: wizard ? step : undefined, photos: photos.length, kind, name: nameTr, price: parseAmount(priceTry), shipping: parseAmount(shippingTry), origin });
   return <>
     {!currentPlan && <ListingMascot {...photoGuide}
       roadmap={WIZARD_STEPS} actionLabel={!photos.length ? "Goxi ile galeriden fotoğraf seç" : wizard && step < 5 ? "Goxi ile sonraki adıma geç" : "Goxi ile Etsy araştırmasını başlat"}

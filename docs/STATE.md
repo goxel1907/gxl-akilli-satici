@@ -69,3 +69,8 @@ Güncelleme: 9 Kasım 2026
 - KARGO KARARI (11 Kasım, kullanıcı): kargoyu satıcı öder (Shipentegra), ücret ürün fiyatına eklenir, alıcı "Free shipping" görür.
   computePricing kargoyu başabaşa ekler; açıklama "Free shipping to the US with a tracking number"; kargo profili ücretsiz (0) açılır;
   taslak ABD ücreti 0 olan profili seçer, ücretli profil varsa uyarır. net-from-price kargoyu düşer.
+- 11 Kasım akşam (siyah mine tesbih denemesi): Etsy taslağında yayın için zorunlu alanlar eksik kalıyordu. Artık taslakta
+  hazırlık süresi (processing) profili yoksa oluşturulur (hazır: 1-3, siparişe: 5-10 gün); "Etsy'de yayınla" önce ilanı okur,
+  eksik iade politikası/hazırlık süresi/kargo profilini PATCH ile tamamlar, kategori/kim yaptı/fotoğraf eksikse açıkça söyler.
+  Açıklamada Türkçe harf varsa taslak gönderilmez. Tam ilan JSON'u origin (1-4 numaralı soru) ve hallmarkConfirmed taşır;
+  Goxi "kim yaptı" yanıtsızsa bunu adıyla ister.
