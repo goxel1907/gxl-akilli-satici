@@ -25,7 +25,7 @@ Güncelleme: 9 Kasım 2026
 - Fiziksel ürün: bebek/çocuk algılanır ("for women/gift for her" yerine baby…, CPSIA uyarısı); çanta/battaniyeye giyim etiketi yok; takıda 13 etiket dolar; açıklamada ABD teslim süresi (7-21 gün); "ay yıldız"/"nazar" çevirisi.
 - Video: taslaktan sonra "Video ekle (5-15 sn)" → POST /api/etsy/listings/:id/video → Etsy (sunucuda saklanmaz).
 - Fotoğraf analizi: Gemini → OpenAI → yoksa ücretsiz Cloudflare Workers AI (wrangler "ai" bağlaması, llama-3.2-11b-vision, lisans 'agree' otomatik).
-- Kargo ALICIYA AİT (kullanıcı kararı): fiyata eklenmez; kargo profiline kesintiyi karşılayan tutar (buyerShippingTry) yazılır, Etsy alıcıya gösterir. Not: Etsy ABD'de 35$+ ücretsiz kargoyu aramada öne alır.
+- (Eski, 9 Kasım) Kargo alıcıya aitti; 11 Kasım'da değişti (aşağıda).
 - Araştırma: arama türü söylemiyorsa tür kelimesi eklenir (sunum oyunu → "powerpoint"); "christmas trivia game" artık öneri alıyor.
 - Görsel seçimi: dosyalardan seçme + ada göre doğal sıralama + ekleyerek seçme + temizle.
 - Büyük dosyada (>2.5 MB) dosya denetimi hafif modda; sunucu düşerse taslağa devam edilebilir.
@@ -66,3 +66,6 @@ Güncelleme: 9 Kasım 2026
   kategori tam ad → son iki → son kelime, saç/craft supplies cezalı. İade politikası yoksa taslakta Etsy standardı (30 gün)
   oluşturulur. Sunucu Türkçe başlık/etiketi reddeder; Türkçe "İngilizce ad" yok sayılır ("gm tesbih" olmaz).
   Kapak: kodla kesip stüdyo zeminine koyma (GrabCut). Kargo: Shipentegra "Fiyat Hesapla" teklifi.
+- KARGO KARARI (11 Kasım, kullanıcı): kargoyu satıcı öder (Shipentegra), ücret ürün fiyatına eklenir, alıcı "Free shipping" görür.
+  computePricing kargoyu başabaşa ekler; açıklama "Free shipping to the US with a tracking number"; kargo profili ücretsiz (0) açılır;
+  taslak ABD ücreti 0 olan profili seçer, ücretli profil varsa uyarır. net-from-price kargoyu düşer.

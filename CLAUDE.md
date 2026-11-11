@@ -36,4 +36,5 @@ printable-studio.ts büyük dosyalardır, yalnız gereken satır aralığını o
 ## Kullanıcı tercihleri
 - Ücretsiz araçlar. Fazla "devam" istenmesin. Görseller rakiplerden sıyrılsın (büyük başlık, ürün baskın).
 - Goxi (ilan rehberi kartı) sade olsun; ayrıntı kapalı başlar.
+- Fiziksel üründe kargoyu satıcı öder (Shipentegra), ücret fiyata eklenir; alıcı "Free shipping" görür (11 Kasım kararı).
 - Her işten sonra kısa Türkçe özet: ne yapıldı, kullanıcı ne yapacak.

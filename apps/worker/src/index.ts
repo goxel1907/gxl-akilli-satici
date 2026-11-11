@@ -752,7 +752,8 @@ export async function handleRequest(request: Request, env: Env, context?: {waitU
       if (!usdTryRate) return json(503, { error: "Güncel dolar kuru alınamadı. 'Elinize geçecek' tutarını elle yazın." });
       let shopCurrency: string | undefined;
       try { shopCurrency = (await getConnectedShop(env)).currencyCode; } catch { shopCurrency = undefined; }
-      return json(200, { priceUsd, usdTryRate, netTry: netTryFromPriceUsd(priceUsd, usdTryRate, shopCurrency) });
+      const shippingTry = Number(input.shippingTry) > 0 ? Number(input.shippingTry) : 0;
+      return json(200, { priceUsd, usdTryRate, netTry: netTryFromPriceUsd(priceUsd, usdTryRate, shopCurrency, shippingTry) });
     }
     if (request.method === "POST" && url.pathname === "/api/products/etsy-publish") {
       const input = await readBody(request);
