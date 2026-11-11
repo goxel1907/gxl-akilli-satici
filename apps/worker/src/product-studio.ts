@@ -4,11 +4,15 @@ import type { MarketStrategy } from "./market-strategy.js";
 import { evaluateMarketplacePolicies, type ProductOrigin, type RiskFlag } from "../../api/src/marketplace-policy.js";
 import { generateStructuredObject, hasAiProvider, type AiRuntimeEnv } from "../../api/src/structured-ai.js";
 import { etsyRequest, EtsyIntegrationError, getConnectedShop, type EtsyRuntimeEnv } from "./etsy.js";
-import { returnPolicies, shippingProfiles } from "./etsy-setup.js";
+import { createReturnPolicy, returnPolicies, shippingProfiles } from "./etsy-setup.js";
 import type { TrendResult } from "./etsy-trends.js";
 import { normalizeEtsyTags, normalizeEtsyTitle, validateEtsyListingText } from "./pattern-studio.js";
 import { termsToEnglish } from "./tr-glossary.js";
 import { findIpRisks } from "./ip-guard.js";
+
+// Etsy ABD ilanı İngilizcedir: "Türkiye" dışında Türkçe harf ya da sık Türkçe kelime görülürse metin Türkçe sayılır.
+export const TURKISH_TEXT = /[çğıöşüÇĞİÖŞÜ]|\b(ve|için|ile|el yapımı|gümüş|gumus|tesbih|tespih|damgalı|damgali|hediye|kolye|yüzük|bilezik|küpe|kazak|hırka|örgü)\b/i;
+export function looksTurkish(text: string): boolean { return TURKISH_TEXT.test(text.replace(/Türkiye/g, "")); }
 
 type Fetcher = typeof fetch;
 
@@ -309,7 +313,8 @@ export function normalizeProductInput(raw: Record<string, unknown>): ProductPlan
     titleTr,
     descriptionTr: raw.descriptionTr ? String(raw.descriptionTr).trim().slice(0, 3_000) : undefined,
     categoryHint: raw.categoryHint ? String(raw.categoryHint).trim().slice(0, 60) : undefined,
-    productNounEn: raw.productNounEn ? String(raw.productNounEn).toLowerCase().replace(/[^a-z\s'-]/g, "").trim().slice(0, 40) || undefined : undefined,
+    // Türkçe yazılmış ad ("gümüş tesbih") harfleri silinip "gm tesbih" gibi bozuk İngilizceye çevrilmez; yok sayılır.
+    productNounEn: raw.productNounEn && !TURKISH_TEXT.test(String(raw.productNounEn)) ? String(raw.productNounEn).toLowerCase().replace(/[^a-z\s'-]/g, "").replace(/\s+/g, " ").trim().slice(0, 40) || undefined : undefined,
     material: raw.material ? String(raw.material).trim().slice(0, 60) : undefined,
     materialVerified: raw.materialVerified === true,
     weightGrams: positiveNumber(raw.weightGrams, 100_000),
@@ -378,7 +383,8 @@ export function detectProductSignals(input: ProductPlanInput): ProductSignals {
   const extraMaterials = isKnitwear ? [] : found.slice(1).filter((item) => item.short !== material?.short && !item.precious);
   const isTesbih = input.productKind === "tesbih" || nounMatch?.en === "prayer beads" || input.productNounEn === "prayer beads";
   const isVintage = input.origin === "vintage" || input.productKind === "vintage" || hasStem(words, ["vintage", "antika", "antique"]);
-  let noun = input.productNounEn || (isTesbih ? "prayer beads" : nounMatch?.en) || "item";
+  // Tesbihin adı her zaman "prayer beads"tır: "sterling silver tasbih prayer beads" gibi uzun ad başlığı ve kategoriyi bozar.
+  let noun = isTesbih ? "prayer beads" : input.productNounEn || nounMatch?.en || "item";
   const craftWord = craft === "crochet" ? "crochet" : craft === "knit" ? "hand knit" : "";
   if (isKnitwear && craftWord && noun !== "item" && !/\b(crochet|knit|knitted)\b/.test(noun)) noun = `${craftWord} ${noun}`;
   // "Kilim yastık kılıfı" bir kilim değil, kilimden yastık kılıfıdır.
@@ -881,7 +887,9 @@ export async function findTaxonomyId(env: EtsyRuntimeEnv, store: KeyValueStore, 
       const name = String(node.name || "").toLowerCase();
       const fullPath = `${path} > ${name}`;
       if (node.id && name.includes(term)) {
-        const score = depth + (prefer?.test(fullPath) ? 10 : 0) - (!childTerm && CHILD_PATH.test(fullPath) ? 20 : 0);
+        // Bitmiş ürün "Craft Supplies" (boncuk, malzeme) ya da saç aksesuarı altına girmez; tam ad eşleşmesi öne geçer.
+        const score = depth + (prefer?.test(fullPath) ? 10 : 0) - (!childTerm && CHILD_PATH.test(fullPath) ? 20 : 0)
+          - (/craft supplies|hair/.test(fullPath) && !/craft|hair/.test(term) ? 30 : 0) + (name === term ? 5 : 0);
         if (!best || score > best.score) best = { id: node.id, score };
       }
       for (const child of node.children || []) visit(child, depth + 1, fullPath);
@@ -920,6 +928,8 @@ export async function createEtsyPhysicalDraft(
   const check = validateEtsyListingText({ title, tags, materials: listing.materials });
   if (check.issues.some((issue) => !issue.startsWith("Etsy 13 etiket"))) throw new EtsyIntegrationError("VALIDATION_FAILED", check.issues.join(" "), 400);
   if (!(listing.priceUsd > 0)) throw new EtsyIntegrationError("VALIDATION_FAILED", "Etsy fiyatı gerekli.", 400);
+  // Taslak yalnız İngilizce gider: Türkçe başlık/etiket ABD'li alıcıya görünmemeli (tesbih "tasbih" etiketi İngilizcede de aranır).
+  if (looksTurkish(title) || tags.some((tag) => looksTurkish(tag.replace(/\b(tesbih|tespih)\b/g, "")))) throw new EtsyIntegrationError("VALIDATION_FAILED", "Başlık veya etiketlerde Türkçe var. Etsy ABD ilanı İngilizce olmalı; İngilizce başlık ve etiketlerle yeniden deneyin.", 400);
   // Başlık, etiket ve açıklama sohbetten de gelebilir: marka/telif adı ve doğrulanmamış değerli maden iddiası Etsy'ye gitmez.
   const ipRisks = findIpRisks([title, ...tags, listing.description].join(" \n "));
   if (ipRisks.length) throw new EtsyIntegrationError("VALIDATION_FAILED", `Marka veya telif riski olan ifade var: ${ipRisks.join(", ")}. Başlık, etiket ve açıklamadan çıkarın.`, 400);
@@ -964,7 +974,17 @@ export async function createEtsyPhysicalDraft(
     policyReadFailed = true;
   }
   if (policyReadFailed) draftWarnings.push("İade politikası Etsy'den okunamadı ve taslağa eklenmedi. Yayınlamadan önce Etsy'de taslağı açıp iade politikasını seçin.");
-  else if (!returnPolicyId) draftWarnings.push("İade politikası yok: yayınlamadan önce Mağaza hazırlığı listesinden 'İade politikası oluştur' (basit modda Yardım, uzman modda Etsy → Kılavuz).");
+  else if (!returnPolicyId) {
+    // Etsy fiziksel ilanı iade politikası olmadan yayınlamaz: Etsy'nin önerdiği standart politika (30 gün iade ve değişim,
+    // iade kargosu alıcıya ait) oluşturulup taslağa eklenir.
+    try {
+      returnPolicyId = (await createReturnPolicy(env, { acceptsReturns: true, deadlineDays: 30 }, fetcher)).returnPolicyId;
+      draftWarnings.push("Mağazada iade politikası yoktu: Etsy'nin standart politikası (30 gün iade ve değişim, iade kargosu alıcıya ait) oluşturulup ilana eklendi. Değiştirmek için Etsy → Settings → Policies.");
+    } catch (error) {
+      if (error instanceof EtsyIntegrationError && error.code === "AUTH_FAILED") throw error;
+      draftWarnings.push("İade politikası oluşturulamadı: yayınlamadan önce Etsy'de taslakta 'Returns and exchanges' bölümünden 'Apply this policy' deyin.");
+    }
+  }
 
   let readinessStateId: number | undefined;
   try {
@@ -982,7 +1002,9 @@ export async function createEtsyPhysicalDraft(
     if (!productionPartnerId) throw new EtsyIntegrationError("VALIDATION_FAILED", "Etsy'de üretim ortağı tanımlı değil: Shop Manager → Settings → Production partners bölümünden gümüşçünüzü/atölyenizi ekleyin.", 400);
   }
 
-  const terms = signals.noun === "prayer beads" ? ["prayer beads", "mala", "rosar"] : [signals.noun, signals.noun.split(" ").at(-1) || signals.noun];
+  // Kategori adı önce tam ürün adıyla, sonra son iki ve son kelimeyle aranır ("beads" tek başına "Hair Beads" seçtiriyordu).
+  const nounWords = signals.noun.split(" ");
+  const terms = signals.isTesbih ? ["prayer beads", "mala", "rosar"] : [...new Set([signals.noun, nounWords.slice(-2).join(" "), nounWords.at(-1) || signals.noun])];
   const prefer = signals.isKnitwear ? (input.audience === "men" ? /\bmen/ : input.audience === "unisex" ? /unisex adult/ : /\bwomen/) : undefined;
   const taxonomyId = await findTaxonomyId(env, store, terms, fetcher, prefer);
 

@@ -293,3 +293,34 @@ test("a physical draft refuses chat-written brand names and unverified silver or
   const ok = await createEtsyPhysicalDraft(env, kv.store, product, { ...base, description: `A gold tone brass brooch. ${base.description}` }, fetcher);
   assert.equal(ok.listingId, 902);
 });
+
+test("a tesbih with a long English name goes to Prayer Beads (not Hair Beads), gets a return policy and refuses Turkish titles", async () => {
+  const kv = memoryKv();
+  await kv.store.put("etsy:tokens", JSON.stringify({ accessToken: "123.token", refreshToken: "r", expiresAt: Date.now() + 3_600_000, scope: "listings_w shops_w", userId: "123" }));
+  const env = { ETSY_API_KEY: "key", ETSY_SHARED_SECRET: "secret", ETSY_OAUTH: kv.store };
+  let form: URLSearchParams | undefined; let policies: Array<Record<string, unknown>> = []; let createdPolicy = 0;
+  const fetcher = (async (input: string | URL | Request, init?: RequestInit) => {
+    const url = new URL(String(input));
+    if (url.pathname === "/v3/application/users/123/shops") return Response.json({ shop_id: 777, currency_code: "USD" });
+    if (url.pathname.endsWith("/shipping-profiles")) return Response.json({ results: [{ shipping_profile_id: 55, is_deleted: false }] });
+    if (url.pathname.endsWith("/policies/return") && init?.method === "POST") { createdPolicy++; policies = [{ return_policy_id: 66, accepts_returns: true, return_deadline: 30 }]; return Response.json(policies[0], { status: 201 }); }
+    if (url.pathname.endsWith("/policies/return")) return Response.json({ results: policies });
+    if (url.pathname.endsWith("/readiness-state-definitions")) return Response.json({ results: [{ readiness_state_id: 9, readiness_state: "ready_to_ship" }] });
+    if (url.pathname === "/v3/application/seller-taxonomy/nodes") return Response.json({ results: [
+      { id: 1, name: "Accessories", children: [{ id: 11, name: "Hair Accessories", children: [{ id: 12, name: "Hair Beads & Cuffs", children: [] }] }] },
+      { id: 2, name: "Craft Supplies & Tools", children: [{ id: 21, name: "Beads", children: [] }] },
+      { id: 3, name: "Religious & Spiritual", children: [{ id: 31, name: "Prayer Beads", children: [] }] }] });
+    if (url.pathname === "/v3/application/shops/777/listings") { form = init?.body as URLSearchParams; return Response.json({ listing_id: 903 }, { status: 201 }); }
+    return Response.json({}, { status: 500 });
+  }) as typeof fetch;
+  const product = normalizeProductInput({ titleTr: "925 damgalı gümüş tesbih", productKind: "tesbih", origin: "made_by_seller", materialVerified: true, productNounEn: "sterling silver tasbih prayer beads", priceTry: 8000, usdTryRate: 40, sourceId: "t-1" });
+  assert.equal(detectProductSignals(product).noun, "prayer beads");
+  const plan = buildProductPlan(product, ruleKeywordCandidates(product), [], { usdTryRate: 40, shopCurrency: "USD" });
+  const listing = { title: plan.title, tags: plan.tags, description: plan.description, materials: plan.materials, priceUsd: 220 };
+  await assert.rejects(createEtsyPhysicalDraft(env, kv.store, product, { ...listing, title: "925 Damgalı El İşçiliği Gümüş Tesbih" }, fetcher), /Türkçe/);
+  const result = await createEtsyPhysicalDraft(env, kv.store, product, listing, fetcher);
+  assert.equal(form?.get("taxonomy_id"), "31");
+  assert.equal(createdPolicy, 1); assert.equal(form?.get("return_policy_id"), "66");
+  assert.ok(result.warnings.some(line => /standart politikası/.test(line)));
+  assert.equal(normalizeProductInput({ titleTr: "Gümüş yüzük", productNounEn: "gümüş tesbih" }).productNounEn, undefined, "Turkish English-name is ignored, not mangled");
+});

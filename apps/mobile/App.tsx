@@ -3287,7 +3287,7 @@ function EtsyPlanResult({ plan, payload, etsyReady, priceSourceLabel, preparePro
     confirmDraft();
   };
   const confirmDraft = () => {
-    Alert.alert("Etsy'de taslak ilan oluşturulsun mu?", "İlan önce taslak olarak oluşturulur, yayına girmez. Kontrol ettikten sonra buradan veya Etsy'den yayınlayabilirsiniz.", [
+    Alert.alert("Etsy'de taslak ilan oluşturulsun mu?", "İlan önce taslak olarak oluşturulur, yayına girmez. Mağazada iade politikası yoksa Etsy'nin standart politikası (30 gün iade ve değişim) oluşturulup eklenir; Etsy fiziksel ilanı iade politikası olmadan yayınlamaz. Kontrol ettikten sonra buradan veya Etsy'den yayınlayabilirsiniz.", [
       { text: "Vazgeç", style: "cancel" },
       { text: "Taslak oluştur", onPress: async () => {
         setSaving(true);
@@ -4253,7 +4253,7 @@ function PhotoListingStudio({ online, etsyReady, wizard, onStepChange }: any) {
       <View style={{ width: 70 }}><Field label="Adet" value={quantity} onChangeText={setQuantity} keyboardType="number-pad" /></View>
     </View>
     <Toggle label="Hazır, hemen gönderilebilir" value={readyToShip} onChange={setReadyToShip} />
-    {wizard && <Text style={styles.formHint}>Elinize geçecek: Etsy kesintileri düşüldükten sonra size kalacak tutar; Etsy fiyatı buna göre hesaplanır. ABD'ye kargo: paketli ürünü göndermenin size maliyeti (paketli ağırlığı PTT'ye ya da kargo firmasına söyleyip sorun). Kargoyu alıcı öder; fiyata eklenmez, uygulama kargo profiline yazılacak tutarı hesaplar. "Hazır" kapalıysa ürün sipariş gelince yapılır demektir.</Text>}
+    {wizard && <Text style={styles.formHint}>Elinize geçecek: Etsy kesintileri düşüldükten sonra size kalacak tutar; Etsy fiyatı buna göre hesaplanır. ABD'ye kargo: paketli ürünü göndermenin size maliyeti; Shipentegra kullanıyorsanız uygulamasındaki 'Fiyat Hesapla' ile paketli ağırlık ve ölçüden ABD fiyatını alıp yazın (Alaska/Hawaii dahil). Kargoyu alıcı öder; fiyata eklenmez, uygulama kargo profiline yazılacak tutarı hesaplar. "Hazır" kapalıysa ürün sipariş gelince yapılır demektir.</Text>}
     </>}
     {show(5) && <>
     <Pressable style={[styles.analyzeButton, { marginTop: 12 }, (Boolean(progress) || !online) && styles.primaryDisabled]} disabled={Boolean(progress) || !online} onPress={prepare}>{progress ? <ActivityIndicator color="white" /> : <Ionicons name="search" size={18} color="white" />}<Text style={styles.primaryText}>{plan ? "Yeniden araştır" : "Etsy'de araştır ve ilanı hazırla"}</Text></Pressable>
