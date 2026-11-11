@@ -38,6 +38,8 @@ async function photoScreen() {
   ui.pickImages = async () => ({ canceled: false, assets: [{ uri: "local:tesbih", width: 100, height: 100 }] });
   const renderer = await mount(screens.PhotoListingStudio, { online: true, etsyReady: true });
   await tap(renderer, /^Galeriden seç$/); await tap(renderer, /^Tesbih$/);
+  // Diğer yollar (yalnız analiz, otomatik doldurma) kapalı başlar.
+  await tap(renderer, /^Diğer yollar/);
   return renderer;
 }
 test("structured analysis reports timeout and malformed provider responses without filling any fields", async context => {
@@ -106,6 +108,8 @@ test("simple photo wizard offers an explicit free auto-fill and keeps the chat o
     assert.equal(buttons(renderer, /^Analiz yanıtını uygula$/).length, 0);
     await tap(renderer, /^Galeriden seç$/);
     assert.equal(paths.length, 0);
+    assert.equal(buttons(renderer, /^Fotoğraftan otomatik doldur$/).length, 0, "other ways stay folded");
+    await tap(renderer, /^Diğer yollar/);
     await tap(renderer, /^Fotoğraftan otomatik doldur$/);
     await waitFor(() => paths.includes("/api/products/photo-analyze"));
     await tap(renderer, /^İleri$/);
