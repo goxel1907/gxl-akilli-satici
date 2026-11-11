@@ -90,20 +90,19 @@ test("Etsy gate blocks resale and requires partner, hallmark or vintage proof", 
   assert.equal(etsyEligibility(normalizeProductInput({ titleTr: "Tesbih", origin: "unknown" })).status, "review");
 });
 
-test("pricing converts TRY, adds Etsy Turkey fees, leaves shipping to the buyer, and compares with the Etsy median", () => {
+test("pricing converts TRY, adds Etsy Turkey fees, includes the seller-paid shipping (free shipping) and compares with the Etsy median", () => {
   const aligned = computePricing({ priceTry: 5000, shippingTry: 1200, usdTryRate: 40, shopCurrency: "USD", medianUsd: 159 })!;
   assert.equal(aligned.targetNetUsd, 125);
   assert.equal(aligned.shippingUsd, 30);
   assert.equal(aligned.feePercent, 17.77);
-  // Kargo alıcıya ait: fiyata eklenmez; kargo profiline Etsy kesintisini karşılayan tutar önerilir.
-  assert.equal(aligned.breakEvenUsd, 152.68);
+  // Kargoyu satıcı öder: kargo fiyata eklenir, Etsy kesintisi kargolu fiyattan alınır; satıcıya hedeflediği net kalır.
+  assert.equal(aligned.breakEvenUsd, 189.16);
   assert.equal(aligned.positioning, "aligned");
-  assert.equal(aligned.recommendedUsd, 152.99);
-  assert.equal(aligned.recommendedTry, 6120);
-  assert.ok(aligned.netAtRecommendedTry >= 5000);
-  assert.equal(aligned.buyerShippingUsd, 36.49);
-  assert.equal(aligned.buyerShippingTry, 1460);
-  assert.match(aligned.note, /Kargo alıcıya ait/);
+  assert.equal(aligned.recommendedUsd, 189.99);
+  assert.equal(aligned.recommendedTry, 7600);
+  assert.ok(aligned.netAtRecommendedTry >= 5000, String(aligned.netAtRecommendedTry));
+  assert.equal(aligned.shippingIncluded, true);
+  assert.match(aligned.note, /Ücretsiz kargo: 1200 TL/);
 
   const below = computePricing({ priceTry: 2000, shippingTry: 1200, usdTryRate: 40, shopCurrency: "USD", medianUsd: 159 })!;
   assert.equal(below.positioning, "below");
@@ -323,4 +322,34 @@ test("a tesbih with a long English name goes to Prayer Beads (not Hair Beads), g
   assert.equal(createdPolicy, 1); assert.equal(form?.get("return_policy_id"), "66");
   assert.ok(result.warnings.some(line => /standart politikası/.test(line)));
   assert.equal(normalizeProductInput({ titleTr: "Gümüş yüzük", productNounEn: "gümüş tesbih" }).productNounEn, undefined, "Turkish English-name is ignored, not mangled");
+});
+
+test("a physical draft picks the free-shipping profile and warns when only a paid US profile exists", async () => {
+  const kv = memoryKv();
+  await kv.store.put("etsy:tokens", JSON.stringify({ accessToken: "123.token", refreshToken: "r", expiresAt: Date.now() + 3_600_000, scope: "listings_w shops_w", userId: "123" }));
+  const env = { ETSY_API_KEY: "key", ETSY_SHARED_SECRET: "secret", ETSY_OAUTH: kv.store };
+  let profiles: unknown[] = [];
+  let form: URLSearchParams | undefined;
+  const fetcher = (async (input: string | URL | Request, init?: RequestInit) => {
+    const url = new URL(String(input));
+    if (url.pathname === "/v3/application/users/123/shops") return Response.json({ shop_id: 777, currency_code: "USD" });
+    if (url.pathname.endsWith("/shipping-profiles")) return Response.json({ results: profiles });
+    if (url.pathname.endsWith("/policies/return")) return Response.json({ results: [{ return_policy_id: 66 }] });
+    if (url.pathname.endsWith("/readiness-state-definitions")) return Response.json({ results: [] });
+    if (url.pathname === "/v3/application/seller-taxonomy/nodes") return Response.json({ results: [{ id: 31, name: "Prayer Beads", children: [] }] });
+    if (url.pathname === "/v3/application/shops/777/listings") { form = init?.body as URLSearchParams; return Response.json({ listing_id: 904 }, { status: 201 }); }
+    return Response.json({}, { status: 500 });
+  }) as typeof fetch;
+  const paid = { shipping_profile_id: 50, shipping_profile_destinations: [{ destination_country_iso: "US", primary_cost: { amount: 65000, divisor: 100 } }] };
+  const free = { shipping_profile_id: 51, shipping_profile_destinations: [{ destination_country_iso: "US", primary_cost: { amount: 0, divisor: 100 } }] };
+  const product = (id: string) => normalizeProductInput({ titleTr: "Kehribar tesbih", productKind: "tesbih", origin: "made_by_seller", priceTry: 3000, shippingTry: 800, usdTryRate: 40, sourceId: id });
+  const plan = buildProductPlan(product("a"), ruleKeywordCandidates(product("a")), [], { usdTryRate: 40, shopCurrency: "USD" });
+  const listing = { title: plan.title, tags: plan.tags, description: plan.description, materials: plan.materials, priceUsd: 120 };
+  assert.match(plan.description, /Free shipping to the US/); assert.doesNotMatch(plan.description, /paid by the buyer/);
+  profiles = [paid, free];
+  const chosen = await createEtsyPhysicalDraft(env, kv.store, product("a"), listing, fetcher);
+  assert.equal(form?.get("shipping_profile_id"), "51"); assert.ok(!chosen.warnings.some(line => /ABD kargo ücreti var/.test(line)));
+  profiles = [paid];
+  const warned = await createEtsyPhysicalDraft(env, kv.store, product("b"), listing, fetcher);
+  assert.equal(form?.get("shipping_profile_id"), "50"); assert.ok(warned.warnings.some(line => /ABD kargo ücreti var/.test(line)));
 });

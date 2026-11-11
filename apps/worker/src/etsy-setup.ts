@@ -81,7 +81,7 @@ export async function shopReadiness(env: EtsyRuntimeEnv, fetcher: Fetcher = fetc
     const [profiles, policies] = await Promise.all([shippingProfiles(env, shop.shopId, fetcher), returnPolicies(env, shop.shopId, fetcher)]);
     items.push(profiles.length
       ? { id: "shipping", titleTr: "Kargo profili var", state: "done", detailTr: `${profiles.length} kargo profili tanımlı.` }
-      : { id: "shipping", titleTr: "Kargo profili (yalnız fiziksel ürün)", state: "optional", detailTr: "Dijital ürün satıyorsanız gerekmez. Fiziksel ürün (tesbih, vintage, örgü) satacaksanız uygulama Türkiye'den ABD'ye kargo profilini sizin yerinize oluşturur; kargo ücretini alıcı öder ve Etsy ilan sayfasında gösterir. Başka ülkelere göndermek isterseniz Etsy'de profile ülke ekleyebilirsiniz.", action: "create_shipping_profile" });
+      : { id: "shipping", titleTr: "Kargo profili (yalnız fiziksel ürün)", state: "optional", detailTr: "Dijital ürün satıyorsanız gerekmez. Fiziksel ürün (tesbih, vintage, örgü) satacaksanız uygulama Türkiye'den ABD'ye ücretsiz kargo profilini sizin yerinize oluşturur; kargoyu siz ödersiniz, ücreti ürün fiyatına eklenir ve alıcı 'Free shipping' görür. Başka ülkelere göndermek isterseniz Etsy'de profile ülke ekleyebilirsiniz.", action: "create_shipping_profile" });
     items.push(policies.length
       ? { id: "returns", titleTr: "İade politikası var", state: "done", detailTr: policies[0].accepts_returns ? `İade kabul: ${policies[0].return_deadline || "?"} gün.` : "İade kabul edilmiyor." }
       : { id: "returns", titleTr: "İade politikası (yalnız fiziksel ürün)", state: "optional", detailTr: "Dijital ürün satıyorsanız gerekmez. Fiziksel ilanın yayına girmesi için gerekir; önerilen: 30 gün içinde iade ve değişim (iade kargosunu alıcı öder).", action: "create_return_policy" });
@@ -117,7 +117,8 @@ export function normalizeShippingProfileInput(raw: Record<string, unknown>) {
   return { minDeliveryDays, maxDeliveryDays, minProcessingDays, maxProcessingDays, postalCode: postalCode || undefined, costTry: money(raw.costTry), additionalCostTry: money(raw.additionalCostTry) };
 }
 
-// Türkiye → ABD kargo profili; girilen kargo ücretini alıcı öder (Etsy ilan sayfasında gösterir). Var olan profil varsa yenisi açılmaz.
+// Türkiye → ABD kargo profili. Varsayılan ücretsiz kargodur (kargo fiyata dahil, kullanıcı kararı); ücret girilirse alıcıdan alınır.
+// Var olan profil varsa yenisi açılmaz.
 export async function createShippingProfile(env: EtsyRuntimeEnv, input: ReturnType<typeof normalizeShippingProfileInput>, fetcher: Fetcher = fetch) {
   const shop = await getConnectedShop(env, fetcher);
   const existing = await shippingProfiles(env, shop.shopId, fetcher);
@@ -126,7 +127,7 @@ export async function createShippingProfile(env: EtsyRuntimeEnv, input: ReturnTy
     title: input.costTry ? "Tracked shipping from Türkiye to the US" : "Free shipping to the US from Türkiye",
     origin_country_iso: "TR",
     destination_country_iso: "US",
-    // Kargo alıcıya ait: girilen ücret (mağaza para birimi) Etsy'de ilan sayfasında ve ödemede alıcıya gösterilir.
+    // Ücretsiz kargo: 0. Ücret girilmişse (mağaza para birimi) alıcıya gösterilir.
     primary_cost: String(input.costTry || 0),
     secondary_cost: String(input.additionalCostTry ?? Math.round((input.costTry || 0) / 2)),
     min_delivery_days: String(input.minDeliveryDays),

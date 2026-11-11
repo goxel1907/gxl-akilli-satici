@@ -2890,7 +2890,7 @@ const ETSY_GUIDE: Array<{ id: string; title: string; icon: any; steps: string[] 
     "Örgü/tığ işi: kimin ördüğünü, tekniği, bedeni, göğüs genişliği ile boyu, iplik içeriğini (ör. %100 pamuk) ve yıkama şeklini seçin. Ailenizden biri örüyorsa 'mağaza üyesi' seçin ve Etsy'de o kişiyi Shop members bölümüne ekleyin.",
     "Tesbih: kim yaptı, gram, tane sayısı, uzunluk. 925 damgası veya belge yoksa ilanda 'gümüş' yazılmaz. Hazır alınıp yeniden satılan tesbih Etsy'de yasaktır; sistem yayınlamaz.",
     "Vintage: yaklaşık üretim yılı (en az 20 yıl önce), ölçüler ve durum notu. Yıl girilmeden vintage ilan açılmaz.",
-    "'Elinize geçecek (TL)' ve 'ABD'ye kargo (TL)' yazın → 'Etsy'de araştır ve ilanı hazırla'. Sistem alıcıların aramalarını tarar; başlık, 13 etiket, İngilizce açıklama ve kesintiler dahil dolar fiyatını hazırlar. Kargo alıcıya ait: fiyata eklenmez; uygulama Etsy kargo profiline yazılacak tutarı söyler (profil yoksa Mağaza hazırlığı → Kargo profili → 'Kargo profilini oluştur').",
+    "'Elinize geçecek (TL)' ve 'ABD'ye kargo (TL)' yazın → 'Etsy'de araştır ve ilanı hazırla'. Sistem alıcıların aramalarını tarar; başlık, 13 etiket, İngilizce açıklama ve kesintiler dahil dolar fiyatını hazırlar. Kargoyu siz ödersiniz: kargo ücreti fiyata eklenir, alıcı ücretsiz kargo görür (Etsy kargo profilinde ABD ücreti 0 olmalı; profil yoksa Mağaza hazırlığı → Kargo profili → 'Kargo profilini oluştur').",
     "Başlığı, etiketleri ve fiyatı isterseniz düzeltin → 'Etsy taslağı oluştur' (fotoğraflar bu adımda yüklenir) → isterseniz 'Video ekle (5-15 sn)' → 'Taslağı kontrol et' → 'Etsy'de yayınla'. Yayınlamada Etsy 0,20 USD ilan ücreti keser.",
     "Shopier'de zaten olan ürünler için Shopier sekmesindeki 'Etsy ilanı hazırla' da aynı motoru kullanır."
   ] },
@@ -3344,7 +3344,7 @@ function EtsyPlanResult({ plan, payload, etsyReady, priceSourceLabel, preparePro
         <Text style={styles.cardTitle}>Fiyat analizi</Text>
         <Text style={styles.analysisLine}>{priceSourceLabel}: {pricing.priceTry} TL ≈ {pricing.targetNetUsd} USD (kur {pricing.usdTryRate})</Text>
         <Text style={styles.analysisLine}>Etsy kesintileri: %{pricing.feePercent} + {pricing.fixedFeesUsd} USD sabit</Text>
-        <Text style={styles.analysisLine}>ABD kargosu alıcıya ait: kargo profiline {pricing.buyerShippingTry ? `${pricing.buyerShippingTry} TL (≈${pricing.buyerShippingUsd} USD)` : "kargo ücretinizi"} yazın; alıcı ilan sayfasında ve ödemede görür.</Text>
+        <Text style={styles.analysisLine}>{pricing.shippingIncluded ? `Ücretsiz kargo: ${pricing.shippingUsd} USD kargo fiyata eklendi; alıcı "Free shipping" görür, Etsy kargo profilinde ABD ücreti 0 olmalı.` : "Kargo ücreti girilmedi; fiyata eklenmedi."}</Text>
         <Text style={styles.analysisLine}>Başabaş Etsy fiyatı: {pricing.breakEvenUsd} USD</Text>
         <Text style={styles.analysisLine}>Etsy ortancası: {pricing.medianUsd ?? "—"} USD</Text>
         <Text style={styles.listingTitle}>Önerilen: {pricing.recommendedUsd} USD ≈ {pricing.recommendedTry} TL · elinize ≈ {pricing.netAtRecommendedTry} TL</Text>
@@ -3492,7 +3492,6 @@ function ShopReadinessCard({ online, onSell }: any) {
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState<string>();
   const [postal, setPostal] = useState("");
-  const [shipCost, setShipCost] = useState("");
   const [minDays, setMinDays] = useState("7");
   const [maxDays, setMaxDays] = useState("21");
   const [processing, setProcessing] = useState("3");
@@ -3545,9 +3544,8 @@ function ShopReadinessCard({ online, onSell }: any) {
         {item.state !== "done" && !!item.action && <Ionicons name="chevron-forward" size={18} color="#748079" />}
       </Pressable>
       {item.id === "shipping" && form === "shipping" && <View style={styles.adviceBox}>
-        <Text style={styles.rowTitle}>Kargo profili: Türkiye → ABD, kargo alıcıya ait</Text>
-        <Text style={styles.small}>Alıcı kargo ücretini ilan sayfasında ve ödemede görür ve öder. Etsy kargo ücretinden de kesinti alır; ilan planındaki "kargo profiline yazın" tutarını kullanın. Teslim süresini kargo firmanıza sorun; PTT ile genelde 1–3 hafta, hızlı kargoyla birkaç gün.</Text>
-        <Field label="Alıcının ödeyeceği kargo ücreti (TL, ilk ürün)" value={shipCost} onChangeText={setShipCost} keyboardType="decimal-pad" placeholder="650" />
+        <Text style={styles.rowTitle}>Kargo profili: Türkiye → ABD, ücretsiz kargo</Text>
+        <Text style={styles.small}>Kargoyu siz ödersiniz; her ilanda kargo maliyeti fiyata eklenir, alıcı "Free shipping" görür. Teslim süresini kargo firmanıza (ör. Shipentegra) sorun; ekonomik gönderi genelde 1–3 hafta, hızlı kargo birkaç gün.</Text>
         <View style={{ flexDirection: "row", gap: 10 }}>
           <View style={{ flex: 1 }}><Field label="Teslim en az (iş günü)" value={minDays} onChangeText={setMinDays} keyboardType="number-pad" /></View>
           <View style={{ flex: 1 }}><Field label="Teslim en çok (iş günü)" value={maxDays} onChangeText={setMaxDays} keyboardType="number-pad" /></View>
@@ -3556,7 +3554,7 @@ function ShopReadinessCard({ online, onSell }: any) {
           <View style={{ flex: 1 }}><Field label="Kargoya veriş (en çok gün)" value={processing} onChangeText={setProcessing} keyboardType="number-pad" /></View>
           <View style={{ flex: 1 }}><Field label="Posta kodunuz (önerilir)" value={postal} onChangeText={setPostal} keyboardType="number-pad" placeholder="34000" /></View>
         </View>
-        <Pressable style={[styles.primary, { marginTop: 10, marginBottom: 0 }, (busy || !online) && styles.primaryDisabled]} disabled={busy || !online} onPress={() => (Number(shipCost.replace(",", ".")) > 0 ? undefined : Alert.alert("Kargo ücreti", "Alıcının ödeyeceği kargo ücretini TL olarak girin.")) ?? post("/api/etsy/shipping-profile", { postalCode: postal.trim() || undefined, costTry: Number(shipCost.replace(",", ".")), minDeliveryDays: Number(minDays), maxDeliveryDays: Number(maxDays), maxProcessingDays: Number(processing) }, "Kargo profili Etsy'de oluşturuldu.")}>{busy ? <ActivityIndicator color="white" /> : <Ionicons name="cube" size={18} color="white" />}<Text style={styles.primaryText}>Kargo profilini oluştur</Text></Pressable>
+        <Pressable style={[styles.primary, { marginTop: 10, marginBottom: 0 }, (busy || !online) && styles.primaryDisabled]} disabled={busy || !online} onPress={() => post("/api/etsy/shipping-profile", { postalCode: postal.trim() || undefined, minDeliveryDays: Number(minDays), maxDeliveryDays: Number(maxDays), maxProcessingDays: Number(processing) }, "Kargo profili Etsy'de oluşturuldu.")}>{busy ? <ActivityIndicator color="white" /> : <Ionicons name="cube" size={18} color="white" />}<Text style={styles.primaryText}>Kargo profilini oluştur</Text></Pressable>
       </View>}
       {item.id === "returns" && form === "returns" && <View style={styles.adviceBox}>
         <Text style={styles.rowTitle}>İade politikası</Text>
@@ -3855,7 +3853,7 @@ const WIZARD_HINTS = [
   "Ürünün 1–10 gerçek fotoğrafını çekin veya galeriden seçin (5+ önerilir). En kolay yol: 'Tüm ilan talimatını paylaş' ile fotoğrafları ve kısa videoyu ChatGPT/Claude'a gönderin, gelen JSON ile 'Tüm boşlukları doldur'. İleri düğmesi kendiliğinden analiz yapmaz.",
   "Ürün türünü, adını ve doğruladığınız bilgileri yazın. Otomatik doldurma veya sohbet analizi öneri getirdiyse kontrol edin; emin olmadığınız bilgiyi yazmayın.",
   "Renkleri ve öne çıkan özellikleri Türkçe yazabilirsiniz; sistem İngilizceye çevirir. Bu adım isteğe bağlıdır.",
-  "Satıştan elinize geçmesini istediğiniz tutarı ve ABD'ye kargo ücretini yazın. Etsy kesintileri fiyata eklenir; kargoyu alıcı öder ve ilan sayfasında görür.",
+  "Satıştan elinize geçmesini istediğiniz tutarı ve ABD'ye kargo maliyetinizi (ör. Shipentegra fiyatı) yazın. Kargoyu siz ödersiniz: kargo ve Etsy kesintileri fiyata eklenir, alıcı ücretsiz kargo görür.",
   "Uygulama Etsy'de alıcıların aramalarını tarar; İngilizce başlık, 13 etiket, açıklama ve fiyatı hazırlar. Türkçe karşılığına bakıp Etsy'ye gönderin."
 ];
 
@@ -3955,8 +3953,8 @@ function PhotoListingStudio({ online, etsyReady, wizard, onStepChange }: any) {
     let priceLine = "";
     if (result.pricing.suggestedPriceUsd) {
       try {
-        const net = await apiJson("/api/products/net-from-price", { method: "POST", headers: apiHeaders(true), body: JSON.stringify({ priceUsd: result.pricing.suggestedPriceUsd }) });
-        if (net.netTry > 0) { setPriceTry(String(net.netTry)); priceLine = `Fiyat önerisi ${result.pricing.suggestedPriceUsd} USD → Etsy kesintilerinden sonra elinize ≈ ${net.netTry} TL ('Elinize geçecek' alanına yazıldı).`; }
+        const net = await apiJson("/api/products/net-from-price", { method: "POST", headers: apiHeaders(true), body: JSON.stringify({ priceUsd: result.pricing.suggestedPriceUsd, shippingTry: result.shipping.estimatedUsShippingTry || undefined }) });
+        if (net.netTry > 0) { setPriceTry(String(net.netTry)); priceLine = `Fiyat önerisi ${result.pricing.suggestedPriceUsd} USD (ücretsiz kargo dahil) → Etsy kesintileri ve kargo düşülünce elinize ≈ ${net.netTry} TL ('Elinize geçecek' alanına yazıldı).`; }
       } catch { priceLine = `Fiyat önerisi ${result.pricing.suggestedPriceUsd} USD. Kur alınamadı; 'Elinize geçecek' tutarını elle yazın.`; }
     }
     setFullReply("");
@@ -3964,7 +3962,7 @@ function PhotoListingStudio({ online, etsyReady, wizard, onStepChange }: any) {
     Alert.alert("Boşluklar dolduruldu", [
       "Ürün bilgisi, ölçüler, renkler, başlık, 13 etiket ve tanıtım paragrafı aktarıldı.",
       priceLine,
-      result.shipping.estimatedUsShippingTry ? `Kargo tahmini ${Math.round(result.shipping.estimatedUsShippingTry)} TL: PTT ya da kargo firmasından gerçek fiyatı sorup düzeltin.` : "Kargo ücretini yazın.",
+      result.shipping.estimatedUsShippingTry ? `Kargo ${Math.round(result.shipping.estimatedUsShippingTry)} TL: Shipentegra 'Fiyat Hesapla' ile gerçek fiyatı kontrol edin; kargo fiyata eklenir, alıcı ücretsiz kargo görür.` : "Kargo maliyetinizi yazın.",
       /gümüş|gumus|925|altın|altin|silver|gold/i.test(item.materialTr + item.nameTr) ? "Malzeme gümüş/altın: üründe 925 gibi ayar damgası ya da belge varsa 'Ayar damgası veya malzeme belgesi var' kutusunu işaretleyin; işaretlenmezse ilan Etsy'ye gönderilmez." : "",
       "Kontrol edin: 'Bu ürünü kim yaptı?' yanıtı ve ölçüler.",
       "Asistanın görselleri sizin ürününüzle birebir aynı olmalı. Farklı bir ürün çizdiyse o görseli kullanmayın; kendi fotoğraflarınızla devam edin.",
@@ -4032,7 +4030,7 @@ function PhotoListingStudio({ online, etsyReady, wizard, onStepChange }: any) {
     if (nameTr.trim().length < 3) return Alert.alert("Ürün adı", "Ürünün Türkçe adını yazın; fotoğraf analizi de önerebilir.");
     if (!knit && origin === "unknown") return Alert.alert("Üretim bilgisi", "Bu ürünü kim yaptı sorusunu yanıtlayın. Uygulama ürünü sizin yaptığınızı veya tasarladığınızı varsaymaz.");
     const net = parseAmount(priceTry);
-    if (!net) return Alert.alert("Elinize geçecek tutar", "Bu üründen elinize geçmesini istediğiniz tutarı TL olarak yazın. Etsy fiyatı, Etsy kesintileri eklenerek buna göre hesaplanır; kargoyu alıcı ayrıca öder.");
+    if (!net) return Alert.alert("Elinize geçecek tutar", "Bu üründen elinize geçmesini istediğiniz tutarı TL olarak yazın. Etsy fiyatı, Etsy kesintileri ve kargo maliyetiniz eklenerek buna göre hesaplanır; alıcı ücretsiz kargo görür.");
     const list = (text: string) => text.split(",").map((item) => item.trim()).filter(Boolean);
     const vintage = kind === "vintage" || origin === "vintage";
     const base: any = {
@@ -4114,7 +4112,7 @@ function PhotoListingStudio({ online, etsyReady, wizard, onStepChange }: any) {
     }
     if (step === 4) {
       if (!parseAmount(priceTry)) return Alert.alert("Elinize geçecek tutar", "Bu üründen elinize geçmesini istediğiniz tutarı TL olarak yazın.");
-      if (!parseAmount(shippingTry)) return Alert.alert("ABD'ye kargo ücreti", "Kargo ücretini yazın; alıcının ödeyeceği tutarı (Etsy kesintisi dahil) hesaplayıp kargo profiline yazmanızı söyleyeceğim. Bilmiyorsanız ürünü paketleyip tartın; PTT'ye ya da kargo firmasına ağırlığı söyleyip ABD fiyatını sorun.");
+      if (!parseAmount(shippingTry)) return Alert.alert("ABD'ye kargo ücreti", "Kargo maliyetinizi yazın; fiyata eklenir ve alıcı ücretsiz kargo görür. Ürünü paketleyip tartın; Shipentegra'da 'Fiyat Hesapla' ile paketli ağırlık ve ölçüden ABD fiyatını alın.");
     }
     goTo(Math.min(WIZARD_STEPS.length, step + 1));
   };
@@ -4253,7 +4251,7 @@ function PhotoListingStudio({ online, etsyReady, wizard, onStepChange }: any) {
       <View style={{ width: 70 }}><Field label="Adet" value={quantity} onChangeText={setQuantity} keyboardType="number-pad" /></View>
     </View>
     <Toggle label="Hazır, hemen gönderilebilir" value={readyToShip} onChange={setReadyToShip} />
-    {wizard && <Text style={styles.formHint}>Elinize geçecek: Etsy kesintileri düşüldükten sonra size kalacak tutar; Etsy fiyatı buna göre hesaplanır. ABD'ye kargo: paketli ürünü göndermenin size maliyeti; Shipentegra kullanıyorsanız uygulamasındaki 'Fiyat Hesapla' ile paketli ağırlık ve ölçüden ABD fiyatını alıp yazın (Alaska/Hawaii dahil). Kargoyu alıcı öder; fiyata eklenmez, uygulama kargo profiline yazılacak tutarı hesaplar. "Hazır" kapalıysa ürün sipariş gelince yapılır demektir.</Text>}
+    {wizard && <Text style={styles.formHint}>Elinize geçecek: Etsy kesintileri düşüldükten sonra size kalacak tutar; Etsy fiyatı buna göre hesaplanır. ABD'ye kargo: paketli ürünü göndermenin size maliyeti; Shipentegra kullanıyorsanız uygulamasındaki 'Fiyat Hesapla' ile paketli ağırlık ve ölçüden ABD fiyatını alıp yazın (Alaska/Hawaii dahil). Kargoyu siz ödersiniz: bu tutar Etsy fiyatına eklenir, alıcı ücretsiz kargo görür. "Hazır" kapalıysa ürün sipariş gelince yapılır demektir.</Text>}
     </>}
     {show(5) && <>
     <Pressable style={[styles.analyzeButton, { marginTop: 12 }, (Boolean(progress) || !online) && styles.primaryDisabled]} disabled={Boolean(progress) || !online} onPress={prepare}>{progress ? <ActivityIndicator color="white" /> : <Ionicons name="search" size={18} color="white" />}<Text style={styles.primaryText}>{plan ? "Yeniden araştır" : "Etsy'de araştır ve ilanı hazırla"}</Text></Pressable>
