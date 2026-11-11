@@ -62,3 +62,7 @@ Güncelleme: 9 Kasım 2026
   USD öneri /api/products/net-from-price ile "Elinize geçecek" TL'ye çevrilir. Metin ilan ekranında malzeme onayıyla yeniden denetlenir.
 - 10 Kasım 22:58 hatası: ChatGPT Türkçe başlık verdi ve görsel aracı başka bir tesbih çizdi. Artık başlık/etiket/tanıtım
   İngilizce değilse reddedilir ("Türkiye" serbest); fiziksel ürün görselleri yalnız Python koduyla düzenlenir (görsel aracı yasak).
+- 11 Kasım (gümüş tesbih denemesi): Etsy kategorisi "Hair Beads & Cuffs" seçiliyordu → tesbih her zaman "prayer beads",
+  kategori tam ad → son iki → son kelime, saç/craft supplies cezalı. İade politikası yoksa taslakta Etsy standardı (30 gün)
+  oluşturulur. Sunucu Türkçe başlık/etiketi reddeder; Türkçe "İngilizce ad" yok sayılır ("gm tesbih" olmaz).
+  Kapak: kodla kesip stüdyo zeminine koyma (GrabCut). Kargo: Shipentegra "Fiyat Hesapla" teklifi.
