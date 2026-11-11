@@ -13,6 +13,54 @@ import { findIpRisks } from "./ip-guard.js";
 // Etsy ABD ilanı İngilizcedir: "Türkiye" dışında Türkçe harf ya da sık Türkçe kelime görülürse metin Türkçe sayılır.
 export const TURKISH_TEXT = /[çğıöşüÇĞİÖŞÜ]|\b(ve|için|ile|el yapımı|gümüş|gumus|tesbih|tespih|damgalı|damgali|hediye|kolye|yüzük|bilezik|küpe|kazak|hırka|örgü)\b/i;
 export function looksTurkish(text: string): boolean { return TURKISH_TEXT.test(text.replace(/Türkiye/g, "")); }
+// Açıklamada yalnız Türkçe harf aranır (İngilizce metinde "ve" gibi kısa kelimeler yanlış alarm verebilir).
+const TURKISH_LETTERS_ONLY = /[çğıöşüÇĞİÖŞÜ]/;
+
+// Hazırlık süresi profili: hazırsa 1-3 iş günü, siparişe göre yapılıyorsa 5-10 iş günü. Varsa yenisi açılmaz.
+export async function ensureReadinessState(env: EtsyRuntimeEnv, shopId: number, readyToShip: boolean, fetcher: Fetcher = fetch): Promise<number | undefined> {
+  const wanted = readyToShip ? "ready_to_ship" : "made_to_order";
+  let rows: Array<{ readiness_state_id?: number; readiness_state?: string }> = [];
+  try {
+    rows = (await etsyRequest<{ results?: typeof rows }>(env, `/application/shops/${shopId}/readiness-state-definitions`, {}, fetcher)).results || [];
+  } catch (error) {
+    if (!(error instanceof EtsyIntegrationError && error.code === "NOT_FOUND")) throw error;
+  }
+  const found = rows.find((row) => row.readiness_state === wanted && row.readiness_state_id);
+  if (found) return found.readiness_state_id;
+  const form = new URLSearchParams({ readiness_state: wanted, min_processing_time: readyToShip ? "1" : "5", max_processing_time: readyToShip ? "3" : "10", processing_time_unit: "days" });
+  const created = await etsyRequest<{ readiness_state_id?: number }>(env, `/application/shops/${shopId}/readiness-state-definitions`, { method: "POST", form }, fetcher);
+  return Number(created.readiness_state_id) || rows[0]?.readiness_state_id;
+}
+
+// Yayından önce Etsy'deki taslak okunur: yayın için şart olan alanlar eksikse uygulama tamamlar, tamamlayamadığını söyler.
+export async function completePhysicalListing(env: EtsyRuntimeEnv, store: KeyValueStore | undefined, listingId: number, fetcher: Fetcher = fetch): Promise<{ fixed: string[]; missing: string[] }> {
+  const shop = await getConnectedShop(env, fetcher);
+  const listing = await etsyRequest<Record<string, any>>(env, `/application/listings/${listingId}`, {}, fetcher);
+  if (Number(listing.shop_id) !== shop.shopId) throw new EtsyIntegrationError("VALIDATION_FAILED", "İlan bağlı Etsy mağazasıyla uyuşmuyor.", 400);
+  if (listing.listing_type && listing.listing_type !== "physical") return { fixed: [], missing: [] };
+  const patch = new URLSearchParams(), fixed: string[] = [], missing: string[] = [];
+  if (!listing.return_policy_id) {
+    try { patch.set("return_policy_id", String((await createReturnPolicy(env, { acceptsReturns: true, deadlineDays: 30 }, fetcher)).returnPolicyId)); fixed.push("iade politikası (30 gün iade ve değişim)"); }
+    catch { missing.push("iade politikası (Etsy'de 'Returns and exchanges' → 'Apply this policy')"); }
+  }
+  if (!listing.shipping_profile_id) {
+    const profiles = await shippingProfiles(env, shop.shopId, fetcher);
+    if (profiles[0]) { patch.set("shipping_profile_id", String(profiles[0].shipping_profile_id)); fixed.push("kargo profili"); }
+    else missing.push("kargo profili (Mağaza hazırlığı → Kargo profili → 'Kargo profilini oluştur')");
+  }
+  if (!listing.readiness_state_id) {
+    try { const id = await ensureReadinessState(env, shop.shopId, true, fetcher); if (id) { patch.set("readiness_state_id", String(id)); fixed.push("hazırlık süresi (1-3 iş günü)"); } }
+    catch { missing.push("hazırlık süresi (Etsy'de 'Processing time')"); }
+  }
+  if (!listing.taxonomy_id) missing.push("kategori");
+  if (!listing.who_made || !listing.when_made) missing.push("'Who made it?' ve 'When was it made?'");
+  if (!(Number(listing.quantity) > 0)) missing.push("adet");
+  const images = await etsyRequest<{ count?: number; results?: unknown[] }>(env, `/application/listings/${listingId}/images`, {}, fetcher).catch(() => ({ count: undefined }));
+  if (images.count === 0) missing.push("en az bir fotoğraf");
+  if ([...patch.keys()].length) await etsyRequest(env, `/application/shops/${shop.shopId}/listings/${listingId}`, { method: "PATCH", form: patch }, fetcher);
+  void store;
+  return { fixed, missing };
+}
 
 type Fetcher = typeof fetch;
 
@@ -928,7 +976,7 @@ export async function createEtsyPhysicalDraft(
   if (check.issues.some((issue) => !issue.startsWith("Etsy 13 etiket"))) throw new EtsyIntegrationError("VALIDATION_FAILED", check.issues.join(" "), 400);
   if (!(listing.priceUsd > 0)) throw new EtsyIntegrationError("VALIDATION_FAILED", "Etsy fiyatı gerekli.", 400);
   // Taslak yalnız İngilizce gider: Türkçe başlık/etiket ABD'li alıcıya görünmemeli (tesbih "tasbih" etiketi İngilizcede de aranır).
-  if (looksTurkish(title) || tags.some((tag) => looksTurkish(tag.replace(/\b(tesbih|tespih)\b/g, "")))) throw new EtsyIntegrationError("VALIDATION_FAILED", "Başlık veya etiketlerde Türkçe var. Etsy ABD ilanı İngilizce olmalı; İngilizce başlık ve etiketlerle yeniden deneyin.", 400);
+  if (looksTurkish(title) || tags.some((tag) => looksTurkish(tag.replace(/\b(tesbih|tespih)\b/g, ""))) || TURKISH_LETTERS_ONLY.test(listing.description.replace(/Türkiye/g, ""))) throw new EtsyIntegrationError("VALIDATION_FAILED", "Başlık veya etiketlerde Türkçe var. Etsy ABD ilanı İngilizce olmalı; İngilizce başlık ve etiketlerle yeniden deneyin.", 400);
   // Başlık, etiket ve açıklama sohbetten de gelebilir: marka/telif adı ve doğrulanmamış değerli maden iddiası Etsy'ye gitmez.
   const ipRisks = findIpRisks([title, ...tags, listing.description].join(" \n "));
   if (ipRisks.length) throw new EtsyIntegrationError("VALIDATION_FAILED", `Marka veya telif riski olan ifade var: ${ipRisks.join(", ")}. Başlık, etiket ve açıklamadan çıkarın.`, 400);
@@ -995,13 +1043,13 @@ export async function createEtsyPhysicalDraft(
     }
   }
 
+  // Etsy fiziksel ilanı hazırlık süresi (processing) profili olmadan yayınlamaz: yoksa oluşturulur.
   let readinessStateId: number | undefined;
   try {
-    const processing = await etsyRequest<{ results?: Array<{ readiness_state_id?: number; readiness_state?: string }> }>(env, `/application/shops/${shop.shopId}/readiness-state-definitions`, {}, fetcher);
-    const rows = processing.results || [];
-    readinessStateId = (rows.find((row) => row.readiness_state === (input.readyToShip ? "ready_to_ship" : "made_to_order")) || rows[0])?.readiness_state_id;
+    readinessStateId = await ensureReadinessState(env, shop.shopId, input.readyToShip, fetcher);
   } catch (error) {
-    if (!(error instanceof EtsyIntegrationError && error.code === "NOT_FOUND")) throw error;
+    if (error instanceof EtsyIntegrationError && error.code === "AUTH_FAILED") throw error;
+    draftWarnings.push("Hazırlık süresi (processing time) Etsy'ye eklenemedi; yayınlamadan önce taslakta 'Processing time' seçin.");
   }
 
   let productionPartnerId: number | undefined;
@@ -1072,6 +1120,14 @@ export async function createEtsyPhysicalDraft(
 // Taslağı yayına alır; Etsy yayın için en az bir görsel ister ve ilan ücreti bu adımda alınır.
 export async function publishEtsyListing(env: EtsyRuntimeEnv, listingId: number, fetcher: Fetcher = fetch) {
   if (!Number.isInteger(listingId) || listingId <= 0) throw new EtsyIntegrationError("VALIDATION_FAILED", "Geçersiz Etsy ilan numarası.", 400);
+  // Yayından önce eksik zorunlu alanlar tamamlanır; tamamlanamayan varsa Etsy'nin belirsiz hatası yerine açıkça söylenir.
+  let completion: { fixed: string[]; missing: string[] } = { fixed: [], missing: [] };
+  try { completion = await completePhysicalListing(env, undefined, listingId, fetcher); }
+  catch (error) {
+    // Ön kontrol okunamazsa yayın engellenmez (Etsy kendi denetimini yapar); yalnız yetki hatası durdurur.
+    if (error instanceof EtsyIntegrationError && error.code === "AUTH_FAILED") throw error;
+  }
+  if (completion.missing.length) throw new EtsyIntegrationError("VALIDATION_FAILED", `Yayın için Etsy'de eksik: ${completion.missing.join(", ")}.${completion.fixed.length ? ` Uygulama şunları tamamladı: ${completion.fixed.join(", ")}.` : ""}`, 400);
   const shop = await getConnectedShop(env, fetcher);
   const updated = await etsyRequest<{ state?: string; url?: string }>(env, `/application/shops/${shop.shopId}/listings/${listingId}`, {
     method: "PATCH",
@@ -1079,5 +1135,5 @@ export async function publishEtsyListing(env: EtsyRuntimeEnv, listingId: number,
   }, fetcher);
   const state = updated.state === "active" ? updated.state : (await readEtsyListingStatus(env, listingId, fetcher, shop.shopId)).state;
   if (state !== "active") throw new EtsyIntegrationError("UPSTREAM_FAILED", "Etsy ilanı aktif olarak doğrulamadı. Tekrar yayınlamadan önce Etsy’de ilan durumunu kontrol edin.", 502);
-  return { listingId, state, url: updated.url || `https://www.etsy.com/listing/${listingId}` };
+  return { listingId, state, url: updated.url || `https://www.etsy.com/listing/${listingId}`, ...(completion.fixed.length ? { completed: completion.fixed } : {}) };
 }

@@ -353,3 +353,34 @@ test("a physical draft picks the free-shipping profile and warns when only a pai
   const warned = await createEtsyPhysicalDraft(env, kv.store, product("b"), listing, fetcher);
   assert.equal(form?.get("shipping_profile_id"), "50"); assert.ok(warned.warnings.some(line => /ABD kargo ücreti var/.test(line)));
 });
+
+test("publishing fills the Etsy fields a physical draft is missing (return policy, processing time) and names what it cannot fill", async () => {
+  const { publishEtsyListing } = await import("../../worker/src/product-studio.js");
+  const kv = memoryKv();
+  await kv.store.put("etsy:tokens", JSON.stringify({ accessToken: "123.token", refreshToken: "r", expiresAt: Date.now() + 3_600_000, scope: "listings_w shops_w", userId: "123" }));
+  const env = { ETSY_API_KEY: "key", ETSY_SHARED_SECRET: "secret", ETSY_OAUTH: kv.store };
+  let listing: Record<string, unknown> = { listing_id: 905, shop_id: 777, listing_type: "physical", state: "draft", taxonomy_id: 31, who_made: "i_did", when_made: "made_to_order", quantity: 1, shipping_profile_id: 55 };
+  const patches: URLSearchParams[] = []; let readinessCreated = 0;
+  const fetcher = (async (input: string | URL | Request, init?: RequestInit) => {
+    const url = new URL(String(input));
+    if (url.pathname === "/v3/application/users/123/shops") return Response.json({ shop_id: 777, currency_code: "USD" });
+    if (url.pathname === "/v3/application/listings/905") return Response.json(listing);
+    if (url.pathname === "/v3/application/listings/905/images") return Response.json({ count: 6, results: [] });
+    if (url.pathname.endsWith("/policies/return") && init?.method === "POST") return Response.json({ return_policy_id: 66 }, { status: 201 });
+    if (url.pathname.endsWith("/policies/return")) return Response.json({ results: [] });
+    if (url.pathname.endsWith("/readiness-state-definitions") && init?.method === "POST") { readinessCreated++; return Response.json({ readiness_state_id: 9 }, { status: 201 }); }
+    if (url.pathname.endsWith("/readiness-state-definitions")) return Response.json({ results: [] });
+    if (url.pathname === "/v3/application/shops/777/listings/905") {
+      const form = init?.body as URLSearchParams; patches.push(form);
+      if (form.get("state") === "active") return Response.json({ ...listing, state: "active" });
+      listing = { ...listing, return_policy_id: 66, readiness_state_id: 9 }; return Response.json(listing);
+    }
+    return Response.json({}, { status: 500 });
+  }) as typeof fetch;
+  const result = await publishEtsyListing(env, 905, fetcher);
+  assert.equal(result.state, "active");
+  assert.equal(patches[0].get("return_policy_id"), "66"); assert.equal(patches[0].get("readiness_state_id"), "9"); assert.equal(readinessCreated, 1);
+  assert.ok(result.completed?.some(line => /iade politikası/.test(line)));
+  listing = { ...listing, taxonomy_id: undefined };
+  await assert.rejects(publishEtsyListing(env, 905, fetcher), /Yayın için Etsy'de eksik: kategori/);
+});

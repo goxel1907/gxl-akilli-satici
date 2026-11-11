@@ -256,6 +256,8 @@ test("the suggested US price converts to the seller's net and back to the same E
   assert.ok(Math.abs(back.breakEvenUsd - 89) < 0.5, `${net} TL → ${back.breakEvenUsd} USD`);
   const ok = { version: "GXL_PHYSICAL_FULL_V1", requestId: "r", product: { productKind: "other", nameTr: "Seramik kase", origin: "" }, listing: { title: "Ceramic Bowl", tags: Array.from({ length: 13 }, (_, i) => `bowl tag ${i}`), aboutEn: "A hand-thrown ceramic bowl with a deep blue glaze." }, pricing: {}, shipping: {}, questionsTr: [] };
   assert.equal(parseFullListing(JSON.stringify(ok), "r").product.nameTr, "Seramik kase");
+  assert.equal(parseFullListing(JSON.stringify({ ...ok, product: { ...ok.product, hallmarkConfirmed: true } }), "r").product.hallmarkConfirmed, true);
+  assert.equal(parseFullListing(JSON.stringify({ ...ok, product: { ...ok.product, hallmarkConfirmed: "yes" } }), "r").product.hallmarkConfirmed, undefined);
   assert.throws(() => parseFullListing(JSON.stringify({ ...ok, version: "X" }), "r"), /tam ilan JSON/);
   assert.throws(() => parseFullListing(JSON.stringify({ ...ok, requestId: "z" }), "r"), /başka bir talimata/);
   assert.throws(() => parseFullListing(JSON.stringify({ ...ok, product: { ...ok.product, productKind: "car" } }), "r"), /Ürün türü/);

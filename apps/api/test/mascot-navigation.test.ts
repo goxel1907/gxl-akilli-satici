@@ -63,7 +63,7 @@ test("guidance preserves seller-owned patterns and returns failed file QA to cor
   const failed = listingProgress({ phase: "saved", qaOk: false, verifiedState: "active", files: 1, images: 10 });
   assert.equal(failed.complete, false); assert.equal(failed.step, 3);
   assert.match(failed.title, /yeniden denetle/);
-  assert.equal(physicalListingProgress({ photos: 3, kind: "tesbih", name: "Püsküllü tesbih", price: 2500 }).step, 4);
+  assert.equal(physicalListingProgress({ photos: 3, kind: "tesbih", name: "Püsküllü tesbih", price: 2500, origin: "made_by_seller" }).step, 4);
 });
 
 test("Goxi alone walks every physical product kind from photos to a prepared Etsy listing", async context => {
@@ -101,7 +101,7 @@ test("Goxi alone walks every physical product kind from photos to a prepared Ets
         // "Kim yaptı?" yanıtlanmadan Goxi 2. adımdan geçirmez.
         await tap(renderer, /^Goxi ile sonraki adıma geç$/);
         assert.ok(ui.alerts.some(alert => alert.title === "Üretim bilgisi"), item.kind);
-        assert.ok(shown(renderer, "Ürünün bilgilerini doğrula"), item.kind);
+        assert.ok(shown(renderer, "‘Bu ürünü kim yaptı?’ sorusunu yanıtla"), item.kind);
         await tap(renderer, /^Ben \/ atölyem yaptı$/);
       }
       await tap(renderer, /^Goxi ile sonraki adıma geç$/);
@@ -156,4 +156,10 @@ test("Goxi guides the upload of every digital category to a ready-to-save listin
     } finally { await unmount(renderer); }
   }
   ui.pickFiles = async () => ({ canceled: true }); ui.pickImages = async () => ({ canceled: true });
+});
+
+test("Goxi asks the who-made question by name when it is unanswered outside the wizard", () => {
+  const guide = physicalListingProgress({ photos: 9, kind: "tesbih", name: "Gümüş tesbih", price: 11000, shipping: 1250, origin: "unknown" });
+  assert.equal(guide.step, 2); assert.match(guide.title, /kim yaptı/);
+  assert.equal(physicalListingProgress({ photos: 9, kind: "tesbih", name: "Gümüş tesbih", price: 11000, shipping: 1250, origin: "designed_by_seller" }).step, 5);
 });
