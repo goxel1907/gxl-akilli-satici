@@ -4131,6 +4131,7 @@ function PhotoListingStudio({ online, etsyReady, wizard, onStepChange }: any) {
   };
 
   const [showChat, setShowChat] = useState(false);
+  const [otherWays, setOtherWays] = useState(false);
   const photoGuide = physicalListingProgress({ wizardStep: wizard ? step : undefined, photos: photos.length, kind, name: nameTr, price: parseAmount(priceTry), shipping: parseAmount(shippingTry), origin });
   return <>
     {!currentPlan && <ListingMascot {...photoGuide}
@@ -4144,7 +4145,7 @@ function PhotoListingStudio({ online, etsyReady, wizard, onStepChange }: any) {
     </View>}
     {!wizard && <View style={styles.analysisCard}>
       <Text style={styles.cardTitle}>Elinizdeki ürünü Etsy'de satın</Text>
-      <Text style={styles.analysisLine}>Fotoğrafları çekin ve ürün türünü seçin. Bilgileri 'Fotoğraftan otomatik doldur' ile önerdirebilir, ChatGPT / Claude sohbetinden aktarabilir veya elle girebilirsiniz. Uygulama Etsy'de alıcıların aramalarını tarar; başlık, 13 etiket, İngilizce açıklama ve fiyatı hazırlar. Shopier gerekmez.</Text>
+      <Text style={styles.analysisLine}>1) Fotoğrafları ve 5-15 sn videoyu çekin. 2) Aşağıdaki 'ChatGPT / Claude ile tüm ilanı hazırla' kutusundan talimatı paylaşın; asistan ürünü tanır, İngilizce başlık, 13 etiket, açıklama, ABD fiyatı ve kargo bilgisini hazırlar. 3) JSON'u yapıştırın, 'Tüm boşlukları doldur'. 4) 'Etsy'de araştır ve ilanı hazırla' → taslak → 'Etsy'de yayınla'. Shopier gerekmez.</Text>
     </View>}
     {show(1) && <>
     <Text style={styles.fieldLabel}>Fotoğraflar ({photos.length}/{MAX_LISTING_PHOTOS}) · kapak yapmak için fotoğrafa dokunun</Text>
@@ -4169,6 +4170,9 @@ function PhotoListingStudio({ online, etsyReady, wizard, onStepChange }: any) {
       <Pressable style={styles.secondaryButton} onPress={importFull}><Text style={styles.secondaryButtonText}>Tüm boşlukları doldur</Text></Pressable>
       {!!chatText && <Text style={styles.formHint}>Sohbetten gelen başlık ve 13 etiket hazır; 'Etsy'de araştır ve ilanı hazırla' adımında ilana uygulanacak.</Text>}
     </View>
+    {/* Tek ana yol "tüm ilanı hazırla"dır; diğer yollar kafa karıştırmasın diye kapalı başlar. */}
+    <Pressable onPress={() => setOtherWays(!otherWays)} style={{ marginBottom: 10 }}><Text style={styles.linkNote}>{otherWays ? "Diğer yolları gizle" : "Diğer yollar (yalnız fotoğraf güzelleştirme, otomatik doldurma, yalnız analiz) →"}</Text></Pressable>
+    {otherWays && <>
     {photos.length > 0 && <View style={styles.analysisCard}>
       <Text style={styles.cardTitle}>Fotoğrafları güzelleştir (isteğe bağlı)</Text>
       <Text style={styles.formHint}>Talimatı ChatGPT veya Claude'a gönder, fotoğrafları sohbete ekle. Ürün değiştirilmeden ışık, renk, kırpma ve arka plan düzeltilir; Etsy fotoğrafın gerçek ürünü göstermesini ister. Hazır fotoğrafları indirip buradaki eski fotoğrafları silerek yenilerini ekle, sonra devam et.</Text>
@@ -4189,6 +4193,7 @@ function PhotoListingStudio({ online, etsyReady, wizard, onStepChange }: any) {
       <Field label="Sohbetten gelen analiz JSON'u" value={assistantReply} onChangeText={setAssistantReply} multiline autoCapitalize="none" />
       <Pressable style={styles.secondaryButton} onPress={importPhotoAnalysis}><Text style={styles.secondaryButtonText}>Analiz yanıtını uygula</Text></Pressable>
     </View>}
+    </>}
     {wizard && analyzing && <Text style={styles.formHint}>Yapay zekâ fotoğrafa bakıyor…</Text>}
     </>}
     {show(2) && <>
