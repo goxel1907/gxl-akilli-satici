@@ -178,6 +178,10 @@ export async function scoreShopListings(env: EtsyRuntimeEnv, fetcher: Fetcher = 
       ...(salesKnown ? { sales: sales.get(Number(row.listing_id)) || 0 } : {}),
       url: row.url ? String(row.url) : undefined,
       editUrl: `https://www.etsy.com/your/shops/me/listing-editor/edit/${row.listing_id}`,
+      // "Bu ilana reklam ver" önerisi fotoğraf sayısına ve ürünün dijital olup olmadığına bakar.
+      ...(Array.isArray(row.images) ? { photoCount: row.images.length } : {}),
+      digital: row.type === "download",
+      ...(price.currency_code === "USD" && Number(price.amount) ? { priceUsd: Number(price.amount) / (Number(price.divisor) || 100) } : price.currency_code === "TRY" && Number(price.amount) ? { priceTry: Number(price.amount) / (Number(price.divisor) || 100) } : {}),
       ...card
     };
   }).filter((item) => item.listingId > 0).sort((a, b) => a.score - b.score);

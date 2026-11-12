@@ -2313,6 +2313,51 @@ function StudioPanel({ online, active, seed, onUpload, onOpenProduct, etsyReady,
 }
 
 // Etsy ilanına video: 5-15 saniyelik MP4/MOV, en fazla 100 MB. Videolu ilanlar Etsy'de daha çok tıklanır.
+// İlana reklam: Etsy, reklamın başka bir uygulamadan açılmasına izin vermez (API'de reklam yok). Uygulama ilana özel
+// kararı, bütçeyi, durdurma kuralını ve adımları hazırlar; o ilanın Etsy sayfasını açar. Ödeme ve "Start" satıcıdadır.
+function ListingAdButton({ listing, online }: { listing: { listingId: number; title: string; state?: string; priceUsd?: number; priceTry?: number; photoCount?: number; digital?: boolean; kind?: string }; online: boolean }) {
+  const [open, setOpen] = useState(false);
+  const [advice, setAdvice] = useState<any>();
+  const [loading, setLoading] = useState(false);
+  const live = listing.state === undefined || listing.state === "active";
+  const load = async () => {
+    setOpen(!open);
+    if (open || advice || !online) return;
+    setLoading(true);
+    try {
+      const plan = await apiJson("/api/marketing/plan", { method: "POST", headers: apiHeaders(true), body: JSON.stringify({
+        productName: (listing.title || "Etsy ilanı").slice(0, 80), kind: listing.kind || (listing.digital ? "pdf" : "other"), channel: "etsy",
+        priceUsd: listing.priceUsd, priceTry: listing.priceTry, photoCount: listing.photoCount, activeEtsyListings: 1
+      }) });
+      setAdvice({ ads: (plan.channels || []).find((item: any) => item.id === "etsy_ads"), offsite: (plan.channels || []).find((item: any) => item.id === "offsite_ads") });
+    } catch (error) { setAdvice({ error: errorText(error) }); }
+    finally { setLoading(false); }
+  };
+  const ads = advice?.ads;
+  return <View>
+    <Pressable style={[styles.secondaryButton, { alignSelf: "flex-start" }]} onPress={load}><Text style={styles.secondaryButtonText}>{open ? "Reklam önerisini kapat" : "Bu ilana reklam ver"}</Text></Pressable>
+    {open && <View style={styles.adviceBox}>
+      <Text style={styles.rowTitle}>Etsy reklamı · ilan #{listing.listingId}</Text>
+      {!live && <Text style={styles.warningText}>Bu ilan henüz yayında değil. Etsy reklamı yalnız yayındaki ilana verilir; önce yayınlayın.</Text>}
+      {loading && <ActivityIndicator color="#C88B47" />}
+      {!!advice?.error && <Text style={styles.warningText}>{advice.error}</Text>}
+      {ads && <>
+        <Text style={styles.trendVerdict}>{ads.decisionTr}</Text>
+        <Text style={styles.small}>{ads.whyTr}</Text>
+        {!!ads.budgetTr && <Text style={styles.analysisLine}>Bütçe: {ads.budgetTr}</Text>}
+        {!!ads.stopRuleTr && <Text style={styles.analysisLine}>Durdurma kuralı: {ads.stopRuleTr}</Text>}
+      </>}
+      <Text style={styles.analysisLine}>1) Aşağıdan ilanı aç; Etsy'de giriş yaptıysan üstte 'Seller listing tools' satırı çıkar → 'Promote'a bas.</Text>
+      <Text style={styles.analysisLine}>2) Günlük bütçeyi yaz (önerilen 1–3 USD; mağaza TL ise Etsy TL karşılığını gösterir) ve 'Start' / 'Save' de.</Text>
+      <Text style={styles.analysisLine}>3) Ödemeyi Etsy, reklam harcamasını satış bakiyenden ya da kayıtlı kartından alır; tıklanma olunca ücretlenir.</Text>
+      <Text style={styles.formHint}>Etsy reklamın başka bir uygulamadan başlatılmasına izin vermez; bu yüzden son onay ve ödeme Etsy'de sende. Reklamı 30 gün bütçeye dokunmadan çalıştır.</Text>
+      {!!advice?.offsite && <Text style={styles.small}>Site dışı reklam (Offsite Ads): {advice.offsite.whyTr}</Text>}
+      <Pressable style={[styles.primary, { marginTop: 10, marginBottom: 6 }]} onPress={() => openUrl(`https://www.etsy.com/listing/${listing.listingId}`, "Etsy ilanı")}><Text style={styles.primaryText}>Etsy'de bu ilanın reklamını aç</Text></Pressable>
+      <Pressable onPress={() => openUrl("https://www.etsy.com/your/shops/me/advertising", "Etsy Ads")}><Text style={styles.linkNote}>Etsy Ads panelini aç (bütçe ve harcama) →</Text></Pressable>
+    </View>}
+  </View>;
+}
+
 function EtsyVideoUpload({ listingId }: { listingId: number }) {
   const [state, setState] = useState<"idle" | "uploading" | "done">("idle");
   const pick = async () => {
@@ -2688,6 +2733,7 @@ function DigitalPanel({ online, active = true, shopReady, prefill, onPrefillUsed
         <Pressable style={styles.secondaryButton} onPress={() => setGrantProduct(product)}><Text style={styles.secondaryButtonText}>Satış bağlantısı</Text></Pressable>
         <Pressable style={styles.secondaryButton} onPress={() => loadDetail(product.id)}><Text style={styles.secondaryButtonText}>Bağlantılar</Text></Pressable>
         {!!product.etsy?.listingId && <EtsyVideoUpload listingId={product.etsy.listingId} />}
+        {!!product.etsy?.listingId && <ListingAdButton online={online} listing={{ listingId: product.etsy.listingId, title: product.listing?.title || product.name, state: publication[product.id]?.state, priceUsd: product.prices?.usd, photoCount: product.images?.length, digital: true }} />}
         <Pressable style={styles.secondaryButton} disabled={busy === product.id} onPress={() => removeProduct(product)}><Text style={[styles.secondaryButtonText, { color: "#B4483A" }]}>Uygulamadan sil</Text></Pressable>
       </View>
       {(details[product.id]?.grants || []).map((grant: any) => <View style={styles.grantRow} key={grant.id}>
@@ -3381,6 +3427,7 @@ function EtsyPlanResult({ plan, payload, etsyReady, priceSourceLabel, preparePro
         <Text style={styles.policyLabel}>{published ? "Yayında" : "Taslak hazır · henüz yayında değil"}</Text>
         <Pressable style={[styles.secondaryButton, { alignSelf: "flex-start", marginTop: 6 }]} onPress={() => published ? openUrl(published.url, "Etsy ilanı") : openUrl(draft.editUrl, "Etsy taslak ilanı")}><Text style={styles.secondaryButtonText}>{published ? "İlanı aç" : "Taslağı kontrol et"}</Text></Pressable>
         {!published && <EtsyVideoUpload listingId={draft.listingId} />}
+        <ListingAdButton online={true} listing={{ listingId: draft.listingId, title, state: published?.state || "draft", priceUsd: Number(priceUsd.replace(",", ".")) || undefined, photoCount, kind: payload?.productKind === "tesbih" ? "tesbih" : payload?.productKind === "vintage" ? "vintage" : payload?.productKind === "knitwear" ? "knitwear" : "other" }} />
         {!published && <Pressable style={[styles.analyzeButton, { marginTop: 12 }, publishing && styles.primaryDisabled]} disabled={publishing} onPress={publish}>{publishing ? <ActivityIndicator color="white" /> : <Ionicons name="rocket-outline" size={18} color="white" />}<Text style={styles.primaryText}>Etsy'de yayınla</Text></Pressable>}
       </View>}
   </>;
@@ -3477,6 +3524,7 @@ function ShopListingsScorecard({ online }: any) {
       <Text style={styles.small}>{item.state === "active" ? "Yayında" : "Taslak"}</Text>
       {item.checks.filter((check: any) => !check.ok).slice(0, 3).map((check: any) => <Text style={styles.warningText} key={check.id}>• {check.fixTr}</Text>)}
       <Pressable onPress={() => openUrl(item.editUrl, "Etsy ilan düzenleme")}><Text style={styles.linkNote}>Etsy'de düzenle</Text></Pressable>
+      <ListingAdButton online={online} listing={{ listingId: item.listingId, title: item.title, state: item.state, photoCount: item.photoCount, digital: item.digital, priceUsd: item.priceUsd, priceTry: item.priceTry }} />
     </View>)}
   </View>;
 }
