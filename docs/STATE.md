@@ -74,3 +74,6 @@ Güncelleme: 9 Kasım 2026
   eksik iade politikası/hazırlık süresi/kargo profilini PATCH ile tamamlar, kategori/kim yaptı/fotoğraf eksikse açıkça söyler.
   Açıklamada Türkçe harf varsa taslak gönderilmez. Tam ilan JSON'u origin (1-4 numaralı soru) ve hallmarkConfirmed taşır;
   Goxi "kim yaptı" yanıtsızsa bunu adıyla ister.
+- "Bu ilana reklam ver" (12 Kasım): ilan karnesi, Dijital ürün kartı ve fiziksel taslak kutusunda. Etsy API'de reklam yok:
+  uygulama ilana özel karar/bütçe/durdurma kuralını (marketing-plan etsy_ads) gösterir, etsy.com/listing/{id} açar
+  (Seller listing tools → Promote). Ödeme ve Start satıcıda.

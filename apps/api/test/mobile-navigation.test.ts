@@ -434,3 +434,30 @@ test("Trend explains a group where every scanned search has weak demand and neve
     assert.doesNotMatch(shown(), /Alıcı ilgisi olan en iyi fırsatlar/);
   } finally { await unmount(renderer); }
 });
+
+test("each Etsy listing card offers 'Bu ilana reklam ver' with a listing-specific plan and opens that listing's Promote page", async context => {
+  const product = {
+    id: "ad-product", name: "Word Search", kind: "puzzles", productType: "word search",
+    fileName: "Word-Search-US-Letter.pdf", fileSize: 100, files: [{ name: "Word-Search-US-Letter.pdf", size: 100 }],
+    images: Array.from({ length: 10 }, (_, i) => ({ url: `https://local.invalid/${i}.png` })),
+    listing: { title: "Large Print Word Search Printable", description: "Puzzles.", tags: [], materials: [] },
+    prices: { usd: 5.99 }, flags: { testMade: true },
+    etsy: { listingId: 4614031045, editUrl: "https://www.etsy.com/your/shops/me/listing-editor/edit/4614031045", imagesUploaded: 10, filesUploaded: 1, fileUploaded: true }
+  };
+  let planBody: any;
+  context.mock.method(globalThis, "fetch", router((path, init) => {
+    if (path === "/api/digital/products") return Response.json({ products: [product] });
+    if (path === "/api/marketing/plan") { planBody = JSON.parse(String(init?.body)); return Response.json({ channels: [{ id: "etsy_ads", decision: "now", decisionTr: "Şimdi yap", whyTr: "Etsy'de arayan alıcıya gösterir.", budgetTr: "Günde 1–3 USD, 30 gün", stopRuleTr: "30 gün sonra satış yoksa kapatın.", stepsTr: [], copy: [] }, { id: "offsite_ads", decision: "always", decisionTr: "Mutlaka", whyTr: "Satış olursa %15.", stepsTr: [], copy: [] }] }); }
+    return Response.json({});
+  }));
+  ui.links.length = 0;
+  const renderer = await mount(screens.DigitalPanel, { online: true, active: true, shopReady: true, onPrepare: () => {} });
+  try {
+    await waitFor(() => buttons(renderer, /^Bu ilana reklam ver$/).length === 1);
+    await tap(renderer, /^Bu ilana reklam ver$/);
+    await waitFor(() => renderer.root.findAllByType("Text" as any).some((node: any) => visible(node) && text(node) === "Şimdi yap"));
+    assert.equal(planBody.productName, "Large Print Word Search Printable"); assert.equal(planBody.kind, "pdf"); assert.equal(planBody.photoCount, 10);
+    await tap(renderer, /^Etsy'de bu ilanın reklamını aç$/);
+    assert.equal(ui.links.at(-1), "https://www.etsy.com/listing/4614031045");
+  } finally { await unmount(renderer); }
+});
