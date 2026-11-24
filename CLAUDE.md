@@ -26,7 +26,7 @@ printable-studio.ts büyük dosyalardır, yalnız gereken satır aralığını o
 - Sunucu: Cloudflare Worker `gxl-akilli-satici-api` (apps/worker/src/index.ts), main'e merge ile kendiliğinden yayın.
 - Telefon: Expo, apps/mobile/App.tsx (+ ListingMascot, ProductionTracker, ListingOfferPicker...). Sürüm 0.8.6,
   OTA güncelleme (Özet → Güncellemeyi denetle). Telefon kodu değişince kullanıcıya güncellemeyi söyle.
-- Test: `npm test` (433 test, hepsi geçmeli), `npm run typecheck`. Testler gerçek ekranları render eder
+- Test: `npm test` (434 test, hepsi geçmeli), `npm run typecheck`. Testler gerçek ekranları render eder
   (apps/api/test/fixtures/mobile-ui); buton etiketi değişirse ilgili testi güncelle.
 
 ## Önemli dosyalar

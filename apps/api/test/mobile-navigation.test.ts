@@ -1,4 +1,5 @@
-import { PRINTABLE_WORKSPACE_KEY } from "../../mobile/workflow-state.js";
+import { PRINTABLE_WORKSPACE_KEY, parsePrintableWorkspace } from "../../mobile/workflow-state.js";
+import { PRODUCTION_TRACKER_KEY, readProductionRecords } from "../../mobile/production-tracker.js";
 import { readFile } from "node:fs/promises";
 import { handleRequest } from "../../worker/src/index.js";
 import { validPdf } from "./fixtures/valid-pdf.js";
@@ -279,6 +280,15 @@ test("real screen buttons drive Trend → Studio → Digital → draft → verif
     assert.match(switched.plan.brief.masterPrompt,/- Gemini: görselleri yerleşik görsel aracınla üret/);
     assert.match(switched.plan.brief.masterPrompt,/## Evidence-based market strategy/,"research sections are kept");
     assert.ok(renderer.root.findAllByType("Text" as any).some(node=>visible(node)&&text(node)==="Sırada: Üretim ajanı (Gemini)"));
+    // Kayıt yapay zekâ değişince bozuk sayılıp listeden düşmez; paket hatasız gönderilir.
+    assert.ok(parsePrintableWorkspace(JSON.stringify(switched)), "the switched workspace stays valid");
+    const tracked=readProductionRecords(ui.storage.get(PRODUCTION_TRACKER_KEY)||null);
+    assert.equal(tracked.find(row=>row.workspace.plan.brief.name===plan.brief.name)?.workspace.input.assistant,"gemini");
+    const sharesBefore=ui.shares.length; ui.alerts.length=0;
+    await act(async()=>{buttons(renderer,/^Tek paketi Gemini’ye gönder$/)[0].props.onPress();});
+    await waitFor(()=>ui.shares.length===sharesBefore+1);
+    assert.ok(!ui.alerts.some(alert=>alert.title==="Çalışma işlemi tamamlanamadı"), JSON.stringify(ui.alerts));
+    assert.match((ui.shares.at(-1) as {message:string}).message,/- Gemini: görselleri yerleşik görsel aracınla üret/);
     await tap(renderer,/^ChatGPT$/);
     await waitFor(()=>buttons(renderer,/^Tek paketi ChatGPT’ye gönder$/).length>=1);
     await tap(renderer,/^Dosyalarım hazır, ajanlara ver →$/);
