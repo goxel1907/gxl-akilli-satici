@@ -1028,6 +1028,8 @@ export async function handleRequest(request: Request, env: Env, context?: {waitU
       if (error.code === "VALIDATION_FAILED") return json(400, { error: error.message, field: error.upstreamCode });
       return json(502, { error: "Shopier geçici olarak yanıt vermedi." });
     }
+    // Cloudflare KV günlük yazma/okuma sınırı (ücretsiz planda günde 1000 yazma) dolunca put/get hata verir.
+    if (/\bKV\b.*\b(429|limit|exceeded|too many)/i.test(code)) return json(503, { error: "Sunucunun günlük depolama sınırı doldu. Yükleme ve kayıtlar sınır sıfırlanınca (UTC gece yarısı, Türkiye saatiyle 03:00) yeniden çalışır.", code: "STORAGE_LIMIT" });
     return json(500, { error: "Beklenmeyen sunucu hatası." });
   }
 }
