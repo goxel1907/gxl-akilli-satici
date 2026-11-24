@@ -22,6 +22,8 @@ export interface MasterPromptInput {
   qa?: string[];
   // Satıcının seçtiği yapay zekâ: paket o aracın yapabildiğine göre yazılır (Claude fotoğraf üretmez, vektör çizer).
   assistant?: "chatgpt" | "claude" | "gemini";
+  // Sahneleri üreten başka araç (ajan ekibi): üretici yalnız promptu verir, satıcı görseli o araçta üretip yükler.
+  visualAssistant?: "chatgpt" | "claude" | "gemini";
   // Türün Türkçe adı (giriş cümlesi) ve ABD pazarı kuralları (us-market.ts, Türkçe).
   productLabelTr?: string;
   usRules?: string[];
@@ -70,8 +72,9 @@ export function buildMasterPrompt(input: MasterPromptInput): string {
   // Kodla yapılan görseller tek Python betiğiyle aynı yanıtta biter; yalnız görsel aracı gerekenler yanıt başına birdir.
   if (codeVisuals.length) {
     const [first, ...scenes] = imageVisuals;
-    steps.push({ title: "İlan görselleri", body: claude
-      ? `${imageVisuals.join(", ")} için spec değerleri doldurulmuş İngilizce sahne promptlarını TEK yanıtta, alt alta ver (her birinin altında bir satır Türkçe açıklama; ${first} yalnız temalı zemindir, sayfasız ve yazısız). Aynı yanıtta ${codeVisuals.join(", ")} görsellerini gerçek dosyalardan TEK bir Python betiğiyle kodla üret ve başlık/rozetleri Brief C kurallarıyla ekle; zemine ihtiyaç duyanları (backdrop.png) ben ${first} zeminini yükleyince tamamla. Sahneler gelince gerçek sayfaları yerleştir, başlığı ekle ve hepsini listing-01.jpg sırasıyla tek zip'te ver. Başka satıcıların ya da internetin görsellerini asla kullanma; görsel aracına yazı, harf veya logo çizdirme.`
+    const elsewhere = input.visualAssistant && input.visualAssistant !== input.assistant ? (input.visualAssistant === "gemini" ? "Gemini" : "ChatGPT") : "";
+    steps.push({ title: "İlan görselleri", body: claude || elsewhere
+      ? `${elsewhere ? `Görsel kredini korumak için ${imageVisuals.join(", ")} görsellerini sen üretme; bunları ${elsewhere}'de üreteceğim. ` : ""}${imageVisuals.join(", ")} için spec değerleri doldurulmuş İngilizce sahne promptlarını TEK yanıtta, alt alta ver (her birinin altında bir satır Türkçe açıklama; ${first} yalnız temalı zemindir, sayfasız ve yazısız)${elsewhere ? `; ben ${elsewhere}'de üretip bu sohbete yüklerim` : ""}. Aynı yanıtta ${codeVisuals.join(", ")} görsellerini gerçek dosyalardan TEK bir Python betiğiyle kodla üret ve başlık/rozetleri Brief C kurallarıyla ekle; zemine ihtiyaç duyanları (backdrop.png) ben ${first} zeminini yükleyince tamamla. Sahneler gelince gerçek sayfaları yerleştir, başlığı ekle ve hepsini listing-01.jpg sırasıyla tek zip'te ver. Başka satıcıların ya da internetin görsellerini asla kullanma; görsel aracına yazı, harf veya logo çizdirme.`
       : `Bu adımı hızlı bitir: önce ${first} için görsel aracıyla yalnız temalı zemini üret (sayfasız, yazısız) ve backdrop.png olarak kaydet. Hemen ardından, AYNI yanıtta durmadan, ${first} kapağını ve ${codeVisuals.join(", ")} görsellerini gerçek dosyalardan TEK bir Python betiğiyle kodla üret; gerçek sayfaları yerleştir, başlık ve rozetleri Brief C kurallarıyla (Pillow) ekle. Sonra ${scenes.join(" ve ")} sahnelerini görsel aracıyla üret (araç izin veriyorsa art arda, vermiyorsa her yanıtta bir tane) ve başlıklarını kodla ekle. Görselde görünen ürün ${realProduct} olmalı; başka satıcıların ya da internetin görsellerini asla kullanma. Görsel aracına yazı, harf veya logo çizdirme (görsel modelleri yazıyı bozar). Son görsel bitince bütün ilan görsellerini listing-01.jpg sırasıyla TEK zip'te ver.` });
   }
   else steps.push({ title: "İlan görselleri", body: claude

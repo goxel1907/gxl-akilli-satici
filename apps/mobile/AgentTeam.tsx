@@ -1,8 +1,29 @@
 import React, { useEffect, useState } from "react";
-import { Alert, Pressable, Share, StyleSheet, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Alert, Pressable, Share, StyleSheet, Text, TextInput, View } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { ASSISTANTS, assistantName, assistantTo, isAssistant, type Assistant } from "./assistants";
-import { applyOpening, listingReviewPrompt, parseListingReview, planAgentTeam, type ListingReview, type ReviewContext } from "./agent-team";
+import { applyOpening, beatCompetitors, listingReviewPrompt, parseListingReview, planAgentTeam, type BeatCheck, type ListingReview, type ReviewContext } from "./agent-team";
+import { agentState, digitalPipeline, physicalPipeline, type AgentOwner } from "./agent-pipeline";
+
+const ownerLabel = (owner: AgentOwner) => owner === "goxi" ? "Goxi · otomatik" : owner === "seller" ? "Sen" : assistantName(owner);
+
+// Ajan hattı: üründen yayına tüm işler; kim yapıyor (Goxi otomatik, ChatGPT/Claude/Gemini ya da sen) ve hangisi sırada.
+export function AgentPipeline({ kind, stage, complete }: { kind: "digital" | "physical"; stage: number; complete?: boolean }) {
+  const { team } = useAgentTeam();
+  const [open, setOpen] = useState(false);
+  const agents = kind === "digital" ? digitalPipeline(team) : physicalPipeline(team);
+  const states = agents.map((agent) => agentState(agent, stage, complete));
+  const done = states.filter((state) => state === "done").length;
+  const active = agents.filter((_, index) => states[index] === "active");
+  return <View style={s.card} testID={`agent-pipeline-${kind}`}>
+    <Pressable accessibilityRole="button" onPress={() => setOpen(!open)}><Text style={s.title}>Ajan hattı · {done}/{agents.length} tamam {open ? "▲" : "▼"}</Text></Pressable>
+    <Text style={s.small}>{active.length ? `Şu an çalışan: ${active.map((agent) => `${agent.nameTr} (${ownerLabel(agent.owner)})`).join(", ")}` : "Tüm ajanlar işini bitirdi."}</Text>
+    {open && agents.map((agent, index) => <View key={agent.id} style={s.agentRow}>
+      <Text style={states[index] === "done" ? s.done : states[index] === "active" ? s.active : s.waiting}>{states[index] === "done" ? "✓" : states[index] === "active" ? "●" : "○"}</Text>
+      <View style={{ flex: 1 }}><Text style={s.line}><Text style={{ fontWeight: "700" }}>{agent.nameTr}</Text> · {ownerLabel(agent.owner)}</Text><Text style={s.small}>{agent.taskTr}</Text></View>
+    </View>)}
+  </View>;
+}
 
 export const AGENT_TEAM_KEY = "gxl.agentTeam";
 interface Saved { members: Assistant[]; low: Assistant[] }
@@ -43,7 +64,7 @@ export function AgentTeamCard({ producer, onUseProducer, disabled }: { producer:
 }
 
 // Denetçi ajan: bitmiş ilanı ikinci bir yapay zekâ denetler; başlık, 13 etiket ve açılış paragrafı denetimden geçerse uygulanır.
-export function ListingReviewCard({ context, producer, onApply }: { context: ReviewContext; producer?: string; onApply: (next: { title: string; tags: string[]; description: string }) => void }) {
+export function ListingReviewCard({ context, producer, onApply, runAuto, images = 0, video = false, sellers = [] }: { context: ReviewContext; producer?: string; onApply: (next: { title: string; tags: string[]; description: string }) => void; runAuto?: (body: Record<string, unknown>) => Promise<any>; images?: number; video?: boolean; sellers?: any[] }) {
   const { team } = useAgentTeam();
   const fallback = team.reviewer !== producer ? team.reviewer : ASSISTANTS.map((item) => item.id).find((id) => id !== producer) || team.reviewer;
   const [reviewer, setReviewer] = useState<Assistant>(fallback);
@@ -52,6 +73,23 @@ export function ListingReviewCard({ context, producer, onApply }: { context: Rev
   const [reply, setReply] = useState("");
   const [result, setResult] = useState<ListingReview>();
   const [error, setError] = useState("");
+  const [autoBusy, setAutoBusy] = useState(false);
+  const [autoNote, setAutoNote] = useState("");
+  const [serverBeat, setServerBeat] = useState<{ ok: boolean; checks: BeatCheck[] }>();
+  // Kapı her an yerelde de hesaplanır; otomatik denetim gelince sunucunun sonucu gösterilir (ikisi aynı kuraldır).
+  const beat = serverBeat || beatCompetitors({ kind: context.kind, title: context.title, tags: context.tags, description: context.description, priceUsd: context.priceUsd, images, video, targetSearch: context.targetSearch, sellers });
+  useEffect(() => setServerBeat(undefined), [context.title, context.description, context.tags.join(","), images, video]);
+  const auto = async () => {
+    if (!runAuto) return;
+    setAutoBusy(true); setAutoNote(""); setError("");
+    try {
+      const response = await runAuto({ kind: context.kind, title: context.title, tags: context.tags, description: context.description, priceUsd: context.priceUsd, targetSearch: context.targetSearch, images, video, sellers });
+      if (response?.beat?.checks) setServerBeat(response.beat);
+      if (response?.review) { setResult(response.review); setAutoNote("Goxi'nin denetçi ajanı ilanı satan rakiplere göre denetledi."); }
+      else setAutoNote(response?.reviewErrorTr || "Otomatik öneri gelmedi; aşağıdan başka bir yapay zekâyla denetle.");
+    } catch (autoError) { setAutoNote(String((autoError as Error)?.message || autoError)); }
+    finally { setAutoBusy(false); }
+  };
   const share = async () => {
     if (!context.title.trim() || context.tags.length === 0) return Alert.alert("Önce ilan bilgisi gerekli", "Başlık ve etiketler dolunca denetime gönder.");
     const id = `review-${Date.now()}`;
@@ -63,8 +101,13 @@ export function ListingReviewCard({ context, producer, onApply }: { context: Rev
     catch (parseError) { setResult(undefined); setError(String((parseError as Error).message)); }
   };
   return <View style={s.card} testID="listing-review-card">
-    <Text style={s.title}>Denetçi ajan (ikinci görüş)</Text>
-    <Text style={s.small}>İlanı yayından önce başka bir yapay zekâ en çok satan rakiplere ve Etsy kurallarına göre denetler. İlan görsellerini de sohbete ekle.</Text>
+    <Text style={s.title}>Denetçi ajan</Text>
+    <Text style={s.label}>{beat.ok ? "Rakipten iyi mi? Evet, tüm şartlar geçti." : "Rakipten iyi mi? Henüz değil, yayından önce düzelt:"}</Text>
+    {beat.checks.map((check) => <Text key={check.id} style={check.ok ? s.line : s.warn}>{check.ok ? "✓" : "✗"} {check.labelTr}{check.ok ? "" : ` · ${check.detailTr}`}</Text>)}
+    {!!runAuto && <Pressable accessibilityRole="button" style={[s.button, autoBusy && s.disabled]} disabled={autoBusy} onPress={auto}>{autoBusy ? <ActivityIndicator color="white" /> : <Text style={s.buttonText}>Goxi denetlesin (otomatik)</Text>}</Pressable>}
+    {!!autoNote && <Text style={s.small}>{autoNote}</Text>}
+    <Text style={s.label}>İkinci görüş (görselleri de görür)</Text>
+    <Text style={s.small}>Başka bir yapay zekâ ilanı ve görselleri en çok satan rakiplere göre denetler. İlan görsellerini sohbete ekle.</Text>
     <View style={s.row}>{ASSISTANTS.map((item) => <Pressable key={item.id} accessibilityRole="button" style={[s.chip, reviewer === item.id && s.chipOn]} onPress={() => setReviewer(item.id)}><Text style={reviewer === item.id ? s.chipTextOn : s.chipText}>{item.label}</Text></Pressable>)}</View>
     {reviewer === producer && <Text style={s.warn}>Bu ilanı hazırlayan da {assistantName(reviewer)}; daha tarafsız denetim için başka bir araç seç.</Text>}
     <Pressable accessibilityRole="button" style={s.button} onPress={share}><Text style={s.buttonText}>Denetim talimatını {assistantTo(reviewer)} gönder</Text></Pressable>
@@ -95,6 +138,10 @@ const s = StyleSheet.create({
   line: { fontSize: 13, color: "#26302B" },
   warn: { fontSize: 13, color: "#9A3412" },
   row: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  agentRow: { flexDirection: "row", gap: 8, alignItems: "flex-start", paddingVertical: 4 },
+  done: { color: "#2F7D4F", fontWeight: "800", width: 16 },
+  active: { color: "#C2410C", fontWeight: "800", width: 16 },
+  waiting: { color: "#9AA39E", fontWeight: "800", width: 16 },
   chip: { borderWidth: 1, borderColor: "#B9C7BF", borderRadius: 18, paddingHorizontal: 12, paddingVertical: 6, backgroundColor: "#F5F2E9" },
   chipOn: { backgroundColor: "#315B4C", borderColor: "#315B4C" },
   chipLow: { backgroundColor: "#FDE7D8", borderColor: "#E9A27A" },

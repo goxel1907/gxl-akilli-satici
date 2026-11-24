@@ -10,6 +10,7 @@ import { acceptListingOffer, createListingOffers } from "./listing-offers.js";
 import { rememberProduct, type IdeaStore } from "./product-memory.js";
 import { researchPrintableMarket } from "./printable-research.js";
 import { gatherSalesProof } from "./sales-proof.js";
+import { runListingReview } from "./agent-review.js";
 import type { MarketStrategy } from "./market-strategy.js";
 import { products } from "../../api/src/data.js";
 import { patternPolicyIssues, patternPolicyMessage } from "./etsy-policy.js";
@@ -708,6 +709,10 @@ export async function handleRequest(request: Request, env: Env, context?: {waitU
         catch{notification={queued:false,reasonTr:"Cevap hazır, ancak size özel bildirim kaydedilemedi. Bildirim bölümünü kontrol edin."};}
       }
       return json(200,{...result,...(notification?{notification}:{} )});
+    }
+    // Otomatik denetçi ajan: "rakipten iyi mi?" kapısı + sunucu yapay zekâsının düzeltme önerisi (kurallardan geçerse).
+    if (request.method === "POST" && url.pathname === "/api/agents/review") {
+      return json(200, await runListingReview(await readBody(request), env as unknown as AiRuntimeEnv));
     }
     if (request.method === "POST" && url.pathname === "/api/marketing/plan") {
       const input = normalizeMarketingInput(await readBody(request));
