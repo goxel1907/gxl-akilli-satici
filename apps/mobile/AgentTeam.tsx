@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
-import { ActivityIndicator, Alert, Pressable, Share, StyleSheet, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Alert, Linking, Pressable, Share, StyleSheet, Text, TextInput, View } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { ASSISTANTS, assistantName, assistantTo, isAssistant, type Assistant } from "./assistants";
+import { ASSISTANTS, assistantAcc, assistantHome, assistantName, assistantTo, isAssistant, type Assistant } from "./assistants";
 import { applyOpening, beatCompetitors, listingReviewPrompt, parseListingReview, planAgentTeam, type BeatCheck, type ListingReview, type ReviewContext } from "./agent-team";
 import { agentState, digitalPipeline, physicalPipeline, type AgentOwner } from "./agent-pipeline";
 
@@ -20,7 +20,9 @@ export function AgentPipeline({ kind, stage, complete }: { kind: "digital" | "ph
     <Text style={s.small}>{active.length ? `Şu an çalışan: ${active.map((agent) => `${agent.nameTr} (${ownerLabel(agent.owner)})`).join(", ")}` : "Tüm ajanlar işini bitirdi."}</Text>
     {open && agents.map((agent, index) => <View key={agent.id} style={s.agentRow}>
       <Text style={states[index] === "done" ? s.done : states[index] === "active" ? s.active : s.waiting}>{states[index] === "done" ? "✓" : states[index] === "active" ? "●" : "○"}</Text>
-      <View style={{ flex: 1 }}><Text style={s.line}><Text style={{ fontWeight: "700" }}>{agent.nameTr}</Text> · {ownerLabel(agent.owner)}</Text><Text style={s.small}>{agent.taskTr}</Text></View>
+      <View style={{ flex: 1 }}><Text style={s.line}><Text style={{ fontWeight: "700" }}>{agent.nameTr}</Text> · {ownerLabel(agent.owner)}</Text><Text style={s.small}>{agent.taskTr}</Text>
+        {isAssistant(agent.owner) && states[index] !== "done" && <Pressable accessibilityRole="button" onPress={() => Linking.openURL(assistantHome(agent.owner)).catch(() => undefined)}><Text style={s.openLink}>{assistantAcc(agent.owner)} aç →</Text></Pressable>}
+      </View>
     </View>)}
   </View>;
 }
@@ -44,6 +46,24 @@ export function useAgentTeam() {
   return { ...saved, team: planAgentTeam(saved.members, saved.low), update };
 }
 
+// Yapay zekâ hesaplarım: her biri kendi uygulamasında bir kez giriş yapılır; GXL şifre görmez, yalnız uygulamayı açar
+// ve talimatı paylaşır. Ekipte olup olmadığı ve kredisi buradan da değiştirilebilir.
+export function AssistantAccounts() {
+  const { members, low, update } = useAgentTeam();
+  return <View style={s.card} testID="assistant-accounts">
+    <Text style={s.title}>Yapay zekâ hesaplarım</Text>
+    <Text style={s.small}>ChatGPT, Claude ve Gemini'ye kendi uygulamalarında bir kez giriş yaparsın; giriş açık kalır. GXL şifreni görmez, hesaplarına senin yerine giremez: yalnız doğru uygulamayı açar ve hazırladığı talimatı oraya gönderir.</Text>
+    {ASSISTANTS.map((item) => {
+      const inTeam = members.includes(item.id), isLow = low.includes(item.id);
+      return <View key={item.id} style={s.accountRow}>
+        <View style={{ flex: 1 }}><Text style={s.line}><Text style={{ fontWeight: "700" }}>{item.label}</Text> · {inTeam ? isLow ? "ekipte, kredisi az" : "ekipte" : "ekipte değil"}</Text></View>
+        <Pressable accessibilityRole="button" style={s.smallButton} onPress={() => Linking.openURL(assistantHome(item.id)).catch(() => Alert.alert("Açılamadı", `${item.label} bu telefonda açılamadı. Uygulamasını Play Store'dan kur ve bir kez giriş yap.`))}><Text style={s.smallButtonText}>Aç</Text></Pressable>
+        <Pressable accessibilityRole="button" style={s.smallButton} onPress={() => { const next = inTeam ? members.filter((id) => id !== item.id) : [...members, item.id]; if (next.length) update({ members: next, low: low.filter((id) => next.includes(id)) }); }}><Text style={s.smallButtonText}>{inTeam ? "Ekipten çıkar" : "Ekibe ekle"}</Text></Pressable>
+      </View>;
+    })}
+  </View>;
+}
+
 // Üyelikler ve "kredisi az" işaretine göre görev dağıtımı; öneri üretim aracını tek dokunuşla seçer.
 export function AgentTeamCard({ producer, onUseProducer, disabled }: { producer: string; onUseProducer: (value: Assistant) => void; disabled?: boolean }) {
   const { members, low, team, update } = useAgentTeam();
@@ -51,7 +71,8 @@ export function AgentTeamCard({ producer, onUseProducer, disabled }: { producer:
   const toggle = (list: Assistant[], id: Assistant) => list.includes(id) ? list.filter((item) => item !== id) : [...list, id];
   return <View style={s.card} testID="agent-team-card">
     <Pressable accessibilityRole="button" onPress={() => setOpen(!open)}><Text style={s.title}>Ajan ekibi {open ? "▲" : "▼"}</Text></Pressable>
-    <Text style={s.small}>{team.notesTr[0]} Denetim: {assistantName(team.reviewer)}.</Text>
+    <Text style={s.small}>Üretim: {assistantName(team.producer)} · Görsel: {assistantName(team.visuals)} · Denetim: {assistantName(team.reviewer)}</Text>
+    <Text style={s.small}>Ekipte: {members.map(assistantName).join(", ")}{low.length ? ` · kredisi az: ${low.map(assistantName).join(", ")}` : ""}{members.length < 3 ? " · diğerlerini eklemek için dokun" : ""}</Text>
     {open && <>
       <Text style={s.label}>Üyeliğim olanlar</Text>
       <View style={s.row}>{ASSISTANTS.map((item) => <Pressable key={item.id} accessibilityRole="button" style={[s.chip, members.includes(item.id) && s.chipOn]} onPress={() => { const next = toggle(members, item.id); if (next.length) update({ members: next, low: low.filter((row) => next.includes(row)) }); }}><Text style={members.includes(item.id) ? s.chipTextOn : s.chipText}>{item.label}</Text></Pressable>)}</View>
@@ -149,6 +170,7 @@ const s = StyleSheet.create({
   done: { color: "#2F7D4F", fontWeight: "800", width: 16 },
   active: { color: "#C2410C", fontWeight: "800", width: 16 },
   waiting: { color: "#9AA39E", fontWeight: "800", width: 16 },
+  openLink: { color: "#315B4C", fontWeight: "700", fontSize: 13, paddingTop: 4 },
   chip: { borderWidth: 1, borderColor: "#B9C7BF", borderRadius: 18, paddingHorizontal: 12, paddingVertical: 6, backgroundColor: "#F5F2E9" },
   chipOn: { backgroundColor: "#315B4C", borderColor: "#315B4C" },
   chipLow: { backgroundColor: "#FDE7D8", borderColor: "#E9A27A" },
@@ -157,5 +179,8 @@ const s = StyleSheet.create({
   button: { backgroundColor: "#315B4C", borderRadius: 12, paddingVertical: 11, alignItems: "center", marginTop: 6 },
   disabled: { opacity: 0.5 },
   buttonText: { color: "#FFFFFF", fontWeight: "700" },
+  accountRow: { flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 4 },
+  smallButton: { borderWidth: 1, borderColor: "#315B4C", borderRadius: 10, paddingHorizontal: 10, paddingVertical: 6 },
+  smallButtonText: { color: "#315B4C", fontWeight: "700", fontSize: 13 },
   input: { borderWidth: 1, borderColor: "#D5CFBF", borderRadius: 10, padding: 10, minHeight: 90, textAlignVertical: "top", backgroundColor: "#FBFAF6" }
 });

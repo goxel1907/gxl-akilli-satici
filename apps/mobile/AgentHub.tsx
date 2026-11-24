@@ -1,6 +1,6 @@
 import React from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import { AgentPipeline, AgentTeamCard, useAgentTeam } from "./AgentTeam";
+import { AgentPipeline, AgentTeamCard, AssistantAccounts, useAgentTeam } from "./AgentTeam";
 import { DriveCard } from "./DriveConnect";
 import { assistantName, type Assistant } from "./assistants";
 
@@ -35,6 +35,7 @@ export function AgentHub({ onDigital, onPhysical, request, onOpen, producer, onU
       <Text style={[s.title, { marginTop: 10 }]}>Fiziksel ürün nasıl ilerler?</Text>
       {physicalSteps.map((step, index) => <Text key={step} style={s.line}>{index + 1}. {step}</Text>)}
     </View>
+    <AssistantAccounts />
     <AgentTeamCard producer={producer || team.producer} onUseProducer={onUseProducer || (() => undefined)} />
     <AgentPipeline kind="digital" stage={1} />
     <AgentPipeline kind="physical" stage={1} />

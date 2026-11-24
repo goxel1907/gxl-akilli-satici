@@ -120,3 +120,5 @@ Güncelleme: 9 Kasım 2026
   'Dosyalarım hazır, ajanlara ver' yükleme ekranını aynı ürün kaydıyla doğrudan açar (productionResume.upload / uploadAsk).
 - 25 Kasım (4): Takip ajanı açık çalışmaların hepsini Etsy ile eşitler; aktif ilan başlığı/numarası eşleşen çalışma
   'yayında' olur (markPublishedFromEtsy, dışarıdan yüklenenler dahil). Liste yalnız açık çalışmaları sayar; yayınlananlar ayrı.
+- 25 Kasım (5): Yapay zekâ hesaplarım kartı (AssistantAccounts, Ajan Merkezi): her biri için Aç ve Ekibe ekle/çıkar.
+  Ajan hattında yapay zekâ satırlarında 'X'i aç →'. Ajan ekibi özeti tüm rolleri ve ekipte olanları gösterir.

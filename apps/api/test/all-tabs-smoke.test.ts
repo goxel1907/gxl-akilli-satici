@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { screens, mount, tap, unmount, visible, text, ui, waitFor } from "./fixtures/mobile-ui.js";
+import { screens, mount, tap, unmount, visible, text, ui, waitFor, act } from "./fixtures/mobile-ui.js";
 
 // Her ana sekme ve Etsy alt sekmesi, sunucu boş veri döndürse bile açılmalı ve hata ekranı göstermemeli.
 const empty = async (input: any) => {
@@ -39,6 +39,12 @@ test("the Agent tab is where the system starts: digital opens the studio, physic
     await tap(renderer, /^Ajan$/);
     assert.ok(shown(/^Ürünü ajanlar hazırlar$/));
     assert.ok(shown(/^Ajan hattı · 0\/15 tamam/), "the digital agent line is visible");
+    // Yapay zekâ hesapları: üçü de ekipte; "Aç" uygulamayı açar, görevler üçüne dağılır.
+    assert.equal(visible(renderer.root.findByProps({ testID: "assistant-accounts" })), true);
+    assert.ok(shown(/^Üretim: ChatGPT · Görsel: Gemini · Denetim: Gemini$/));
+    ui.links.length = 0;
+    await act(async () => { renderer.root.findByProps({ testID: "assistant-accounts" }).findAll((node: any) => node.props?.accessibilityRole === "button")[2].props.onPress(); });
+    assert.deepEqual(ui.links, ["https://claude.ai/"]);
     await tap(renderer, /^Dijital ürün: ajanları başlat →$/);
     await waitFor(() => visible(renderer.root.findByProps({ testID: "etsy-section-studio" })));
     assert.equal(crashed(renderer), false);
