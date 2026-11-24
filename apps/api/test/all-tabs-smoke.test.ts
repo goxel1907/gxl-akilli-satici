@@ -29,3 +29,21 @@ for (const mode of ["expert", "simple"]) {
     } finally { await unmount(renderer); ui.storage.clear(); }
   });
 }
+
+test("the Agent tab is where the system starts: digital opens the studio, physical opens the photo flow", async context => {
+  ui.storage.clear(); ui.storage.set("gxl.appAccessToken", "local-test"); ui.storage.set("gxl.appMode", "expert");
+  context.mock.method(globalThis, "fetch", empty);
+  const renderer = await mount(screens.App, {});
+  const shown = (pattern: RegExp) => renderer.root.findAllByType("Text" as any).some((node: any) => visible(node) && pattern.test(text(node)));
+  try {
+    await tap(renderer, /^Ajan$/);
+    assert.ok(shown(/^Ürünü ajanlar hazırlar$/));
+    assert.ok(shown(/^Ajan hattı · 0\/15 tamam/), "the digital agent line is visible");
+    await tap(renderer, /^Dijital ürün: ajanları başlat →$/);
+    await waitFor(() => visible(renderer.root.findByProps({ testID: "etsy-section-studio" })));
+    assert.equal(crashed(renderer), false);
+    await tap(renderer, /^Ajan$/);
+    await tap(renderer, /^Fiziksel ürün: fotoğrafla başlat →$/);
+    await waitFor(() => shown(/Önce ürününün gerçek fotoğraflarını ekle/));
+  } finally { await unmount(renderer); ui.storage.clear(); }
+});
