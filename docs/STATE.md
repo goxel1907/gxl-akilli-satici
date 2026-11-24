@@ -86,3 +86,9 @@ Güncelleme: 9 Kasım 2026
   (yalnız aranan ifadedeki renk kalır; örgü kalıplarında iplik rengi korunur), stillere canlı paletler eklendi.
   Hız: basılı/dijital türlerde yalnız C1 zemini, C2 ve C6 görsel aracıyla; C3-C5, C7-C12 gerçek dosyalardan tek Python
   betiğiyle aynı yanıtta (AdVisual.tool). Pin/reklam C1 backdrop.png'yi yeniden kullanır.
+- 24 Kasım (3): Satış göstergeli rakip analizi (sales-proof.ts): listings/batch (Shop, Images, Videos) + ilan yorum sayısı;
+  liderler yorum sayısına göre sıralanır, salesEvidence "proxy". İlk sayfa kapaklarının gerçek ton ölçümü kapak rengine girer.
+  Fiziksel planda da salesProof döner. Öneri akışında yorum sorgusu 3 (Cloudflare dış çağrı sınırı).
+  Gemini üçüncü üretim aracı (assistants.ts): paket, fotoğraf/tam ilan/denetim talimatları, sohbet bağlantısı gemini.google.com/app.
+  Ajan ekibi (agent-team.ts, AgentTeam.tsx): üyelik ve "kredisi az" işaretine göre üretici/görselci/denetçi; denetçi ajan
+  GXL_LISTING_REVIEW_V1 JSON'u verir, uygulama başlık/13 etiket/açılış paragrafını sayı ve dil denetiminden geçirip uygular.

@@ -9,6 +9,8 @@ import { recommendProduct } from "./product-recommendation.js";
 import { acceptListingOffer, createListingOffers } from "./listing-offers.js";
 import { rememberProduct, type IdeaStore } from "./product-memory.js";
 import { researchPrintableMarket } from "./printable-research.js";
+import { gatherSalesProof } from "./sales-proof.js";
+import type { MarketStrategy } from "./market-strategy.js";
 import { products } from "../../api/src/data.js";
 import { patternPolicyIssues, patternPolicyMessage } from "./etsy-policy.js";
 import { generateListingPack } from "../../api/src/listing-agent.js";
@@ -742,7 +744,11 @@ export async function handleRequest(request: Request, env: Env, context?: {waitU
       const usdTryRate = await getUsdTryRate(env.ETSY_OAUTH as unknown as KeyValueStore | undefined, fetch, product.usdTryRate);
       let shopCurrency: string | undefined;
       try { shopCurrency = (await getConnectedShop(env)).currencyCode; } catch { shopCurrency = undefined; }
-      return json(200, { ...guardProductPlan(buildProductPlan(product, keywords, scans, { usdTryRate, shopCurrency, signals: detectProductSignals(product) })), shopCurrency });
+      const physicalPlan = guardProductPlan(buildProductPlan(product, keywords, scans, { usdTryRate, shopCurrency, signals: detectProductSignals(product) }));
+      // Fiziksel üründe de rakipler satış göstergesiyle (ilan yorumu, mağaza satışı) sıralanır; alınamazsa plan aynen döner.
+      const physicalStrategy = (physicalPlan as { strategy?: MarketStrategy }).strategy;
+      const salesProof = physicalStrategy && env.ETSY_API_KEY ? await gatherSalesProof(env, physicalStrategy.leaders.map((row) => ({ listing_id: row.id })), physicalStrategy).catch(() => undefined) : undefined;
+      return json(200, { ...physicalPlan, ...(salesProof ? { salesProof } : {}), shopCurrency });
     }
     if (request.method === "POST" && url.pathname === "/api/products/net-from-price") {
       const input = await readBody(request);

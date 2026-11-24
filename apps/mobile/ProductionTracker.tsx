@@ -4,6 +4,7 @@ import {SafeAreaView} from "react-native-safe-area-context";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import ListingMascot from "./ListingMascot";
 import {PRINTABLE_WORKSPACE_KEY,parsePrintableWorkspace,type PrintableWorkspace} from "./workflow-state";
+import {assistantAcc,assistantHome,assistantName,assistantTo} from "./assistants";
 import {PRODUCTION_TRACKER_KEY,PRODUCTION_STAGES,EXTERNAL_STAGES,productionId,readProductionRecords,rememberProduction,changeProduction,syncProductionProduct,parseProductionReceipt,productionTrackingPrompt,productionContinuation,savedConversationUrl,setProductionConversation,removeProduction,type ProductionRecord,type ProductionStage} from "./production-tracker";
 
 const ACTIVE_KEY="gxl.productionActive.v1";
@@ -75,14 +76,14 @@ export function ProductionWorkList({onResume,compact=false}:{onResume:(row:Produ
 }
 function SavedProductionDetails({record,onClose,onResume}:{record:ProductionRecord;onClose:()=>void;onResume:()=>void}){
   const [linkEditing,setLinkEditing]=useState(false),[link,setLink]=useState(record.conversationUrl||""),[details,setDetails]=useState(false),[busy,setBusy]=useState(false);
-  const {workspace}=record,tool=workspace.input.assistant==="claude"?"Claude":"ChatGPT",toolAcc=workspace.input.assistant==="claude"?"Claude’u":"ChatGPT’yi",conversation=savedConversationUrl(record.conversationUrl||"",workspace.input.assistant);
+  const {workspace}=record,tool=assistantName(workspace.input.assistant),toolAcc=assistantAcc(workspace.input.assistant),conversation=savedConversationUrl(record.conversationUrl||"",workspace.input.assistant);
   const run=async(action:()=>Promise<unknown>)=>{setBusy(true);try{await action();}catch(error){Alert.alert("Çalışma işlemi tamamlanamadı",error instanceof Error?error.message:"Yeniden deneyin.");}finally{setBusy(false);}};
   return <View testID="saved-production-details">
     <Text accessibilityRole="header" style={s.heading}>Kayıtlı çalışma açıldı</Text>
     <Text style={s.name}>{workspace.plan.brief.name}</Text><Text style={s.status}>{PRODUCTION_STAGES[record.stage]}</Text><Text style={s.small}>{sourceLabel(record)} · {new Date(record.updatedAt).toLocaleString("tr-TR")}</Text>
     <Text style={s.body}>Bu ürünün kayıtlı paketi açık. Başlık, açıklama, etiketler, fiyat ve kapsam aşağıda korunuyor.</Text>
     <Pressable accessibilityRole="button" style={s.secondary} disabled={busy} onPress={()=>Alert.alert("Çalışma silinsin mi?","Bu ilan çalışması uygulamadaki listeden kaldırılır. Etsy'deki taslağa veya ilana dokunulmaz.",[{text:"Vazgeç",style:"cancel"},{text:"Sil",style:"destructive",onPress:()=>run(async()=>{await deleteProduction(record.id);onClose();})}])}><Text style={s.link}>Bu çalışmayı listeden sil</Text></Pressable>
-    <Pressable accessibilityRole="button" style={s.primary} disabled={busy} onPress={()=>run(()=>Linking.openURL(conversation||(workspace.input.assistant==="claude"?"https://claude.ai/":"https://chatgpt.com/")))}><Text style={s.white}>{conversation?`Kaydedilmiş ${tool} sohbetini aç`:`${toolAcc} aç ve mevcut sohbetini seç`}</Text></Pressable>
+    <Pressable accessibilityRole="button" style={s.primary} disabled={busy} onPress={()=>run(()=>Linking.openURL(conversation||assistantHome(workspace.input.assistant)))}><Text style={s.white}>{conversation?`Kaydedilmiş ${tool} sohbetini aç`:`${toolAcc} aç ve mevcut sohbetini seç`}</Text></Pressable>
     <Text style={s.small}>{conversation?"Bu bağlantı senin bu ürüne bağladığın sohbeti açar. Uygulama sohbeti otomatik okumaz.":`Bu ürünün özel sohbet bağlantısı henüz kayıtlı değil. ${tool} açıldığında mevcut ürün sohbetini geçmişinden seç. Aynı sohbete doğrudan dönmek için bağlantısını bir kez kaydedebilirsin.`}</Text>
     <Pressable accessibilityRole="button" style={s.secondary} disabled={busy} onPress={()=>setLinkEditing(!linkEditing)}><Text style={s.link}>{linkEditing?"Sohbet bağlantısı alanını kapat":conversation?"Kayıtlı sohbet bağlantısını değiştir":"Bu ürüne sohbet bağlantısı ekle"}</Text></Pressable>
     {linkEditing&&<><Text style={s.label}>Bu ürünün özel {tool} sohbet bağlantısı</Text><TextInput accessibilityLabel="Bu ürünün özel sohbet bağlantısı" style={s.input} value={link} onChangeText={setLink} autoCapitalize="none" autoCorrect={false}/><Pressable accessibilityRole="button" style={s.secondary} disabled={busy} onPress={()=>run(async()=>{await mutateProduction(rows=>setProductionConversation(rows,record.id,link));setLinkEditing(false);})}><Text style={s.link}>Sohbet bağlantısını kaydet</Text></Pressable></>}
@@ -96,7 +97,7 @@ function SavedProductionDetails({record,onClose,onResume}:{record:ProductionReco
 export default function ProductionJourney({workspace,onUpload,onOpenProduct}:{workspace:PrintableWorkspace;onUpload:()=>void;onOpenProduct:()=>void}){
   const {rows}=useProductionRecords(),id=productionId(workspace),record=rows.find(row=>row.id===id) || rememberProduction([],workspace)[0];
   const [statusModal,setStatusModal]=useState(false),[receipt,setReceipt]=useState(""),[metadata,setMetadata]=useState(false),[busy,setBusy]=useState(false);
-  const tool=workspace.input.assistant==="claude"?"Claude":"ChatGPT",toTool=workspace.input.assistant==="claude"?"Claude’a":"ChatGPT’ye";
+  const tool=assistantName(workspace.input.assistant),toTool=assistantTo(workspace.input.assistant);
   const run=async(action:()=>Promise<unknown>)=>{setBusy(true);try{await action();}catch(error){Alert.alert("Çalışma kaydedilemedi",error instanceof Error?error.message:"Telefon depolamasını kontrol edin.");}finally{setBusy(false);}};
   const update=(stage:ProductionStage,source:ProductionRecord["source"]="seller")=>run(async()=>{await saveProductionWorkspace(workspace);await mutateProduction(rows=>changeProduction(rows,id,stage,source));setStatusModal(false);setReceipt("");});
   const share=(continuation=false)=>run(async()=>{

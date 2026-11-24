@@ -36,7 +36,7 @@ export default function ListingOfferPicker({offers,busy,offline=false,error,note
           <Text style={s.label}>{preview.tags.length} etiket</Text><Text style={s.body}>{preview.tags.join(", ")}</Text>
           <Text style={s.label}>İçerik farkı</Text><Text style={s.body}>{preview.directionTr}</Text>
           <Text style={s.label}>Karşılaştırılan kaynaklar</Text>
-          {(preview.strategy?.leaders || []).slice(0,5).map((row:any)=><View key={row.id} style={s.source}><Text style={s.body}>{row.title}</Text><Text style={s.small}>{row.priceUsd?`$${row.priceUsd} USD · `:""}{row.favorites??"?"} favori</Text>{row.url&&<Pressable accessibilityRole="button" onPress={()=>onOpenSource(row.url)}><Text style={s.link}>Kaynak ilanı aç</Text></Pressable>}</View>)}
+          {(preview.strategy?.leaders || []).slice(0,5).map((row:any)=><View key={row.id} style={s.source}><Text style={s.body}>{row.title}</Text><Text style={s.small}>{row.priceUsd?`$${row.priceUsd} USD · `:""}{typeof row.reviews==="number"?`${row.reviews} yorum · `:""}{typeof row.shopSales==="number"?`mağaza ${row.shopSales} satış · `:""}{row.favorites??"?"} favori</Text>{row.url&&<Pressable accessibilityRole="button" onPress={()=>onOpenSource(row.url)}><Text style={s.link}>Kaynak ilanı aç</Text></Pressable>}</View>)}
           <Text style={s.small}>Gözlenen fiyat ve başlıklar satışın nedenini kanıtlamaz. Fiyat bir deneme adayıdır; bu öneri henüz yayımlanmış ilan değildir.</Text>
           <Pressable accessibilityRole="button" style={[s.primary,(busy||offline)&&s.disabled]} disabled={busy||offline} onPress={()=>{setPreview(undefined);onChoose(preview.id);}}><Text style={s.primaryText}>Bu öneriyi kullan →</Text></Pressable>
         </>}

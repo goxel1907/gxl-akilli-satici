@@ -5,8 +5,8 @@ export interface MarketStrategy {
   scope: "search_sample" | "product_matched";
   sampleSize: number; linkedSampleSize: number; excludedRisky: number;
   evidenceLevel: "insufficient" | "limited" | "supported";
-  salesEvidence: { status: "unavailable"; bestsellerVerified: false; unitsSold: null };
-  leaders: Array<{ id: string; url?: string; title: string; favorites: number | null; ageDays: number | null; monthlyFavoriteAverage: number | null; priceUsd?: number; riskTerms: string[]; selectedBySeller?: boolean }>;
+  salesEvidence: { status: "unavailable" | "proxy"; bestsellerVerified: false; unitsSold: null; basisTr?: string };
+  leaders: Array<{ id: string; url?: string; title: string; favorites: number | null; ageDays: number | null; monthlyFavoriteAverage: number | null; priceUsd?: number; riskTerms: string[]; selectedBySeller?: boolean; reviews?: number | null; shopSales?: number | null; images?: number | null; video?: boolean }>;
   observations: Array<{ id: string; labelTr: string; labelEn: string; count: number; total: number; sourceIds: string[] }>;
   pricing?: { sampleSize: number; lowUsd: number; medianUsd: number; highUsd: number; trialsUsd: number[] };
   actions: Array<{ id: string; titleTr: string; instructionTr: string; instructionEn: string; evidenceIds: string[] }>;

@@ -21,7 +21,7 @@ export interface MasterPromptInput {
   // Kodla çalıştırılacak kalite protokolü (qa-protocol.ts); çıktısı yapıştırılmadan adım bitmez.
   qa?: string[];
   // Satıcının seçtiği yapay zekâ: paket o aracın yapabildiğine göre yazılır (Claude fotoğraf üretmez, vektör çizer).
-  assistant?: "chatgpt" | "claude";
+  assistant?: "chatgpt" | "claude" | "gemini";
   // Türün Türkçe adı (giriş cümlesi) ve ABD pazarı kuralları (us-market.ts, Türkçe).
   productLabelTr?: string;
   usRules?: string[];
@@ -35,6 +35,10 @@ export const SPEC_DIVIDER = "---";
 function toolNotes(assistant: MasterPromptInput["assistant"], hasArt: boolean): string[] {
   const chatgpt = "- ChatGPT: görselleri yerleşik görsel aracınla üret, dosyaları Python ile kur (ör. reportlab ya da HTML'den PDF; tablo için openpyxl, sunum için python-pptx, belge için python-docx) ve indirme bağlantısı ver.";
   if (assistant === "chatgpt") return [chatgpt];
+  if (assistant === "gemini") return [
+    "- Gemini: görselleri yerleşik görsel aracınla üret (kapak zemini ve fotoğraf gibi sahneler); dosyaları kod yürütme (Python) ile kur. Google Arama erişimin varsa hedef Etsy aramasının ilk sayfa kapaklarına ve en çok yorum alan ilanlara bak.",
+    "- İndirilebilir PDF/XLSX/PPTX/DOCX/ZIP dosyası veremiyorsan bunu ilk adımda Türkçe söyle; her dosyanın eksiksiz, baskıya hazır HTML'sini (veya Canvas belgesini) ver ki ben PDF olarak kaydedeyim, ve otomatik kontrolü UNVERIFIED işaretle. Yapmadığın bir dosyayı hazır sayma."
+  ];
   const claude = [
     hasArt
       ? "- Claude: fotoğraf ya da piksel tabanlı görsel üretemezsin. Brief B'deki her görseli kodla, spec paletinde temiz vektör SVG olarak çiz ve belirtilen ölçüde PNG'ye çevir. Dosyaları kendi kod ve dosya araçlarınla kur, indirme bağlantısı ver."

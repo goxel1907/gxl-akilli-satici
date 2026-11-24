@@ -62,7 +62,7 @@ export async function createListingOffers(env:EtsyRuntimeEnv,store:OfferStore|un
     try {
       const seed=await createPatternSeed(env,store,{studio:"printable",kind,keyword:candidate.keyword},requestFetch,now);
       let input=normalizePrintablePlanInput({kind,productType:explicit?String(raw.productType || seed.productType):seed.productType,keyword:candidate.keyword,colors:seed.colors,formats:seed.formats,pageCount:raw.pageCount,assistant:raw.assistant,competitorLinks:explicit?raw.competitorLinks:undefined,trendFeatures:seed.trendFeatures});
-      const research=await researchPrintableMarket(env,input,requestFetch);
+      const research=await researchPrintableMarket(env,input,requestFetch,{reviewLookups:3});
       const recommendation=await recommendProduct(input,research,store);
       if(recommendation.requiresNewTopic)continue;
       const budget=recommendation.contentBudget;

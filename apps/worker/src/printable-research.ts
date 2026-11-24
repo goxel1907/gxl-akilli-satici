@@ -3,6 +3,7 @@ import { inferPrintableKind, normalizeKeyword, scoreTrend, type PrintableKind } 
 import { buildCompetition } from "./pattern-seed.js";
 import { buildMarketStrategy } from "./market-strategy.js";
 import { planCoverColor } from "./color-standout.js";
+import { gatherSalesProof } from "./sales-proof.js";
 
 type ResearchProduct = { kind: PrintableKind; productType: string; keyword?: string; pageCount?: number; competitorLinks?: string };
 export function competitorIds(value = ""): string[] {
@@ -53,7 +54,7 @@ function kindSearch(keyword: string, kind: string): string {
   return word && inferPrintableKind(keyword) !== kind ? `${keyword} ${word}`.slice(0, 80) : keyword;
 }
 
-export async function researchPrintableMarket(env: EtsyRuntimeEnv, input: ResearchProduct, fetcher: typeof fetch = fetch) {
+export async function researchPrintableMarket(env: EtsyRuntimeEnv, input: ResearchProduct, fetcher: typeof fetch = fetch, options: { reviewLookups?: number } = {}) {
   const keyword = kindSearch(normalizeKeyword(input.keyword || input.productType), input.kind);
   const selectedIds = competitorIds(input.competitorLinks);
   const response = await etsyRequest<{ count?: number; results?: Array<Record<string, unknown>> }>(env, "/application/listings/active", {
@@ -79,7 +80,16 @@ export async function researchPrintableMarket(env: EtsyRuntimeEnv, input: Resear
   if (!competition.launchPriceUsd) throw new EtsyIntegrationError("VALIDATION_FAILED", "Karşılaştırılabilir rakip fiyatı alınamadı. Başka arama deneyin.", 400);
   const marketBriefEn = `Fresh product-matched Etsy sample for ${JSON.stringify(keyword)}; checked ${result.scannedAt}; ${result.strategy.sampleSize} eligible digital listings. Comparable USD median: ${result.strategy.pricing.medianUsd.toFixed(2)} USD. Candidate launch price: ${competition.launchPriceUsd.toFixed(2)} USD (heuristic test, not an optimal-price claim). Observations are titles/tags, not verified sales or buyer preferences.`;
   // Rakiplerin başlık ve etiketlerindeki renkler: kapak zemini bunlardan ayrışan doygun bir renkle yapılır.
-  const colorPlan = planCoverColor({ competitorTexts: comparable.map(row => `${String(row.title || "")} ${Array.isArray(row.tags) ? row.tags.join(" ") : ""}`), theme: `${keyword} ${input.productType}` });
-  return { keyword, scannedAt: result.scannedAt, sampleSize: result.strategy.sampleSize, selectedIds, strategy: result.strategy, marketBriefEn, competition, colorPlan, trendTags: result.topTags.map(item => item.tag),
+  // Satış göstergesi (yorum, mağaza satışı) ve ilk sayfa kapaklarının gerçek renk ölçümü; alınamazsa araştırma durmaz.
+  const salesProof = await gatherSalesProof(env, comparable, result.strategy, fetcher, Date.now(), options.reviewLookups).catch(() => undefined);
+  if (salesProof) {
+    const proof = new Map(salesProof.sellers.map(row => [row.id, row]));
+    result.strategy.leaders = result.strategy.leaders.map(row => proof.has(row.id) ? { ...row, reviews: proof.get(row.id)!.reviews, shopSales: proof.get(row.id)!.shopSales, images: proof.get(row.id)!.images, video: proof.get(row.id)!.video } : row)
+      .sort((a, b) => Number(Boolean(b.selectedBySeller)) - Number(Boolean(a.selectedBySeller)) || (b.reviews ?? -1) - (a.reviews ?? -1));
+    result.strategy.salesEvidence = { ...result.strategy.salesEvidence, status: "proxy", basisTr: "İlan yorum sayısı ve mağaza toplam satışı (gerçek satış adedi değil)." };
+    result.strategy.productionBriefEn += `\n${salesProof.briefEn}`;
+  }
+  const colorPlan = planCoverColor({ competitorTexts: comparable.map(row => `${String(row.title || "")} ${Array.isArray(row.tags) ? row.tags.join(" ") : ""}`), theme: `${keyword} ${input.productType}`, covers: salesProof?.covers });
+  return { keyword, scannedAt: result.scannedAt, sampleSize: result.strategy.sampleSize, selectedIds, strategy: result.strategy, marketBriefEn, competition, colorPlan, ...(salesProof ? { salesProof } : {}), trendTags: result.topTags.map(item => item.tag),
     noteTr: "Etsy aramasındaki aynı tür ve konuda eşleştirilen dijital ilan örneklemidir. Favori ve ilan sayıları satış değildir; fiyatlar gözlenen örnekleme dayanır." };
 }
