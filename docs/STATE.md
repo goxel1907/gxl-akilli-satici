@@ -122,3 +122,5 @@ Güncelleme: 9 Kasım 2026
   'yayında' olur (markPublishedFromEtsy, dışarıdan yüklenenler dahil). Liste yalnız açık çalışmaları sayar; yayınlananlar ayrı.
 - 25 Kasım (5): Yapay zekâ hesaplarım kartı (AssistantAccounts, Ajan Merkezi): her biri için Aç ve Ekibe ekle/çıkar.
   Ajan hattında yapay zekâ satırlarında 'X'i aç →'. Ajan ekibi özeti tüm rolleri ve ekipte olanları gösterir.
+- 25 Kasım (6): 'X'i aç ve mevcut sohbetini seç' yanıltıcıydı (ana ekranı açıyor). Ad: 'X'i aç (sohbeti listeden seç)'; açıklama
+  ☰ menü + ürün adıyla arama ve Chrome'dan özel bağlantıyı (chatgpt.com/c/…) kaydetmeyi anlatır. Paylaşım bağlantısı yine reddedilir.
