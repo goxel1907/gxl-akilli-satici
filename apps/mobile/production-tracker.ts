@@ -67,6 +67,26 @@ export function syncProductionProduct(rows:ProductionRecord[],product:any,status
     const at=new Date().toISOString();return {...next,stage,source:"app" as const,updatedAt:at,history:[...row.history,{stage,at,source:"app" as const}].slice(-30)};
   });
 }
+// Etsy'deki aktif ilanlar çalışmayla eşleşirse (ilan numarası ya da başlık) çalışma "yayında" olur ve açık işlerden çıkar.
+// Dosyaları Etsy'ye uygulama dışından yüklenen ilanlar da böylece kapanır. Başlık satıcı tarafından biraz değiştirilmiş
+// olabilir: boşluk/noktalama yok sayılır, ilk 50 harf eşleşmesi yeterlidir.
+const titleKey=(value:string)=>value.toLowerCase().normalize("NFKD").replace(/[^a-z0-9]+/g," ").trim();
+export function markPublishedFromEtsy(rows:ProductionRecord[],listings:Array<{listingId:number;title:string;state?:string}>,now=new Date().toISOString()):ProductionRecord[]{
+  const active=listings.filter(row=>row.listingId>0&&(row.state===undefined||row.state==="active"));
+  // Bir Etsy ilanı yalnız bir çalışmayı kapatır; ilan numarası eşleşmesi başlık eşleşmesinden önce gelir.
+  const used=new Set(rows.filter(row=>row.stage==="published"&&row.listingId).map(row=>row.listingId));
+  const byId=new Map(rows.filter(row=>row.stage!=="published"&&row.listingId&&active.some(item=>item.listingId===row.listingId)).map(row=>[row.id,row.listingId!]));
+  for(const id of byId.values())used.add(id);
+  return rows.map(row=>{
+    if(row.stage==="published")return row;
+    const own=titleKey(row.workspace.plan.listing?.title||"");
+    const match=byId.has(row.id)?active.find(item=>item.listingId===byId.get(row.id)):(own.length>=20?active.find(item=>{if(used.has(item.listingId))return false;const other=titleKey(item.title);return other===own||other.slice(0,50)===own.slice(0,50);}):undefined);
+    if(!match)return row;
+    used.add(match.listingId);
+    return {...row,stage:"published",listingId:match.listingId,etsyState:"active",checkedAt:now,updatedAt:now,source:"app",history:[...row.history,{stage:"published",at:now,source:"app"}]};
+  });
+}
+
 export function parseProductionReceipt(raw:string,record:ProductionRecord):ProductionStage {
   if(raw.length>5000)throw new Error("Yalnız kısa GXL durum JSON’unu yapıştırın.");
   let receipt:any;try{receipt=JSON.parse(raw.trim().replace(/^```(?:json)?\s*/i,"").replace(/\s*```$/,""));}catch{throw new Error("Geçerli GXL durum JSON’u bulunamadı.");}

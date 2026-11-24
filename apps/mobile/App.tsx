@@ -9,7 +9,7 @@ import ListingMascot, { type ListingMascotProps } from "./ListingMascot";
 import LiveCheckPanel from "./LiveCheckPanel";
 import ListingOfferPicker from "./ListingOfferPicker";
 import OwnerNotificationsPanel from "./OwnerNotificationsPanel";
-import ProductionJourney, { ProductionWorkList, useProductionRecords, saveProductionWorkspace, activeProduction, syncTrackedProduct, syncTrackedProducts, shareProductionPackage, restoreProductions } from "./ProductionTracker";
+import ProductionJourney, { ProductionWorkList, useProductionRecords, saveProductionWorkspace, activeProduction, syncTrackedProduct, syncTrackedProducts, markTrackedPublished, shareProductionPackage, restoreProductions } from "./ProductionTracker";
 import { type ProductionRecord } from "./production-tracker";
 import { appendLocalFile, uploadInChunks } from "./upload-file";
 import { archiveUploaded, chooseFolder, downloadToCache, entryName, folderSupported, GXL_FOLDER_KEY, scanFolder, unzipImages } from "./gxl-folder";
@@ -269,12 +269,19 @@ function App() {
     const refresh=async()=>{
       if(productionRefresh.current)return;productionRefresh.current=true;
       try{
-        const current=await activeProduction(await restoreProductions());if(!current)return;
+        // Takip ajanı: açık çalışmaların hepsi (yalnız sonuncusu değil) Etsy durumuyla eşitlenir; yayına girenler kapanır.
+        const open=(await restoreProductions()).filter(row=>row.stage!=="published");if(!open.length)return;
         const result=await apiJson("/api/digital/products",{headers:apiHeaders()});
-        const product=(result.products || []).find((product:any)=>product.id===current.productId || product.handoff?.id && product.handoff.id===current.workspace.plan.handoff?.id);
-        if(!product)return;
-        await syncTrackedProduct(product);
-        if(product.etsy?.listingId){try{await syncTrackedProduct(product,await apiJson(`/api/digital/products/${product.id}/etsy-status`,{headers:apiHeaders()}));}catch{await syncTrackedProduct(product,undefined,true);}}
+        for(const current of open.slice(0,8)){
+          const product=(result.products || []).find((product:any)=>product.id===current.productId || product.handoff?.id && product.handoff.id===current.workspace.plan.handoff?.id);
+          if(!product)continue;
+          await syncTrackedProduct(product);
+          if(product.etsy?.listingId){try{await syncTrackedProduct(product,await apiJson(`/api/digital/products/${product.id}/etsy-status`,{headers:apiHeaders()}));}catch{await syncTrackedProduct(product,undefined,true);}}
+        }
+        // Dosyaları Etsy'ye uygulama dışından yüklenen ilanlar: Etsy'deki aktif ilan başlığıyla eşleşen çalışma yayında sayılır.
+        if((await restoreProductions()).some(row=>row.stage!=="published")){
+          try{const card=await apiJson("/api/etsy/listings/scorecard",{headers:apiHeaders()});await markTrackedPublished((card.items||[]).map((item:any)=>({listingId:Number(item.listingId),title:String(item.title||""),state:item.state==="undefined"?undefined:item.state})));}catch{/* ilan listesi alınamazsa çalışma açık kalır */}
+        }
       }catch{/* Offline or missing server evidence never completes a project. */}
       finally{productionRefresh.current=false;}
     };

@@ -111,3 +111,16 @@ test("saved chat action opens the exact stored conversation after restart withou
     await unmount(renderer);renderer=await mount(screens.StudioPanel,{online:false,active:true,onUpload:()=>{}});await waitFor(()=>buttons(renderer,/^Son çalışmayı aç$/).length===1);await tap(renderer,/^Son çalışmayı aç$/);await tap(renderer,/^Kaydedilmiş ChatGPT sohbetini aç$/);assert.deepEqual(ui.links,[url]);assert.equal(ui.shares.length,0);assert.deepEqual(readProductionRecords(ui.storage.get(PRODUCTION_TRACKER_KEY)!)[0].workspace.plan.listing,work.plan.listing);
   }finally{await unmount(renderer);ui.storage.clear();}
 });
+
+test("works whose listing is active on Etsy close by themselves, even when the files were uploaded outside the app", async () => {
+  const { markPublishedFromEtsy } = await import("../../mobile/production-tracker.js");
+  const first = workspace("Tosery Wedding Planner"), second = workspace("Sada Planner Stickers");
+  second.plan.listing.title = "Printable Planner Stickers, Functional Stickers, Weekly Kit, US Letter, A4";
+  let rows = rememberProduction(rememberProduction([], first), second);
+  const title = first.plan.listing.title;
+  rows = markPublishedFromEtsy(rows, [{ listingId: 4321, title: `${title.slice(0, 60)}, Edited By Seller`, state: "active" }, { listingId: 99, title: second.plan.listing.title, state: "draft" }], "2026-11-25T10:00:00.000Z");
+  const done = rows.find(row => row.id === productionId(first))!;
+  assert.equal(done.stage, "published"); assert.equal(done.listingId, 4321); assert.equal(done.etsyState, "active");
+  assert.equal(rows.find(row => row.id === productionId(second))!.stage, "package_ready", "a draft on Etsy is not a published listing");
+  assert.deepEqual(markPublishedFromEtsy(rows, [{ listingId: 5, title: "Something Else Entirely Different Product", state: "active" }]), rows);
+});

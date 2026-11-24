@@ -118,3 +118,5 @@ Güncelleme: 9 Kasım 2026
   türevli anahtar; yanıtlarda dönmez). Cloudflare gizli ayarı varsa o önce gelir. Drive kartı kurulum adımları telefona göre.
 - 25 Kasım (3): Kayıtlı çalışma ekranında (Son çalışmayı aç) en üstte kalan iş kartı + ajan hattı (remainingWork/agentStage).
   'Dosyalarım hazır, ajanlara ver' yükleme ekranını aynı ürün kaydıyla doğrudan açar (productionResume.upload / uploadAsk).
+- 25 Kasım (4): Takip ajanı açık çalışmaların hepsini Etsy ile eşitler; aktif ilan başlığı/numarası eşleşen çalışma
+  'yayında' olur (markPublishedFromEtsy, dışarıdan yüklenenler dahil). Liste yalnız açık çalışmaları sayar; yayınlananlar ayrı.
