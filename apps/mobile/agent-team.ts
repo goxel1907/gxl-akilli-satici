@@ -7,23 +7,29 @@ import { listingTextProblems } from "./photo-assistant";
 // - Görselci: kapak zemini ve fotoğraf gibi sahneler. Gemini ve ChatGPT görsel üretir; Claude üretemez.
 // - Denetçi: bitmiş ilanı rakiplere ve Etsy kurallarına göre denetler, düzeltilmiş başlık/etiket JSON'u verir.
 //   Üreticiden farklı bir araç olur ki kendi işini onaylamasın; Google Arama yapabildiği için Gemini önce gelir.
-export interface AgentTeam { producer: Assistant; visuals: Assistant; reviewer: Assistant; notesTr: string[] }
+// Fiziksel üründe: fotoğrafçı (gerçek fotoğrafı kodla düzenler, Python'u en güvenilir ChatGPT), ilan yazarı (fotoğraf ve
+// videodan tam ilan JSON'u; web araması yapabilenler önce).
+export interface AgentTeam { producer: Assistant; visuals: Assistant; reviewer: Assistant; photoEditor: Assistant; listingWriter: Assistant; notesTr: string[] }
 
-const ORDER: Record<"producer" | "visuals" | "reviewer", Assistant[]> = {
+const ORDER = {
   producer: ["chatgpt", "claude", "gemini"],
   visuals: ["gemini", "chatgpt"],
-  reviewer: ["gemini", "claude", "chatgpt"]
-};
+  reviewer: ["gemini", "claude", "chatgpt"],
+  photoEditor: ["chatgpt", "claude", "gemini"],
+  listingWriter: ["chatgpt", "gemini", "claude"]
+} as const satisfies Record<string, Assistant[]>;
 
 export function planAgentTeam(members: Assistant[], low: Assistant[] = []): AgentTeam {
   const have = members.length ? members : ["chatgpt" as Assistant];
-  const pick = (order: Assistant[], avoid?: Assistant) => {
+  const pick = (order: readonly Assistant[], avoid?: Assistant) => {
     const usable = order.filter((item) => have.includes(item) && item !== avoid);
     return usable.find((item) => !low.includes(item)) || usable[0];
   };
   const producer = pick(ORDER.producer) || have[0];
   const visuals = pick(ORDER.visuals) || producer;
   const reviewer = pick(ORDER.reviewer, producer) || producer;
+  const photoEditor = pick(ORDER.photoEditor) || producer;
+  const listingWriter = pick(ORDER.listingWriter) || producer;
   const notesTr = [
     `Üretim (dosyalar, kodla görseller): ${assistantName(producer)}.`,
     visuals === producer ? `Kapak zemini ve sahneler: aynı sohbette ${assistantName(visuals)}.` : `Kapak zemini ve sahneler: ${assistantName(visuals)}. ${assistantName(producer)} sahne promptunu verince ${assistantName(visuals)}'de çalıştır, görseli aynı üretim sohbetine yükle.`,
@@ -31,7 +37,8 @@ export function planAgentTeam(members: Assistant[], low: Assistant[] = []): Agen
     ...(producer === "gemini" ? ["Gemini PDF/ZIP indirme bağlantısı veremeyebilir; veremezse baskıya hazır sayfayı PDF olarak kaydet."] : []),
     ...(low.length ? [`Kredisi az işaretlenen araç yalnız başka seçenek yoksa kullanılır: ${low.map(assistantName).join(", ")}.`] : [])
   ];
-  return { producer, visuals, reviewer, notesTr };
+  notesTr.push(`Fiziksel ürün: fotoğraf düzenleme ${assistantName(photoEditor)}, tam ilan ${assistantName(listingWriter)}.`);
+  return { producer, visuals, reviewer, photoEditor, listingWriter, notesTr };
 }
 
 export interface ReviewContext {
@@ -88,4 +95,35 @@ export function applyOpening(description: string, openingEn: string): string {
   if (!openingEn) return description;
   const parts = description.split(/\n\s*\n/);
   return [openingEn, ...parts.slice(1)].join("\n\n");
+}
+
+// "Rakipten iyi mi?" kapısı: satış göstergesi en güçlü rakiplerin alıcıya görünen standardı ölçülür. Kalite şartı
+// göz ardı edilmez: geçmeyen satır yayından önce düzeltilir (uygulama dijitalde yalnız taslak açar, yayın satıcıdadır).
+export interface BeatInput {
+  kind: "digital" | "physical";
+  title: string; tags: string[]; description: string; priceUsd?: number;
+  images: number; video: boolean; targetSearch?: string;
+  sellers?: Array<{ priceUsd?: number; images?: number | null; video?: boolean; reviews?: number | null }>;
+}
+export interface BeatCheck { id: string; ok: boolean; labelTr: string; detailTr: string }
+const middle = (values: number[]) => { const sorted = [...values].sort((a, b) => a - b); return sorted.length ? sorted[Math.floor((sorted.length - 1) / 2)] : undefined; };
+
+export function beatCompetitors(input: BeatInput): { ok: boolean; checks: BeatCheck[] } {
+  const sellers = (input.sellers || []).filter((row) => (row.reviews ?? 0) > 0 || row.images);
+  const words = (input.targetSearch || "").toLowerCase().split(/\s+/).filter((word) => word.length > 2);
+  const head = input.title.toLowerCase().slice(0, 60);
+  const imageBar = Math.min(10, Math.max(8, middle(sellers.flatMap((row) => typeof row.images === "number" ? [row.images] : [])) || 0));
+  const videoShare = sellers.length ? sellers.filter((row) => row.video).length / sellers.length : 0;
+  const prices = sellers.flatMap((row) => row.priceUsd ? [row.priceUsd] : []);
+  const priceOk = !input.priceUsd || prices.length < 2 || (input.priceUsd >= Math.min(...prices) * 0.8 && input.priceUsd <= Math.max(...prices) * 1.2);
+  const checks: BeatCheck[] = [
+    { id: "search_first", ok: !words.length || words.every((word) => head.includes(word.replace(/s$/, ""))), labelTr: "Başlık alıcının aradığı ifadeyle başlıyor", detailTr: words.length ? `İlk 60 karakterde "${input.targetSearch}" geçmeli.` : "Hedef arama yok." },
+    { id: "tags", ok: input.tags.length === 13 && new Set(input.tags.map((tag) => tag.toLowerCase())).size === 13, labelTr: "13 farklı etiket", detailTr: `${input.tags.length} etiket var.` },
+    { id: "images", ok: input.images >= imageBar, labelTr: `En az ${imageBar} ilan görseli`, detailTr: `Sende ${input.images}. Etsy 10 görsele izin verir; satan rakiplerden az görsel kullanma.` },
+    { id: "video", ok: input.video || videoShare < 0.3, labelTr: "Video", detailTr: videoShare >= 0.3 ? `Satan rakiplerin %${Math.round(videoShare * 100)}'inde video var; 5-15 sn video ekle.` : "Satan rakiplerde video yaygın değil; yine de eklemek artıdır." },
+    { id: "price", ok: priceOk, labelTr: "Fiyat satan rakiplerin aralığında", detailTr: prices.length >= 2 ? `Satan rakipler $${Math.min(...prices)}-$${Math.max(...prices)}; sende ${input.priceUsd ? `$${input.priceUsd}` : "fiyat yok"}.` : "Yeterli satan rakip fiyatı yok." },
+    { id: "facts", ok: /\d/.test(input.description), labelTr: "Açıklamada gerçek sayı ve ölçü", detailTr: input.kind === "digital" ? "Sayfa/kart sayısı ve formatlar açıklamada yazmalı." : "Ölçü, ağırlık veya adet açıklamada yazmalı." },
+    ...(input.kind === "digital" ? [{ id: "ai_note", ok: /\b(AI|artificial intelligence)\b/i.test(input.description), labelTr: "Yapay zekâ beyanı açıklamada", detailTr: "Etsy kuralı: yapay zekâ ile hazırlanan içerik açıklamada belirtilir." }] : [])
+  ];
+  return { ok: checks.every((check) => check.ok), checks };
 }

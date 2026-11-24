@@ -92,3 +92,7 @@ Güncelleme: 9 Kasım 2026
   Gemini üçüncü üretim aracı (assistants.ts): paket, fotoğraf/tam ilan/denetim talimatları, sohbet bağlantısı gemini.google.com/app.
   Ajan ekibi (agent-team.ts, AgentTeam.tsx): üyelik ve "kredisi az" işaretine göre üretici/görselci/denetçi; denetçi ajan
   GXL_LISTING_REVIEW_V1 JSON'u verir, uygulama başlık/13 etiket/açılış paragrafını sayı ve dil denetiminden geçirip uygular.
+- 24 Kasım (4): Ajan hattı (agent-pipeline.ts, AgentPipeline): dijitalde 15, fizikselde 13 ajan; her adımın sahibi Goxi
+  (otomatik), ajan ekibindeki ChatGPT/Claude/Gemini ya da satıcı. Otomatik denetçi POST /api/agents/review (agent-review.ts):
+  sunucu yapay zekâsı + 'rakipten iyi mi?' kapısı (beatCompetitors: arama ifadesi başta, 13 etiket, görsel sayısı, video,
+  fiyat aralığı, sayı, YZ beyanı). Kredi paylaşımı: visualAssistant üreticiden farklıysa paket sahneleri o araca bırakır.

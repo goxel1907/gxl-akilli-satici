@@ -39,6 +39,8 @@ export interface PrintablePlanInput {
   priceUsd?: number;
   // Satıcının kullandığı yapay zekâ (ChatGPT veya Claude); paket ona göre yazılır.
   assistant?: "chatgpt" | "claude" | "gemini";
+  // Ajan ekibinin görselcisi: üreticiden farklıysa sahneler o araçta üretilir (üreticinin kredisi korunur).
+  visualAssistant?: "chatgpt" | "claude" | "gemini";
   // Kapak zemini: rakiplerin sık kullandığı renklerden (crowdedColors) ayrışan doygun renk (color-standout.ts).
   coverColor?: string;
   coverHex?: string;
@@ -462,6 +464,7 @@ export function normalizePrintablePlanInput(raw: Record<string, unknown>): Print
     aiAssisted: raw.aiAssisted !== false,
     ...(Number(raw.priceUsd) > 0 ? { priceUsd: Math.round(Number(raw.priceUsd) * 100) / 100 } : {}),
     ...(raw.assistant === "chatgpt" || raw.assistant === "claude" || raw.assistant === "gemini" ? { assistant: raw.assistant } : {}),
+    ...(raw.visualAssistant === "chatgpt" || raw.visualAssistant === "gemini" ? { visualAssistant: raw.visualAssistant } : {}),
     ...(cleanText(raw.coverColor, 30) ? { coverColor: cleanText(raw.coverColor, 30).toLowerCase() } : {}),
     ...(/^#[0-9a-f]{6}$/i.test(String(raw.coverHex || "")) ? { coverHex: String(raw.coverHex).toUpperCase() } : {}),
     ...(cleanList(raw.crowdedColors, 5, 30).length ? { crowdedColors: cleanList(raw.crowdedColors, 5, 30).map((item) => item.toLowerCase()) } : {})
@@ -1560,6 +1563,7 @@ export function buildPrintableBrief(raw: PrintablePlanInput): PrintableBrief {
       adVisuals,
       pins,
       assistant: input.assistant,
+      ...(input.visualAssistant && input.visualAssistant !== input.assistant ? { visualAssistant: input.visualAssistant } : {}),
       qa: qaProtocol({ type: "printable", name, kind: input.kind, formats, pages, pagesNote: art.pagesNote, papersOnly: input.kind === "paper_craft" && paperMode(input.productType) === "papers", escapeRoom: input.kind === "party" && ESCAPE_ROOM.test(input.productType), year: input.kind === "calendar" ? requestedCalendarYear(input) : undefined, alphabet: isAlphabet(input) }),
       checklist: checklistFor(prepared)
     }),

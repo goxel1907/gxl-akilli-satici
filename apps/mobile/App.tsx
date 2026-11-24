@@ -1,5 +1,5 @@
 import { addLocalWhatsapp, localWhatsappLink } from "./marketing-local";
-import { AgentTeamCard, ListingReviewCard } from "./AgentTeam";
+import { AgentPipeline, AgentTeamCard, ListingReviewCard, useAgentTeam } from "./AgentTeam";
 import { ASSISTANTS, assistantHint, assistantName, assistantTo, isAssistant, type Assistant } from "./assistants";
 import { photoAssistantPrompt, photoEnhancePrompt, parsePhotoAssistant, listingChatPrompt, parseListingChat, mergeListingAbout, fullListingPrompt, parseFullListing, listingTextProblems, type ImportedListingText } from "./photo-assistant";
 import { canRankTrend, compareTrendEvidence, hasBuyerDemand, trendFreshness } from "./trend-priority";
@@ -1763,6 +1763,8 @@ function PrintableStudio({ online, seed, seeding, resumeWorkspace, onPrepared, o
   const offerRequest=useRef(0),autoOfferKey=useRef("");
   const [kind, setKind] = useState("planner");
   const [assistant, setAssistant] = useState("chatgpt");
+  // Ajan ekibinin görselcisi pakete gider: üreticiden farklıysa sahneler o araçta üretilir (kredi paylaşımı).
+  const agentTeam = useAgentTeam();
   const assistantPreferenceChanged = useRef(false);
   useEffect(() => { AsyncStorage.getItem(ASSISTANT_KEY).then((value) => { if (!assistantPreferenceChanged.current && isAssistant(value)) setAssistant(value); }).catch(() => undefined); }, []);
   const chooseAssistant = (next: string) => { generationRequest.current += 1; offerRequest.current+=1; setOffersBusy(false); setWorking(false); assistantPreferenceChanged.current = true; setAssistant(next); setPlan(undefined); if(guided&&flow!=="manual")setFlow("offers"); AsyncStorage.setItem(ASSISTANT_KEY, next).catch(() => undefined); };
@@ -1838,7 +1840,7 @@ function PrintableStudio({ online, seed, seeding, resumeWorkspace, onPrepared, o
     const requestId = ++generationRequest.current;
     setWorking(true);
     try {
-      const result = await apiJson("/api/printables/plan", { method: "POST", headers: apiHeaders(true), body: JSON.stringify({ kind, productType, referenceNotes, colors, formats, pageCount: pageCount ? Number(pageCount) : undefined, autoScope: !pageCountEdited.current, audience, keyword, competitorLinks, trendTags, trendFeatures, assistant, research: true, seed: String(Date.now()) }) });
+      const result = await apiJson("/api/printables/plan", { method: "POST", headers: apiHeaders(true), body: JSON.stringify({ kind, productType, referenceNotes, colors, formats, pageCount: pageCount ? Number(pageCount) : undefined, autoScope: !pageCountEdited.current, audience, keyword, competitorLinks, trendTags, trendFeatures, assistant, visualAssistant: agentTeam.team.visuals, research: true, seed: String(Date.now()) }) });
       if (requestId !== generationRequest.current || liveInputKey.current !== inputKey) return;
       const effectivePages = result.contentBudget?.effective;
       const savedInput = effectivePages ? { ...workspaceInput,pageCount:String(effectivePages) } : workspaceInput;
@@ -1863,7 +1865,7 @@ function PrintableStudio({ online, seed, seeding, resumeWorkspace, onPrepared, o
     setOffersBusy(true);setOffersError("");setOffers([]);
     const chosenKind=includeSeed?(seed?.kind || kind):kind;
     try{
-      const body={kind:chosenKind,assistant,...(includeSeed&&seed?.keyword?(seed.selection?{includeKeyword:seed.keyword}:{keyword:seed.keyword,productType:seed.productType}):{})};
+      const body={kind:chosenKind,assistant,visualAssistant:agentTeam.team.visuals,...(includeSeed&&seed?.keyword?(seed.selection?{includeKeyword:seed.keyword}:{keyword:seed.keyword,productType:seed.productType}):{})};
       const result=await apiJson("/api/printables/suggestions",{method:"POST",headers:apiHeaders(true),body:JSON.stringify(body)});
       if(requestId!==offerRequest.current)return;
       if(!Array.isArray(result.offers)||!result.offers.length)throw new Error("Seçilebilir öneri hazırlanamadı. Konuyu kendiniz yazabilir veya yeniden araştırabilirsiniz.");
@@ -2390,7 +2392,10 @@ function EtsyVideoUpload({ listingId }: { listingId: number }) {
 
 function ListingGuide({ input, ...actions }: { input: ListingProgressInput } & Pick<ListingMascotProps, "onAction" | "actionLabel" | "disabled" | "onSecondary" | "secondaryLabel">) {
   const guide = listingProgress(input);
-  return <ListingMascot {...guide} tasks={listingTasks(input)} {...actions} />;
+  return <>
+    <ListingMascot {...guide} tasks={listingTasks(input)} {...actions} />
+    <AgentPipeline kind="digital" stage={guide.complete ? 6 : guide.step} />
+  </>;
 }
 
 function Toggle({ label, value, onChange }: any) {
@@ -2588,7 +2593,7 @@ function DigitalUploadForm({ visible, suspended = false, prefill, onClose, onSav
       <Field label={`Başlık (${title.length}/140)`} value={title} onChangeText={setTitle} multiline />
       <Field label="Etiketler (virgülle, 13 adet, her biri en fazla 20 karakter)" value={tags} onChangeText={setTags} multiline autoCapitalize="none" />
       <Field label="Açıklama" value={description} onChangeText={setDescription} multiline style={[styles.input, { minHeight: 160, textAlignVertical: "top" }]} />
-      <ListingReviewCard producer={prefill?.assistant} context={{ kind: "digital", title, tags: tags.split(",").map((tag: string) => tag.trim()).filter(Boolean), description, priceUsd: Number(priceUsd.replace(",", ".")) || undefined, targetSearch: prefill?.research?.keyword, provenSellers: provenSellerLines(prefill?.research?.salesProof) }} onApply={(next) => { setTitle(next.title); setTags(next.tags.join(", ")); setDescription(next.description); }} />
+      <ListingReviewCard producer={prefill?.assistant} runAuto={(body) => apiJson("/api/agents/review", { method: "POST", headers: apiHeaders(true), body: JSON.stringify(body) })} images={images.length} sellers={prefill?.research?.salesProof?.sellers || []} context={{ kind: "digital", title, tags: tags.split(",").map((tag: string) => tag.trim()).filter(Boolean), description, priceUsd: Number(priceUsd.replace(",", ".")) || undefined, targetSearch: prefill?.research?.keyword, provenSellers: provenSellerLines(prefill?.research?.salesProof) }} onApply={(next) => { setTitle(next.title); setTags(next.tags.join(", ")); setDescription(next.description); }} />
       <View style={styles.card}>
         {kind === "pattern" && <Toggle label="Deseni ben veya mağaza üyem yazdı (yapay zekâ yazmadı)" value={ownPattern} onChange={setOwnPattern} />}
         <Toggle label={kind === "pattern" ? "Desen bizzat örülerek / yapılarak test edildi" : testLabel(kind)} value={testMade} onChange={setTestMade} />
@@ -3391,6 +3396,7 @@ function EtsyPlanResult({ plan, payload, etsyReady, priceSourceLabel, preparePro
         roadmap={["Ürün ve fotoğraflar", "Gerçek bilgiler ve köken", "Fiyat ve kargo", "İlan kontrolü ve taslak", "Etsy kontrolü ve yayın doğrulaması"]}
         actionLabel={published?.state === "active" ? "Goxi ile yayındaki ilanı aç" : draft ? "Goxi ile Etsy taslağını aç" : "Goxi ile fiziksel ürün taslağını hazırla"}
         onAction={() => published?.state === "active" ? openUrl(published.url, "Etsy ilanı") : draft ? openUrl(draft.editUrl, "Etsy taslağı") : createDraft()} disabled={eligibility.status !== "allowed" || saving || publishing || !etsyReady} />
+      <AgentPipeline kind="physical" stage={published?.state === "active" ? 7 : draft ? 6 : 5} />
       <MarketStrategyCard strategy={plan.strategy} />
       <View style={[styles.policyBox, bannerStyle, { marginBottom: 14 }]}>
         <Text style={styles.policyName}>ETSY KURAL KONTROLÜ</Text>
@@ -3438,7 +3444,7 @@ function EtsyPlanResult({ plan, payload, etsyReady, priceSourceLabel, preparePro
         {(plan.salesProof?.sellers || []).filter((row: any) => typeof row.reviews === "number" || typeof row.shopSales === "number").slice(0, 4).map((row: any) => <Pressable key={row.id} onPress={() => openUrl(row.url, "Etsy ilanı")}><Text style={styles.linkNote} numberOfLines={2}>{row.priceUsd ? `${row.priceUsd.toFixed(2)} USD · ` : ""}{typeof row.reviews === "number" ? `${row.reviews} yorum · ` : ""}{typeof row.shopSales === "number" ? `mağaza ${row.shopSales} satış · ` : ""}{row.title}</Text></Pressable>)}
         {plan.competitors.map((item: any, index: number) => <Pressable key={`${item.url}-${index}`} onPress={() => item.url && openUrl(item.url, "Etsy ilanı")}><Text style={styles.linkNote} numberOfLines={2}>{item.priceUsd ? `${item.priceUsd.toFixed(2)} USD · ` : ""}{item.favorites} favori · {item.title}</Text></Pressable>)}
       </View>}
-      <ListingReviewCard producer={chatAssistant} context={{ kind: "physical", title, tags: tags.split(",").map((tag: string) => tag.trim()).filter(Boolean), description, priceUsd: Number(String(priceUsd).replace(",", ".")) || undefined, targetSearch: plan.primaryKeyword, provenSellers: provenSellerLines(plan.salesProof) }} onApply={(next) => { setTitle(next.title); setTags(next.tags.join(", ")); setDescription(next.description); setGlossSource({ title: next.title, tags: next.tags }); }} />
+      <ListingReviewCard producer={chatAssistant} runAuto={(body) => apiJson("/api/agents/review", { method: "POST", headers: apiHeaders(true), body: JSON.stringify(body) })} images={photoCount || 0} sellers={plan.salesProof?.sellers || []} context={{ kind: "physical", title, tags: tags.split(",").map((tag: string) => tag.trim()).filter(Boolean), description, priceUsd: Number(String(priceUsd).replace(",", ".")) || undefined, targetSearch: plan.primaryKeyword, provenSellers: provenSellerLines(plan.salesProof) }} onApply={(next) => { setTitle(next.title); setTags(next.tags.join(", ")); setDescription(next.description); setGlossSource({ title: next.title, tags: next.tags }); }} />
       {plan.warnings.map((warning: string) => <Text style={styles.warningText} key={warning}>• {warning}</Text>)}
       <Pressable style={[styles.analyzeButton, { marginTop: 14 }, (eligibility.status !== "allowed" || saving || Boolean(draft)) && styles.primaryDisabled]} disabled={eligibility.status !== "allowed" || saving || Boolean(draft)} onPress={createDraft}>{saving ? <ActivityIndicator color="white" /> : <Ionicons name="storefront-outline" size={18} color="white" />}<Text style={styles.primaryText}>{eligibility.status === "blocked" ? "Etsy'de yayınlanamaz" : draft ? "Taslak oluşturuldu" : "Etsy taslağı oluştur"}</Text></Pressable>
       {!!savingText && <Text style={styles.formHint}>{savingText}</Text>}
@@ -4205,6 +4211,7 @@ function PhotoListingStudio({ online, etsyReady, wizard, onStepChange }: any) {
     {!currentPlan && <ListingMascot {...photoGuide}
       roadmap={WIZARD_STEPS} actionLabel={!photos.length ? "Goxi ile galeriden fotoğraf seç" : wizard && step < 5 ? "Goxi ile sonraki adıma geç" : "Goxi ile Etsy araştırmasını başlat"}
       onAction={!photos.length ? () => addPhotos(false) : wizard && step < 5 ? next : photoGuide.step === 5 ? prepare : undefined} disabled={analyzing || Boolean(progress) || (!online && photos.length > 0)} />}
+    {!currentPlan && <AgentPipeline kind="physical" stage={photoGuide.step} />}
     {wizard && <View style={styles.analysisCard}>
       <View style={styles.stepBar}>{WIZARD_STEPS.map((label, index) => <View key={label} style={[styles.stepDot, index < step && styles.stepDotActive]} />)}</View>
       <Text style={styles.small}>Adım {step}/{WIZARD_STEPS.length}</Text>
