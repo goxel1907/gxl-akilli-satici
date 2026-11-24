@@ -1,5 +1,6 @@
 import { addLocalWhatsapp, localWhatsappLink } from "./marketing-local";
 import { AgentPipeline, AgentTeamCard, ListingReviewCard, useAgentTeam } from "./AgentTeam";
+import { AgentHub } from "./AgentHub";
 import { ASSISTANTS, assistantHint, assistantName, assistantTo, isAssistant, type Assistant } from "./assistants";
 import { photoAssistantPrompt, photoEnhancePrompt, parsePhotoAssistant, listingChatPrompt, parseListingChat, mergeListingAbout, fullListingPrompt, parseFullListing, listingTextProblems, type ImportedListingText } from "./photo-assistant";
 import { canRankTrend, compareTrendEvidence, hasBuyerDemand, trendFreshness } from "./trend-priority";
@@ -237,6 +238,13 @@ function App() {
   const {rows:productionRows,loaded:productionLoaded}=useProductionRecords();
   const [productionResume,setProductionResume]=useState<any>();
   const startupProduction=useRef(false);
+  // Ajan Merkezi'nden başlatma: dijital → Stüdyo (dijital ürün), fiziksel → Stüdyo (fotoğraf). Basit modda satış akışı açılır.
+  const [etsyJump, setEtsyJump] = useState<{ section: string; studioMode?: string; revision: number }>();
+  const startAgents = (kind: "digital" | "physical") => {
+    if (mode === "simple") return openSell(kind === "digital" ? "digital" : "photo");
+    setEtsyJump({ section: "Stüdyo", studioMode: kind === "digital" ? "printable" : "physical", revision: Date.now() });
+    setTab("Etsy");
+  };
   const resumeProduction=(row:ProductionRecord)=>{setProductionResume({id:row.id,revision:Date.now()});if(mode==="simple"){setSellRoute("digital");setTab("Sat");}else setTab("Etsy");};
   useEffect(()=>{if(!productionLoaded||startupProduction.current)return;startupProduction.current=true;void activeProduction(productionRows).then(row=>{if(row)resumeProduction(row);}).catch(()=>undefined);},[productionLoaded]);
   const scrollRef = useRef<ScrollView>(null);
@@ -460,6 +468,7 @@ function App() {
         <ScrollView ref={scrollRef} contentContainerStyle={[styles.content, { paddingBottom: 110 + insets.bottom }]}>
           {!online && <OfflineNotice reason={offlineReason} busy={reconnecting} onRetry={reconnect} onResetKey={confirmResetToken} />}
           {tab!=="Etsy"&&tab!=="Sat"&&<ProductionWorkList compact onResume={resumeProduction}/>}
+          {tab === "Başla" && <AgentHub onDigital={() => startAgents("digital")} onPhysical={() => startAgents("physical")} request={driveRequest} onOpen={(url) => openUrl(url, "Google")} />}
           {tab === "Başla" && <HomeScreen online={online} channels={channels} setTab={setTab} openSell={openSell} />}
           {mode === "simple" && <View style={tab === "Sat" ? undefined : styles.hidden}><SellScreen online={online} active={tab==="Sat"} productionResume={productionResume} channels={channels} route={sellRoute} setRoute={setSellRoute} onStepChange={scrollTop} setTab={setTab} /></View>}
           {tab === "Siparişler" && <EtsyOrdersPanel online={online} />}
@@ -467,7 +476,8 @@ function App() {
           {tab === "Yardım" && <HelpScreen online={online} channels={channels} onExpert={() => changeMode("expert")} onSell={() => openSell("choose")} />}
           {tab === "Özet" && <Overview data={data} setTab={setTab} online={online} channels={channels} onSimple={() => changeMode("simple")} />}
           {tab === "Shopier" && <ShopierScreen center={shopierCenter} online={online} onRefresh={refresh} etsyReady={Boolean(channels?.etsy?.shopReady || channels?.etsy?.shopId)} />}
-          <View style={tab === "Etsy" ? undefined : styles.hidden}><EtsyScreen online={online} active={tab === "Etsy"} channels={channels} productionResume={productionResume} /></View>
+          <View style={tab === "Etsy" ? undefined : styles.hidden}><EtsyScreen online={online} active={tab === "Etsy"} channels={channels} productionResume={productionResume} jump={etsyJump} /></View>
+          {tab === "Ajan" && <AgentHub onDigital={() => startAgents("digital")} onPhysical={() => startAgents("physical")} request={driveRequest} onOpen={(url) => openUrl(url, "Google")} />}
           {tab === "Ajan" && <AgentScreen center={opportunityCenter} online={online} onRefresh={refresh} shopierProducts={shopierCenter?.products} etsyActiveListings={channels?.etsy?.activeListings} />}
           {tab === "Onaylar" && <Approvals items={pending} decide={decide} />}
           {tab === "Müşteriler" && <Leads items={data.leads} />}
@@ -1207,10 +1217,11 @@ function errorText(error: unknown) {
 
 type EtsySection = "Trend" | "Stüdyo" | "Dijital" | "Pinterest" | "Kılavuz";
 
-function EtsyScreen({ online, channels, active = true, initialSection = "Trend", productionResume }: any) {
+function EtsyScreen({ online, channels, active = true, initialSection = "Trend", productionResume, jump }: any) {
   const [section, setSection] = useState<EtsySection>(initialSection);
   const [studioSeed, setStudioSeed] = useState<any>();
   useEffect(()=>{if(productionResume)setSection("Stüdyo");},[productionResume]);
+  useEffect(()=>{if(jump?.section)setSection(jump.section);},[jump?.revision]);
   const [uploadPrefill, setUploadPrefill] = useState<any>();
   const etsy = channels?.etsy || {};
   const shopReady = Boolean(etsy.shopReady || etsy.shopId);
@@ -1228,7 +1239,7 @@ function EtsyScreen({ online, channels, active = true, initialSection = "Trend",
     <View testID="etsy-section-trend" style={section === "Trend" ? undefined : styles.hidden}>
       <ListingMascot title="Yeni ilanını birlikte hazırlayalım" instruction="Ne satacağını biliyorsan Stüdyo’ya geç. Kararsızsan aşağıdaki Trend kartlarını incele; puan bir satış garantisi değildir." tasks={["Dijital ürün, kendi desenin veya elindeki fiziksel ürün için doğru yolu seç.", "Bir trend seçersen karttaki hazırlama düğmesi aynı konuyu Stüdyo’ya taşır."]} actionLabel="Ürünümü seçmek istiyorum" onAction={() => setSection("Stüdyo")} />
       <TrendPanel online={online} active={active && section === "Trend"} onUse={(seed: any) => { setStudioSeed(seed); setSection("Stüdyo"); }} /></View>
-    <View style={section === "Stüdyo" ? undefined : styles.hidden}><StudioPanel online={online} active={active && section === "Stüdyo"} etsyReady={shopReady} seed={studioSeed} productionResume={productionResume} onOpenProduct={()=>setSection("Dijital")} onUpload={(prefill: any) => { setUploadPrefill(prefill); setSection("Dijital"); }} /></View>
+    <View testID="etsy-section-studio" style={section === "Stüdyo" ? undefined : styles.hidden}><StudioPanel online={online} active={active && section === "Stüdyo"} etsyReady={shopReady} seed={studioSeed} productionResume={productionResume} modeJump={jump} onOpenProduct={()=>setSection("Dijital")} onUpload={(prefill: any) => { setUploadPrefill(prefill); setSection("Dijital"); }} /></View>
     <View testID="etsy-section-digital" style={section === "Dijital" ? undefined : styles.hidden}><DigitalPanel online={online} active={active && section === "Dijital"} shopReady={shopReady} prefill={uploadPrefill} onPrefillUsed={() => setUploadPrefill(undefined)} onPrepare={() => setSection("Stüdyo")} /></View>
     {section === "Pinterest" && <PinterestPanel online={online} />}
     {section === "Kılavuz" && <><LiveDeviceCheck /><ShopReadinessCard online={online} onSell={() => setSection("Stüdyo")} /><ShopSettingsCard online={online} shopReady={shopReady} /><ShopListingsScorecard online={online} /><EtsyGuide shopReady={shopReady} authorized={authorized} /></>}
@@ -2070,7 +2081,7 @@ function PromptBox({ title, text, shareTitle, quality }: any) {
   </View>;
 }
 
-function StudioPanel({ online, active, seed, onUpload, onOpenProduct, etsyReady, productionResume }: any) {
+function StudioPanel({ online, active, seed, onUpload, onOpenProduct, etsyReady, productionResume, modeJump }: any) {
   const [craft, setCraft] = useState("crochet");
   const [productType, setProductType] = useState("");
   const [referenceNotes, setReferenceNotes] = useState("");
@@ -2191,6 +2202,7 @@ function StudioPanel({ online, active, seed, onUpload, onOpenProduct, etsyReady,
     setInitialized(true);
     fillFromTrend({ studio: mode });
   }, [active, online,workspaceLoaded]);
+  useEffect(() => { if (modeJump?.studioMode && modeJump.studioMode !== mode) changeMode(modeJump.studioMode); }, [modeJump?.revision]);
   const changeMode = (next: "pattern" | "printable" | "physical") => {
     seedRequest.current += 1;
     setSeeding(false);
