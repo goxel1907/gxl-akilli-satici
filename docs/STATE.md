@@ -114,3 +114,5 @@ Güncelleme: 9 Kasım 2026
 - 25 Kasım: Ajan Merkezi (AgentHub.tsx): Ajan sekmesinin (basit modda Başla) en üstünde. 'Dijital ürün: ajanları başlat'
   Etsy → Stüdyo (dijital), 'Fiziksel ürün: fotoğrafla başlat' Stüdyo (fotoğraf) açar (etsyJump/modeJump). Ajan ekibi,
   iki ajan hattı ve Drive kartı burada. Seçili ilan çalışmasında (ProductionJourney) da ajan hattı görünür.
+- 25 Kasım (2): Google anahtarı uygulamadan girilir (POST /api/drive/credentials; secret KV'de AES-GCM, APP_ACCESS_TOKEN
+  türevli anahtar; yanıtlarda dönmez). Cloudflare gizli ayarı varsa o önce gelir. Drive kartı kurulum adımları telefona göre.

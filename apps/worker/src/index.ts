@@ -11,7 +11,7 @@ import { rememberProduct, type IdeaStore } from "./product-memory.js";
 import { researchPrintableMarket } from "./printable-research.js";
 import { gatherSalesProof } from "./sales-proof.js";
 import { runListingReview } from "./agent-review.js";
-import { DriveError, disconnectDrive, driveConnectUrl, driveStatus, handleDriveCallback, importDriveFile, scanDriveFolder, streamDriveFile, type DriveEnv } from "./google-drive.js";
+import { DriveError, deleteDriveClient, disconnectDrive, driveConnectUrl, saveDriveClient, driveStatus, handleDriveCallback, importDriveFile, scanDriveFolder, streamDriveFile, type DriveEnv } from "./google-drive.js";
 import type { MarketStrategy } from "./market-strategy.js";
 import { products } from "../../api/src/data.js";
 import { patternPolicyIssues, patternPolicyMessage } from "./etsy-policy.js";
@@ -714,6 +714,15 @@ export async function handleRequest(request: Request, env: Env, context?: {waitU
     }
     // Google Drive köprüsü: GXL klasöründeki dosyaları sunucu çeker (telefon yüklemez).
     if (request.method === "GET" && url.pathname === "/api/drive/status") return json(200, { ...(await driveStatus(env)), redirectUri: `${url.origin}/google/oauth/callback` });
+    if (request.method === "POST" && url.pathname === "/api/drive/credentials") {
+      const body = await readBody(request);
+      const blocked = requireConfirmedWrite(env, body, "Google anahtarını kaydetme");
+      return blocked || json(200, await saveDriveClient(env, body));
+    }
+    if (request.method === "POST" && url.pathname === "/api/drive/credentials/delete") {
+      const blocked = requireConfirmedWrite(env, await readBody(request), "Google anahtarını silme");
+      return blocked || json(200, await deleteDriveClient(env));
+    }
     if (request.method === "POST" && url.pathname === "/api/drive/connect") return json(200, await driveConnectUrl(env, url.origin));
     if (request.method === "POST" && url.pathname === "/api/drive/disconnect") {
       const blocked = requireConfirmedWrite(env, await readBody(request), "Drive bağlantısını kaldırma");

@@ -1,11 +1,11 @@
 import React, { useCallback, useEffect, useState } from "react";
-import { ActivityIndicator, AppState, Pressable, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, AppState, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 
 // Google Drive köprüsü: yapay zekânın dosyaları Drive'daki "GXL" klasörüne girer, sunucu oradan çeker.
 // Google bu izni 7 günde bir yeniden onaylatır: kart kalan günü gösterir, süre yaklaşınca uyarır ve
 // Google Takvim'e haftalık hatırlatma ekler (telefon bildirimini takvim verir).
 type Request = (path: string, init?: RequestInit) => Promise<any>;
-export interface DriveStatus { configured: boolean; connected: boolean; expired: boolean; daysLeft?: number; renewBy?: string; redirectUri?: string; folder: string; missingTr: string[] }
+export interface DriveStatus { configured: boolean; connected: boolean; expired: boolean; daysLeft?: number; renewBy?: string; redirectUri?: string; folder: string; missingTr: string[]; source?: "cloudflare" | "app" }
 
 const pad = (value: number) => String(value).padStart(2, "0");
 const calendarStamp = (date: Date) => `${date.getUTCFullYear()}${pad(date.getUTCMonth() + 1)}${pad(date.getUTCDate())}T${pad(date.getUTCHours())}${pad(date.getUTCMinutes())}00Z`;
@@ -51,6 +51,26 @@ export function DriveCard({ request, onOpen }: { request: Request; onOpen: (url:
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [guide, setGuide] = useState(false);
+  // Google anahtarı uygulamadan girilir; secret sunucuda şifreli saklanır ve bir daha gösterilmez.
+  const [clientId, setClientId] = useState("");
+  const [clientSecret, setClientSecret] = useState("");
+  const [editKey, setEditKey] = useState(false);
+  const saveKey = async () => {
+    setBusy(true); setError("");
+    try {
+      await request("/api/drive/credentials", { method: "POST", body: JSON.stringify({ confirm: true, clientId: clientId.trim(), clientSecret: clientSecret.trim() }) });
+      setClientId(""); setClientSecret(""); setEditKey(false); setGuide(false);
+    } catch (saveError) { setError(String((saveError as Error)?.message || saveError)); }
+    finally { setBusy(false); refresh(); }
+  };
+  const keyForm = <View style={{ gap: 6 }}>
+    <Text style={s.label}>Client ID</Text>
+    <TextInput style={s.input} value={clientId} onChangeText={setClientId} placeholder="…apps.googleusercontent.com" autoCapitalize="none" autoCorrect={false} />
+    <Text style={s.label}>Client secret</Text>
+    <TextInput style={s.input} value={clientSecret} onChangeText={setClientSecret} placeholder="GOCSPX-…" autoCapitalize="none" autoCorrect={false} secureTextEntry />
+    <Text style={s.small}>Bu iki değeri yalnız buraya yapıştır; sohbete veya mesaja yazma. Kaydedince sunucuda şifreli saklanır, bir daha ekranda görünmez.</Text>
+    <Pressable accessibilityRole="button" style={[s.primary, (busy || !clientId.trim() || !clientSecret.trim()) && s.disabled]} disabled={busy || !clientId.trim() || !clientSecret.trim()} onPress={saveKey}><Text style={s.primaryText}>{busy ? "Kaydediliyor…" : "Google anahtarını kaydet"}</Text></Pressable>
+  </View>;
   const connect = async () => {
     setBusy(true); setError("");
     try { const { url } = await request("/api/drive/connect", { method: "POST" }); onOpen(url); }
@@ -62,28 +82,28 @@ export function DriveCard({ request, onOpen }: { request: Request; onOpen: (url:
   return <View style={[s.card, attention && s.cardWarn]} testID="drive-card">
     <Text style={s.title}>Google Drive (telefon yüklemez)</Text>
     {!status.configured && <>
-      <Text style={s.line}>Kurulum bir kez yapılır (ücretsiz, yaklaşık 10 dakika). Sonra yapay zekânın dosyalarını Drive'daki "{status.folder}" klasörüne kaydedersin; sunucu dosyaları Drive'dan kendisi alır.</Text>
+      <Text style={s.line}>Kurulum bir kez yapılır (ücretsiz, yaklaşık 10 dakika, telefondan da olur). Sonra yapay zekânın dosyalarını Drive'daki "{status.folder}" klasörüne kaydedersin; sunucu dosyaları Drive'dan kendisi alır.</Text>
       <Pressable accessibilityRole="button" onPress={() => setGuide(!guide)}><Text style={s.link}>{guide ? "Kurulum adımlarını gizle ▲" : "Kurulum adımlarını göster ▼"}</Text></Pressable>
       {guide && <View style={{ gap: 6 }}>
         {[
-          "Bilgisayardan console.cloud.google.com adresini aç, kendi Gmail hesabınla gir. Üstten 'Proje seç → Yeni proje', adı: GXL.",
-          "Soldaki menü: 'APIs & Services → Library'. 'Google Drive API'yi ara, aç ve 'Enable'a bas.",
-          "'APIs & Services → OAuth consent screen': User type 'External'. Uygulama adı: GXL, e-posta: kendi Gmail'in. 'Test users' bölümüne kendi Gmail adresini ekle ve kaydet.",
-          `'APIs & Services → Credentials → Create credentials → OAuth client ID'. Tür: 'Web application'. 'Authorized redirect URIs' bölümüne şunu aynen ekle: ${status.redirectUri || "(uygulama gösterir)"}`,
-          "Çıkan 'Client ID' ve 'Client secret' değerlerini kopyala. Bunları sohbete, mesaja veya not uygulamasına YAZMA.",
-          "dash.cloudflare.com → Workers & Pages → gxl-akilli-satici-api → Settings → Variables and Secrets → Add. Tür 'Secret' seç; adı GOOGLE_CLIENT_ID olan birini ve adı GOOGLE_CLIENT_SECRET olan birini ekle, kaydet (Deploy).",
-          `Google Drive'da "Yeni → Klasör" ile "${status.folder}" adlı klasör oluştur.`,
-          "Bu karta dön: 'Drive'ı bağla'ya bas, Google ekranında kendi hesabını seç. 'Google bu uygulamayı doğrulamadı' uyarısında 'Devam'a bas (uygulama senin; bu normal) ve Drive iznini onayla."
+          "Telefonda Chrome'u aç (sayfa küçük görünürse menüden 'Masaüstü sitesi'ni seç) ve console.cloud.google.com adresine kendi Gmail hesabınla gir. Üstten 'Proje seç → Yeni proje', adı: GXL, 'Oluştur'.",
+          "Menü (☰): 'APIs & Services → Library'. 'Google Drive API' yaz, aç ve 'Enable'a bas.",
+          "'APIs & Services → OAuth consent screen' (ya da 'Google Auth Platform'): 'Get started'. Uygulama adı: GXL, destek e-postası: kendi Gmail'in, kitle: 'External'. Sonra 'Audience → Test users → Add users' ile kendi Gmail adresini ekle.",
+          `'APIs & Services → Credentials → Create credentials → OAuth client ID'. Uygulama türü: 'Web application'. 'Authorized redirect URIs → Add URI' kutusuna şunu aynen yapıştır: ${status.redirectUri || "(uygulama gösterir)"}  Sonra 'Create'.`,
+          "Açılan pencerede 'Client ID' ve 'Client secret' yazar. İkisini sırayla kopyalayıp aşağıdaki kutulara yapıştır ve 'Google anahtarını kaydet'e bas.",
+          `Google Drive'da 'Yeni → Klasör' ile "${status.folder}" adlı klasör oluştur.`,
+          "Bu kartta 'Drive'ı bağla'ya bas, kendi hesabını seç. 'Google bu uygulamayı doğrulamadı' uyarısında 'Gelişmiş → GXL'e git (güvenli değil)' ile devam et (uygulama senin; bu normal) ve Drive iznini onayla."
         ].map((step, index) => <Text key={step} style={s.line}>{index + 1}. {step}</Text>)}
         <Pressable accessibilityRole="button" style={s.secondary} onPress={() => onOpen("https://console.cloud.google.com/")}><Text style={s.secondaryText}>Google Cloud'u aç</Text></Pressable>
-        <Pressable accessibilityRole="button" style={s.secondary} onPress={() => onOpen("https://dash.cloudflare.com/")}><Text style={s.secondaryText}>Cloudflare'i aç</Text></Pressable>
-        <Pressable accessibilityRole="button" onPress={refresh}><Text style={s.link}>Ekledim, yeniden kontrol et</Text></Pressable>
       </View>}
+      {keyForm}
     </>}
     {status.configured && <>
       <Text style={attention ? s.warn : s.line}>{status.connected ? `Bağlı. Haftalık onayın yenilenmesine ${status.daysLeft} gün var.` : status.expired ? "Haftalık onayın süresi doldu; yeniden bağla." : "Henüz bağlı değil."} Klasör: Drive'da "{status.folder}".</Text>
       <Pressable accessibilityRole="button" style={[s.primary, busy && s.disabled]} disabled={busy} onPress={connect}><Text style={s.primaryText}>{busy ? "Açılıyor…" : status.connected ? "Drive'ı yeniden bağla (7 günü yenile)" : status.expired ? "Drive'ı yeniden bağla" : "Drive'ı bağla"}</Text></Pressable>
       {status.connected && !!status.renewBy && <Pressable accessibilityRole="button" style={s.secondary} onPress={() => onOpen(driveReminderUrl(status.renewBy!))}><Text style={s.secondaryText}>Google Takvim'e haftalık hatırlatma ekle</Text></Pressable>}
+      {status.source === "app" && <Pressable accessibilityRole="button" onPress={() => setEditKey(!editKey)}><Text style={s.link}>{editKey ? "Anahtar değişikliğini kapat ▲" : "Google anahtarını değiştir ▼"}</Text></Pressable>}
+      {editKey && keyForm}
       <Text style={s.small}>Yapay zekâdan aldığın satış dosyalarını (ZIP/PDF) ve ilan görsellerini Drive'daki "{status.folder}" klasörüne kaydet: ChatGPT/Gemini indirme ekranında "Drive'a kaydet"i seç. Sunucu Drive'da hiçbir şeyi silmez veya değiştirmez.</Text>
     </>}
     {!!error && <Text style={s.warn}>{error}</Text>}
@@ -98,6 +118,8 @@ const s = StyleSheet.create({
   small: { fontSize: 12, color: "#5C6660" },
   warn: { fontSize: 13, color: "#9A3412", fontWeight: "600" },
   link: { color: "#315B4C", fontWeight: "700", paddingVertical: 4 },
+  label: { fontSize: 13, fontWeight: "700", color: "#315B4C" },
+  input: { borderWidth: 1, borderColor: "#D5CFBF", borderRadius: 10, padding: 10, backgroundColor: "#FBFAF6", color: "#1F2A24" },
   primary: { backgroundColor: "#315B4C", borderRadius: 12, paddingVertical: 11, alignItems: "center" },
   primaryText: { color: "#FFFFFF", fontWeight: "700" },
   secondary: { borderWidth: 1, borderColor: "#315B4C", borderRadius: 12, paddingVertical: 9, alignItems: "center" },

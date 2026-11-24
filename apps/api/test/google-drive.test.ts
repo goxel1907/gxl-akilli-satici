@@ -67,3 +67,32 @@ test("Drive entries are sorted into sale files, images and image packs", () => {
   assert.equal(classifyDriveEntry({ id: "x", name: "listing-03.png", size: 9_000_000 }).noteTr, "8 MB'tan büyük; telefon küçültüp gönderir.");
   assert.equal(classifyDriveEntry({ id: "x", name: "notes.txt" }).role, "skip");
 });
+
+test("the Google key can be pasted in the app: stored encrypted, never shown back, used for connecting", async () => {
+  const { handleRequest } = await import("../../worker/src/index.js");
+  const { store, values } = memory();
+  const env = { APP_ACCESS_TOKEN: "local-test", ETSY_OAUTH: store };
+  const auth = { authorization: "Bearer local-test", "content-type": "application/json" };
+  const call = (path: string, body?: unknown) => handleRequest(new Request(`https://api.example${path}`, body === undefined ? { headers: auth } : { method: "POST", headers: auth, body: JSON.stringify(body) }), env as never);
+  const clientId = "123456789012-abcdefghijklmnopqrstuvwxyz123456.apps.googleusercontent.com", clientSecret = "GOCSPX-abcdefghijklmnopqrstuvwx";
+  assert.equal((await (await call("/api/drive/status")).json() as { configured: boolean }).configured, false);
+  assert.equal((await call("/api/drive/credentials", { confirm: true, clientId: "wrong", clientSecret })).status, 400);
+  assert.equal((await call("/api/drive/credentials", { clientId, clientSecret })).status >= 400, true, "saving needs explicit confirmation");
+  const saved = await call("/api/drive/credentials", { confirm: true, clientId, clientSecret });
+  assert.equal(saved.status, 200);
+  assert.doesNotMatch(await saved.text(), /GOCSPX/);
+  const raw = String(values.get("google:drive:client"));
+  assert.doesNotMatch(raw, /GOCSPX-abcdefghijklmnopqrstuvwx/, "the secret is encrypted at rest");
+  const status = await (await call("/api/drive/status")).text();
+  assert.match(status, /"configured":true/); assert.match(status, /"source":"app"/); assert.doesNotMatch(status, /GOCSPX/);
+  const { url } = await (await call("/api/drive/connect", {})).json() as { url: string };
+  assert.equal(new URL(url).searchParams.get("client_id"), clientId);
+  // Google'a giden token isteğinde şifresi çözülmüş secret kullanılır.
+  let sentSecret = "";
+  const state = new URL(url).searchParams.get("state")!;
+  const fetcher = (async (_input: string, init: RequestInit) => { sentSecret = new URLSearchParams(String(init.body)).get("client_secret") || ""; return Response.json({ access_token: "a", refresh_token: "r", expires_in: 3600 }); }) as typeof fetch;
+  assert.equal((await handleDriveCallback(new Request(`https://api.example/google/oauth/callback?state=${state}&code=c`), env, fetcher)).status, 200);
+  assert.equal(sentSecret, clientSecret);
+  // Başka bir sunucu anahtarıyla şifre çözülemez.
+  assert.equal((await driveStatus({ APP_ACCESS_TOKEN: "other", ETSY_OAUTH: store })).configured, false);
+});

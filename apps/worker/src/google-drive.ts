@@ -3,10 +3,50 @@ import { stageDigitalUpload, stageRemoteSaleFile, type DigitalStore, type MediaW
 // Google Drive köprüsü: yapay zekânın ürettiği dosyalar satıcının Drive'ındaki "GXL" klasörüne girer, sunucu onları
 // Drive'dan kendisi çeker. Telefon dosya yüklemez, mobil veri harcanmaz. İzin: drive.readonly (yalnız okuma; sunucu
 // Drive'da hiçbir şeyi değiştirmez veya silmez). Kişisel (test modundaki) Google uygulamalarında bu izin 7 günde bir
-// yeniden onaylanır; uygulama kalan günü gösterir ve hatırlatır. Anahtarlar yalnız Cloudflare'de (GOOGLE_CLIENT_ID,
-// GOOGLE_CLIENT_SECRET) ve KV'de durur; telefona veya sohbete gitmez.
-export interface DriveEnv { GOOGLE_CLIENT_ID?: string; GOOGLE_CLIENT_SECRET?: string }
+// yeniden onaylanır; uygulama kalan günü gösterir ve hatırlatır.
+// Google anahtarı (Client ID + Client secret) iki yoldan gelir: Cloudflare gizli ayarı (GOOGLE_CLIENT_ID/SECRET) ya da
+// satıcının uygulamadan yapıştırması (25 Kasım kararı). Uygulamadan gelen secret KV'de AES-GCM ile şifreli durur;
+// şifre anahtarı Cloudflare'deki APP_ACCESS_TOKEN'dan türetilir. Secret hiçbir yanıtta geri gösterilmez.
+export interface DriveEnv { GOOGLE_CLIENT_ID?: string; GOOGLE_CLIENT_SECRET?: string; APP_ACCESS_TOKEN?: string }
 type Env = DriveEnv & { ETSY_OAUTH?: unknown };
+const CLIENT_KEY = "google:drive:client";
+interface StoredClient { clientId: string; secret: string; savedAt: number }
+
+async function cipherKey(env: Env): Promise<CryptoKey> {
+  if (!env.APP_ACCESS_TOKEN) throw new DriveError("NOT_CONFIGURED", "Sunucuda uygulama erişim anahtarı yok; Google anahtarı şifrelenemez.", 503);
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(`gxl-drive-client-v1:${env.APP_ACCESS_TOKEN}`));
+  return crypto.subtle.importKey("raw", digest, "AES-GCM", false, ["encrypt", "decrypt"]);
+}
+const toBase64 = (bytes: Uint8Array) => btoa(String.fromCharCode(...bytes));
+const fromBase64 = (text: string) => Uint8Array.from(atob(text), (char) => char.charCodeAt(0));
+
+export async function saveDriveClient(env: Env, input: { clientId?: unknown; clientSecret?: unknown }, now = Date.now()) {
+  const clientId = String(input.clientId || "").trim();
+  const clientSecret = String(input.clientSecret || "").trim();
+  if (!/^[0-9]{6,20}-[a-z0-9]{10,64}\.apps\.googleusercontent\.com$/.test(clientId)) throw new DriveError("VALIDATION", "Client ID biçimi tanınmadı. Google'daki değeri tam kopyala; '...apps.googleusercontent.com' ile biter.");
+  if (!/^[A-Za-z0-9_-]{20,100}$/.test(clientSecret)) throw new DriveError("VALIDATION", "Client secret biçimi tanınmadı. Google'daki değeri boşluksuz kopyala (genelde 'GOCSPX-' ile başlar).");
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const sealed = new Uint8Array(await crypto.subtle.encrypt({ name: "AES-GCM", iv }, await cipherKey(env), new TextEncoder().encode(clientSecret)));
+  const joined = new Uint8Array(iv.length + sealed.length); joined.set(iv, 0); joined.set(sealed, iv.length);
+  await store(env).put(CLIENT_KEY, JSON.stringify({ clientId, secret: toBase64(joined), savedAt: now } satisfies StoredClient));
+  // Yeni anahtar eski bağlantıyı geçersiz kılar; satıcı yeniden bağlanır.
+  await store(env).delete(TOKEN_KEY);
+  return { saved: true, clientIdEnd: clientId.split("-")[0].slice(-4) };
+}
+export async function deleteDriveClient(env: Env) { await store(env).delete(CLIENT_KEY); await store(env).delete(TOKEN_KEY); return { deleted: true }; }
+
+// Önce Cloudflare gizli ayarı, yoksa uygulamadan girilen şifreli anahtar.
+async function clientCredentials(env: Env): Promise<{ id: string; secret: string; source: "cloudflare" | "app" } | undefined> {
+  if (env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET) return { id: env.GOOGLE_CLIENT_ID, secret: env.GOOGLE_CLIENT_SECRET, source: "cloudflare" };
+  if (!env.ETSY_OAUTH) return undefined;
+  const stored = await readJson<StoredClient>(store(env), CLIENT_KEY);
+  if (!stored) return undefined;
+  try {
+    const joined = fromBase64(stored.secret);
+    const plain = await crypto.subtle.decrypt({ name: "AES-GCM", iv: joined.subarray(0, 12) }, await cipherKey(env), joined.subarray(12));
+    return { id: stored.clientId, secret: new TextDecoder().decode(plain), source: "app" };
+  } catch { return undefined; }
+}
 interface DriveTokens { refreshToken: string; accessToken?: string; expiresAt?: number; connectedAt: number; expired?: boolean }
 export interface DriveEntry { id: string; name: string; size: number; mimeType: string; role: "file" | "image" | "image_zip" | "skip"; noteTr?: string }
 
@@ -24,7 +64,8 @@ const readJson = async <T>(kv: Store, key: string): Promise<T | undefined> => { 
 export const redirectUri = (origin: string) => `${origin}/google/oauth/callback`;
 
 export async function driveStatus(env: Env, now = Date.now()) {
-  const configured = Boolean(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET);
+  const client = await clientCredentials(env);
+  const configured = Boolean(client);
   const tokens = env.ETSY_OAUTH ? await readJson<DriveTokens>(store(env), TOKEN_KEY) : undefined;
   const renewBy = tokens ? tokens.connectedAt + RENEW_DAYS * DAY : undefined;
   const daysLeft = renewBy ? Math.max(0, Math.ceil((renewBy - now) / DAY)) : undefined;
@@ -32,20 +73,24 @@ export async function driveStatus(env: Env, now = Date.now()) {
     configured, connected: Boolean(tokens && !tokens.expired && renewBy! > now), expired: Boolean(tokens && (tokens.expired || renewBy! <= now)),
     ...(tokens ? { connectedAt: new Date(tokens.connectedAt).toISOString(), renewBy: new Date(renewBy!).toISOString(), daysLeft } : {}),
     folder: DRIVE_FOLDER,
-    missingTr: [!env.GOOGLE_CLIENT_ID && "GOOGLE_CLIENT_ID", !env.GOOGLE_CLIENT_SECRET && "GOOGLE_CLIENT_SECRET"].filter(Boolean)
+    ...(client ? { source: client.source } : {}),
+    missingTr: client ? [] : ["Google Client ID", "Google Client secret"]
   };
 }
 
 export async function driveConnectUrl(env: Env, origin: string) {
-  if (!env.GOOGLE_CLIENT_ID || !env.GOOGLE_CLIENT_SECRET) throw new DriveError("NOT_CONFIGURED", "Google bağlantısı kurulmamış: Cloudflare'e GOOGLE_CLIENT_ID ve GOOGLE_CLIENT_SECRET eklenmeli (uygulamadaki kurulum adımlarına bakın).", 409);
+  const client = await clientCredentials(env);
+  if (!client) throw new DriveError("NOT_CONFIGURED", "Google anahtarı girilmemiş: Drive kartındaki kurulum adımlarını izleyip Client ID ve Client secret'ı yapıştır.", 409);
   const state = crypto.randomUUID();
   await store(env).put(`${STATE_PREFIX}${state}`, JSON.stringify({ createdAt: Date.now() }), { expirationTtl: 600 });
-  const query = new URLSearchParams({ client_id: env.GOOGLE_CLIENT_ID, redirect_uri: redirectUri(origin), response_type: "code", scope: SCOPE, access_type: "offline", prompt: "consent", include_granted_scopes: "true", state });
+  const query = new URLSearchParams({ client_id: client.id, redirect_uri: redirectUri(origin), response_type: "code", scope: SCOPE, access_type: "offline", prompt: "consent", include_granted_scopes: "true", state });
   return { url: `https://accounts.google.com/o/oauth2/v2/auth?${query}` };
 }
 
 async function tokenRequest(env: Env, form: URLSearchParams, fetcher: typeof fetch) {
-  form.set("client_id", env.GOOGLE_CLIENT_ID || ""); form.set("client_secret", env.GOOGLE_CLIENT_SECRET || "");
+  const client = await clientCredentials(env);
+  if (!client) throw new DriveError("NOT_CONFIGURED", "Google anahtarı girilmemiş.", 409);
+  form.set("client_id", client.id); form.set("client_secret", client.secret);
   const response = await fetcher("https://oauth2.googleapis.com/token", { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" }, body: form });
   const body = await response.json().catch(() => ({})) as { access_token?: string; refresh_token?: string; expires_in?: number; error?: string };
   return { ok: response.ok && Boolean(body.access_token), body };
