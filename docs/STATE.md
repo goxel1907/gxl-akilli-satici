@@ -124,3 +124,6 @@ Güncelleme: 9 Kasım 2026
   Ajan hattında yapay zekâ satırlarında 'X'i aç →'. Ajan ekibi özeti tüm rolleri ve ekipte olanları gösterir.
 - 25 Kasım (6): 'X'i aç ve mevcut sohbetini seç' yanıltıcıydı (ana ekranı açıyor). Ad: 'X'i aç (sohbeti listeden seç)'; açıklama
   ☰ menü + ürün adıyla arama ve Chrome'dan özel bağlantıyı (chatgpt.com/c/…) kaydetmeyi anlatır. Paylaşım bağlantısı yine reddedilir.
+- 25 Kasım (7): Kayıtlı çalışmada 'Üretimi kim yapsın?' (ChatGPT/Claude/Gemini). POST /api/printables/repackage paketi aynı
+  ürün adıyla (fixedName) seçilen yapay zekâ için yeniden yazar; başlık/etiket/fiyat ve araştırma bölümleri korunur.
+  Ajan hattı çalışmanın gerçek üreticisini ve görselcisini gösterir (workspaceAssistant/workspaceVisual).

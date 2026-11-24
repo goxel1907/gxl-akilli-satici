@@ -564,6 +564,22 @@ export async function handleRequest(request: Request, env: Env, context?: {waitU
       return json(200, { research: { ...research,recommendation } });
     }
 
+    // Kayıtlı çalışmanın paketi başka yapay zekâ için yeniden yazılır: ürün adı, başlık, etiket, açıklama, fiyat ve
+    // araştırma bölümleri aynı kalır; yalnız araç notları ve görsel adımları seçilen yapay zekâya göre değişir.
+    if (request.method === "POST" && url.pathname === "/api/printables/repackage") {
+      const raw = await readBody(request);
+      const name = String(raw.name || "").replace(/\s+/g, " ").trim().slice(0, 80);
+      const listingRaw = raw.listing && typeof raw.listing === "object" ? raw.listing as Record<string, unknown> : {};
+      const listing = { title: String(listingRaw.title || "").slice(0, 140), description: String(listingRaw.description || "").slice(0, 9000), tags: (Array.isArray(listingRaw.tags) ? listingRaw.tags : []).map(String).slice(0, 13) };
+      if (!name || !listing.title || listing.tags.length !== 13) return json(400, { error: "Kayıtlı çalışmanın adı, başlığı ve 13 etiketi gerekli." });
+      if (!["chatgpt", "claude", "gemini"].includes(String(raw.assistant))) return json(400, { error: "Yapay zekâ seçimi geçersiz." });
+      const input = normalizePrintablePlanInput({ ...(raw.input && typeof raw.input === "object" ? raw.input as Record<string, unknown> : {}), assistant: raw.assistant, visualAssistant: raw.visualAssistant, priceUsd: raw.priceUsd, coverColor: raw.coverColor, coverHex: raw.coverHex, crowdedColors: raw.crowdedColors });
+      const brief = buildPrintableBrief({ ...input, fixedName: name });
+      const appendix = String(raw.appendix || "");
+      if (appendix && /^\n\n## /.test(appendix)) brief.masterPrompt += appendix.slice(0, 30000);
+      const guarded = guardPrintablePlan(brief, listing as never, { kind: input.kind, formats: input.formats });
+      return json(200, { brief: guarded.brief, quality: guarded.quality });
+    }
     if (request.method === "POST" && url.pathname === "/api/printables/plan") {
       const raw = await readBody(request);
       if (raw.suggestionId) return json(200,await acceptListingOffer(env.ETSY_OAUTH as unknown as Parameters<typeof acceptListingOffer>[0],String(raw.suggestionId)));

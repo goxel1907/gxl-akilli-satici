@@ -474,7 +474,7 @@ function App() {
       {loading ? <ActivityIndicator style={{ marginTop: 40 }} color="#C88B47" /> : (
         <ScrollView ref={scrollRef} contentContainerStyle={[styles.content, { paddingBottom: 110 + insets.bottom }]}>
           {!online && <OfflineNotice reason={offlineReason} busy={reconnecting} onRetry={reconnect} onResetKey={confirmResetToken} />}
-          {tab!=="Etsy"&&tab!=="Sat"&&<ProductionWorkList compact onResume={resumeProduction}/>}
+          {tab!=="Etsy"&&tab!=="Sat"&&<ProductionWorkList compact onResume={resumeProduction} request={driveRequest}/>}
           {tab === "Başla" && <AgentHub onDigital={() => startAgents("digital")} onPhysical={() => startAgents("physical")} request={driveRequest} onOpen={(url) => openUrl(url, "Google")} />}
           {tab === "Başla" && <HomeScreen online={online} channels={channels} setTab={setTab} openSell={openSell} />}
           {mode === "simple" && <View style={tab === "Sat" ? undefined : styles.hidden}><SellScreen online={online} active={tab==="Sat"} productionResume={productionResume} channels={channels} route={sellRoute} setRoute={setSellRoute} onStepChange={scrollTop} setTab={setTab} /></View>}
@@ -2268,7 +2268,7 @@ function StudioPanel({ online, active, seed, onUpload, onOpenProduct, etsyReady,
     <Text style={styles.sectionTitle}>{mode === "physical" ? "Elimdeki ürünü sat" : "Yeni ürün fikri"}</Text>
     <ChipGroup options={STUDIO_MODES} value={mode} onChange={changeMode} />
     {workspaceOutdated && !savedWorkspace && <Text style={styles.warningText}>Önceki hazırlama paketi bu sürümün kontrollerinden geçmedi. Aşağıdan ürünü seçip yeniden hazırla; eski paketi üretimde kullanma. Telefona indirdiğin dosyalar silinmedi.</Text>}
-    <ProductionWorkList onResume={(row,options)=>{resumeSaved(row.workspace);if(options?.upload)setUploadAsk(Date.now());}}/>
+    <ProductionWorkList request={driveRequest} onResume={(row,options)=>{resumeSaved(row.workspace);if(options?.upload)setUploadAsk(Date.now());}}/>
     {seeding && <View style={styles.guardrail}><ActivityIndicator color="#315B4C" /><Text style={[styles.guardrailText, { flex: 1 }]}>Etsy trend verisi okunuyor; tüm alanlar otomatik dolduruluyor…</Text></View>}
     <View testID="studio-mode-physical" style={mode === "physical" ? undefined : styles.hidden}>{seed?.studio === "physical" && <Text style={styles.formHint}>Seçilen pazar araması: {seed.keyword}. Kendi ürününüzün gerçek fotoğrafları ve doğruladığınız bilgilerle ilerleyin; rakibin özellikleri ürününüze aktarılmaz.</Text>}<PhotoListingStudio online={online} etsyReady={etsyReady} /></View>
     <View testID="studio-mode-printable" style={mode === "printable" ? undefined : styles.hidden}><PrintableStudio guided online={online} seed={printableSeed} resumeWorkspace={resumeWorkspace} uploadRequest={uploadAsk || (productionResume?.upload ? productionResume.revision : undefined)} onPrepared={setSavedWorkspace} seeding={seeding} onReseed={() => printableSeed?.keyword && fillFromTrend({ keyword: printableSeed.keyword, kind: printableSeed.kind, studio: "printable" })} onPickKind={(kind: string, avoidKeyword?: string) => fillFromTrend({ studio: "printable", kind, avoidKeyword })} onPickQuery={(keyword: string) => fillFromTrend({ studio: "printable", kind: printableSeed?.kind, keyword })} onOpenProduct={onOpenProduct} onUpload={onUpload} /></View>
