@@ -24,7 +24,7 @@ printable-studio.ts büyük dosyalardır, yalnız gereken satır aralığını o
 - Sunucu: Cloudflare Worker `gxl-akilli-satici-api` (apps/worker/src/index.ts), main'e merge ile kendiliğinden yayın.
 - Telefon: Expo, apps/mobile/App.tsx (+ ListingMascot, ProductionTracker, ListingOfferPicker...). Sürüm 0.8.6,
   OTA güncelleme (Özet → Güncellemeyi denetle). Telefon kodu değişince kullanıcıya güncellemeyi söyle.
-- Test: `npm test` (380 test, hepsi geçmeli), `npm run typecheck`. Testler gerçek ekranları render eder
+- Test: `npm test` (422 test, hepsi geçmeli), `npm run typecheck`. Testler gerçek ekranları render eder
   (apps/api/test/fixtures/mobile-ui); buton etiketi değişirse ilgili testi güncelle.
 
 ## Önemli dosyalar
@@ -32,6 +32,7 @@ printable-studio.ts büyük dosyalardır, yalnız gereken satır aralığını o
   qa-protocol.ts, output-guard.ts, us-market.ts, decor.ts, digital-delivery.ts (yükleme, Etsy taslağı, USD→TL,
   dosya denetimi), pinterest.ts (manualOnly pinler), listing-scorecard.ts, etsy-setup.ts, shop-settings.ts, archive-qa.ts.
 - Pinterest API onaysız: otomatik kapalı, "Elle paylaş" kullanılır.
+- Yapay zekâ: ChatGPT, Claude, Gemini (assistants.ts). Ajan ekibi + denetçi ajan: AgentTeam.tsx. Rakip satış göstergesi: sales-proof.ts.
 
 ## Kullanıcı tercihleri
 - Ücretsiz araçlar. Fazla "devam" istenmesin. Görseller rakiplerden sıyrılsın (büyük başlık, ürün baskın).

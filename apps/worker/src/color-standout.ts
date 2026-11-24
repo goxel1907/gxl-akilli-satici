@@ -74,11 +74,16 @@ export function colorShares(texts: string[]): Array<{ name: string; share: numbe
   return [...counts.entries()].map(([name, count]) => ({ name, share: count / texts.length })).sort((a, b) => b.share - a.share);
 }
 
-export function planCoverColor(options: { competitorTexts?: string[]; theme?: string; palette?: string[]; avoid?: string[] }): ColorPlan {
+export function planCoverColor(options: { competitorTexts?: string[]; theme?: string; palette?: string[]; avoid?: string[]; covers?: Array<{ hue: number; saturation: number; brightness: number }> }): ColorPlan {
   const shares = colorShares(options.competitorTexts || []);
   const crowded = [...new Set([...shares.filter((item) => item.share >= 0.12).map((item) => item.name), ...(options.avoid || []).map((item) => item.toLowerCase())])].slice(0, 5);
   const lookup = (name: string) => SEEN.find((color) => color.name === name) || BOLD.find((color) => color.name === name);
-  const crowdedHues = crowded.map((name) => lookup(name)?.hue).filter((hue): hue is number => hue !== undefined);
+  // Gerçek kapak ölçümü (Etsy görsel tonu): ilk sayfa kapaklarının en az %15'inde görülen canlı ton aralığı da kalabalıktır.
+  const covers = options.covers || [];
+  const vivid = covers.filter((item) => item.saturation >= 28 && item.brightness >= 12 && item.brightness <= 92);
+  const coverHues = Array.from({ length: 12 }, (_, bucket) => bucket * 30 + 15).filter((center) => vivid.filter((item) => hueDistance(item.hue, center) <= 15).length >= Math.max(2, covers.length * 0.15));
+  const mutedShare = covers.length ? 1 - vivid.length / covers.length : 0;
+  const crowdedHues = [...crowded.map((name) => lookup(name)?.hue).filter((hue): hue is number => hue !== undefined), ...coverHues];
   const theme = (options.theme || "").toLowerCase();
   const order = THEME_ORDER.find(([pattern]) => pattern.test(theme))?.[1] || [];
   // Ürün paletinde zaten doygun bir renk varsa ve rakiplerde kalabalık değilse önce o denenir (galeri tutarlı kalır).
@@ -88,8 +93,9 @@ export function planCoverColor(options: { competitorTexts?: string[]; theme?: st
   const distance = (color: typeof BOLD[number]) => crowdedHues.length ? Math.min(...crowdedHues.map((hue) => hueDistance(hue, color.hue))) : 180;
   const pick = ranked.find((color) => distance(color) >= 60 && !crowded.some((name) => color.name.includes(name) || name.includes(color.name)))
     || [...ranked].sort((a, b) => distance(b) - distance(a))[0];
-  const noteTr = crowded.length
-    ? `Rakiplerde en sık görülen renkler: ${crowded.join(", ")}. Kapak zemini bunlardan ayrışan ${pick.name} (${pick.hex}).`
-    : `Rakip renk verisi yok; kapak zemini temaya uyan doygun ${pick.name} (${pick.hex}).`;
+  const coverNote = covers.length >= 5 ? ` İlk sayfadaki ${covers.length} rakip kapağın %${Math.round(mutedShare * 100)}'i soluk/nötr.` : "";
+  const noteTr = (crowded.length || coverHues.length)
+    ? `Rakiplerde en sık görülen renkler: ${crowded.join(", ") || "kapaklarda ölçülen tonlar"}. Kapak zemini bunlardan ayrışan ${pick.name} (${pick.hex}).${coverNote}`
+    : `Rakip renk verisi yok; kapak zemini temaya uyan doygun ${pick.name} (${pick.hex}).${coverNote}`;
   return { crowded, coverColor: pick.name, coverHex: pick.hex, noteTr };
 }

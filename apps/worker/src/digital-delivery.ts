@@ -44,7 +44,7 @@ export interface DigitalProduct {
   craft?: PatternCraft;
   kind?: PrintableKind;
   productType: string;
-  handoff?: { id?: string; name: string; assistant?: "claude" | "chatgpt"; researchKeyword?: string; researchedAt?: string };
+  handoff?: { id?: string; name: string; assistant?: "claude" | "chatgpt" | "gemini"; researchKeyword?: string; researchedAt?: string };
   // İlk dosya (geriye uyum için ayrıca fileName/fileSize olarak da tutulur).
   fileName: string;
   fileSize: number;
@@ -481,7 +481,7 @@ export async function createDigitalProduct(store: DigitalStore, form: FormData, 
     name,
     ...(kind ? { kind } : { craft }),
     productType,
-    ...(hasHandoff ? { handoff: { name, ...(metadata.handoffId ? { id: String(metadata.handoffId) } : {}), ...(metadata.assistant === "claude" || metadata.assistant === "chatgpt" ? { assistant: metadata.assistant } : {}), ...(metadata.research && typeof metadata.research === "object" ? { researchKeyword: String((metadata.research as Record<string, unknown>).keyword || "").slice(0, 60), researchedAt: String((metadata.research as Record<string, unknown>).scannedAt || "").slice(0, 40) } : {}) } } : {}),
+    ...(hasHandoff ? { handoff: { name, ...(metadata.handoffId ? { id: String(metadata.handoffId) } : {}), ...(metadata.assistant === "claude" || metadata.assistant === "chatgpt" || metadata.assistant === "gemini" ? { assistant: metadata.assistant } : {}), ...(metadata.research && typeof metadata.research === "object" ? { researchKeyword: String((metadata.research as Record<string, unknown>).keyword || "").slice(0, 60), researchedAt: String((metadata.research as Record<string, unknown>).scannedAt || "").slice(0, 40) } : {}) } } : {}),
     fileName: files[0].name,
     fileSize: files[0].size,
     files,

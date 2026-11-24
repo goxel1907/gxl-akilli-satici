@@ -1,4 +1,6 @@
 import { addLocalWhatsapp, localWhatsappLink } from "./marketing-local";
+import { AgentTeamCard, ListingReviewCard } from "./AgentTeam";
+import { ASSISTANTS, assistantHint, assistantName, assistantTo, isAssistant, type Assistant } from "./assistants";
 import { photoAssistantPrompt, photoEnhancePrompt, parsePhotoAssistant, listingChatPrompt, parseListingChat, mergeListingAbout, fullListingPrompt, parseFullListing, listingTextProblems, type ImportedListingText } from "./photo-assistant";
 import { canRankTrend, compareTrendEvidence, hasBuyerDemand, trendFreshness } from "./trend-priority";
 import { listingProgress, listingTasks, physicalListingProgress, etsyTransferComplete, type ListingProgressInput } from "./listing-progress";
@@ -1665,7 +1667,7 @@ const KIND_HELP: Record<string, string> = {
 
 // Satıcının kullandığı yapay zekâ: paket o araca göre yazılır. Seçim telefonda hatırlanır.
 const ASSISTANT_KEY = "gxl.assistant";
-const ASSISTANT_OPTIONS = [{ id: "chatgpt", label: "ChatGPT" }, { id: "claude", label: "Claude" }];
+const ASSISTANT_OPTIONS = ASSISTANTS;
 const STUDIO_MODES = [
   { id: "printable", label: "Dijital ürün" },
   { id: "pattern", label: "El işi deseni" },
@@ -1687,10 +1689,11 @@ function MarketStrategyCard({ strategy }: any) {
     {strategy.pricing && <Text style={styles.listingTitle}>Fiyat deneme referansları: {strategy.pricing.trialsUsd.join(" / ")} USD · maliyet ve ücretleri ayrıca kontrol edin</Text>}
     {strategy.actions.map((action: any) => <View key={action.id} style={styles.visualRow}><Text style={styles.rowTitle}>{action.titleTr}</Text><Text style={styles.analysisLine}>{action.instructionTr}</Text>{!!action.evidenceIds?.length && <Text style={styles.small}>Dayanak: {action.evidenceIds.slice(0, 5).join(", ")} numaralı örnek ilanlar</Text>}</View>)}
     <Text style={styles.warningTitle}>İncelenen rakipler</Text>
+    {strategy.salesEvidence?.status === "proxy" && <Text style={styles.small}>Sıralama satış göstergesine göre: {strategy.salesEvidence.basisTr}</Text>}
     {strategy.leaders.map((row: any) => <View key={row.id} style={styles.visualRow}>
       <Text style={styles.rowTitle}>{row.title}</Text>
       {row.selectedBySeller && <Text style={styles.evidence}>Senin karşılaştırmaya eklediğin ilan</Text>}
-      <Text style={styles.small}>{row.priceUsd ? `${row.priceUsd} USD · ` : ""}{row.favorites ?? "?"} favori · {row.ageDays === null ? "yaş bilinmiyor" : `${row.ageDays} gün`}{row.monthlyFavoriteAverage !== null ? ` · aylık ortalama ${row.monthlyFavoriteAverage} favori` : ""}</Text>
+      <Text style={styles.small}>{row.priceUsd ? `${row.priceUsd} USD · ` : ""}{typeof row.reviews === "number" ? `${row.reviews} yorum · ` : ""}{typeof row.shopSales === "number" ? `mağaza ${row.shopSales} satış · ` : ""}{typeof row.images === "number" ? `${row.images} görsel${row.video ? " + video" : ""} · ` : ""}{row.favorites ?? "?"} favori · {row.ageDays === null ? "yaş bilinmiyor" : `${row.ageDays} gün`}{row.monthlyFavoriteAverage !== null ? ` · aylık ortalama ${row.monthlyFavoriteAverage} favori` : ""}</Text>
       {!!row.url && <Pressable style={styles.secondaryButton} onPress={() => openUrl(row.url, "Rakip ilanı")}><Text style={styles.secondaryButtonText}>Kaynak ilanı aç</Text></Pressable>}
     </View>)}
     <Text style={styles.warningTitle}>Yayın sonrası ölçüm</Text>
@@ -1761,7 +1764,7 @@ function PrintableStudio({ online, seed, seeding, resumeWorkspace, onPrepared, o
   const [kind, setKind] = useState("planner");
   const [assistant, setAssistant] = useState("chatgpt");
   const assistantPreferenceChanged = useRef(false);
-  useEffect(() => { AsyncStorage.getItem(ASSISTANT_KEY).then((value) => { if (!assistantPreferenceChanged.current && (value === "claude" || value === "chatgpt")) setAssistant(value); }).catch(() => undefined); }, []);
+  useEffect(() => { AsyncStorage.getItem(ASSISTANT_KEY).then((value) => { if (!assistantPreferenceChanged.current && isAssistant(value)) setAssistant(value); }).catch(() => undefined); }, []);
   const chooseAssistant = (next: string) => { generationRequest.current += 1; offerRequest.current+=1; setOffersBusy(false); setWorking(false); assistantPreferenceChanged.current = true; setAssistant(next); setPlan(undefined); if(guided&&flow!=="manual")setFlow("offers"); AsyncStorage.setItem(ASSISTANT_KEY, next).catch(() => undefined); };
   const [productType, setProductType] = useState("");
   const [referenceNotes, setReferenceNotes] = useState("");
@@ -1902,13 +1905,14 @@ function PrintableStudio({ online, seed, seeding, resumeWorkspace, onPrepared, o
     </View>;
     return <View>
       <Text style={styles.fieldLabel}>Üretim aracı</Text><ChipGroup options={ASSISTANT_OPTIONS} value={assistant} onChange={chooseAssistant} disabled={offersBusy||Boolean(seeding)}/>
+      <AgentTeamCard producer={assistant} onUseProducer={chooseAssistant} disabled={offersBusy||Boolean(seeding)} />
       <ListingOfferPicker offers={offers} busy={offersBusy||Boolean(seeding)} offline={!online} error={offersError} note={offersNote} kindLabel={PRINTABLE_KIND_OPTIONS.find(row=>row.id===kind)?.label || kind} onChoose={chooseOffer} onRefresh={()=>loadOffers(false)} onChangeKind={()=>setKindPicker(true)} onManual={()=>setFlow("manual")} onOpenSource={(url:string)=>openUrl(url,"Rakip ilanı")}/>
       <Modal visible={kindPicker} animationType="slide" onRequestClose={()=>setKindPicker(false)}><SafeAreaView style={styles.formSafe}><ScrollView contentContainerStyle={styles.formContent}><Text style={styles.sectionTitle}>Ne tür ürün hazırlayalım?</Text><ChipGroup options={PRINTABLE_KIND_OPTIONS} value={kind} onChange={(next:string)=>{setKindPicker(false);setKind(next);onPickKind(next);}}/><Pressable style={styles.secondaryButton} onPress={()=>setKindPicker(false)}><Text style={styles.secondaryButtonText}>Kapat</Text></Pressable></ScrollView></SafeAreaView></Modal>
     </View>;
   }
   return <>
     {guided&&<View style={styles.inlineActions}><Pressable style={styles.secondaryButton} onPress={()=>setFlow(currentPlan?.quality?.ok?"production":"offers")}><Text style={styles.secondaryButtonText}>{currentPlan?.quality?.ok?"Üretim adımını göster":"Ürün önerilerine dön"}</Text></Pressable><Pressable style={styles.secondaryButton} onPress={()=>setResearchDetails(!researchDetails)}><Text style={styles.secondaryButtonText}>{researchDetails?"Araştırma ayrıntılarını gizle":"Araştırma ayrıntılarını göster"}</Text></Pressable></View>}
-    <ListingGuide input={{ phase: "studio", planReady: Boolean(currentPlan?.quality?.ok), assistant: assistant === "claude" ? "claude" : "chatgpt" }}
+    <ListingGuide input={{ phase: "studio", planReady: Boolean(currentPlan?.quality?.ok), assistant: isAssistant(assistant) ? assistant : "chatgpt" }}
       actionLabel={currentPlan?.quality?.ok ? "Goxi ile üretim paketini paylaş" : currentPreview?.recommendation?.requiresNewTopic ? "Goxi ile yeni konu bul" : currentPreview ? "Goxi ile ilan paketini hazırla" : "Goxi ile rakipleri araştır"}
       onAction={() => currentPlan?.quality?.ok ? shareChecked(currentPlan.quality, currentPlan.brief.masterPrompt, `${currentPlan.brief.name} - tek paket`) : currentPreview?.recommendation?.requiresNewTopic ? onPickKind(kind,keyword) : currentPreview ? generate() : analyze()}
       disabled={!online || working || seeding}
@@ -1935,7 +1939,7 @@ function PrintableStudio({ online, seed, seeding, resumeWorkspace, onPrepared, o
     {!!KIND_HELP[kind] && <Text style={styles.formHint}>{KIND_HELP[kind]}</Text>}
     <Text style={styles.fieldLabel}>Hangi yapay zekâyla üreteceksiniz?</Text>
     <ChipGroup options={ASSISTANT_OPTIONS} value={assistant} onChange={chooseAssistant} />
-    <Text style={styles.formHint}>{assistant === "claude" ? "Claude: dosyaları ve vektör (SVG) çizimleri kendisi yapar; fotoğraf üretemez. Fotoğraf gibi sahneler için size görsel promptunu verir, onu bir görsel aracında çalıştırırsınız." : "ChatGPT: görselleri kendi görsel aracıyla, dosyaları Python ile hazırlar ve indirme bağlantısı verir."}</Text>
+    <Text style={styles.formHint}>{assistantHint(assistant)}</Text>
     <Field label="Ürün (İngilizce)" value={productType} onChangeText={(value: string) => { setProductType(value); setKeyword(""); setTrendTags([]); setTrendFeatures([]); setReferenceNotes(""); }} placeholder="budget planner, adult coloring pages, recipe cards" autoCapitalize="none" />
     <Field label="Trend özeti (Etsy üst ilanlarından)" value={currentPlan?.research?.marketBriefEn || referenceNotes} onChangeText={setReferenceNotes} placeholder="Trendden gelince otomatik dolar" multiline />
     <Field label="Renkler" value={colors} onChangeText={setColors} placeholder="sage green, cream, terracotta" autoCapitalize="none" />
@@ -2034,19 +2038,19 @@ function shareChecked(quality: any, message: string, title?: string) {
 // Paylaşım ChatGPT/Claude'da her seferinde yeni sohbet açar; parçalar ayrı sohbetlere düşerse ad, palet ve spec kaybolur.
 // Tek paket tüm adımları sırayla içerir: bir kez gönderilir, tüm iş aynı sohbette yürür.
 function MasterPromptCard({ brief, quality, assistant, trackingWorkspace }: any) {
-  const tool = assistant === "claude" ? "Claude" : assistant === "chatgpt" ? "ChatGPT" : "ChatGPT'ye (veya Claude'a)";
+  const tool = assistantName(assistant);
   if (!brief?.masterPrompt) return null;
   const steps = (brief.masterPrompt.match(/^- (ADIM|STEP) \d+/gm) || []).length;
   return <View style={[styles.analysisCard, styles.masterCard]}>
     <Text style={styles.cardTitle}>Tek paket: tek sohbette hepsi</Text>
     <Text style={styles.analysisLine}>Parça parça gönderme: her paylaşım yeni sohbet açar ve yeni sohbet önceki ürün adını, paleti ve sayfa planını bilmez. Bu paket ürün dosyası, görseller ve varsa pinler dahil tüm parçaları {steps} sıralı adımda birleştirir.</Text>
     <Text style={styles.analysisLine}>Dil: paketin istek kısmı Türkçedir. Yapay zekâ sizinle Türkçe konuşur ve sizden isteyeceği her işi (ekran görüntüsü yükleme, bir promptu görsel aracında çalıştırma) Türkçe yazar. Ürün, dosyalar, görsellerdeki yazılar ve ilan ise ABD'deki alıcı için Amerikan İngilizcesiyle hazırlanır; vergi, resmî tatil, okul yılı ve iklim gibi eyaletten eyalete değişen konular ürüne sabit bilgi olarak yazılmaz.</Text>
-    <Text style={styles.analysisLine}>1. Aşağıdaki düğmeyle bir kez {assistant === "claude" ? "Claude'a" : assistant === "chatgpt" ? "ChatGPT'ye" : tool} gönder; paylaş ekranında {assistant === "claude" ? "Claude" : "ChatGPT"} uygulamasını seç.</Text>
+    <Text style={styles.analysisLine}>1. Aşağıdaki düğmeyle bir kez {assistantTo(assistant)} gönder; paylaş ekranında {tool} uygulamasını seç.</Text>
     <Text style={styles.analysisLine}>2. Her adım bitince aynı sohbete "devam" yaz; yeni sohbet açma.</Text>
-    <Text style={styles.analysisLine}>3. {assistant === "claude" ? "Claude görselleri kodla vektör çizer; fotoğraf gibi sahnelerin promptunu verir, onları bir görsel aracında üretip aynı sohbete yükle." : "ChatGPT görselleri kendi görsel aracıyla üretir; dosyaları indirme bağlantısıyla verir."}</Text>
+    <Text style={styles.analysisLine}>3. {assistant === "claude" ? "Claude görselleri kodla vektör çizer; fotoğraf gibi sahnelerin promptunu verir, onları bir görsel aracında üretip aynı sohbete yükle." : assistant === "gemini" ? "Gemini kapak zeminini ve sahneleri üretir; dosya indirme bağlantısı veremezse baskıya hazır sayfayı verir, sen PDF olarak kaydedersin." : "ChatGPT görselleri kendi görsel aracıyla üretir; dosyaları indirme bağlantısıyla verir."}</Text>
     <Text style={styles.small}>{Math.round(brief.masterPrompt.length / 100) / 10} bin karakter. Uygulama uzun metni almazsa paylaş ekranının üstündeki kopyala simgesine dokunup aynı sohbete yapıştır.</Text>
     <QualityNote quality={quality} />
-    <Pressable style={[styles.primary, { marginTop: 12, marginBottom: 0 }]} onPress={() => trackingWorkspace?shareProductionPackage(trackingWorkspace).catch((error:Error)=>Alert.alert("Paket açılamadı",error.message)):shareChecked(quality, brief.masterPrompt, `${brief.name} - tek paket`)}><Text style={styles.primaryText}>{assistant === "claude" ? "Tek paketi Claude'a gönder" : assistant === "chatgpt" ? "Tek paketi ChatGPT'ye gönder" : "Tek paketi gönder"}</Text><Ionicons name="paper-plane-outline" size={18} color="white" /></Pressable>
+    <Pressable style={[styles.primary, { marginTop: 12, marginBottom: 0 }]} onPress={() => trackingWorkspace?shareProductionPackage(trackingWorkspace).catch((error:Error)=>Alert.alert("Paket açılamadı",error.message)):shareChecked(quality, brief.masterPrompt, `${brief.name} - tek paket`)}><Text style={styles.primaryText}>{`Tek paketi ${assistantTo(assistant)} gönder`}</Text><Ionicons name="paper-plane-outline" size={18} color="white" /></Pressable>
     <Text style={[styles.small, { marginTop: 10 }]}>Aşağıdaki parçalar bu paketin içindekilerdir. Ayrı kullanacaksan hepsini aynı sohbete yapıştır.</Text>
   </View>;
 }
@@ -2565,7 +2569,7 @@ function DigitalUploadForm({ visible, suspended = false, prefill, onClose, onSav
       <ListingGuide input={uploadGuideInput}
         actionLabel={!files.length ? "Goxi ile ürün dosyalarını seç" : !images.length ? "Goxi ile ilan görsellerini seç" : uploadReady ? "Goxi ile dosyaları güvenli depoya yükle" : undefined}
         onAction={!files.length ? pickFiles : !images.length ? pickImages : uploadReady ? save : undefined} disabled={saving} />
-      {prefill && <Text style={styles.formHint}>1. Aynı ürünü ChatGPT veya Claude'da tamamlayın. 2. Dosyaları ve ilan görsellerini telefonunuza indirin. Toplu indirme ZIP'ini önce çıkarın. 3. Aşağıdan yalnız bu ürüne ait PDF/ZIP dosyalarını ve görselleri seçin. Başlık, açıklama, etiketler ve önerilen fiyat ürün kaydından gelir.</Text>}
+      {prefill && <Text style={styles.formHint}>1. Aynı ürünü ChatGPT, Claude veya Gemini'da tamamlayın. 2. Dosyaları ve ilan görsellerini telefonunuza indirin. Toplu indirme ZIP'ini önce çıkarın. 3. Aşağıdan yalnız bu ürüne ait PDF/ZIP dosyalarını ve görselleri seçin. Başlık, açıklama, etiketler ve önerilen fiyat ürün kaydından gelir.</Text>}
       {!prefill && <Text style={styles.warningText}>Bu form Stüdyo'dan dolu gelir. Önce Etsy → Stüdyo'da ürünü hazırlayın; yapay zekâ dosyaları ve görselleri verince Stüdyo'daki 'Dosyalar hazırsa yükle'ye basın. Başlık, etiket, açıklama ve fiyat kendiliğinden dolar.</Text>}
       <Pressable style={styles.uploadRow} onPress={pickFiles}><Ionicons name="document-text-outline" size={22} color="#315B4C" /><Text style={[styles.rowTitle, { flex: 1 }]}>{files.length ? `${files.length}/5 dosya seçildi · eklemek için dokunun` : "Dosyaları seç: PDF veya ZIP (birden çok seçilebilir, en fazla 5)"}</Text></Pressable>
       {files.map((file) => <View key={file.name} style={styles.fileRow}><Ionicons name={/\.zip$/i.test(file.name || "") ? "archive-outline" : "document-outline"} size={18} color="#56615C" /><Text style={[styles.small, { flex: 1 }]} numberOfLines={1}>{file.name} · {Math.round((file.size || 0) / 1024)} KB</Text><Pressable onPress={() => setFiles(files.filter((item) => item.name !== file.name))}><Ionicons name="close-circle-outline" size={20} color="#B4483A" /></Pressable></View>)}
@@ -2584,6 +2588,7 @@ function DigitalUploadForm({ visible, suspended = false, prefill, onClose, onSav
       <Field label={`Başlık (${title.length}/140)`} value={title} onChangeText={setTitle} multiline />
       <Field label="Etiketler (virgülle, 13 adet, her biri en fazla 20 karakter)" value={tags} onChangeText={setTags} multiline autoCapitalize="none" />
       <Field label="Açıklama" value={description} onChangeText={setDescription} multiline style={[styles.input, { minHeight: 160, textAlignVertical: "top" }]} />
+      <ListingReviewCard producer={prefill?.assistant} context={{ kind: "digital", title, tags: tags.split(",").map((tag: string) => tag.trim()).filter(Boolean), description, priceUsd: Number(priceUsd.replace(",", ".")) || undefined, targetSearch: prefill?.research?.keyword, provenSellers: provenSellerLines(prefill?.research?.salesProof) }} onApply={(next) => { setTitle(next.title); setTags(next.tags.join(", ")); setDescription(next.description); }} />
       <View style={styles.card}>
         {kind === "pattern" && <Toggle label="Deseni ben veya mağaza üyem yazdı (yapay zekâ yazmadı)" value={ownPattern} onChange={setOwnPattern} />}
         <Toggle label={kind === "pattern" ? "Desen bizzat örülerek / yapılarak test edildi" : testLabel(kind)} value={testMade} onChange={setTestMade} />
@@ -2898,7 +2903,7 @@ const ETSY_GUIDE: Array<{ id: string; title: string; icon: any; steps: string[] 
     "Bir kartı açıp 'Öne geçmek için ne yapmalı?' önerilerini okuyun, sonra 'Bu nişte dijital ürün hazırla'ya basın.",
     "Stüdyo'yu açtığınızda veya bir ürün türüne bastığınızda sistem o türde en güçlü Etsy aramasını kendisi seçer ve tüm alanları doldurur: ürün, trend özellikleri, renkler (trend rengi yoksa trend stiline uygun palet), formatlar (rakiplerin az sunduğu formatlar eklenir), sayfa sayısı (rakip ortancasının %20 fazlası) ve hedef kitle. 'Başka arama seç' sıradaki güçlü aramayı getirir.",
     "'Rakipleri geçmek için' kartı rakip ortanca fiyatını, önerilen başlangıç ve set fiyatını, format boşluklarını ve geçilecek rakipleri gösterir; önerilen fiyat yükleme formuna otomatik gelir. Siz 'Prompt, görsel ve ilanı hazırla'ya basarsınız.",
-    "Stüdyo'da kullanacağınız yapay zekâyı seçin (ChatGPT veya Claude), sonra 'Tek paketi gönder' ile her şeyi bir kez gönderin: dosyalar, sayfa görselleri, 10 reklam görseli ve pin görselleri sıralı adımlarla aynı sohbette yapılır. Her adım bitince aynı sohbete 'devam' yazın. Parçaları ayrı ayrı paylaşmayın; her paylaşım yeni sohbet açar ve yeni sohbet ürün adını, paleti ve sayfa planını bilmez.",
+    "Stüdyo'da kullanacağınız yapay zekâyı seçin (ChatGPT, Claude veya Gemini), sonra 'Tek paketi gönder' ile her şeyi bir kez gönderin: dosyalar, sayfa görselleri, 10 reklam görseli ve pin görselleri sıralı adımlarla aynı sohbette yapılır. Her adım bitince aynı sohbete 'devam' yazın. Parçaları ayrı ayrı paylaşmayın; her paylaşım yeni sohbet açar ve yeni sohbet ürün adını, paleti ve sayfa planını bilmez.",
     "Paket Türkçe yazılmıştır: yapay zekâ sizinle Türkçe konuşur ve sizden istediği her işi Türkçe yazar. Ürünü, dosya adlarını, görsellerdeki yazıları ve ilanı ABD'deki alıcı için Amerikan İngilizcesiyle yapar. Takvimde resmî tatil, bütçe tablosunda vergi oranı gibi eyaletten eyalete değişen bilgiler ürüne yazılmaz.",
     "ChatGPT seçiliyse görselleri kendi görsel aracıyla üretir. Claude seçiliyse çizimleri kodla vektör olarak kendisi çizer; fotoğraf gibi sahneler için hazır görsel promptu verir, onu bir görsel aracında çalıştırırsınız.",
     "Dosyalar gelince modelden 'Automated QA' betik çıktısını isteyin: tek satırda FAIL olmamalı (saat AM/PM, kopya sayfa, eksik format, ad, kapak, kenar boşluğu). Uygulama da yüklemede ilanda yazan formatın dosyalarda olmamasını ve aynı dosyanın iki kez yüklenmesini engeller.",
@@ -3242,13 +3247,19 @@ function TurkishGloss({ title, tags }: { title: string; tags: string[] }) {
 }
 
 // Planın sonucu, taslak ve yayın: iki akışta da aynı. prepareProduct taslaktan hemen önce çalışır (ör. fotoğrafları yükler).
+// Denetçi ajana giden satış göstergeli rakipler (yorum sayısı ve mağaza satışı; gerçek satış adedi değildir).
+function provenSellerLines(proof: any): string[] {
+  return (Array.isArray(proof?.sellers) ? proof.sellers : []).filter((row: any) => typeof row.reviews === "number" || typeof row.shopSales === "number").slice(0, 5)
+    .map((row: any) => `${row.title} | ${row.reviews ?? "?"} reviews | shop sales ${row.shopSales ?? "?"}${row.priceUsd ? ` | $${row.priceUsd}` : ""}${typeof row.images === "number" ? ` | ${row.images} images${row.video ? " + video" : ""}` : ""}`);
+}
+
 function EtsyPlanResult({ plan, payload, etsyReady, priceSourceLabel, prepareProduct, photoCount, initialText }: any) {
   const [scorecard, setScorecard] = useState<any>();
   const [scoring, setScoring] = useState(false);
   const [title, setTitle] = useState(plan.title);
   const [tags, setTags] = useState(plan.tags.join(", "));
   const [description, setDescription] = useState(plan.description);
-  const [chatAssistant, setChatAssistant] = useState<"chatgpt" | "claude">("chatgpt");
+  const [chatAssistant, setChatAssistant] = useState<Assistant>("chatgpt");
   const [chatReply, setChatReply] = useState("");
   const [chatRequest, setChatRequest] = useState("");
   const [chatNote, setChatNote] = useState("");
@@ -3273,7 +3284,7 @@ function EtsyPlanResult({ plan, payload, etsyReady, priceSourceLabel, preparePro
     if (initialText && !problems.length) {
       const nextTags = initialText.tags.join(", "), nextDescription = mergeListingAbout(plan.description, initialText.aboutEn);
       setTitle(initialText.title); setTags(nextTags); setDescription(nextDescription); setGlossSource({ title: initialText.title, tags: initialText.tags });
-      setChatNote("Başlık, 13 etiket ve tanıtım paragrafı ChatGPT/Claude yanıtından uygulandı; fiyat ve kargo uygulamanın hesabıdır.");
+      setChatNote("Başlık, 13 etiket ve tanıtım paragrafı ChatGPT/Claude/Gemini yanıtından uygulandı; fiyat ve kargo uygulamanın hesabıdır.");
       rescore(initialText.title, nextTags, plan.pricing ? String(plan.pricing.recommendedUsd) : "", nextDescription);
     } else {
       setChatNote(initialText ? `Sohbetten gelen metin uygulanmadı: ${problems.join(" ")}` : "");
@@ -3416,15 +3427,18 @@ function EtsyPlanResult({ plan, payload, etsyReady, priceSourceLabel, preparePro
       <View style={styles.analysisCard}>
         <Text style={styles.cardTitle}>ChatGPT / Claude ile ilan metnini güçlendir (isteğe bağlı)</Text>
         <Text style={styles.formHint}>Plus üyeliğini kullanır. Talimata uygulamanın Etsy rakip verisi eklenir; asistan başlık, 13 etiket ve tanıtım paragrafı yazar. Fotoğrafları sohbete ekle, gelen JSON'u buraya yapıştır. Fiyat, kargo ve teslim süresini uygulama hesaplar; yanıt Etsy kurallarına göre denetlenir.</Text>
-        <ChipGroup options={[{ id: "chatgpt", label: "ChatGPT" }, { id: "claude", label: "Claude" }]} value={chatAssistant} onChange={(value: any) => setChatAssistant(value)} />
+        <ChipGroup options={ASSISTANTS} value={chatAssistant} onChange={(value: any) => setChatAssistant(value)} />
         <Pressable style={styles.secondaryButton} onPress={shareListingChat}><Text style={styles.secondaryButtonText}>İlan metni talimatını paylaş</Text></Pressable>
         <Field label="Sohbetten gelen ilan JSON'u" value={chatReply} onChangeText={setChatReply} multiline autoCapitalize="none" />
         <Pressable style={styles.secondaryButton} onPress={applyListingChat}><Text style={styles.secondaryButtonText}>İlan metnini uygula</Text></Pressable>
       </View>
       {!!plan.competitors.length && <View style={styles.analysisCard}>
         <Text style={styles.cardTitle}>Öne çıkan rakip ilanlar</Text>
+        {(plan.salesProof?.summaryTr || []).map((line: string) => <Text key={line} style={styles.analysisLine}>• {line}</Text>)}
+        {(plan.salesProof?.sellers || []).filter((row: any) => typeof row.reviews === "number" || typeof row.shopSales === "number").slice(0, 4).map((row: any) => <Pressable key={row.id} onPress={() => openUrl(row.url, "Etsy ilanı")}><Text style={styles.linkNote} numberOfLines={2}>{row.priceUsd ? `${row.priceUsd.toFixed(2)} USD · ` : ""}{typeof row.reviews === "number" ? `${row.reviews} yorum · ` : ""}{typeof row.shopSales === "number" ? `mağaza ${row.shopSales} satış · ` : ""}{row.title}</Text></Pressable>)}
         {plan.competitors.map((item: any, index: number) => <Pressable key={`${item.url}-${index}`} onPress={() => item.url && openUrl(item.url, "Etsy ilanı")}><Text style={styles.linkNote} numberOfLines={2}>{item.priceUsd ? `${item.priceUsd.toFixed(2)} USD · ` : ""}{item.favorites} favori · {item.title}</Text></Pressable>)}
       </View>}
+      <ListingReviewCard producer={chatAssistant} context={{ kind: "physical", title, tags: tags.split(",").map((tag: string) => tag.trim()).filter(Boolean), description, priceUsd: Number(String(priceUsd).replace(",", ".")) || undefined, targetSearch: plan.primaryKeyword, provenSellers: provenSellerLines(plan.salesProof) }} onApply={(next) => { setTitle(next.title); setTags(next.tags.join(", ")); setDescription(next.description); setGlossSource({ title: next.title, tags: next.tags }); }} />
       {plan.warnings.map((warning: string) => <Text style={styles.warningText} key={warning}>• {warning}</Text>)}
       <Pressable style={[styles.analyzeButton, { marginTop: 14 }, (eligibility.status !== "allowed" || saving || Boolean(draft)) && styles.primaryDisabled]} disabled={eligibility.status !== "allowed" || saving || Boolean(draft)} onPress={createDraft}>{saving ? <ActivityIndicator color="white" /> : <Ionicons name="storefront-outline" size={18} color="white" />}<Text style={styles.primaryText}>{eligibility.status === "blocked" ? "Etsy'de yayınlanamaz" : draft ? "Taslak oluşturuldu" : "Etsy taslağı oluştur"}</Text></Pressable>
       {!!savingText && <Text style={styles.formHint}>{savingText}</Text>}
@@ -3876,7 +3890,7 @@ function SellRouteContent({ online, active=true, productionResume, channels, rou
   </>;
   return <>
     {back}
-    {route === "digital" && <View style={styles.guardrail}><Ionicons name="information-circle-outline" size={20} color="#315B4C" /><Text style={[styles.guardrailText, { flex: 1 }]}>Goxi açık çalışmanı ve sıradaki işi gösterir. Üretimi aynı ChatGPT/Claude sohbetinde sürdür; son dosyaları indirip aynı ilan kaydına yükle. Kendi desenin için yalnız yazıp denediğin dosyaları kullan.</Text></View>}
+    {route === "digital" && <View style={styles.guardrail}><Ionicons name="information-circle-outline" size={20} color="#315B4C" /><Text style={[styles.guardrailText, { flex: 1 }]}>Goxi açık çalışmanı ve sıradaki işi gösterir. Üretimi aynı ChatGPT/Claude/Gemini sohbetinde sürdür; son dosyaları indirip aynı ilan kaydına yükle. Kendi desenin için yalnız yazıp denediğin dosyaları kullan.</Text></View>}
     <EtsyScreen key={route} online={online} active={active} productionResume={productionResume} channels={channels} initialSection={route === "digital" ? "Stüdyo" : "Trend"} />
   </>;
 }
@@ -3904,7 +3918,7 @@ function HelpScreen({ online, channels, onExpert, onSell }: any) {
 // "İleri" eksik bilgiyi söyler. Uzman modda form tek sayfadır.
 const WIZARD_STEPS = ["Fotoğraflar", "Ürün bilgisi", "Renk ve özellikler", "Fiyat ve kargo", "Önizleme ve gönder"];
 const WIZARD_HINTS = [
-  "Ürünün 1–10 gerçek fotoğrafını çekin veya galeriden seçin (5+ önerilir). En kolay yol: 'Tüm ilan talimatını paylaş' ile fotoğrafları ve kısa videoyu ChatGPT/Claude'a gönderin, gelen JSON ile 'Tüm boşlukları doldur'. İleri düğmesi kendiliğinden analiz yapmaz.",
+  "Ürünün 1–10 gerçek fotoğrafını çekin veya galeriden seçin (5+ önerilir). En kolay yol: 'Tüm ilan talimatını paylaş' ile fotoğrafları ve kısa videoyu ChatGPT/Claude/Gemini'a gönderin, gelen JSON ile 'Tüm boşlukları doldur'. İleri düğmesi kendiliğinden analiz yapmaz.",
   "Ürün türünü, adını ve doğruladığınız bilgileri yazın. Otomatik doldurma veya sohbet analizi öneri getirdiyse kontrol edin; emin olmadığınız bilgiyi yazmayın.",
   "Renkleri ve öne çıkan özellikleri Türkçe yazabilirsiniz; sistem İngilizceye çevirir. Bu adım isteğe bağlıdır.",
   "Satıştan elinize geçmesini istediğiniz tutarı ve ABD'ye kargo maliyetinizi (ör. Shipentegra fiyatı) yazın. Kargoyu siz ödersiniz: kargo ve Etsy kesintileri fiyata eklenir, alıcı ücretsiz kargo görür.",
@@ -3978,12 +3992,12 @@ function PhotoListingStudio({ online, etsyReady, wizard, onStepChange }: any) {
   const shareFullPrompt = async () => {
     const id = `${sourceId}-full-${Date.now()}`;
     try {
-      await Share.share({ message: fullListingPrompt(photoAssistant === "claude" ? "claude" : "chatgpt", { kind, nameTr }, id) });
+      await Share.share({ message: fullListingPrompt(isAssistant(photoAssistant) ? photoAssistant : "chatgpt", { kind, nameTr }, id) });
       setFullRequest(id); setFullReply("");
     } catch (error) { Alert.alert("Paylaşılamadı", errorText(error)); }
   };
   const importFull = async () => {
-    if (!fullRequest) return Alert.alert("Önce talimatı paylaş", "'Tüm ilan talimatını paylaş' ile talimatı ChatGPT veya Claude'a gönder; gelen JSON'u buraya yapıştır.");
+    if (!fullRequest) return Alert.alert("Önce talimatı paylaş", "'Tüm ilan talimatını paylaş' ile talimatı ChatGPT, Claude veya Gemini'a gönder; gelen JSON'u buraya yapıştır.");
     let result;
     try { result = parseFullListing(fullReply, fullRequest); } catch (error) { return Alert.alert("Yanıt uygulanamadı", errorText(error)); }
     const item = result.product;
@@ -4218,7 +4232,7 @@ function PhotoListingStudio({ online, etsyReady, wizard, onStepChange }: any) {
     <View style={[styles.analysisCard, { borderColor: "#315B4C", borderWidth: 1 }]}>
       <Text style={styles.cardTitle}>ChatGPT / Claude ile tüm ilanı hazırla (önerilen)</Text>
       <Text style={styles.formHint}>Plus üyeliğini kullanır. 1) Talimatı paylaş; sohbete fotoğrafları ve kısa videoyu ekle. 2) Asistan sorduğu birkaç bilgiyi yanıtla. 3) Araştırma, başlık, 13 etiket, açıklama, ABD fiyatı, kargo tahmini ve ilgi çekici kapak hazırlanır. 4) Gelen JSON'u buraya yapıştır; boşluklar dolar. Kapak ve görselleri indirip fotoğrafların yerine ekle.</Text>
-      <ChipGroup options={[{ id: "chatgpt", label: "ChatGPT" }, { id: "claude", label: "Claude" }]} value={photoAssistant} onChange={setPhotoAssistant} />
+      <ChipGroup options={ASSISTANTS} value={photoAssistant} onChange={setPhotoAssistant} />
       <Pressable style={styles.secondaryButton} onPress={shareFullPrompt}><Text style={styles.secondaryButtonText}>Tüm ilan talimatını paylaş</Text></Pressable>
       <Field label="Sohbetten gelen tam ilan JSON'u" value={fullReply} onChangeText={setFullReply} multiline autoCapitalize="none" />
       <Pressable style={styles.secondaryButton} onPress={importFull}><Text style={styles.secondaryButtonText}>Tüm boşlukları doldur</Text></Pressable>
@@ -4229,10 +4243,11 @@ function PhotoListingStudio({ online, etsyReady, wizard, onStepChange }: any) {
     {otherWays && <>
     {photos.length > 0 && <View style={styles.analysisCard}>
       <Text style={styles.cardTitle}>Fotoğrafları güzelleştir (isteğe bağlı)</Text>
-      <Text style={styles.formHint}>Talimatı ChatGPT veya Claude'a gönder, fotoğrafları sohbete ekle. Ürün değiştirilmeden ışık, renk, kırpma ve arka plan düzeltilir; Etsy fotoğrafın gerçek ürünü göstermesini ister. Hazır fotoğrafları indirip buradaki eski fotoğrafları silerek yenilerini ekle, sonra devam et.</Text>
+      <Text style={styles.formHint}>Talimatı ChatGPT, Claude veya Gemini'a gönder, fotoğrafları sohbete ekle. Ürün değiştirilmeden ışık, renk, kırpma ve arka plan düzeltilir; Etsy fotoğrafın gerçek ürünü göstermesini ister. Hazır fotoğrafları indirip buradaki eski fotoğrafları silerek yenilerini ekle, sonra devam et.</Text>
       <View style={styles.inlineActions}>
         <Pressable style={styles.secondaryButton} onPress={() => Share.share({ message: photoEnhancePrompt("chatgpt", nameTr) }).catch(() => undefined)}><Text style={styles.secondaryButtonText}>ChatGPT ile güzelleştir</Text></Pressable>
         <Pressable style={styles.secondaryButton} onPress={() => Share.share({ message: photoEnhancePrompt("claude", nameTr) }).catch(() => undefined)}><Text style={styles.secondaryButtonText}>Claude ile güzelleştir</Text></Pressable>
+        <Pressable style={styles.secondaryButton} onPress={() => Share.share({ message: photoEnhancePrompt("gemini", nameTr) }).catch(() => undefined)}><Text style={styles.secondaryButtonText}>Gemini ile güzelleştir</Text></Pressable>
       </View>
       <Pressable onPress={() => setPhotos([])}><Text style={styles.linkNote}>Tüm fotoğrafları kaldır ({photos.length})</Text></Pressable>
     </View>}
@@ -4242,8 +4257,8 @@ function PhotoListingStudio({ online, etsyReady, wizard, onStepChange }: any) {
     {(!wizard || showChat) && <View style={styles.analysisCard}>
       <Text style={styles.cardTitle}>ChatGPT / Claude sohbetiyle analiz</Text>
       <Text style={styles.formHint}>Plus / ücretli sohbet hesabınızı kendi uygulamasında kullanın. Burada API çağrısı yapılmaz. Talimatı paylaşın, fotoğrafları sohbete ayrıca ekleyin; JSON yanıtını buraya yapıştırın. Hiçbir ilan otomatik yayınlanmaz.</Text>
-      <ChipGroup options={[{ id: "chatgpt", label: "ChatGPT" }, { id: "claude", label: "Claude" }]} value={photoAssistant} onChange={setPhotoAssistant} />
-      <Pressable style={styles.secondaryButton} onPress={sharePhotoPrompt}><Text style={styles.secondaryButtonText}>{photoAssistant === "claude" ? "Claude için analiz talimatını paylaş" : "ChatGPT için analiz talimatını paylaş"}</Text></Pressable>
+      <ChipGroup options={ASSISTANTS} value={photoAssistant} onChange={setPhotoAssistant} />
+      <Pressable style={styles.secondaryButton} onPress={sharePhotoPrompt}><Text style={styles.secondaryButtonText}>{`${assistantName(photoAssistant)} için analiz talimatını paylaş`}</Text></Pressable>
       <Field label="Sohbetten gelen analiz JSON'u" value={assistantReply} onChangeText={setAssistantReply} multiline autoCapitalize="none" />
       <Pressable style={styles.secondaryButton} onPress={importPhotoAnalysis}><Text style={styles.secondaryButtonText}>Analiz yanıtını uygula</Text></Pressable>
     </View>}

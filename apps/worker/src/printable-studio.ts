@@ -38,7 +38,7 @@ export interface PrintablePlanInput {
   aiAssisted?: boolean;
   priceUsd?: number;
   // Satıcının kullandığı yapay zekâ (ChatGPT veya Claude); paket ona göre yazılır.
-  assistant?: "chatgpt" | "claude";
+  assistant?: "chatgpt" | "claude" | "gemini";
   // Kapak zemini: rakiplerin sık kullandığı renklerden (crowdedColors) ayrışan doygun renk (color-standout.ts).
   coverColor?: string;
   coverHex?: string;
@@ -461,7 +461,7 @@ export function normalizePrintablePlanInput(raw: Record<string, unknown>): Print
     seed: cleanText(raw.seed, 60) || undefined,
     aiAssisted: raw.aiAssisted !== false,
     ...(Number(raw.priceUsd) > 0 ? { priceUsd: Math.round(Number(raw.priceUsd) * 100) / 100 } : {}),
-    ...(raw.assistant === "chatgpt" || raw.assistant === "claude" ? { assistant: raw.assistant } : {}),
+    ...(raw.assistant === "chatgpt" || raw.assistant === "claude" || raw.assistant === "gemini" ? { assistant: raw.assistant } : {}),
     ...(cleanText(raw.coverColor, 30) ? { coverColor: cleanText(raw.coverColor, 30).toLowerCase() } : {}),
     ...(/^#[0-9a-f]{6}$/i.test(String(raw.coverHex || "")) ? { coverHex: String(raw.coverHex).toUpperCase() } : {}),
     ...(cleanList(raw.crowdedColors, 5, 30).length ? { crowdedColors: cleanList(raw.crowdedColors, 5, 30).map((item) => item.toLowerCase()) } : {})

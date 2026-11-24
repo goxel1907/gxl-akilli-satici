@@ -86,13 +86,13 @@ export function savedConversationUrl(raw:string,assistant:string):string|undefin
   try{
     const url=new URL(raw.trim());
     if(url.protocol!=="https:"||url.username||url.password||url.port||url.search||url.hash)return;
-    const valid=assistant==="claude"?url.hostname==="claude.ai"&&/^\/chat\/[A-Za-z0-9_-]{8,100}\/?$/.test(url.pathname):assistant==="chatgpt"&&url.hostname==="chatgpt.com"&&/^\/c\/[A-Za-z0-9_-]{8,100}\/?$/.test(url.pathname);
+    const valid=assistant==="claude"?url.hostname==="claude.ai"&&/^\/chat\/[A-Za-z0-9_-]{8,100}\/?$/.test(url.pathname):assistant==="gemini"?url.hostname==="gemini.google.com"&&/^\/app\/[A-Za-z0-9_-]{8,100}\/?$/.test(url.pathname):assistant==="chatgpt"&&url.hostname==="chatgpt.com"&&/^\/c\/[A-Za-z0-9_-]{8,100}\/?$/.test(url.pathname);
     return valid?url.href:undefined;
   }catch{return;}
 }
 export function setProductionConversation(rows:ProductionRecord[],id:string,raw:string):ProductionRecord[]{
   const row=rows.find(row=>row.id===id);if(!row)throw new Error("Çalışma kaydı bulunamadı.");
   const conversationUrl=raw.trim()?savedConversationUrl(raw,row.workspace.input.assistant):undefined;
-  if(raw.trim()&&!conversationUrl)throw new Error("Bu ürüne ait özel sohbet bağlantısını kullanın: ChatGPT için chatgpt.com/c/…, Claude için claude.ai/chat/… . Paylaşım bağlantısı veya hesap giriş bağlantısı kullanmayın.");
+  if(raw.trim()&&!conversationUrl)throw new Error("Bu ürüne ait özel sohbet bağlantısını kullanın: ChatGPT için chatgpt.com/c/…, Claude için claude.ai/chat/…, Gemini için gemini.google.com/app/… . Paylaşım bağlantısı veya hesap giriş bağlantısı kullanmayın.");
   return rows.map(row=>row.id===id?{...row,conversationUrl}:row);
 }
