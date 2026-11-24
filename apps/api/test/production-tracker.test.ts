@@ -124,3 +124,16 @@ test("works whose listing is active on Etsy close by themselves, even when the f
   assert.equal(rows.find(row => row.id === productionId(second))!.stage, "package_ready", "a draft on Etsy is not a published listing");
   assert.deepEqual(markPublishedFromEtsy(rows, [{ listingId: 5, title: "Something Else Entirely Different Product", state: "active" }]), rows);
 });
+
+test("a work saved by the faulty producer switch is repaired instead of dropped; other key mismatches are still rejected", async () => {
+  const { parsePrintableWorkspace, generationKey } = await import("../../mobile/workflow-state.js");
+  const work = workspace("Sada Planner Stickers");
+  const broken = { ...work, input: { ...work.input, assistant: "gemini", visualAssistant: "gemini" } };
+  const repaired = parsePrintableWorkspace(JSON.stringify(broken))!;
+  assert.ok(repaired, "the switched work is kept");
+  assert.equal(repaired.input.assistant, "gemini"); assert.equal(repaired.input.visualAssistant, undefined);
+  assert.equal(repaired.plan.inputKey, generationKey(repaired.input)); assert.equal(repaired.plan.visualAssistant, "gemini");
+  const rows = readProductionRecords(JSON.stringify({ version: 1, records: [{ id: productionId(work), workspace: broken, stage: "package_ready", source: "app", updatedAt: new Date().toISOString(), history: [] }] }));
+  assert.equal(rows.length, 1, "the tracker keeps the repaired work");
+  assert.equal(parsePrintableWorkspace(JSON.stringify({ ...work, input: { ...work.input, productType: "something else" } })), undefined, "a real mismatch is still rejected");
+});

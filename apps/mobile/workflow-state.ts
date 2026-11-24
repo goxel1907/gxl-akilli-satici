@@ -18,10 +18,24 @@ export interface PrintableWorkspace {
   input: Record<string, any>;
   plan: Record<string, any>;
 }
+// 25 Kasım hatası: "Üretimi kim yapsın?" yapay zekâyı değiştirip girdi anahtarını (inputKey) güncellemiyordu; kayıt bozuk
+// sayılıp listeden düşüyordu. Yalnız o duruma uyan kayıt onarılır: anahtar, yapay zekâ başka biri yapılınca tutuyorsa
+// yeniden hesaplanır ve görselci girdiden plana taşınır. Başka hiçbir uyuşmazlık kabul edilmez.
+function repairSwitchedAssistant(value: PrintableWorkspace) {
+  const input = value?.input, plan = value?.plan;
+  if (!input || !plan || typeof plan.inputKey !== "string" || generationKey(input) === plan.inputKey) return;
+  const { visualAssistant, ...clean } = input;
+  const original = ["chatgpt", "claude", "gemini"].some((assistant) => generationKey({ ...clean, assistant }) === plan.inputKey);
+  if (!original || !["chatgpt", "claude", "gemini"].includes(clean.assistant)) return;
+  value.input = clean;
+  value.plan = { ...plan, inputKey: generationKey(clean), ...(typeof visualAssistant === "string" ? { visualAssistant } : {}) };
+}
+
 export function parsePrintableWorkspace(raw: string | null): PrintableWorkspace | undefined {
   if (!raw || raw.length > 1_500_000) return undefined;
   try {
     const value = JSON.parse(raw) as PrintableWorkspace;
+    repairSwitchedAssistant(value);
     const input = value.input, plan = value.plan;
     if (input?.competitorLinks !== undefined && (typeof input.competitorLinks !== "string" || input.competitorLinks.length > 2500)) return undefined;
     const textFields = ["kind", "productType", "referenceNotes", "colors", "formats", "pageCount", "audience", "keyword", "assistant"];

@@ -127,3 +127,6 @@ Güncelleme: 9 Kasım 2026
 - 25 Kasım (7): Kayıtlı çalışmada 'Üretimi kim yapsın?' (ChatGPT/Claude/Gemini). POST /api/printables/repackage paketi aynı
   ürün adıyla (fixedName) seçilen yapay zekâ için yeniden yazar; başlık/etiket/fiyat ve araştırma bölümleri korunur.
   Ajan hattı çalışmanın gerçek üreticisini ve görselcisini gösterir (workspaceAssistant/workspaceVisual).
+- 25 Kasım (8): HATA DÜZELTİLDİ: 'Üretimi kim yapsın?' inputKey'i güncellemiyordu, kayıt bozuk sayılıp listeden düşüyordu,
+  paket gönderiminde 'stage of undefined'. Artık inputKey yeniden hesaplanır, görselci plan.visualAssistant'ta; bozuk kayıt
+  parsePrintableWorkspace'te onarılır (repairSwitchedAssistant). shareProductionPackage kayıt yoksa Türkçe hata verir.

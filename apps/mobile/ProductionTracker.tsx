@@ -3,7 +3,7 @@ import {Alert,AppState,Linking,Modal,Pressable,ScrollView,Share,StyleSheet,Text,
 import {SafeAreaView} from "react-native-safe-area-context";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import ListingMascot from "./ListingMascot";
-import {PRINTABLE_WORKSPACE_KEY,parsePrintableWorkspace,type PrintableWorkspace} from "./workflow-state";
+import {PRINTABLE_WORKSPACE_KEY,generationKey,parsePrintableWorkspace,type PrintableWorkspace} from "./workflow-state";
 import {assistantAcc,assistantHome,assistantName,assistantTo} from "./assistants";
 import {AgentPipeline,useAgentTeam} from "./AgentTeam";
 import {ASSISTANTS,isAssistant} from "./assistants";
@@ -48,7 +48,8 @@ export const markTrackedPublished=(listings:Array<{listingId:number;title:string
 export const syncTrackedProducts=(products:any[])=>mutateProduction(rows=>products.reduce((current,product)=>syncProductionProduct(current,product),rows));
 export async function shareProductionPackage(workspace:PrintableWorkspace){
   await saveProductionWorkspace(workspace);
-  const id=productionId(workspace),rows=await mutateProduction(rows=>rows),record=rows.find(row=>row.id===id)!;
+  const id=productionId(workspace),rows=await mutateProduction(rows=>rows),record=rows.find(row=>row.id===id);
+  if(!record)throw new Error("Bu çalışmanın kaydı okunamadı. Stüdyo'da çalışmayı yeniden aç ve 'Tek paketi gönder'e bas; paket ve ilan bilgileri korunuyor.");
   const opening=record.stage==="package_ready"||record.stage==="status_unknown";
   // Persist before Android can background/kill this process in another app.
   if(opening)await mutateProduction(rows=>changeProduction(rows,id,"share_opened","app"));
@@ -116,7 +117,11 @@ function SavedProductionDetails({record,onClose,onResume,onUpload,request}:{reco
     const research=workspace.plan.research||{};
     const result=await request("/api/printables/repackage",{method:"POST",body:JSON.stringify({name:workspace.plan.brief.name,listing:workspace.plan.listing,input:workspace.input,assistant:next,visualAssistant:visual,priceUsd:workspace.plan.brief.priceUsd,coverColor:research.colorPlan?.coverColor,coverHex:research.colorPlan?.coverHex,crowdedColors:research.colorPlan?.crowded,appendix:packageAppendix(String(workspace.plan.brief.masterPrompt||""))})});
     if(!result?.brief?.masterPrompt||result.quality?.ok===false)throw new Error("Paket bu yapay zekâ için kalite denetiminden geçmedi; mevcut paket korunuyor.");
-    const updated={...workspace,savedAt:new Date().toISOString(),input:{...workspace.input,assistant:next,visualAssistant:visual},plan:{...workspace.plan,brief:result.brief,quality:result.quality}};
+    // Kayıt, girdinin anahtarıyla (inputKey) doğrulanır: yapay zekâ değişince anahtar da yeniden hesaplanır, yoksa kayıt
+    // bozuk sayılıp listeden düşer. Görselci girdide değil planda tutulur (Stüdyo girdisi aynı alanları taşır).
+    const input={...workspace.input,assistant:next};
+    const updated:PrintableWorkspace={...workspace,savedAt:new Date().toISOString(),input,plan:{...workspace.plan,inputKey:generationKey(input),visualAssistant:visual,brief:result.brief,quality:result.quality}};
+    if(!parsePrintableWorkspace(JSON.stringify(updated)))throw new Error("Yeni paket kaydedilemedi; mevcut paket korunuyor.");
     await mutateProduction(rows=>rememberProduction(rows,updated));await saveProductionWorkspace(updated);
     Alert.alert("Paket hazır",`Paket ${assistantName(next)} için yeniden yazıldı. Ürün adı, başlık, etiketler ve fiyat aynı kaldı. Şimdi 'Tek paketi ${assistantTo(next)} gönder'e bas.`);
   });
@@ -132,7 +137,7 @@ function SavedProductionDetails({record,onClose,onResume,onUpload,request}:{reco
       {work.action==="share"&&!!request&&<><Text style={s.label}>Üretimi kim yapsın?</Text><View style={s.chips}>{ASSISTANTS.map(item=><Pressable key={item.id} accessibilityRole="button" disabled={busy} style={[s.chip,workspace.input.assistant===item.id&&s.chipOn]} onPress={()=>switchProducer(item.id)}><Text style={workspace.input.assistant===item.id?s.chipTextOn:s.chipText}>{item.label}</Text></Pressable>)}</View><Text style={s.small}>Seçince paket o yapay zekâya göre yeniden yazılır; ürün adı, başlık, etiketler ve fiyat değişmez.</Text></>}
       {work.action==="share"&&<Pressable accessibilityRole="button" style={s.primary} disabled={busy} onPress={()=>run(()=>shareProductionPackage(workspace))}><Text style={s.white}>{work.labelTr}</Text></Pressable>}
       {work.action!=="none"&&<Pressable accessibilityRole="button" style={work.action==="share"?s.secondary:s.primary} disabled={busy} onPress={!record.productId&&onUpload?onUpload:onResume}><Text style={work.action==="share"?s.link:s.white}>{work.action==="share"?"Dosyalarım hazır, ajanlara ver →":work.labelTr}</Text></Pressable>}
-      <AgentPipeline kind="digital" stage={agentStage(record)} complete={record.stage==="published"} workspaceAssistant={workspace.input.assistant} workspaceVisual={workspace.input.visualAssistant}/>
+      <AgentPipeline kind="digital" stage={agentStage(record)} complete={record.stage==="published"} workspaceAssistant={workspace.input.assistant} workspaceVisual={workspace.plan.visualAssistant}/>
     </View>;})()}
     <Text style={s.body}>Bu ürünün kayıtlı paketi açık. Başlık, açıklama, etiketler, fiyat ve kapsam aşağıda korunuyor.</Text>
     <Pressable accessibilityRole="button" style={s.secondary} disabled={busy} onPress={()=>Alert.alert("Çalışma silinsin mi?","Bu ilan çalışması uygulamadaki listeden kaldırılır. Etsy'deki taslağa veya ilana dokunulmaz.",[{text:"Vazgeç",style:"cancel"},{text:"Sil",style:"destructive",onPress:()=>run(async()=>{await deleteProduction(record.id);onClose();})}])}><Text style={s.link}>Bu çalışmayı listeden sil</Text></Pressable>
@@ -164,7 +169,7 @@ export default function ProductionJourney({workspace,onUpload,onOpenProduct}:{wo
     <Text style={s.status}>Takip: {PRODUCTION_STAGES[record.stage]}</Text><Text style={s.small}>{sourceLabel(record)} · {new Date(record.updatedAt).toLocaleString("tr-TR")}</Text>
     {record.checkedAt&&<Text style={s.small}>Son Etsy doğrulaması: {record.etsyState} · {new Date(record.checkedAt).toLocaleString("tr-TR")}</Text>}
     <ListingMascot step={uploaded?record.stage==="published"||record.stage==="draft"?5:4:downloaded?3:2} complete={record.stage==="published"} title={uploaded?"Aynı ilanın Etsy adımlarına devam et":downloaded?"Dosyalarını aynı ilana yükleyelim":record.stage==="package_ready"?"Şimdi ürün dosyalarını üretelim":"Aynı ürünü takip ediyorum"} instruction={instruction} actionLabel={uploaded?"Ürün kaydı ve Etsy durumuna git":downloaded?"Dosyalarım hazır, yüklemeye geç":record.stage==="package_ready"?`Tek paketi ${toTool} gönder`:"Aynı sohbet için devam metnini aç"} onAction={uploaded?onOpenProduct:downloaded?onUpload:()=>share(record.stage!=="package_ready")} disabled={busy}/>
-    <AgentPipeline kind="digital" stage={agentStage(record)} workspaceAssistant={workspace.input.assistant} workspaceVisual={workspace.input.visualAssistant}/>
+    <AgentPipeline kind="digital" stage={agentStage(record)} workspaceAssistant={workspace.input.assistant} workspaceVisual={workspace.plan.visualAssistant}/>
     {!uploaded&&<>
       <Pressable accessibilityRole="button" style={s.secondary} disabled={busy} onPress={()=>setStatusModal(true)}><Text style={s.link}>Üretim durumunu güncelle / içe aktar</Text></Pressable>
       {!downloaded&&<Pressable accessibilityRole="button" style={s.secondary} disabled={busy} onPress={onUpload}><Text style={s.link}>Dosyalarım hazır, yüklemeye geç</Text></Pressable>}
