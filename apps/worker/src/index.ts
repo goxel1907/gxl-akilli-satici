@@ -11,6 +11,7 @@ import { rememberProduct, type IdeaStore } from "./product-memory.js";
 import { researchPrintableMarket } from "./printable-research.js";
 import { gatherSalesProof } from "./sales-proof.js";
 import { runListingReview } from "./agent-review.js";
+import { DriveError, disconnectDrive, driveConnectUrl, driveStatus, handleDriveCallback, importDriveFile, scanDriveFolder, streamDriveFile, type DriveEnv } from "./google-drive.js";
 import type { MarketStrategy } from "./market-strategy.js";
 import { products } from "../../api/src/data.js";
 import { patternPolicyIssues, patternPolicyMessage } from "./etsy-policy.js";
@@ -91,7 +92,7 @@ import {
   type DigitalStore
 } from "./digital-delivery.js";
 
-interface Env extends CrmEnv, OwnerNotificationEnv, AiRuntimeEnv, ShopierRuntimeEnv, EtsyRuntimeEnv, PinterestRuntimeEnv {
+interface Env extends CrmEnv, OwnerNotificationEnv, AiRuntimeEnv, ShopierRuntimeEnv, EtsyRuntimeEnv, PinterestRuntimeEnv, DriveEnv {
   APP_ACCESS_TOKEN?: string;
   PRODUCT_MEDIA?: {
     get(key: string): Promise<{ body: ReadableStream; httpEtag?: string } | null>;
@@ -419,6 +420,7 @@ export async function handleRequest(request: Request, env: Env, context?: {waitU
     if (request.method === "GET" && PRIVACY_PATHS.has(url.pathname.toLowerCase().replace(/\/+$/, ""))) return privacyPolicyPage();
     if (request.method === "GET" && url.pathname === "/etsy/oauth/callback") return await handleEtsyCallback(request, env);
     if (request.method === "GET" && url.pathname === "/pinterest/oauth/callback") return await handlePinterestCallback(request, env);
+    if (request.method === "GET" && url.pathname === "/google/oauth/callback") return await handleDriveCallback(request, env);
     if (request.method === "GET" && /^\/media\/(shopier|digital|photo)\//.test(url.pathname)) {
       if (!productMediaStorage(env)) return json(404, { error: "Ürün görseli bulunamadı." });
       const key = url.pathname.slice("/media/".length);
@@ -710,6 +712,22 @@ export async function handleRequest(request: Request, env: Env, context?: {waitU
       }
       return json(200,{...result,...(notification?{notification}:{} )});
     }
+    // Google Drive köprüsü: GXL klasöründeki dosyaları sunucu çeker (telefon yüklemez).
+    if (request.method === "GET" && url.pathname === "/api/drive/status") return json(200, { ...(await driveStatus(env)), redirectUri: `${url.origin}/google/oauth/callback` });
+    if (request.method === "POST" && url.pathname === "/api/drive/connect") return json(200, await driveConnectUrl(env, url.origin));
+    if (request.method === "POST" && url.pathname === "/api/drive/disconnect") {
+      const blocked = requireConfirmedWrite(env, await readBody(request), "Drive bağlantısını kaldırma");
+      return blocked || json(200, await disconnectDrive(env));
+    }
+    if (request.method === "GET" && url.pathname === "/api/drive/files") return json(200, await scanDriveFolder(env));
+    if (request.method === "POST" && url.pathname === "/api/drive/import") {
+      const body = await readBody(request);
+      const blocked = requireConfirmedWrite(env, body, "Drive'dan dosya alma");
+      if (blocked) return blocked;
+      return json(201, await importDriveFile(env, { fileId: String(body.fileId || ""), role: body.role === "image" ? "image" : "file" }, (key, bytes, mimeType) => putProductMedia(env, key, bytes, mimeType)));
+    }
+    const driveFile = url.pathname.match(/^\/api\/drive\/file\/([A-Za-z0-9_-]{10,200})$/);
+    if (request.method === "GET" && driveFile) return await streamDriveFile(env, driveFile[1]);
     // Otomatik denetçi ajan: "rakipten iyi mi?" kapısı + sunucu yapay zekâsının düzeltme önerisi (kurallardan geçerse).
     if (request.method === "POST" && url.pathname === "/api/agents/review") {
       return json(200, await runListingReview(await readBody(request), env as unknown as AiRuntimeEnv));
@@ -1023,6 +1041,7 @@ export async function handleRequest(request: Request, env: Env, context?: {waitU
     if (code === "PATTERN_KEYWORD_REQUIRED") return json(400, { error: "Desen için bir Etsy araması seçin." });
     if (code === "PATTERN_PRODUCT_REQUIRED") return json(400, { error: "Ürün türünü yazın (ör. doily, slippers)." });
     if (error instanceof DigitalDeliveryError) return json(error.status, { error: error.message });
+    if (error instanceof DriveError) return json(error.status, { error: error.message, code: error.code });
     if (error instanceof ShopSettingsError) return json(error.status, { error: error.message, code: error.code });
     if (error instanceof PhotoListingError) return json(error.status, { error: error.message });
     if (error instanceof MarketingPlanError) return json(error.status, { error: error.message });

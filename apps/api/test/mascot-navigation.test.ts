@@ -32,9 +32,10 @@ test("Goxi leads from Trend into Studio and disables online preparation while di
   } finally { await unmount(renderer); }
 });
 
-test("the physical mascot follows wizard validation and never silently analyzes or advances missing information", async context => {
+test("the physical mascot follows wizard validation; only the recognition agent runs on its own and a failure stays quiet", async context => {
   let apiCalls = 0;
-  context.mock.method(globalThis, "fetch", async () => { apiCalls++; throw Error("No API call expected"); });
+  // Tanıma ajanı fotoğraf eklenince bir kez çalışır; sunucu yanıt vermezse sessiz kalır, satıcı elle sürdürür.
+  context.mock.method(globalThis, "fetch", async (url: unknown) => { apiCalls++; assert.match(String(url), /\/api\/products\/photo-analyze$/); throw Error("server down"); });
   ui.alerts.length = 0;
   ui.pickImages = async () => ({ canceled: false, assets: [{ uri: "local:goxi-product", width: 100, height: 100 }] });
   const renderer = await mount(screens.PhotoListingStudio, { online: true, etsyReady: true, wizard: true });
@@ -51,7 +52,8 @@ test("the physical mascot follows wizard validation and never silently analyzes 
     await tap(renderer, /^Ben \/ atölyem yaptı$/);
     await tap(renderer, /^Goxi ile sonraki adıma geç$/);
     assert.ok(shown(renderer, "Renk ve özellikleri ekle"));
-    assert.equal(apiCalls, 0);
+    assert.equal(apiCalls, 1, "only the automatic recognition call, once");
+    assert.ok(!ui.alerts.some(item => item.title === "Sunucu analizi kullanılamıyor"), "a failed automatic analysis does not interrupt the seller");
   } finally { await unmount(renderer); ui.pickImages = async () => ({ canceled: true }); }
 });
 
@@ -115,7 +117,7 @@ test("Goxi alone walks every physical product kind from photos to a prepared Ets
       await type(renderer, /^ABD'ye kargo \(TL\)$/, "900");
       await tap(renderer, /^Goxi ile sonraki adıma geç$/);
       assert.ok(shown(renderer, "Rakipleri araştırıp ilanı hazırla"), item.kind);
-      assert.equal(paths.length, 0, `${item.kind}: no API call before the seller asks for research`);
+      assert.deepEqual(paths, ["/api/products/photo-analyze"], `${item.kind}: only the recognition agent ran before the seller asks for research`);
       await tap(renderer, /^Goxi ile Etsy araştırmasını başlat$/);
       await waitFor(() => renderer.root.findAllByType(screens.EtsyPlanResult).length === 1).catch(error => { throw new Error(`${item.kind}: ${error.message}; alerts=${JSON.stringify(ui.alerts.map(a => [a.title, a.message]))}; paths=${paths.join(",")}`); });
       assert.ok(paths.some(path => path.endsWith("/etsy-plan")), item.kind);

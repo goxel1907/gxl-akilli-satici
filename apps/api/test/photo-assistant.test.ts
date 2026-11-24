@@ -82,9 +82,9 @@ test("a chat reply for previous photos cannot be applied to a changed product", 
     assert.equal(field(renderer, /^Ürün adı \(Türkçe\)$/).props.value, "Başka ürün");
   } finally { await unmount(renderer); ui.pickImages = async () => ({ canceled: true }); }
 });
-test("simple photo wizard requires photos but does not silently invoke a separate API", async context => {
+test("simple photo wizard requires photos and then the recognition agent runs once on its own", async context => {
   let calls = 0;
-  context.mock.method(globalThis, "fetch", async () => { calls++; throw Error("No automatic API call expected"); });
+  context.mock.method(globalThis, "fetch", async () => { calls++; throw Error("analysis unavailable"); });
   ui.alerts.length = 0;
   ui.pickImages = async () => ({ canceled: false, assets: [{ uri: "local:wizard", width: 100, height: 100 }] });
   const renderer = await mount(screens.PhotoListingStudio, { online: true, wizard: true });
@@ -92,12 +92,12 @@ test("simple photo wizard requires photos but does not silently invoke a separat
     await tap(renderer, /^İleri$/);
     assert.ok(ui.alerts.some(item => item.title === "Fotoğraf gerekli"));
     await tap(renderer, /^Galeriden seç$/); await tap(renderer, /^İleri$/);
-    assert.equal(calls, 0);
+    assert.equal(calls, 1);
     await tap(renderer, /^Tesbih$/); await type(renderer, /^Ürün adı \(Türkçe\)$/, "Püsküllü tesbih");
     assert.equal(field(renderer, /^Ürün adı \(Türkçe\)$/).props.value, "Püsküllü tesbih");
   } finally { await unmount(renderer); ui.pickImages = async () => ({ canceled: true }); }
 });
-test("simple photo wizard offers an explicit free auto-fill and keeps the chat option folded", async context => {
+test("simple photo wizard fills itself from the photos and keeps the chat option folded", async context => {
   const paths: string[] = [];
   context.mock.method(globalThis, "fetch", async (url: unknown) => { paths.push(new URL(String(url)).pathname); return Response.json({ analysis: answer.analysis }); });
   ui.alerts.length = 0;
@@ -107,14 +107,14 @@ test("simple photo wizard offers an explicit free auto-fill and keeps the chat o
     assert.equal(buttons(renderer, /^Fotoğraftan otomatik doldur$/).length, 0);
     assert.equal(buttons(renderer, /^Analiz yanıtını uygula$/).length, 0);
     await tap(renderer, /^Galeriden seç$/);
-    assert.equal(paths.length, 0);
-    assert.equal(buttons(renderer, /^Fotoğraftan otomatik doldur$/).length, 0, "other ways stay folded");
-    await tap(renderer, /^Diğer yollar/);
-    await tap(renderer, /^Fotoğraftan otomatik doldur$/);
+    // Tanıma ajanı: fotoğraf eklenince sunucu analizi kendiliğinden çalışır.
     await waitFor(() => paths.includes("/api/products/photo-analyze"));
+    assert.equal(paths.filter(path => path === "/api/products/photo-analyze").length, 1);
+    assert.equal(buttons(renderer, /^Fotoğraftan otomatik doldur$/).length, 0, "other ways stay folded");
     await tap(renderer, /^İleri$/);
     await waitFor(() => field(renderer, /^Ürün adı \(Türkçe\)$/).props.value === answer.analysis.nameTr);
     await tap(renderer, /^← Geri$/);
+    await tap(renderer, /^Diğer yollar/);
     await tap(renderer, /^ChatGPT \/ Claude sohbetiyle analiz \(isteğe bağlı\) →$/);
     assert.equal(buttons(renderer, /^Analiz yanıtını uygula$/).length, 1);
   } finally { await unmount(renderer); ui.pickImages = async () => ({ canceled: true }); }
@@ -124,7 +124,7 @@ test("a late automatic photo response cannot overwrite changed form fields", asy
   context.mock.method(globalThis, "fetch", () => new Promise(resolve => { finish = resolve; }));
   const renderer = await photoScreen();
   try {
-    await act(async () => { void buttons(renderer, /^Fotoğraftan otomatik doldur/)[0].props.onPress(); });
+    // photoScreen fotoğraf ekledi: otomatik tanıma isteği beklemede.
     await waitFor(() => Boolean(finish));
     await type(renderer, /^Ürün adı \(Türkçe\)$/, "Benim seçtiğim ürün");
     await act(async () => finish(Response.json({ analysis: answer.analysis })));

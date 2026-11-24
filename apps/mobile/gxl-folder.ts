@@ -38,7 +38,7 @@ async function sizeOf(uri: string): Promise<number | undefined> {
 }
 
 // Görsel ZIP'ini telefonda açar; görseller önbelleğe yazılır (adı korunur, sıralama bozulmaz).
-async function unzipImages(uri: string, label: string): Promise<FolderAsset[]> {
+export async function unzipImages(uri: string, label: string): Promise<FolderAsset[]> {
   const base64: string = await FS.readAsStringAsync(uri, { encoding: FS.EncodingType.Base64 });
   const bytes = Uint8Array.from(globalThis.atob(base64), (char) => char.charCodeAt(0));
   const entries = unzipSync(bytes, { filter: (file) => IMAGE.test(file.name) && !/(^|\/)(__MACOSX|\.)/.test(file.name) });
@@ -95,4 +95,13 @@ export async function archiveUploaded(folderUri: string, uris: string[]): Promis
     }
   } catch { /* klasör yazılamıyorsa dokunulmaz */ }
   return done;
+}
+
+// Drive'daki büyük görsel ve görsel paketi telefona sunucu üzerinden indirilir (telefon küçültür/açar).
+export async function downloadToCache(url: string, headers: Record<string, string>, name: string): Promise<string> {
+  if (!FS?.downloadAsync) throw new Error("Bu telefonda dosya indirme desteklenmiyor; görselleri GXL klasörüne koy.");
+  const target = `${FS.cacheDirectory}gxl-drive-${Date.now()}-${name.replace(/[^\w.-]+/g, "_")}`;
+  const result = await FS.downloadAsync(url, target, { headers });
+  if (result?.status && result.status >= 400) throw new Error(`${name} Drive'dan indirilemedi (kod ${result.status}).`);
+  return result?.uri || target;
 }

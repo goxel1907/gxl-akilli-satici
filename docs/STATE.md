@@ -103,3 +103,11 @@ Güncelleme: 9 Kasım 2026
   GXL klasörü (gxl-folder.ts, Android SAF, expo-file-system/legacy): ZIP/PDF ve görselleri ayırır, listing-images.zip'i
   fflate ile açar (jsOnly paket, APK gerekmez), yüklenenleri Yuklendi'ye taşır. Yüklemeden sonra Etsy taslağı kendiliğinden
   açılır (yayın satıcıda). Paket: satış dosyaları ayrı bağlantı, görseller listing-images.zip.
+- 24 Kasım (6): Google Drive köprüsü (google-drive.ts, DriveConnect.tsx): drive.readonly OAuth (/google/oauth/callback),
+  sırlar GOOGLE_CLIENT_ID/GOOGLE_CLIENT_SECRET (Cloudflare). Drive'da 'GXL' klasörü taranır; satış dosyası sunucuda aralık
+  istekleriyle denetlenip akışla KV'ye yazılır (stageRemoteSaleFile), küçük dosya/görsel tam denetlenir. Büyük görsel ve
+  listing-images.zip telefona /api/drive/file/:id ile iner (telefon küçültür/açar). Test modunda Google izni 7 günde
+  bir yenilenir: DriveReminder bandı (Etsy ekranı) + Google Takvim haftalık hatırlatma bağlantısı. Kurulum adımları kartta.
+  Fiziksel: fotoğraf eklenince tanıma ajanı kendiliğinden (hata sessiz), son kargo ücreti türe göre hatırlanır,
+  denetçi ajan plan/yükleme ekranında kendiliğinden çalışır. Stüdyo fotoğrafı (Cloudflare Images arka plan kaldırma)
+  belgeleri doğrulanamadığı için eklenmedi; açık iş.

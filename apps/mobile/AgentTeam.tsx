@@ -64,7 +64,7 @@ export function AgentTeamCard({ producer, onUseProducer, disabled }: { producer:
 }
 
 // Denetçi ajan: bitmiş ilanı ikinci bir yapay zekâ denetler; başlık, 13 etiket ve açılış paragrafı denetimden geçerse uygulanır.
-export function ListingReviewCard({ context, producer, onApply, runAuto, images = 0, video = false, sellers = [] }: { context: ReviewContext; producer?: string; onApply: (next: { title: string; tags: string[]; description: string }) => void; runAuto?: (body: Record<string, unknown>) => Promise<any>; images?: number; video?: boolean; sellers?: any[] }) {
+export function ListingReviewCard({ context, producer, onApply, runAuto, images = 0, video = false, sellers = [], autoRun = false }: { context: ReviewContext; producer?: string; onApply: (next: { title: string; tags: string[]; description: string }) => void; runAuto?: (body: Record<string, unknown>) => Promise<any>; images?: number; video?: boolean; sellers?: any[]; autoRun?: boolean }) {
   const { team } = useAgentTeam();
   const fallback = team.reviewer !== producer ? team.reviewer : ASSISTANTS.map((item) => item.id).find((id) => id !== producer) || team.reviewer;
   const [reviewer, setReviewer] = useState<Assistant>(fallback);
@@ -90,6 +90,13 @@ export function ListingReviewCard({ context, producer, onApply, runAuto, images 
     } catch (autoError) { setAutoNote(String((autoError as Error)?.message || autoError)); }
     finally { setAutoBusy(false); }
   };
+  // Denetçi ajan kart açılınca bir kez kendiliğinden çalışır; satıcı yalnız sonucu görüp "Düzeltmeleri uygula"ya basar.
+  const autoStarted = React.useRef(false);
+  useEffect(() => {
+    if (!autoRun || !runAuto || autoStarted.current || !context.title.trim() || context.tags.length === 0) return;
+    autoStarted.current = true;
+    auto();
+  }, [autoRun, context.title]);
   const share = async () => {
     if (!context.title.trim() || context.tags.length === 0) return Alert.alert("Önce ilan bilgisi gerekli", "Başlık ve etiketler dolunca denetime gönder.");
     const id = `review-${Date.now()}`;
