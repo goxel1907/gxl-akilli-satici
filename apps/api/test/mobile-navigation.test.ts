@@ -226,6 +226,8 @@ test("real screen buttons drive Trend → Studio → Digital → draft → verif
   }
   globalThis.FormData = UriFormData;
   context.mock.method(globalThis, "fetch", (async (input: string | URL | Request, init?: RequestInit) => {
+    // RN reads a picked local file as a blob before sending it in chunks.
+    if (String(input).startsWith("local:")) { const asset = ui.assets.get(String(input)); if (!asset) throw Error(`Unknown local asset ${input}`); return new Response(Uint8Array.from(asset.bytes), { headers: { "content-type": asset.type } }); }
     const url = new URL(String(input));
     if (url.hostname === "local.invalid") {
       const response = await handleRequest(new Request(url, init), env);
@@ -283,13 +285,11 @@ test("real screen buttons drive Trend → Studio → Digital → draft → verif
     await tap(renderer, /^Goxi ile ürün dosyalarını seç$/); await tap(renderer, /^Goxi ile ilan görsellerini seç$/);
     await tap(renderer, /^Test baskısı alındı/);
     await tap(renderer, /^Goxi ile dosyaları güvenli depoya yükle$/); await confirm(/^Dosyalar güvenli/, /^Yükle$/);
-    await waitFor(() => Boolean(saved) && buttons(renderer, /^Etsy taslağı oluştur$/).length === 1);
+    // Yayın ajanı: yükleme bitince taslak kendiliğinden açılır; satıcıya yalnız Etsy'de yayınlamak kalır.
+    await waitFor(() => Boolean(saved) && buttons(renderer, /^Yayın durumunu denetle$/).length === 1);
     assert.equal(saved!.files?.length, 2); assert.equal(saved!.images.length, 1);
-    await tap(renderer, /^Goxi ile dosyaları denetle$/);
-    assert.ok(renderer.root.findAllByType("Text" as any).some(node => visible(node) && text(node) === "Dosya yapısı kontrolleri geçti"));
-    assert.equal(draftWrites + imageWrites + fileWrites + publishWrites, 0, "Read-only file QA must not send a listing to Etsy");
-    await tap(renderer, /^Goxi ile Etsy taslağını oluştur$/); await confirm(/^Etsy'de taslak/, /^Taslak oluştur$/);
-    await waitFor(() => buttons(renderer, /^Yayın durumunu denetle$/).length === 1);
+    assert.ok(ui.alerts.some(alert => alert.title === "Etsy taslağı hazır" && /Yayınla/.test(alert.message)), JSON.stringify(ui.alerts.map(alert => alert.title)));
+    assert.equal(publishWrites, 0, "the app never publishes a digital listing itself");
     assert.equal(draftWrites, 1); assert.equal(imageWrites, 1); assert.equal(fileWrites, 2);
     assert.equal(sent?.get("title"), plan.listing.title); assert.equal(sent?.get("description"), plan.listing.description);
     assert.equal(sent?.get("tags"), plan.listing.tags.join(",")); assert.equal(sent?.get("price"), plan.brief.priceUsd.toFixed(2));

@@ -10,7 +10,8 @@ import ListingOfferPicker from "./ListingOfferPicker";
 import OwnerNotificationsPanel from "./OwnerNotificationsPanel";
 import ProductionJourney, { ProductionWorkList, useProductionRecords, saveProductionWorkspace, activeProduction, syncTrackedProduct, syncTrackedProducts, shareProductionPackage, restoreProductions } from "./ProductionTracker";
 import { type ProductionRecord } from "./production-tracker";
-import { appendLocalFile } from "./upload-file";
+import { appendLocalFile, uploadInChunks } from "./upload-file";
+import { archiveUploaded, chooseFolder, entryName, folderSupported, GXL_FOLDER_KEY, scanFolder } from "./gxl-folder";
 import { isLiveReadPath } from "./live-check";
 import { sameProduct } from "./product-identity";
 import { mergeLocalProducts, generationKey, uploadPrices, PRINTABLE_WORKSPACE_KEY, parsePrintableWorkspace, type PrintableWorkspace } from "./workflow-state";
@@ -2505,6 +2506,25 @@ function DigitalUploadForm({ visible, suspended = false, prefill, onClose, onSav
     mergeImages(result.assets.filter((asset) => !tooBig.includes(asset)).map((asset) => ({ uri: asset.uri, fileName: asset.name, mimeType: asset.mimeType || (/\.png$/i.test(asset.name) ? "image/png" : "image/jpeg") })));
   };
   const pickImages = pickImagesFromGallery;
+  // GXL klasörü: yapay zekâdan indirilen ZIP'ler ve görseller tek klasörde; Goxi hepsini bulur, ayırır ve sıralar.
+  const [folderUri, setFolderUri] = useState<string>();
+  const [folderNotes, setFolderNotes] = useState<string[]>([]);
+  useEffect(() => { if (visible && folderSupported()) AsyncStorage.getItem(GXL_FOLDER_KEY).then((value) => setFolderUri(value || undefined)).catch(() => undefined); }, [visible]);
+  const takeFromFolder = async (forceChoose = false) => {
+    try {
+      const uri = !forceChoose && folderUri ? folderUri : await chooseFolder();
+      if (!uri) return;
+      setFolderUri(uri); AsyncStorage.setItem(GXL_FOLDER_KEY, uri).catch(() => undefined);
+      setUploadStep("GXL klasörü okunuyor…");
+      const scan = await scanFolder(uri);
+      setFiles(scan.files as any[]);
+      setImages(scan.images as any[]);
+      setFolderNotes(scan.notesTr);
+    } catch (error) {
+      Alert.alert("Klasör okunamadı", `${errorText(error)}\n\nKlasörü yeniden seç.`);
+      setFolderUri(undefined);
+    } finally { setUploadStep(""); }
+  };
   const save = () => {
     if (!name.trim() || !productType.trim() || !title.trim() || !description.trim()) return Alert.alert("Eksik bilgi", "Ürün adı, ürün türü, başlık ve açıklama gerekli. Önce Stüdyo'da ilanı hazırlayın.");
     if (prefill?.handoffName && !sameProduct(prefill.handoff || { name: prefill.handoffName, kind: prefill.kind, productType: prefill.productType }, { name, kind, productType })) return Alert.alert("Ürün kaydı değişti", "Ürün adı ve türü üretim kaydıyla aynı olmalı. Stüdyo’dan yeni paket hazırlayın.");
@@ -2519,7 +2539,7 @@ function DigitalUploadForm({ visible, suspended = false, prefill, onClose, onSav
     if (prefill?.handoffName && !testMade) return Alert.alert("Son kontrol", "Modelin QA sonuçlarını ve dosyaları kontrol edip test edildi onayını işaretleyin.");
     if (prefill?.handoffName && (tags.split(",").filter(tag => tag.trim()).length !== 13 || tags.split(",").some(tag => tag.trim().length > 20))) return Alert.alert("Etiketleri kontrol edin", "Tam 13 etiket olmalı; her biri en fazla 20 karakter.");
     if (!images.length) return Alert.alert("Görsel ekleyin", kind === "pattern" ? "Bitmiş ürünün en az bir gerçek, düzenlenmemiş fotoğrafını ekleyin." : "En az bir görsel ekleyin; biri PDF sayfalarının düzenlenmemiş önizlemesi olsun (talimattaki C4).");
-    Alert.alert("Dosyalar güvenli depoya yüklensin mi?", "Dosyalar herkese açık değildir. Müşteri yalnızca Etsy'de ödeme yaptıktan sonra Etsy üzerinden veya sizin oluşturduğunuz kişiye özel bağlantıyla indirebilir.", [
+    Alert.alert("Dosyalar güvenli depoya yüklensin mi?", "Dosyalar herkese açık değildir. Müşteri yalnızca Etsy'de ödeme yaptıktan sonra Etsy üzerinden veya sizin oluşturduğunuz kişiye özel bağlantıyla indirebilir. Yükleme bitince Goxi Etsy'de TASLAK ilanı kendisi açar; ilan siz Etsy'de Yayınla'ya basana kadar yayına girmez.", [
       { text: "Vazgeç", style: "cancel" },
       { text: "Yükle", onPress: async () => {
         setSaving(true);
@@ -2552,14 +2572,27 @@ function DigitalUploadForm({ visible, suspended = false, prefill, onClose, onSav
             return result.id as string;
           };
           // Kullanıcı hangi dosyada olduğunu görür (büyük ZIP'ler tek tek gönderilir).
-          for (const [index, file] of files.entries()) { setUploadStep(`Dosya ${index + 1}/${files.length} gönderiliyor…`); parts.files.push(await stage(file, "file", index)); }
-          for (const [index, image] of images.entries()) { setUploadStep(`Görsel ${index + 1}/${images.length} gönderiliyor…`); parts.images.push(await stage(image, "image", index)); }
+          // Satış dosyaları 4 MB'lık parçalarla, görseller telefonda küçültülüp gönderilir; hata hangi dosyada olduysa adıyla söylenir.
+          for (const [index, file] of files.entries()) {
+            const label = file.name || file.fileName || `dosya-${index + 1}`;
+            try {
+              const result = await uploadInChunks(file, { apiUrl: API_URL, headers: apiHeaders(), name: label, onProgress: (part, total) => setUploadStep(`Dosya ${index + 1}/${files.length} gönderiliyor${total > 1 ? ` (parça ${part}/${total})` : ""}…`) });
+              parts.files.push(result.id);
+            } catch (error) { throw new Error(`${label}: ${errorText(error)}`); }
+          }
+          for (const [index, image] of images.entries()) {
+            const label = image.fileName || image.name || `görsel-${index + 1}`;
+            setUploadStep(`Görsel ${index + 1}/${images.length} hazırlanıyor ve gönderiliyor…`);
+            try { parts.images.push(await stage(await prepareListingImage(image), "image", index)); }
+            catch (error) { throw new Error(`${label}: ${errorText(error)}`); }
+          }
           setUploadStep("Ürün kaydediliyor…");
           form.append("parts", JSON.stringify(parts));
           const response = await fetch(`${API_URL}/api/digital/products`, { method: "POST", headers: apiHeaders(), body: form });
           const body = await response.json().catch(() => ({})) as any;
           if (!response.ok) throw new Error(body.error || "Yükleme tamamlanamadı.");
           initializedSeed.current = undefined;
+          if (folderUri) await archiveUploaded(folderUri, [...files, ...images].map((asset: any) => String(asset.uri || ""))).catch(() => 0);
           onSaved(body.product);
         } catch (error) { Alert.alert("Yüklenemedi", errorText(error)); }
         finally { setSaving(false); setUploadStep(""); }
@@ -2572,8 +2605,15 @@ function DigitalUploadForm({ visible, suspended = false, prefill, onClose, onSav
     <SafeAreaView style={styles.formSafe}><StatusBar barStyle="dark-content" /><ScrollView contentContainerStyle={styles.formContent}>
       <View style={styles.formHeader}><Text style={styles.sectionTitle}>Dijital ürün yükle</Text><Pressable onPress={onClose}><Ionicons name="close" size={26} color="#315B4C" /></Pressable></View>
       <ListingGuide input={uploadGuideInput}
-        actionLabel={!files.length ? "Goxi ile ürün dosyalarını seç" : !images.length ? "Goxi ile ilan görsellerini seç" : uploadReady ? "Goxi ile dosyaları güvenli depoya yükle" : undefined}
-        onAction={!files.length ? pickFiles : !images.length ? pickImages : uploadReady ? save : undefined} disabled={saving} />
+        actionLabel={!files.length ? (folderSupported() ? "Goxi GXL klasöründen alsın" : "Goxi ile ürün dosyalarını seç") : !images.length ? "Goxi ile ilan görsellerini seç" : uploadReady ? "Goxi ile dosyaları güvenli depoya yükle" : undefined}
+        onAction={!files.length ? (folderSupported() ? () => takeFromFolder() : pickFiles) : !images.length ? pickImages : uploadReady ? save : undefined} disabled={saving} />
+      {folderSupported() && <View style={styles.analysisCard}>
+        <Text style={styles.cardTitle}>GXL klasörü</Text>
+        <Text style={styles.analysisLine}>{folderUri ? `Klasör: ${entryName(folderUri)}. ` : "Bir kez klasör seç: İndirilenler içinde 'GXL' adlı yeni klasör aç ve onu seç. "}Yapay zekâdan indirdiğin ZIP/PDF dosyalarını ve ilan görsellerini (ya da listing-images.zip paketini) bu klasöre kaydet. Goxi dosyaları ayırır, görselleri sıralar ve küçültür; yüklenenleri 'Yuklendi' klasörüne taşır.</Text>
+        <Pressable style={[styles.primary, { marginTop: 8, marginBottom: 0 }, saving && styles.primaryDisabled]} disabled={saving} onPress={() => takeFromFolder()}><Text style={styles.primaryText}>{folderUri ? "GXL klasöründen al" : "GXL klasörünü seç ve al"}</Text><Ionicons name="folder-open-outline" size={18} color="white" /></Pressable>
+        {!!folderUri && <Pressable onPress={() => takeFromFolder(true)}><Text style={styles.linkNote}>Klasörü değiştir</Text></Pressable>}
+        {folderNotes.map((note) => <Text key={note} style={styles.warningText}>• {note}</Text>)}
+      </View>}
       {prefill && <Text style={styles.formHint}>1. Aynı ürünü ChatGPT, Claude veya Gemini'da tamamlayın. 2. Dosyaları ve ilan görsellerini telefonunuza indirin. Toplu indirme ZIP'ini önce çıkarın. 3. Aşağıdan yalnız bu ürüne ait PDF/ZIP dosyalarını ve görselleri seçin. Başlık, açıklama, etiketler ve önerilen fiyat ürün kaydından gelir.</Text>}
       {!prefill && <Text style={styles.warningText}>Bu form Stüdyo'dan dolu gelir. Önce Etsy → Stüdyo'da ürünü hazırlayın; yapay zekâ dosyaları ve görselleri verince Stüdyo'daki 'Dosyalar hazırsa yükle'ye basın. Başlık, etiket, açıklama ve fiyat kendiliğinden dolar.</Text>}
       <Pressable style={styles.uploadRow} onPress={pickFiles}><Ionicons name="document-text-outline" size={22} color="#315B4C" /><Text style={[styles.rowTitle, { flex: 1 }]}>{files.length ? `${files.length}/5 dosya seçildi · eklemek için dokunun` : "Dosyaları seç: PDF veya ZIP (birden çok seçilebilir, en fazla 5)"}</Text></Pressable>
@@ -2710,6 +2750,23 @@ function DigitalPanel({ online, active = true, shopReady, prefill, onPrefillUsed
       } }
     ]);
   };
+  // Yayın ajanı: dosyalar güvenli depoya girince Etsy taslağı kendiliğinden açılır (yükleme onayında söylenir).
+  // Aktarım yarıda kalırsa aynı taslaktan birkaç kez sürdürülür; satıcıya yalnız Etsy'de "Yayınla" kalır.
+  const autoDraft = async (product: any) => {
+    if (!shopReady || !product?.images?.length) return Alert.alert("Yüklendi", "Dosyalar güvenli depoya alındı. Etsy bağlantısı hazır olunca ürün kartındaki 'Etsy taslağı oluştur' ile taslağı açın.");
+    setBusy(product.id);
+    let result: any, problem = "";
+    try {
+      for (let attempt = 0; attempt < 6; attempt += 1) {
+        try { result = await apiJson(`/api/digital/products/${product.id}/etsy-draft`, { method: "POST", headers: apiHeaders(true), body: JSON.stringify({ confirm: true }) }); problem = ""; }
+        catch (error) { problem = errorText(error); if (!/kod 5\d\d|zamanında|Network|bağlan/i.test(problem)) break; }
+        if (result?.product && transferComplete(result.product)) break;
+      }
+    } finally { setBusy(undefined); await load(); }
+    const editUrl = result?.product?.etsy?.editUrl;
+    if (result?.product && transferComplete(result.product)) return Alert.alert("Etsy taslağı hazır", "Dosyalar, görseller, başlık, etiketler ve fiyat Etsy'ye taslak olarak gitti. Sana kalan tek iş: taslağı açıp kontrol et ve Etsy'de Yayınla'ya bas.", [{ text: "Sonra", style: "cancel" }, ...(editUrl ? [{ text: "Etsy'de aç", onPress: () => openUrl(editUrl, "Etsy taslak ilanı") }] : [])]);
+    Alert.alert("Etsy taslağı tamamlanamadı", `${problem || "Aktarım yarıda kaldı."}\n\nDosyaların güvende. Ürün kartındaki 'Etsy yüklemesini tamamla' ile kaldığı yerden sürdür.`);
+  };
   const revoke = (grant: any, productId: string) => Alert.alert("Bağlantı kapatılsın mı?", `${grant.orderRef} siparişinin indirme bağlantısı hemen çalışmaz hale gelir.`, [
     { text: "Vazgeç", style: "cancel" },
     { text: "Kapat", style: "destructive", onPress: async () => {
@@ -2758,7 +2815,7 @@ function DigitalPanel({ online, active = true, shopReady, prefill, onPrefillUsed
         {!grant.revoked && <Pressable onPress={() => revoke(grant, product.id)}><Ionicons name="close-circle-outline" size={21} color="#A84A3A" /></Pressable>}
       </View>)}
     </View>)}
-    <DigitalUploadForm visible={formVisible} suspended={!active} prefill={prefill} onClose={() => { setFormVisible(false); }} onSaved={async (product:any) => { await syncTrackedProduct(product).catch(()=>Alert.alert("Ürün yüklendi", "Ürün sunucuda kayıtlı, ancak telefon takip kaydı güncellenemedi. Aynı dosyaları tekrar yüklemeyin; Dijital bölümünden mevcut ürüne devam edin."));setFormVisible(false); onPrefillUsed(); await load(); Alert.alert("Yüklendi", "PDF güvenli depoya alındı. Etsy mağazası hazırsa 'Etsy taslağı oluştur' ile ilana dönüştürebilirsiniz."); }} />
+    <DigitalUploadForm visible={formVisible} suspended={!active} prefill={prefill} onClose={() => { setFormVisible(false); }} onSaved={async (product:any) => { await syncTrackedProduct(product).catch(()=>Alert.alert("Ürün yüklendi", "Ürün sunucuda kayıtlı, ancak telefon takip kaydı güncellenemedi. Aynı dosyaları tekrar yüklemeyin; Dijital bölümünden mevcut ürüne devam edin."));setFormVisible(false); onPrefillUsed(); await load(); await autoDraft(product); }} />
     <GrantForm product={grantProduct} onClose={async (created: boolean) => { const id = grantProduct?.id; setGrantProduct(undefined); if (created && id) await loadDetail(id); }} />
   </>;
 }
@@ -3501,6 +3558,23 @@ async function shrinkPhoto(photo: { uri: string; width?: number; height?: number
   if (Math.max(width, height) > longest) context.resize(width >= height ? { width: longest } : { height: longest });
   const image = await context.renderAsync();
   return await image.saveAsync({ compress, format: SaveFormat.JPEG, base64 });
+}
+
+// İlan görseli yüklemeden önce telefonda hazırlanır: en uzun kenar 3000 px, JPEG %90. Yapay zekânın PNG'leri 8 MB'ı
+// aşabiliyor; küçültülmüş görsel hem sınırı geçer hem hızlı gider. Görsel açılamazsa aslı gönderilir.
+async function prepareListingImage(asset: any): Promise<any> {
+  const name = String(asset.fileName || asset.name || "image.jpg");
+  const size = Number(asset.size || asset.fileSize || 0);
+  try {
+    const probe: any = await ImageManipulator.manipulate(asset.uri).renderAsync();
+    const longest = Math.max(Number(probe?.width) || 0, Number(probe?.height) || 0);
+    if (!longest || longest <= 3000 && size > 0 && size <= 4 * 1024 * 1024) return asset;
+    const context = ImageManipulator.manipulate(asset.uri);
+    if (longest > 3000) context.resize(probe.width >= probe.height ? { width: 3000 } : { height: 3000 });
+    const saved = await (await context.renderAsync()).saveAsync({ compress: 0.9, format: SaveFormat.JPEG });
+    const jpg = name.replace(/\.(png|jpe?g|webp)$/i, "") + ".jpg";
+    return { uri: saved.uri, fileName: jpg, name: jpg, mimeType: "image/jpeg" };
+  } catch { return asset; }
 }
 
 // Shopier'e eklemeden: fotoğraf → ürün türü ve ölçüler → Etsy araştırması → başlık, etiket, açıklama, fiyat → taslak → yayın.

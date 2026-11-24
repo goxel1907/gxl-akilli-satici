@@ -13,7 +13,12 @@ test("a new or changed app package always comes with a new app version and APK",
   assert.equal(app.runtimeVersion?.policy, "appVersion", "updates must target the APK built with the same app version");
   assert.equal(app.updates?.url, `https://u.expo.dev/${app.extra.eas.projectId}`);
   assert.equal(snapshot.appVersion, app.version, "app.json version changed: update apps/mobile/native-modules.json to the new version and its packages");
-  assert.deepEqual(pkg.dependencies, snapshot.dependencies, "app packages changed: raise app.json version (a new APK is needed), then update apps/mobile/native-modules.json");
+  // Saf JavaScript paketleri (jsOnly) güncellemeyle gider; yerel paketler değişirse yeni APK gerekir.
+  const jsOnly = snapshot.jsOnly || {};
+  const native = Object.fromEntries(Object.entries(pkg.dependencies).filter(([name]) => !(name in jsOnly)));
+  assert.deepEqual(native, snapshot.dependencies, "app packages changed: raise app.json version (a new APK is needed), then update apps/mobile/native-modules.json");
+  for (const [name, version] of Object.entries(jsOnly)) assert.equal(pkg.dependencies[name], version, `${name} is listed as JS-only with another version`);
+  assert.ok(Object.keys(jsOnly).every((name) => ["fflate"].includes(name)), "only reviewed pure-JS packages may skip a new APK");
 });
 
 test("every APK build profile listens to an update channel and updates are published to the preview APK's channel", () => {

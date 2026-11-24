@@ -19,6 +19,8 @@ export interface DigitalStore {
   get(key: string, type: "arrayBuffer"): Promise<ArrayBuffer | null>;
   put(key: string, value: string | ArrayBuffer, options?: { expirationTtl?: number }): Promise<void>;
   delete(key: string): Promise<void>;
+  // KV liste özelliği: yarıda bırakılan yüklemelerin dosyalarını temizlemek için (yoksa temizlik atlanır).
+  list?(options: { prefix: string; limit?: number }): Promise<{ keys: Array<{ name: string }> }>;
 }
 
 export type MediaWriter = (key: string, bytes: ArrayBuffer, mimeType: string) => Promise<void>;
@@ -36,6 +38,8 @@ export interface DigitalFile {
   size: number;
   mimeType: "application/pdf" | "application/zip";
   qa?: { state: "structural_pass"; checks: number; entries: number; contentReview: "seller_required" };
+  // Parça yüklemesinde doğrudan yazıldığı kalıcı anahtar (yoksa eski düzen: fileKey).
+  key?: string;
 }
 
 export interface DigitalProduct {
@@ -209,12 +213,19 @@ export function claimedFormats(description: string): FormatId[] {
 
 // ZIP'in merkez dizininden dosya adları okunur (açmadan, yalnız dosya sonundaki dizin).
 export function zipEntryNames(bytes: ArrayBuffer): string[] {
+  return zipEntryNamesAt(bytes, 0) || [];
+}
+
+// ZIP'in yalnız son bölümü elimizdeyse (parça parça yükleme): bytes dosyanın `base` konumundan başlar.
+// İçerik listesi bu bölümün dışında başlıyorsa undefined döner; çağıran bir önceki parçayı da ekler.
+export function zipEntryNamesAt(bytes: ArrayBuffer, base: number): string[] | undefined {
   const view = new DataView(bytes);
   const data = new Uint8Array(bytes);
   for (let end = data.length - 22; end >= Math.max(0, data.length - 65_557); end -= 1) {
     if (view.getUint32(end, true) !== 0x06054b50) continue;
     const count = view.getUint16(end + 10, true);
-    let offset = view.getUint32(end + 16, true);
+    let offset = view.getUint32(end + 16, true) - base;
+    if (offset < 0) return undefined;
     const names: string[] = [];
     for (let index = 0; index < count && offset + 46 <= data.length; index += 1) {
       if (view.getUint32(offset, true) !== 0x02014b50) break;
@@ -227,6 +238,15 @@ export function zipEntryNames(bytes: ArrayBuffer): string[] {
     return names.filter((name) => !name.endsWith("/"));
   }
   return [];
+}
+
+// Büyük dosyanın parmak izi yalnız boyut, baş ve sondan hesaplanır; parça parça gelen dosyada da aynı sonucu verir.
+async function edgeFingerprint(size: number, head: Uint8Array, tail: Uint8Array): Promise<string> {
+  const edge = 256 * 1024, label = new TextEncoder().encode(String(size));
+  const sample = new Uint8Array(label.length + edge * 2);
+  sample.set(label, 0); sample.set(head.subarray(0, edge), label.length); sample.set(tail.subarray(tail.length - edge), label.length + edge);
+  const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", sample));
+  return [...digest].map((value) => value.toString(16).padStart(2, "0")).join("");
 }
 
 async function sha256(bytes: ArrayBuffer): Promise<string> {
@@ -246,6 +266,32 @@ function fileKey(productId: string, index: number): string {
   return index === 0 ? `${FILE_PREFIX}${productId}` : `${FILE_PREFIX}${productId}:${index}`;
 }
 
+// Dosyanın depodaki yeri: yeni yüklemelerde parça anahtarı, eskilerde ürün numarası + sıra.
+export function storedFileKey(product: DigitalProduct, index: number): string {
+  return productFiles(product)[index]?.key || fileKey(product.id, index);
+}
+
+// Parça parça yüklenen dosya "digital:chunked:<id>:<adet>" ile tutulur; parçalar okunup birleştirilir.
+const CHUNKED_PREFIX = "digital:chunked:";
+const CHUNK_PREFIX = "digital:chunk:";
+export const UPLOAD_CHUNK_BYTES = 4 * 1024 * 1024;
+function chunkKeys(key: string): string[] {
+  const match = key.match(/^digital:chunked:([a-f0-9]{32}):(\d{1,2})$/);
+  if (!match) return [];
+  return Array.from({ length: Number(match[2]) }, (_, index) => `${CHUNK_PREFIX}${match[1]}:${index}`);
+}
+export async function readStoredFile(store: DigitalStore, key: string): Promise<ArrayBuffer | null> {
+  if (!key.startsWith(CHUNKED_PREFIX)) return await store.get(key, "arrayBuffer");
+  const parts: ArrayBuffer[] = [];
+  for (const part of chunkKeys(key)) { const bytes = await store.get(part, "arrayBuffer"); if (!bytes) return null; parts.push(bytes); }
+  const joined = new Uint8Array(parts.reduce((sum, part) => sum + part.byteLength, 0));
+  let at = 0; for (const part of parts) { joined.set(new Uint8Array(part), at); at += part.byteLength; }
+  return joined.buffer;
+}
+async function deleteStoredFile(store: DigitalStore, key: string) {
+  for (const part of key.startsWith(CHUNKED_PREFIX) ? chunkKeys(key) : [key]) await store.delete(part).catch(() => undefined);
+}
+
 export function productFiles(product: DigitalProduct): DigitalFile[] {
   return product.files?.length ? product.files : [{ name: product.fileName, size: product.fileSize, mimeType: "application/pdf" }];
 }
@@ -254,7 +300,7 @@ export function productFiles(product: DigitalProduct): DigitalFile[] {
 // Etsy'deki taslak veya ilan silinmez; satıcı onu Etsy'de kendisi siler.
 export async function deleteDigitalProduct(store: DigitalStore, productId: string) {
   const product = await getDigitalProduct(store, productId);
-  for (const [index] of productFiles(product).entries()) await store.delete(fileKey(productId, index));
+  for (const [index] of productFiles(product).entries()) await deleteStoredFile(store, storedFileKey(product, index));
   await store.delete(`${PRODUCT_PREFIX}${productId}`);
   const list = (await readJson<string[]>(store, PRODUCT_INDEX)) || [];
   await store.put(PRODUCT_INDEX, JSON.stringify(list.filter((id) => id !== productId)));
@@ -268,7 +314,7 @@ export async function auditDigitalFiles(store: DigitalStore, productId: string) 
   let nestedUnchecked = false;
   for (const [index, meta] of productFiles(product).entries()) {
     try {
-      const bytes = await store.get(fileKey(productId,index), "arrayBuffer");
+      const bytes = await readStoredFile(store, storedFileKey(product,index));
       if (!bytes) throw new Error("Dosya depoda bulunamadı.");
       const hash=await sha256(bytes);if(hashes.has(hash)) throw new Error("Aynı içerik başka bir dosyada tekrar ediyor.");hashes.add(hash);
       let names=[meta.name],checks=1;
@@ -303,7 +349,22 @@ async function readJson<T>(store: DigitalStore, key: string): Promise<T | undefi
 }
 
 const PART_PREFIX = "digital:upload-part:";
-interface UploadPart { name: string; size: number; role: "file" | "image"; qa?: { kind: "pdf" | "zip"; names: string[]; checks: number; hash: string; light: boolean } }
+interface UploadPart { name: string; size: number; role: "file" | "image"; qa?: { kind: "pdf" | "zip"; names: string[]; checks: number; hash: string; light: boolean }; storedKey?: string; mimeType?: string }
+// Parça baytları yükleme anında kalıcı yerine yazılır; ürün kaydı onları yeniden okumaz ve kopyalamaz (5 büyük ZIP + 10
+// görseli tek istekte taşımak sunucunun bellek/süre sınırını aşıyordu). Kayda bağlanmayan parça 6 saat sonra silinir.
+const BLOB_PREFIX = "digital:blob:";
+const PENDING_PREFIX = "digital:pending-part:";
+const PENDING_MAX_MS = 6 * 60 * 60 * 1000;
+async function sweepAbandonedParts(store: DigitalStore, now = Date.now()) {
+  if (!store.list) return;
+  const page = await store.list({ prefix: PENDING_PREFIX, limit: 20 });
+  for (const { name } of page.keys) {
+    const marker = await readJson<{ key?: string; keys?: string[]; at: number }>(store, name);
+    if (marker && now - Number(marker.at) < PENDING_MAX_MS) continue;
+    for (const key of [...(marker?.key ? [marker.key] : []), ...(Array.isArray(marker?.keys) ? marker!.keys : [])]) await deleteStoredFile(store, key);
+    await store.delete(name).catch(() => undefined);
+  }
+}
 
 // Büyük dosyada (2.5 MB üstü) ZIP'i açmak ve PDF'i ayrıştırmak sunucunun işlem süresi sınırını aşar (kod 503).
 // Bu dosyalarda yalnız yapı denetlenir: ZIP içerik listesi (açmadan) ve tehlikeli dosya türü, PDF başlığı ve sonu.
@@ -335,19 +396,86 @@ async function checkSaleFile(bytes: ArrayBuffer, name: string): Promise<{ kind: 
   return { kind: isPdf ? "pdf" : "zip", ...result, hash: await sha256(bytes), light };
 }
 
-export async function stageDigitalUpload(store: DigitalStore, file: File, role: "file" | "image") {
+export async function stageDigitalUpload(store: DigitalStore, file: File, role: "file" | "image", writeMedia?: MediaWriter, now = Date.now()) {
   const limit = role === "file" ? MAX_PDF_BYTES : MAX_IMAGE_BYTES;
-  if (file.size < 1024 || file.size > limit) throw new DigitalDeliveryError("VALIDATION_FAILED", "Dosya boyutu sınır dışında (PDF/ZIP 20 MB, görsel 8 MB).");
+  if (file.size < 1024) throw new DigitalDeliveryError("VALIDATION_FAILED", `${file.name || "Dosya"}: dosya boş ya da çok küçük. Yeniden indirin.`);
+  if (file.size > limit) throw new DigitalDeliveryError("VALIDATION_FAILED", role === "file"
+    ? `${file.name || "Dosya"}: ${(file.size / 1048576).toFixed(1)} MB. Etsy dijital dosya sınırı 20 MB; bu ZIP'i ikiye bölün (ör. oranları iki ZIP'e ayırın).`
+    : `${file.name || "Görsel"}: ${(file.size / 1048576).toFixed(1)} MB. Görsel en fazla 8 MB olmalı; uygulamayı güncelleyin, görseli kendisi küçültür.`);
   const bytes = await file.arrayBuffer();
-  const head = new Uint8Array(bytes);
+  const head = new Uint8Array(bytes, 0, Math.min(8, bytes.byteLength));
   let qa: UploadPart["qa"];
-  if (role === "file") qa = await checkSaleFile(bytes, file.name);
-  else if (!imageType(head)) throw new DigitalDeliveryError("VALIDATION_FAILED", "Görsel JPG veya PNG olmalı.");
   const id = crypto.randomUUID();
-  await store.put(`${PART_PREFIX}${id}:bytes`, bytes, { expirationTtl: 3600 });
-  await store.put(`${PART_PREFIX}${id}:meta`, JSON.stringify({ name: file.name, size: file.size, role, ...(qa ? { qa } : {}) }), { expirationTtl: 3600 });
+  let storedKey: string;
+  let mimeType: string | undefined;
+  if (role === "file") {
+    qa = await checkSaleFile(bytes, file.name);
+    storedKey = `${BLOB_PREFIX}${id}`;
+    await store.put(storedKey, bytes);
+  } else {
+    const type = imageType(head);
+    if (!type) throw new DigitalDeliveryError("VALIDATION_FAILED", `${file.name || "Görsel"}: JPG veya PNG olmalı.`);
+    mimeType = type.mimeType;
+    if (writeMedia) { storedKey = `digital/${id}.${type.extension}`; await writeMedia(storedKey, bytes, type.mimeType); }
+    else { storedKey = `${BLOB_PREFIX}${id}`; await store.put(storedKey, bytes); }
+  }
+  await store.put(`${PENDING_PREFIX}${id}`, JSON.stringify({ key: storedKey, at: now }));
+  await store.put(`${PART_PREFIX}${id}:meta`, JSON.stringify({ name: file.name, size: file.size, role, storedKey, ...(mimeType ? { mimeType } : {}), ...(qa ? { qa } : {}) }), { expirationTtl: 86400 });
+  await sweepAbandonedParts(store, now).catch(() => undefined);
   return { id, name: file.name, size: file.size };
 }
+// Büyük satış dosyası 4 MB'lık ham parçalarla gelir: ücretsiz planda istek başına işlemci süresi çok kısadır ve 20 MB'lık
+// tek "form" isteğini ayrıştırmak bu süreyi aşabiliyordu. Her parça ayrı istekte saklanır; son parçada dosya yeniden
+// birleştirilmeden denetlenir (baş: tür, son: ZIP içerik listesi veya PDF sonu) ve tek bir yükleme parçası olarak kaydedilir.
+export async function stageDigitalChunk(store: DigitalStore, info: { upload: string; index: number; total: number; size: number; name: string }, bytes: ArrayBuffer, now = Date.now()) {
+  const { upload, index, total, size } = info;
+  const name = String(info.name || "").replace(/[\u0000-\u001f]/g, "").slice(0, 120) || "file.zip";
+  if (!/^[a-f0-9]{32}$/.test(upload) || !Number.isInteger(index) || !Number.isInteger(total) || total < 1 || total > 6 || index < 0 || index >= total) throw new DigitalDeliveryError("VALIDATION_FAILED", "Yükleme parçası geçersiz.");
+  if (size < 1024) throw new DigitalDeliveryError("VALIDATION_FAILED", `${name}: dosya boş ya da çok küçük. Yeniden indirin.`);
+  if (size > MAX_PDF_BYTES) throw new DigitalDeliveryError("VALIDATION_FAILED", `${name}: ${(size / 1048576).toFixed(1)} MB. Etsy dijital dosya sınırı 20 MB; bu ZIP'i ikiye bölün (ör. oranları iki ZIP'e ayırın).`);
+  if (Math.ceil(size / UPLOAD_CHUNK_BYTES) !== total) throw new DigitalDeliveryError("VALIDATION_FAILED", "Parça sayısı dosya boyutuyla uyuşmuyor.");
+  const expected = index < total - 1 ? UPLOAD_CHUNK_BYTES : size - UPLOAD_CHUNK_BYTES * (total - 1);
+  if (bytes.byteLength !== expected) throw new DigitalDeliveryError("VALIDATION_FAILED", `${name}: parça eksik geldi (${index + 1}/${total}). Yeniden deneyin.`);
+  const keys = Array.from({ length: total }, (_, part) => `${CHUNK_PREFIX}${upload}:${part}`);
+  if (index === 0) await store.put(`${PENDING_PREFIX}c-${upload}`, JSON.stringify({ keys: [`${CHUNKED_PREFIX}${upload}:${total}`], at: now }));
+  await store.put(keys[index], bytes);
+  if (index < total - 1) return { received: index + 1, total };
+  // Son parça: baş ve sondan denetim; ZIP içerik listesi son parçaya sığmazsa bir önceki parça da eklenir.
+  const head = total === 1 ? new Uint8Array(bytes) : new Uint8Array((await store.get(keys[0], "arrayBuffer")) || new ArrayBuffer(0));
+  if (head.byteLength < Math.min(size, 8)) throw new DigitalDeliveryError("VALIDATION_FAILED", `${name}: ilk parça bulunamadı; dosyayı yeniden yükleyin.`);
+  let qa: NonNullable<UploadPart["qa"]>;
+  if (total === 1) qa = await checkSaleFile(bytes, name);
+  else {
+    const isPdf = startsWith(head, [0x25, 0x50, 0x44, 0x46, 0x2d]);
+    const isZip = startsWith(head, [0x50, 0x4b, 0x03, 0x04]);
+    if (!isPdf && !isZip) throw new DigitalDeliveryError("VALIDATION_FAILED", `${name} geçerli bir PDF veya ZIP değil.`);
+    let tail = new Uint8Array(bytes), base = size - bytes.byteLength;
+    let names: string[] = [name];
+    if (isPdf) {
+      if (!new TextDecoder().decode(tail.subarray(Math.max(0, tail.length - 2048))).includes("%%EOF")) throw new DigitalDeliveryError("VALIDATION_FAILED", `${name}: PDF eksik ya da yarım indirilmiş görünüyor. Dosyayı yeniden indirin.`);
+    } else {
+      let found = zipEntryNamesAt(tail.slice().buffer, base);
+      for (let part = total - 2; found === undefined && part >= 0; part -= 1) {
+        const previous = new Uint8Array((await store.get(keys[part], "arrayBuffer")) || new ArrayBuffer(0));
+        const joined = new Uint8Array(previous.length + tail.length); joined.set(previous, 0); joined.set(tail, previous.length);
+        tail = joined; base -= previous.length; found = zipEntryNamesAt(tail.buffer, base);
+      }
+      names = (found || []).filter((entry) => !entry.toLowerCase().startsWith("__macosx/") && !/(?:^|\/)\.ds_store$/i.test(entry));
+      if (!names.length) throw new DigitalDeliveryError("VALIDATION_FAILED", `${name}: ZIP içerik listesi okunamadı veya boş. Dosyayı yeniden dışa aktarın.`);
+      const blocked = names.find((entry) => BLOCKED_ENTRY.test(entry));
+      if (blocked) throw new DigitalDeliveryError("VALIDATION_FAILED", `${blocked}: çalıştırılabilir dosya veya makro teslim paketinde olamaz.`);
+    }
+    qa = { kind: isPdf ? "pdf" : "zip", names, checks: names.length, hash: await edgeFingerprint(size, head, new Uint8Array(bytes)), light: true };
+  }
+  const id = crypto.randomUUID();
+  const storedKey = `${CHUNKED_PREFIX}${upload}:${total}`;
+  await store.put(`${PENDING_PREFIX}${id}`, JSON.stringify({ key: storedKey, at: now }));
+  await store.delete(`${PENDING_PREFIX}c-${upload}`).catch(() => undefined);
+  await store.put(`${PART_PREFIX}${id}:meta`, JSON.stringify({ name, size, role: "file", storedKey, qa }), { expirationTtl: 86400 });
+  await sweepAbandonedParts(store, now).catch(() => undefined);
+  return { id, name, size };
+}
+
 async function stagedFiles(store: DigitalStore, ids: unknown, role: UploadPart["role"]): Promise<File[]> {
   if (ids === undefined) return [];
   if (!Array.isArray(ids) || ids.length > (role === "file" ? MAX_FILES : MAX_IMAGES)) throw new DigitalDeliveryError("VALIDATION_FAILED", "Yükleme parça listesi geçersiz.");
@@ -356,8 +484,8 @@ async function stagedFiles(store: DigitalStore, ids: unknown, role: UploadPart["
     const part = await readJson<UploadPart>(store, `${PART_PREFIX}${id}:meta`);
     if (!part || part.role !== role) throw new DigitalDeliveryError("VALIDATION_FAILED", "Yükleme parçası eksik veya süresi doldu. Dosyaları yeniden seçin.");
     // Load bytes only when this individual asset is processed.
-    return { name: part.name, size: part.size, stagedQa: part.qa, arrayBuffer: async () => {
-      const bytes = await store.get(`${PART_PREFIX}${id}:bytes`, "arrayBuffer");
+    return { name: part.name, size: part.size, stagedQa: part.qa, storedKey: part.storedKey, stagedMime: part.mimeType, arrayBuffer: async () => {
+      const bytes = await store.get(part.storedKey && part.storedKey.startsWith(BLOB_PREFIX) ? part.storedKey : `${PART_PREFIX}${id}:bytes`, "arrayBuffer");
       if (!bytes) throw new DigitalDeliveryError("NOT_FOUND", "Dosya yüklemesi tamamlanmamış.", 404);
       return bytes;
     } } as unknown as File;
@@ -426,23 +554,26 @@ export async function createDigitalProduct(store: DigitalStore, form: FormData, 
       const uploaded = upload.name.toLowerCase().replace(/[^a-z0-9]/g, "");
       if (!uploaded.startsWith(stem)) throw new DigitalDeliveryError("VALIDATION_FAILED", `${upload.name}: dosya adı bu ürünün üretim kaydıyla uyuşmuyor. Doğru ürünün PDF/ZIP dosyasını seçin.`);
     }
-    const bytes = await upload.arrayBuffer();
-    // Parça yüklemesinde denetlenmiş dosya yeniden açılmaz (aynı istekte 5 büyük ZIP'i açmak 503 veriyordu).
-    const staged = (upload as unknown as { stagedQa?: UploadPart["qa"] }).stagedQa;
-    const qa = staged && staged.hash ? staged : await checkSaleFile(bytes, upload.name);
+    // Parça yüklemesinde denetlenip kalıcı yere yazılmış dosya yeniden okunmaz ve kopyalanmaz.
+    const stagedPart = upload as unknown as { stagedQa?: UploadPart["qa"]; storedKey?: string };
+    const reuse = Boolean(stagedPart.stagedQa?.hash && (stagedPart.storedKey?.startsWith(BLOB_PREFIX) || stagedPart.storedKey?.startsWith(CHUNKED_PREFIX)));
+    const bytes = reuse ? undefined : await upload.arrayBuffer();
+    const qa = reuse ? stagedPart.stagedQa! : stagedPart.stagedQa?.hash ? stagedPart.stagedQa : await checkSaleFile(bytes!, upload.name);
     const isPdf = qa.kind === "pdf";
     const archive = isPdf ? undefined : { names: qa.names, checks: qa.checks };
     let fileName = safeFileName(upload.name || name, kind ? "printable" : "pattern", isPdf ? "pdf" : "zip");
     for (let copy = 2; usedNames.has(fileName.toLowerCase()); copy += 1) fileName = fileName.replace(/(-\d+)?\.(pdf|zip)$/, `-${copy}.$2`);
     usedNames.add(fileName.toLowerCase());
-    files.push({ name: fileName, size: bytes.byteLength, mimeType: isPdf ? "application/pdf" : "application/zip", qa: { state: "structural_pass", checks: archive?.checks || 1, entries: archive?.names.length || 1, contentReview: "seller_required" } });
+    files.push({ name: fileName, size: bytes ? bytes.byteLength : upload.size, mimeType: isPdf ? "application/pdf" : "application/zip", qa: { state: "structural_pass", checks: archive?.checks || 1, entries: archive?.names.length || 1, contentReview: "seller_required" }, ...(reuse ? { key: stagedPart.storedKey } : {}) });
     hashes.push(qa.hash);
     // Hafif denetimde iç içe ZIP açılmaz; içindeki formatlar bilinmediği için "format eksik" kararı verilmez.
     if (qa.light && qa.names.some((entry) => /\.zip$/i.test(entry))) nestedUnchecked = true;
     for (const entry of archive?.names || [fileName]) for (const format of formatsOfText(entry)) covered.add(format);
-    const key = fileKey(productId, files.length - 1);
-    await store.put(key, bytes);
-    writtenKeys.push(key);
+    if (!reuse) {
+      const key = fileKey(productId, files.length - 1);
+      await store.put(key, bytes!);
+      writtenKeys.push(key);
+    }
   }
   // Kalite kapısı: aynı dosya iki kez yüklenmez; ilanda yazan her format dosyalarda (veya ZIP içinde) bulunur.
   const duplicate = hashes.findIndex((hash, index) => hashes.indexOf(hash) !== index);
@@ -461,6 +592,12 @@ export async function createDigitalProduct(store: DigitalStore, form: FormData, 
   const images: DigitalImage[] = [];
   for (const file of imageFiles) {
     if (file.size < 1_024 || file.size > MAX_IMAGE_BYTES) throw new DigitalDeliveryError("VALIDATION_FAILED", "Her görsel 1 KB ile 8 MB arasında olmalıdır.");
+    // Parça yüklemesinde medya deposuna yazılmış görsel yeniden okunmaz.
+    const stagedImage = file as unknown as { storedKey?: string; stagedMime?: string };
+    if (stagedImage.storedKey?.startsWith("digital/") && stagedImage.stagedMime) {
+      images.push({ key: stagedImage.storedKey, url: `${origin}/media/${stagedImage.storedKey}`, mimeType: stagedImage.stagedMime, size: file.size });
+      continue;
+    }
     const bytes = await file.arrayBuffer();
     const type = imageType(new Uint8Array(bytes, 0, 4));
     if (!type) throw new DigitalDeliveryError("VALIDATION_FAILED", "Görseller JPG veya PNG olmalıdır.");
@@ -503,6 +640,8 @@ export async function createDigitalProduct(store: DigitalStore, form: FormData, 
   for (const id of [...(Array.isArray(parts.files) ? parts.files : []), ...(Array.isArray(parts.images) ? parts.images : [])]) {
     await store.delete(`${PART_PREFIX}${id}:meta`).catch(() => undefined);
     await store.delete(`${PART_PREFIX}${id}:bytes`).catch(() => undefined);
+    // Dosya artık ürüne bağlı: "yarıda kalan yükleme" işareti kalkar, dosya silinmez.
+    await store.delete(`${PENDING_PREFIX}${id}`).catch(() => undefined);
   }
   return product;
   } catch (error) {
@@ -610,7 +749,7 @@ export async function grantDownload(store: DigitalStore, grantId: string, now = 
   const problem = grantProblem(grant, now, Math.max(1, files.length), fileIndex);
   if (problem || !grant) return page("İndirme bağlantısı", `<h1>İndirme yapılamadı</h1><p>${escapeHtml(problem || "")}</p>`, problem?.includes("geçersiz") ? 404 : 410);
   const meta = files[fileIndex];
-  const file = product && meta ? await store.get(fileKey(product.id, fileIndex), "arrayBuffer") : null;
+  const file = product && meta ? await readStoredFile(store, storedFileKey(product, fileIndex)) : null;
   if (!product || !meta || !file) return page("İndirme bağlantısı", "<h1>Dosya bulunamadı</h1><p>Satıcıyla iletişime geçin.</p>", 404);
   const counts = Array.from({ length: files.length }, (_, index) => fileDownloads(grant, index));
   counts[fileIndex] += 1;
@@ -753,7 +892,7 @@ export async function createEtsyDigitalDraft(
     // Tüm dosyalar sırayla ilana eklenir; yarıda kalırsa bir sonraki denemede kaldığı dosyadan devam eder.
     for (const [index, meta] of productFiles(product).entries()) {
       if (index < (product.etsy.filesUploaded || 0)) continue;
-      const file = await store.get(fileKey(product.id, index), "arrayBuffer");
+      const file = await readStoredFile(store, storedFileKey(product, index));
       if (!file) throw new DigitalDeliveryError("NOT_FOUND", `${meta.name} depoda bulunamadı.`, 404);
       const form = new FormData();
       form.set("file", new Blob([file], { type: meta.mimeType }), meta.name);

@@ -75,7 +75,7 @@ import {
   type PinterestStore
 } from "./pinterest.js";
 import {
-  stageDigitalUpload,
+  stageDigitalUpload, stageDigitalChunk,
   createDigitalProduct,
   auditDigitalFiles,
   deleteDigitalProduct,
@@ -806,6 +806,14 @@ export async function handleRequest(request: Request, env: Env, context?: {waitU
     if (request.method === "GET" && url.pathname === "/api/digital/products") {
       return json(200, { products: await listDigitalProducts(digitalStore(env)) });
     }
+    if (request.method === "POST" && url.pathname === "/api/digital/upload-chunk") {
+      const query = url.searchParams;
+      const blocked = requireConfirmedWrite(env, { confirm: query.get("confirm") === "true" }, "Dosya yükleme");
+      if (blocked) return blocked;
+      if (Number(request.headers.get("content-length") || 0) > 4_300_000) return json(413, { error: "Parça 4 MB'tan büyük olamaz." });
+      const bytes = await request.arrayBuffer();
+      return json(201, await stageDigitalChunk(digitalStore(env), { upload: String(query.get("upload") || ""), index: Number(query.get("index")), total: Number(query.get("total")), size: Number(query.get("size")), name: String(query.get("name") || "") }, bytes));
+    }
     if (request.method === "POST" && url.pathname === "/api/digital/upload-part") {
       const form = await readMultipart(request);
       const blocked = requireConfirmedWrite(env, { confirm: form.get("confirm") === "true" }, "Dosya yükleme");
@@ -813,7 +821,7 @@ export async function handleRequest(request: Request, env: Env, context?: {waitU
       const asset = form.get("asset");
       const role = form.get("role");
       if (!asset || typeof asset === "string" || (role !== "file" && role !== "image")) return json(400, { error: "Dosya ve tür gerekli." });
-      return json(201, await stageDigitalUpload(digitalStore(env), asset, role));
+      return json(201, await stageDigitalUpload(digitalStore(env), asset, role, (key, bytes, mimeType) => putProductMedia(env, key, bytes, mimeType)));
     }
     if (request.method === "POST" && url.pathname === "/api/digital/products") {
       const form = await readMultipart(request);

@@ -79,7 +79,9 @@ test("product plan, staged assets, Etsy draft retry and publication verification
     state = "active";
     assert.equal((await (await handleRequest(new Request(statusPath, { headers }), env)).json() as { state: string }).state, "active");
     assert.equal(draftCalls, 1);
-    values.set(`digital:file:${product.id}`, new TextEncoder().encode("corrupt payload").buffer);
+    // Parça yüklemesinde dosya kalıcı parça anahtarına yazılır; ürün kaydı o anahtarı tutar.
+    assert.match(product.files![0].key!, /^digital:blob:/);
+    values.set(product.files![0].key!, new TextEncoder().encode("corrupt payload").buffer);
     const damaged = await (await handleRequest(new Request(auditPath, { headers }), env)).json() as { ok: boolean };
     assert.equal(damaged.ok,false);
     assert.equal((await post(draftPath, JSON.stringify({ confirm: true }), true)).status,400);

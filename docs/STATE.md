@@ -96,3 +96,10 @@ Güncelleme: 9 Kasım 2026
   (otomatik), ajan ekibindeki ChatGPT/Claude/Gemini ya da satıcı. Otomatik denetçi POST /api/agents/review (agent-review.ts):
   sunucu yapay zekâsı + 'rakipten iyi mi?' kapısı (beatCompetitors: arama ifadesi başta, 13 etiket, görsel sayısı, video,
   fiyat aralığı, sayı, YZ beyanı). Kredi paylaşımı: visualAssistant üreticiden farklıysa paket sahneleri o araca bırakır.
+- 24 Kasım (5): Yükleme yeniden yazıldı. Satış dosyaları 4 MB ham parçalarla (/api/digital/upload-chunk; ücretsiz planda 10 ms
+  işlemci sınırı 20 MB'lık form ayrıştırmasını düşürüyordu); baş/son parçadan denetim; dosya digital:chunked:<id>:<adet>.
+  Görseller yüklemede medya deposuna, ZIP'ler kalıcı anahtara yazılır; ürün kaydı baytları okumaz (DigitalFile.key).
+  Bağlanmayan parçalar 6 saat sonra silinir (digital:pending-part). Görseller telefonda 3000 px JPEG'e küçültülür.
+  GXL klasörü (gxl-folder.ts, Android SAF, expo-file-system/legacy): ZIP/PDF ve görselleri ayırır, listing-images.zip'i
+  fflate ile açar (jsOnly paket, APK gerekmez), yüklenenleri Yuklendi'ye taşır. Yüklemeden sonra Etsy taslağı kendiliğinden
+  açılır (yayın satıcıda). Paket: satış dosyaları ayrı bağlantı, görseller listing-images.zip.
