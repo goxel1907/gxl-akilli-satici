@@ -11,6 +11,8 @@ printable-studio.ts büyük dosyalardır, yalnız gereken satır aralığını o
 
 ## Değişmez kurallar
 - Kimlik, IBAN, kart, şifre, token sohbete ya da depoya yazılmaz. Anahtarlar yalnız Cloudflare/GitHub secrets'ta.
+  İstisna (25 Kasım, kullanıcı kararı): Google Drive Client ID/secret uygulamadan girilir; secret KV'de AES-GCM şifreli
+  (anahtar APP_ACCESS_TOKEN'dan türetilir), hiçbir yanıtta geri gösterilmez.
 - Etsy'de satıcının yerine giriş yapma, ödeme yapma, yayınlama yok. Dijital ilanda uygulama yalnız TASLAK oluşturur.
 - Marka/IP yok (Jeopardy, Family Feud, Grinch, Rudolph, Elf on the Shelf, Disney...). Görsellerde logo yok.
 - İlan görselleri gerçek dosyayı gösterir; sayılar dosyalarla aynı; yapay zekâ beyanı açıklamada.
@@ -24,7 +26,7 @@ printable-studio.ts büyük dosyalardır, yalnız gereken satır aralığını o
 - Sunucu: Cloudflare Worker `gxl-akilli-satici-api` (apps/worker/src/index.ts), main'e merge ile kendiliğinden yayın.
 - Telefon: Expo, apps/mobile/App.tsx (+ ListingMascot, ProductionTracker, ListingOfferPicker...). Sürüm 0.8.6,
   OTA güncelleme (Özet → Güncellemeyi denetle). Telefon kodu değişince kullanıcıya güncellemeyi söyle.
-- Test: `npm test` (431 test, hepsi geçmeli), `npm run typecheck`. Testler gerçek ekranları render eder
+- Test: `npm test` (432 test, hepsi geçmeli), `npm run typecheck`. Testler gerçek ekranları render eder
   (apps/api/test/fixtures/mobile-ui); buton etiketi değişirse ilgili testi güncelle.
 
 ## Önemli dosyalar
