@@ -59,7 +59,7 @@ export function useProductionRecords(){
   return {rows,loaded};
 }
 const sourceLabel=(row:ProductionRecord)=>row.source==="app"?"Uygulama kaydı":row.source==="assistant"?"Asistan bildirimi; dosyalar doğrulanmadı":"Senin bildirimin";
-export function ProductionWorkList({onResume,compact=false}:{onResume:(row:ProductionRecord)=>void;compact?:boolean}){
+export function ProductionWorkList({onResume,compact=false}:{onResume:(row:ProductionRecord,options?:{upload?:boolean})=>void;compact?:boolean}){
   const {rows}=useProductionRecords(),[all,setAll]=useState(false),[opened,setOpened]=useState<string>();
   const ordered=[...rows].sort((a,b)=>Number(a.stage==="published")-Number(b.stage==="published")||b.updatedAt.localeCompare(a.updatedAt)),latest=ordered[0],selected=rows.find(row=>row.id===opened);
   const close=()=>{setAll(false);setOpened(undefined);};
@@ -71,17 +71,40 @@ export function ProductionWorkList({onResume,compact=false}:{onResume:(row:Produ
     <Pressable accessibilityRole="button" style={s.primary} onPress={()=>openWork(latest)}><Text style={s.white}>{compact?"İlan çalışmasına dön":"Son çalışmayı aç"}</Text></Pressable>
     {rows.length>1&&<Pressable accessibilityRole="button" style={s.secondary} onPress={()=>setAll(true)}><Text style={s.link}>Tüm çalışmalar ({rows.length})</Text></Pressable>}
     <Modal visible={all||Boolean(selected)} animationType="slide" onRequestClose={close}><SafeAreaView style={s.safe}><ScrollView contentContainerStyle={s.content}>
-      {selected?<SavedProductionDetails key={selected.id} record={selected} onClose={close} onResume={()=>{close();onResume(selected);}}/>:<><Text style={s.heading}>İlan çalışmalarım</Text><Pressable accessibilityRole="button" onPress={close}><Text style={s.link}>Çalışma listesini kapat</Text></Pressable>{ordered.map(row=><View style={s.card} key={row.id}><Text style={s.name}>{row.workspace.plan.brief.name}</Text><Text style={s.status}>{PRODUCTION_STAGES[row.stage]}</Text><Text style={s.small}>{sourceLabel(row)}</Text><Pressable accessibilityRole="button" accessibilityLabel={`${row.workspace.plan.brief.name} çalışmasına devam et`} style={s.primary} onPress={()=>openWork(row)}><Text style={s.white}>Bu çalışmaya devam et</Text></Pressable></View>)}</>}
+      {selected?<SavedProductionDetails key={selected.id} record={selected} onClose={close} onResume={()=>{close();onResume(selected);}} onUpload={()=>{close();onResume(selected,{upload:true});}}/>:<><Text style={s.heading}>İlan çalışmalarım</Text><Pressable accessibilityRole="button" onPress={close}><Text style={s.link}>Çalışma listesini kapat</Text></Pressable>{ordered.map(row=><View style={s.card} key={row.id}><Text style={s.name}>{row.workspace.plan.brief.name}</Text><Text style={s.status}>{PRODUCTION_STAGES[row.stage]}</Text><Text style={s.small}>{sourceLabel(row)}</Text><Pressable accessibilityRole="button" accessibilityLabel={`${row.workspace.plan.brief.name} çalışmasına devam et`} style={s.primary} onPress={()=>openWork(row)}><Text style={s.white}>Bu çalışmaya devam et</Text></Pressable></View>)}</>}
     </ScrollView></SafeAreaView></Modal>
   </View>;
 }
-function SavedProductionDetails({record,onClose,onResume}:{record:ProductionRecord;onClose:()=>void;onResume:()=>void}){
+// Ajan hattındaki aşama: paket hazır → 2 (üretim), indirildi → 3, yüklendi → 4, taslak → 5, yayında → 6.
+export function agentStage(record:ProductionRecord):number{
+  if(record.stage==="published")return 6;
+  if(record.productId)return record.stage==="draft"?5:4;
+  return record.stage==="downloaded"||record.stage==="files_ready"?3:2;
+}
+// Satıcıya kalan tek iş: ajanların beklediği adım ve onu yapan düğme.
+export function remainingWork(record:ProductionRecord):{titleTr:string;detailTr:string;action:"share"|"resume"|"none";labelTr:string}{
+  const tool=assistantName(record.workspace.input.assistant),toTool=assistantTo(record.workspace.input.assistant);
+  if(record.stage==="published")return {titleTr:"Bitti: ilan yayında",detailTr:"Reklam ve Takip ajanları ilanı izliyor. İstersen Dijital bölümünden reklam planını aç.",action:"none",labelTr:""};
+  if(record.productId)return {titleTr:"Sırada: Etsy taslağı ve yayın",detailTr:"Dosyalar güvenli depoda. Yayın ajanı Etsy taslağını açar; sen Etsy'de kontrol edip Yayınla'ya basarsın.",action:"resume",labelTr:"Etsy taslağını bitir →"};
+  if(record.stage==="downloaded"||record.stage==="files_ready")return {titleTr:"Sırada: dosyaları ajanlara ver",detailTr:"Dosyaları Drive'daki ya da telefondaki GXL klasörüne koy. Kalite ve Denetçi ajanları denetler, Yayın ajanı Etsy taslağını açar.",action:"resume",labelTr:"Dosyalarım hazır, ajanlara ver →"};
+  if(["package_ready","status_unknown","share_opened"].includes(record.stage))return {titleTr:`Sırada: Üretim ajanı (${tool})`,detailTr:`Araştırma, seçim, fiyat ve SEO ajanları işini bitirdi. Tek paketi ${toTool} gönder; dosyaları ve ilan görsellerini o üretir. Bittiğinde dosyaları GXL klasörüne koy.`,action:"share",labelTr:`Tek paketi ${toTool} gönder`};
+  return {titleTr:`Sırada: ${tool} üretimi bitirsin`,detailTr:`${tool} dosyaları hazırlıyor. Dosyalar bitince GXL klasörüne koy ve aşağıdaki düğmeye bas.`,action:"resume",labelTr:"Dosyalarım hazır, ajanlara ver →"};
+}
+
+function SavedProductionDetails({record,onClose,onResume,onUpload}:{record:ProductionRecord;onClose:()=>void;onResume:()=>void;onUpload?:()=>void}){
   const [linkEditing,setLinkEditing]=useState(false),[link,setLink]=useState(record.conversationUrl||""),[details,setDetails]=useState(false),[busy,setBusy]=useState(false);
   const {workspace}=record,tool=assistantName(workspace.input.assistant),toolAcc=assistantAcc(workspace.input.assistant),conversation=savedConversationUrl(record.conversationUrl||"",workspace.input.assistant);
   const run=async(action:()=>Promise<unknown>)=>{setBusy(true);try{await action();}catch(error){Alert.alert("Çalışma işlemi tamamlanamadı",error instanceof Error?error.message:"Yeniden deneyin.");}finally{setBusy(false);}};
   return <View testID="saved-production-details">
     <Text accessibilityRole="header" style={s.heading}>Kayıtlı çalışma açıldı</Text>
     <Text style={s.name}>{workspace.plan.brief.name}</Text><Text style={s.status}>{PRODUCTION_STAGES[record.stage]}</Text><Text style={s.small}>{sourceLabel(record)} · {new Date(record.updatedAt).toLocaleString("tr-TR")}</Text>
+    {(()=>{const work=remainingWork(record);return <View style={s.card} testID="saved-production-agents">
+      <Text style={s.heading}>{work.titleTr}</Text>
+      <Text style={s.body}>{work.detailTr}</Text>
+      {work.action==="share"&&<Pressable accessibilityRole="button" style={s.primary} disabled={busy} onPress={()=>run(()=>shareProductionPackage(workspace))}><Text style={s.white}>{work.labelTr}</Text></Pressable>}
+      {work.action!=="none"&&<Pressable accessibilityRole="button" style={work.action==="share"?s.secondary:s.primary} disabled={busy} onPress={!record.productId&&onUpload?onUpload:onResume}><Text style={work.action==="share"?s.link:s.white}>{work.action==="share"?"Dosyalarım hazır, ajanlara ver →":work.labelTr}</Text></Pressable>}
+      <AgentPipeline kind="digital" stage={agentStage(record)} complete={record.stage==="published"}/>
+    </View>;})()}
     <Text style={s.body}>Bu ürünün kayıtlı paketi açık. Başlık, açıklama, etiketler, fiyat ve kapsam aşağıda korunuyor.</Text>
     <Pressable accessibilityRole="button" style={s.secondary} disabled={busy} onPress={()=>Alert.alert("Çalışma silinsin mi?","Bu ilan çalışması uygulamadaki listeden kaldırılır. Etsy'deki taslağa veya ilana dokunulmaz.",[{text:"Vazgeç",style:"cancel"},{text:"Sil",style:"destructive",onPress:()=>run(async()=>{await deleteProduction(record.id);onClose();})}])}><Text style={s.link}>Bu çalışmayı listeden sil</Text></Pressable>
     <Pressable accessibilityRole="button" style={s.primary} disabled={busy} onPress={()=>run(()=>Linking.openURL(conversation||assistantHome(workspace.input.assistant)))}><Text style={s.white}>{conversation?`Kaydedilmiş ${tool} sohbetini aç`:`${toolAcc} aç ve mevcut sohbetini seç`}</Text></Pressable>
@@ -112,7 +135,7 @@ export default function ProductionJourney({workspace,onUpload,onOpenProduct}:{wo
     <Text style={s.status}>Takip: {PRODUCTION_STAGES[record.stage]}</Text><Text style={s.small}>{sourceLabel(record)} · {new Date(record.updatedAt).toLocaleString("tr-TR")}</Text>
     {record.checkedAt&&<Text style={s.small}>Son Etsy doğrulaması: {record.etsyState} · {new Date(record.checkedAt).toLocaleString("tr-TR")}</Text>}
     <ListingMascot step={uploaded?record.stage==="published"||record.stage==="draft"?5:4:downloaded?3:2} complete={record.stage==="published"} title={uploaded?"Aynı ilanın Etsy adımlarına devam et":downloaded?"Dosyalarını aynı ilana yükleyelim":record.stage==="package_ready"?"Şimdi ürün dosyalarını üretelim":"Aynı ürünü takip ediyorum"} instruction={instruction} actionLabel={uploaded?"Ürün kaydı ve Etsy durumuna git":downloaded?"Dosyalarım hazır, yüklemeye geç":record.stage==="package_ready"?`Tek paketi ${toTool} gönder`:"Aynı sohbet için devam metnini aç"} onAction={uploaded?onOpenProduct:downloaded?onUpload:()=>share(record.stage!=="package_ready")} disabled={busy}/>
-    <AgentPipeline kind="digital" stage={record.stage==="published"?6:uploaded?record.stage==="draft"?5:4:downloaded?3:2}/>
+    <AgentPipeline kind="digital" stage={agentStage(record)}/>
     {!uploaded&&<>
       <Pressable accessibilityRole="button" style={s.secondary} disabled={busy} onPress={()=>setStatusModal(true)}><Text style={s.link}>Üretim durumunu güncelle / içe aktar</Text></Pressable>
       {!downloaded&&<Pressable accessibilityRole="button" style={s.secondary} disabled={busy} onPress={onUpload}><Text style={s.link}>Dosyalarım hazır, yüklemeye geç</Text></Pressable>}

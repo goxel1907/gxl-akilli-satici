@@ -267,9 +267,11 @@ test("real screen buttons drive Trend → Studio → Digital → draft → verif
     renderer = await mount(screens.EtsyScreen, { online: true, channels: { etsy: { shopReady: true, shopId: 777 } } });
     await tap(renderer, /^Stüdyo$/); await tap(renderer, /^Son çalışmayı aç$/);
     assert.equal(visible(renderer.root.findByProps({testID:"saved-production-details"})),true);
-    await tap(renderer,/^Bu çalışmayı Stüdyo’da sürdür$/);
-    assert.equal(visible(renderer.root.findByProps({ testID: "listing-offer-production" })), true);
-    await tap(renderer, /^Dosyalarım hazır, yüklemeye geç$/);
+    // Kayıtlı çalışmada ajanlar ve kalan iş görünür; "ajanlara ver" yükleme ekranını doğrudan açar.
+    assert.equal(visible(renderer.root.findByProps({testID:"saved-production-agents"})),true);
+    assert.ok(renderer.root.findAllByType("Text" as any).some(node => visible(node) && text(node) === "Sırada: Üretim ajanı (ChatGPT)"));
+    assert.ok(renderer.root.findAllByType("Text" as any).some(node => visible(node) && /^Ajan hattı · 6\/15 tamam/.test(text(node))));
+    await tap(renderer,/^Dosyalarım hazır, ajanlara ver →$/);
     assert.equal(field(renderer, /^Ürün adı$/).props.value, plan.brief.name);
     assert.equal(field(renderer, /^Başlık \(/).props.value, plan.listing.title);
     assert.equal(field(renderer, /^Etiketler \(/).props.value, plan.listing.tags.join(", "));

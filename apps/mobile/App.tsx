@@ -245,7 +245,7 @@ function App() {
     setEtsyJump({ section: "Stüdyo", studioMode: kind === "digital" ? "printable" : "physical", revision: Date.now() });
     setTab("Etsy");
   };
-  const resumeProduction=(row:ProductionRecord)=>{setProductionResume({id:row.id,revision:Date.now()});if(mode==="simple"){setSellRoute("digital");setTab("Sat");}else setTab("Etsy");};
+  const resumeProduction=(row:ProductionRecord,options:{upload?:boolean}={})=>{setProductionResume({id:row.id,revision:Date.now(),upload:Boolean(options.upload)});if(mode==="simple"){setSellRoute("digital");setTab("Sat");}else setTab("Etsy");};
   useEffect(()=>{if(!productionLoaded||startupProduction.current)return;startupProduction.current=true;void activeProduction(productionRows).then(row=>{if(row)resumeProduction(row);}).catch(()=>undefined);},[productionLoaded]);
   const scrollRef = useRef<ScrollView>(null);
   useEffect(() => {
@@ -1769,7 +1769,7 @@ function CompetitionCard({ competition }: any) {
   </View>;
 }
 
-function PrintableStudio({ online, seed, seeding, resumeWorkspace, onPrepared, onReseed, onPickKind, onPickQuery, onUpload, onOpenProduct, guided = false }: any) {
+function PrintableStudio({ online, seed, seeding, resumeWorkspace, onPrepared, onReseed, onPickKind, onPickQuery, onUpload, onOpenProduct, guided = false, uploadRequest }: any) {
   const [flow,setFlow]=useState<"offers"|"production"|"manual">("offers");
   const [kindPicker,setKindPicker]=useState(false);
   const [offers,setOffers]=useState<any[]>([]);
@@ -1875,6 +1875,13 @@ function PrintableStudio({ online, seed, seeding, resumeWorkspace, onPrepared, o
   const currentPlan = plan?.inputKey === inputKey ? plan : undefined;
   const brief = currentPlan?.brief;
   const listing = currentPlan?.listing;
+  // "Dosyalarım hazır, ajanlara ver": kayıtlı çalışma açılınca yükleme ekranı doğrudan, aynı ürün kaydıyla açılır.
+  const handledUpload = useRef<number>();
+  useEffect(() => {
+    if (!uploadRequest || handledUpload.current === uploadRequest || !currentPlan?.quality?.ok || !brief) return;
+    handledUpload.current = uploadRequest;
+    onUpload({name:currentPlan.handoff?.name || brief.name,kind:currentPlan.handoff?.kind || kind,productType:currentPlan.handoff?.productType || productType,listing,pins:brief.pins,priceUsd:brief.priceUsd,research:currentPlan.research,handoffName:brief.name,handoff:currentPlan.handoff,assistant});
+  }, [uploadRequest, currentPlan?.quality?.ok]);
   const seedEvidenceCurrent = seed?.kind === kind && seed?.keyword === keyword && seed?.productType === productType;
   const research = currentPlan?.research || currentPreview;
   const loadOffers=async(includeSeed=false)=>{
@@ -2109,6 +2116,7 @@ function StudioPanel({ online, active, seed, onUpload, onOpenProduct, etsyReady,
   const {rows:trackedWorks,loaded:workspaceLoaded}=useProductionRecords();
   const restoredInitial=useRef(false);
   useEffect(()=>{let mounted=true;AsyncStorage.getItem(PRINTABLE_WORKSPACE_KEY).then(raw=>{if(mounted){const restored=parsePrintableWorkspace(raw);setSavedWorkspace(restored);setWorkspaceOutdated(Boolean(raw&&!restored));}}).catch(()=>undefined);return()=>{mounted=false;};},[]);
+  const [uploadAsk, setUploadAsk] = useState<number>();
   const resumeSaved = (selected?:PrintableWorkspace) => {
     const workspace=selected || savedWorkspace;
     if (!workspace) return;
@@ -2253,10 +2261,10 @@ function StudioPanel({ online, active, seed, onUpload, onOpenProduct, etsyReady,
     <Text style={styles.sectionTitle}>{mode === "physical" ? "Elimdeki ürünü sat" : "Yeni ürün fikri"}</Text>
     <ChipGroup options={STUDIO_MODES} value={mode} onChange={changeMode} />
     {workspaceOutdated && !savedWorkspace && <Text style={styles.warningText}>Önceki hazırlama paketi bu sürümün kontrollerinden geçmedi. Aşağıdan ürünü seçip yeniden hazırla; eski paketi üretimde kullanma. Telefona indirdiğin dosyalar silinmedi.</Text>}
-    <ProductionWorkList onResume={(row)=>resumeSaved(row.workspace)}/>
+    <ProductionWorkList onResume={(row,options)=>{resumeSaved(row.workspace);if(options?.upload)setUploadAsk(Date.now());}}/>
     {seeding && <View style={styles.guardrail}><ActivityIndicator color="#315B4C" /><Text style={[styles.guardrailText, { flex: 1 }]}>Etsy trend verisi okunuyor; tüm alanlar otomatik dolduruluyor…</Text></View>}
     <View testID="studio-mode-physical" style={mode === "physical" ? undefined : styles.hidden}>{seed?.studio === "physical" && <Text style={styles.formHint}>Seçilen pazar araması: {seed.keyword}. Kendi ürününüzün gerçek fotoğrafları ve doğruladığınız bilgilerle ilerleyin; rakibin özellikleri ürününüze aktarılmaz.</Text>}<PhotoListingStudio online={online} etsyReady={etsyReady} /></View>
-    <View testID="studio-mode-printable" style={mode === "printable" ? undefined : styles.hidden}><PrintableStudio guided online={online} seed={printableSeed} resumeWorkspace={resumeWorkspace} onPrepared={setSavedWorkspace} seeding={seeding} onReseed={() => printableSeed?.keyword && fillFromTrend({ keyword: printableSeed.keyword, kind: printableSeed.kind, studio: "printable" })} onPickKind={(kind: string, avoidKeyword?: string) => fillFromTrend({ studio: "printable", kind, avoidKeyword })} onPickQuery={(keyword: string) => fillFromTrend({ studio: "printable", kind: printableSeed?.kind, keyword })} onOpenProduct={onOpenProduct} onUpload={onUpload} /></View>
+    <View testID="studio-mode-printable" style={mode === "printable" ? undefined : styles.hidden}><PrintableStudio guided online={online} seed={printableSeed} resumeWorkspace={resumeWorkspace} uploadRequest={uploadAsk || (productionResume?.upload ? productionResume.revision : undefined)} onPrepared={setSavedWorkspace} seeding={seeding} onReseed={() => printableSeed?.keyword && fillFromTrend({ keyword: printableSeed.keyword, kind: printableSeed.kind, studio: "printable" })} onPickKind={(kind: string, avoidKeyword?: string) => fillFromTrend({ studio: "printable", kind, avoidKeyword })} onPickQuery={(keyword: string) => fillFromTrend({ studio: "printable", kind: printableSeed?.kind, keyword })} onOpenProduct={onOpenProduct} onUpload={onUpload} /></View>
     <View testID="studio-mode-pattern" style={mode === "pattern" ? undefined : styles.hidden}>
     <ListingGuide input={{ phase: "studio", ownPattern: true, planReady: Boolean(currentPatternPlan?.quality?.ok) }}
       actionLabel={currentPatternPlan?.quality?.ok ? "Goxi ile kendi desenimi yüklemeye geç" : "Goxi ile kendi desenimin ilanını hazırla"}
