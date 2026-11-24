@@ -6,7 +6,7 @@ import ListingMascot from "./ListingMascot";
 import {PRINTABLE_WORKSPACE_KEY,parsePrintableWorkspace,type PrintableWorkspace} from "./workflow-state";
 import {assistantAcc,assistantHome,assistantName,assistantTo} from "./assistants";
 import {AgentPipeline} from "./AgentTeam";
-import {PRODUCTION_TRACKER_KEY,PRODUCTION_STAGES,EXTERNAL_STAGES,productionId,readProductionRecords,rememberProduction,changeProduction,syncProductionProduct,parseProductionReceipt,productionTrackingPrompt,productionContinuation,savedConversationUrl,setProductionConversation,removeProduction,type ProductionRecord,type ProductionStage} from "./production-tracker";
+import {markPublishedFromEtsy,PRODUCTION_TRACKER_KEY,PRODUCTION_STAGES,EXTERNAL_STAGES,productionId,readProductionRecords,rememberProduction,changeProduction,syncProductionProduct,parseProductionReceipt,productionTrackingPrompt,productionContinuation,savedConversationUrl,setProductionConversation,removeProduction,type ProductionRecord,type ProductionStage} from "./production-tracker";
 
 const ACTIVE_KEY="gxl.productionActive.v1";
 const listeners=new Set<(rows:ProductionRecord[])=>void>();
@@ -43,6 +43,7 @@ export async function activeProduction(rows:ProductionRecord[]){
   return rows.find(row=>row.id===selected&&row.stage!=="published") || [...rows].filter(row=>row.stage!=="published").sort((a,b)=>b.updatedAt.localeCompare(a.updatedAt))[0];
 }
 export const syncTrackedProduct=(product:any,status?:any,invalidate=false)=>mutateProduction(rows=>syncProductionProduct(rows,product,status,invalidate));
+export const markTrackedPublished=(listings:Array<{listingId:number;title:string;state?:string}>)=>mutateProduction(rows=>markPublishedFromEtsy(rows,listings));
 export const syncTrackedProducts=(products:any[])=>mutateProduction(rows=>products.reduce((current,product)=>syncProductionProduct(current,product),rows));
 export async function shareProductionPackage(workspace:PrintableWorkspace){
   await saveProductionWorkspace(workspace);
@@ -61,15 +62,22 @@ export function useProductionRecords(){
 const sourceLabel=(row:ProductionRecord)=>row.source==="app"?"Uygulama kaydı":row.source==="assistant"?"Asistan bildirimi; dosyalar doğrulanmadı":"Senin bildirimin";
 export function ProductionWorkList({onResume,compact=false}:{onResume:(row:ProductionRecord,options?:{upload?:boolean})=>void;compact?:boolean}){
   const {rows}=useProductionRecords(),[all,setAll]=useState(false),[opened,setOpened]=useState<string>();
-  const ordered=[...rows].sort((a,b)=>Number(a.stage==="published")-Number(b.stage==="published")||b.updatedAt.localeCompare(a.updatedAt)),latest=ordered[0],selected=rows.find(row=>row.id===opened);
+  const ordered=[...rows].sort((a,b)=>Number(a.stage==="published")-Number(b.stage==="published")||b.updatedAt.localeCompare(a.updatedAt)),openRows=ordered.filter(row=>row.stage!=="published"),publishedCount=rows.length-openRows.length,latest=openRows[0],selected=rows.find(row=>row.id===opened);
   const close=()=>{setAll(false);setOpened(undefined);};
   const openWork=(row:ProductionRecord)=>{setAll(false);setOpened(row.id);void saveProductionWorkspace(row.workspace).catch(()=>Alert.alert("Çalışma açıldı","Son açılan çalışma telefona kaydedilemedi. Mevcut kayıt silinmedi; depolamayı kontrol edin."));};
-  if(!latest)return null;
+  // Yayına giren çalışmalar açık iş sayılmaz; yalnız "Yayınlananlar" altında durur.
+  if(!latest)return compact||!publishedCount?null:<View style={s.card} testID="production-work-list">
+    <Text style={s.heading}>Açık çalışma yok</Text><Text style={s.small}>Tüm ilan çalışmaların Etsy'de yayında.</Text>
+    <Pressable accessibilityRole="button" style={s.secondary} onPress={()=>setAll(true)}><Text style={s.link}>Yayınlananlar ({publishedCount})</Text></Pressable>
+    <Modal visible={all||Boolean(selected)} animationType="slide" onRequestClose={close}><SafeAreaView style={s.safe}><ScrollView contentContainerStyle={s.content}>
+      {selected?<SavedProductionDetails key={selected.id} record={selected} onClose={close} onResume={()=>{close();onResume(selected);}}/>:<><Text style={s.heading}>Yayınlanan çalışmalar</Text><Pressable accessibilityRole="button" onPress={close}><Text style={s.link}>Listeyi kapat</Text></Pressable>{ordered.map(row=><Pressable key={row.id} accessibilityRole="button" style={s.secondary} onPress={()=>openWork(row)}><Text style={s.link}>{row.workspace.plan.brief.name} · {PRODUCTION_STAGES[row.stage]}</Text></Pressable>)}</>}
+    </ScrollView></SafeAreaView></Modal>
+  </View>;
   return <View style={s.card} testID="production-work-list">
     <Text style={s.heading}>{compact?"Goxi ilanını takip ediyor":"Son kaydedilen çalışma"}</Text><Text style={s.name}>{latest.workspace.plan.brief.name}</Text><Text style={s.status}>{PRODUCTION_STAGES[latest.stage]}</Text>
     <Text style={s.small}>{sourceLabel(latest)} · {new Date(latest.updatedAt).toLocaleString("tr-TR")}</Text>
     <Pressable accessibilityRole="button" style={s.primary} onPress={()=>openWork(latest)}><Text style={s.white}>{compact?"İlan çalışmasına dön":"Son çalışmayı aç"}</Text></Pressable>
-    {rows.length>1&&<Pressable accessibilityRole="button" style={s.secondary} onPress={()=>setAll(true)}><Text style={s.link}>Tüm çalışmalar ({rows.length})</Text></Pressable>}
+    {(openRows.length>1||publishedCount>0)&&<Pressable accessibilityRole="button" style={s.secondary} onPress={()=>setAll(true)}><Text style={s.link}>{openRows.length>1?`Açık çalışmalar (${openRows.length})`:"Tüm çalışmalar"}{publishedCount?` · ${publishedCount} yayında`:""}</Text></Pressable>}
     <Modal visible={all||Boolean(selected)} animationType="slide" onRequestClose={close}><SafeAreaView style={s.safe}><ScrollView contentContainerStyle={s.content}>
       {selected?<SavedProductionDetails key={selected.id} record={selected} onClose={close} onResume={()=>{close();onResume(selected);}} onUpload={()=>{close();onResume(selected,{upload:true});}}/>:<><Text style={s.heading}>İlan çalışmalarım</Text><Pressable accessibilityRole="button" onPress={close}><Text style={s.link}>Çalışma listesini kapat</Text></Pressable>{ordered.map(row=><View style={s.card} key={row.id}><Text style={s.name}>{row.workspace.plan.brief.name}</Text><Text style={s.status}>{PRODUCTION_STAGES[row.stage]}</Text><Text style={s.small}>{sourceLabel(row)}</Text><Pressable accessibilityRole="button" accessibilityLabel={`${row.workspace.plan.brief.name} çalışmasına devam et`} style={s.primary} onPress={()=>openWork(row)}><Text style={s.white}>Bu çalışmaya devam et</Text></Pressable></View>)}</>}
     </ScrollView></SafeAreaView></Modal>
