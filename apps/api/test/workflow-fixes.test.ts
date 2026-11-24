@@ -178,3 +178,52 @@ test("folded-card and wall-art size notes do not become extra delivery-format cl
   assert.deepEqual(claimedFormats("Formats: 2:3 ratio (4x6 to 16x24 in), 3:4 ratio (6x8 to 18x24 in)"), []);
   assert.deepEqual(claimedFormats("Formats: 4x6 in cards, 5x7 in cards"), ["4x6", "5x7"]);
 });
+
+test("five large wall-art ZIPs and ten images upload in parts and save without re-opening the archives (no 503)", async () => {
+  const { zipSync } = await import("fflate");
+  const { store, values } = memory();
+  const env = { APP_ACCESS_TOKEN: "local-test", ETSY_OAUTH: store as never };
+  const auth = { authorization: "Bearer local-test" };
+  const noise = (size: number, seed: number) => { const out = new Uint8Array(size); let x = seed; for (let i = 0; i < size; i++) { x = (x * 1103515245 + 12345) >>> 0; out[i] = x >>> 24; } return out; };
+  const png = (seed: number) => { const body = noise(700_000, seed); body.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13, 0x49, 0x48, 0x44, 0x52, 0, 0, 16, 0, 0, 0, 16, 0], 0); return body; };
+  const stage = async (bytes: Uint8Array, name: string, role: "file" | "image", type: string) => {
+    const part = new FormData(); part.set("confirm", "true"); part.set("role", role); part.set("asset", new File([new Uint8Array(bytes)], name, { type }));
+    const response = await handleRequest(new Request("https://local.invalid/api/digital/upload-part", { method: "POST", headers: auth, body: part }), env);
+    return { status: response.status, body: await response.json() as { id?: string; error?: string } };
+  };
+  const sizes = ["2x3-ratio", "3x4-ratio", "4x5-ratio", "11x14-in", "More-Sizes"];
+  const fileIds: string[] = [];
+  for (const [index, size] of sizes.entries()) {
+    const zip = Uint8Array.from(zipSync({ [`Print-1-${size}.png`]: png(index * 3 + 1), [`Print-2-${size}.png`]: png(index * 3 + 2), [`Print-3-${size}.png`]: png(index * 3 + 3), [`Print-4-${size}.png`]: png(index * 3 + 4) }, { level: 0 }));
+    assert.ok(zip.byteLength > 2.5 * 1024 * 1024, "each ZIP is above the light-QA threshold");
+    const staged = await stage(zip, `Green-Uluven-Botanical-Wall-Art-${size}.zip`, "file", "application/zip");
+    assert.equal(staged.status, 201, staged.body.error); fileIds.push(staged.body.id!);
+  }
+  const jpeg = (seed: number) => { const body = noise(200_000, seed); body.set([0xff, 0xd8, 0xff, 0xe0], 0); body.set([0xff, 0xd9], body.length - 2); return body; };
+  const imageIds: string[] = [];
+  for (let index = 0; index < 10; index++) imageIds.push((await stage(jpeg(100 + index), `${169201 + index}.jpg`, "image", "image/jpeg")).body.id!);
+  // Parçalar denetlendikten sonra baytlar bozulsa bile kayıt yeniden açmaz; denetim yüklemede bir kez yapılır.
+  const form = new FormData();
+  form.set("metadata", JSON.stringify({ confirm: true, kind: "wall_art", name: "Green Uluven Botanical Wall Art", productType: "botanical wall art", prices: { usd: "7.99" }, listing: { title: "Botanical Wall Art Set of 3", description: "WHAT'S INCLUDED\n• 3 art prints\n• Formats: 2:3 ratio, 3:4 ratio, 4:5 ratio, 11x14 in", tags: [], materials: [] } }));
+  form.set("parts", JSON.stringify({ files: fileIds, images: imageIds }));
+  const saved = await handleRequest(new Request("https://local.invalid/api/digital/products", { method: "POST", headers: auth, body: form }), env);
+  assert.equal(saved.status, 201, await saved.clone().text());
+  const product = (await saved.json() as { product: { id: string; files: unknown[]; images: unknown[] } }).product;
+  assert.equal(product.files.length, 5); assert.equal(product.images.length, 10);
+  assert.ok(values.has(`digital:file:${product.id}`) || [...values.keys()].some(key => key.includes(product.id)), "files stored under the product");
+  assert.ok(![...values.keys()].some(key => key.startsWith("digital:pending:")), "no temporary copies are left");
+  // Büyük ZIP içinde çalıştırılabilir dosya hafif denetimde de reddedilir.
+  const bad = Uint8Array.from(zipSync({ "Print.png": png(999), "setup.exe": noise(2_700_000, 7) }, { level: 0 }));
+  const rejected = await stage(bad, "Green-Uluven-Botanical-Wall-Art-Extra.zip", "file", "application/zip");
+  assert.equal(rejected.status, 400); assert.match(rejected.body.error || "", /çalıştırılabilir/);
+});
+
+test("a full daily storage quota gives a clear Turkish message instead of an unexpected server error", async () => {
+  const store = { async get() { return null; }, async put() { throw new Error("KV PUT failed: 429 Too Many Requests"); }, async delete() {} };
+  const env = { APP_ACCESS_TOKEN: "local-test", ETSY_OAUTH: store as never };
+  const part = new FormData(); part.set("confirm", "true"); part.set("role", "file");
+  part.set("asset", new File([validPdf("Animal-US-Letter.pdf")], "Animal-US-Letter.pdf", { type: "application/pdf" }));
+  const response = await handleRequest(new Request("https://local.invalid/api/digital/upload-part", { method: "POST", headers: { authorization: "Bearer local-test" }, body: part }), env);
+  assert.equal(response.status, 503);
+  assert.match((await response.json() as { error: string }).error, /günlük depolama sınırı/);
+});

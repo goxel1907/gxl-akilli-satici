@@ -2430,6 +2430,7 @@ function DigitalUploadForm({ visible, suspended = false, prefill, onClose, onSav
   const [files, setFiles] = useState<any[]>([]);
   const [images, setImages] = useState<any[]>([]);
   const [saving, setSaving] = useState(false);
+  const [uploadStep, setUploadStep] = useState("");
   // Closing is a pause, not a new upload. Compare content, not parent object identity.
   const uploadSeed = JSON.stringify(prefill ?? null);
   const initializedSeed = useRef<string | undefined>(undefined);
@@ -2535,12 +2536,16 @@ function DigitalUploadForm({ visible, suspended = false, prefill, onClose, onSav
             part.append("confirm", "true"); part.append("role", role);
             const zip = /\.zip$/i.test(asset.name || "") || /zip/.test(asset.mimeType || "");
             await appendLocalFile(part, "asset", asset, asset.name || asset.fileName || `${role}-${index + 1}.${role === "image" ? "jpg" : zip ? "zip" : "pdf"}`, asset.mimeType || (role === "image" ? "image/jpeg" : zip ? "application/zip" : "application/pdf"));
-            const result = await apiJson("/api/digital/upload-part", { method: "POST", headers: apiHeaders(), body: part });
+            // Bağlantı ya da sunucu bir anlığına düşerse aynı parça bir kez daha gönderilir.
+            const result = await apiJson("/api/digital/upload-part", { method: "POST", headers: apiHeaders(), body: part })
+              .catch(async (error: any) => { if (!/kod 5\d\d|Network|ağ|bağlan/i.test(errorText(error))) throw error; await new Promise((resolve) => setTimeout(resolve, 1500)); const again = new FormData(); again.append("confirm", "true"); again.append("role", role); await appendLocalFile(again, "asset", asset, asset.name || asset.fileName || `${role}-${index + 1}.${role === "image" ? "jpg" : zip ? "zip" : "pdf"}`, asset.mimeType || (role === "image" ? "image/jpeg" : zip ? "application/zip" : "application/pdf")); return apiJson("/api/digital/upload-part", { method: "POST", headers: apiHeaders(), body: again }); });
             if (!result.id) throw new Error("Dosya yüklemesi doğrulanamadı.");
             return result.id as string;
           };
-          for (const [index, file] of files.entries()) parts.files.push(await stage(file, "file", index));
-          for (const [index, image] of images.entries()) parts.images.push(await stage(image, "image", index));
+          // Kullanıcı hangi dosyada olduğunu görür (büyük ZIP'ler tek tek gönderilir).
+          for (const [index, file] of files.entries()) { setUploadStep(`Dosya ${index + 1}/${files.length} gönderiliyor…`); parts.files.push(await stage(file, "file", index)); }
+          for (const [index, image] of images.entries()) { setUploadStep(`Görsel ${index + 1}/${images.length} gönderiliyor…`); parts.images.push(await stage(image, "image", index)); }
+          setUploadStep("Ürün kaydediliyor…");
           form.append("parts", JSON.stringify(parts));
           const response = await fetch(`${API_URL}/api/digital/products`, { method: "POST", headers: apiHeaders(), body: form });
           const body = await response.json().catch(() => ({})) as any;
@@ -2548,7 +2553,7 @@ function DigitalUploadForm({ visible, suspended = false, prefill, onClose, onSav
           initializedSeed.current = undefined;
           onSaved(body.product);
         } catch (error) { Alert.alert("Yüklenemedi", errorText(error)); }
-        finally { setSaving(false); }
+        finally { setSaving(false); setUploadStep(""); }
       } }
     ]);
   };
@@ -2590,6 +2595,7 @@ function DigitalUploadForm({ visible, suspended = false, prefill, onClose, onSav
       {kind === "pattern" && <Text style={styles.warningText}>Etsy kuralı: yapay zekâyla yazılmış desen satılamaz. Yalnız kendi yazdığınız, bizzat yapıp denediğiniz ve bitmiş ürününün gerçek fotoğrafı olan deseni yükleyin.</Text>}
       {!testMade && kind !== "pattern" && <Text style={styles.warningText}>{testWarning(kind)}</Text>}
       <Pressable style={[styles.analyzeButton, { marginTop: 14 }, saving && styles.primaryDisabled]} disabled={saving} onPress={save}>{saving ? <ActivityIndicator color="white" /> : <Ionicons name="cloud-upload-outline" size={18} color="white" />}<Text style={styles.primaryText}>Güvenli depoya yükle</Text></Pressable>
+      {!!uploadStep && <Text style={styles.formHint}>{uploadStep}</Text>}
     </ScrollView></SafeAreaView>
   </Modal>;
 }

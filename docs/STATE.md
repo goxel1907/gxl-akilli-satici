@@ -77,3 +77,7 @@ Güncelleme: 9 Kasım 2026
 - "Bu ilana reklam ver" (12 Kasım): ilan karnesi, Dijital ürün kartı ve fiziksel taslak kutusunda. Etsy API'de reklam yok:
   uygulama ilana özel karar/bütçe/durdurma kuralını (marketing-plan etsy_ads) gösterir, etsy.com/listing/{id} açar
   (Seller listing tools → Promote). Ödeme ve Start satıcıda.
+- 24 Kasım: Dijital yüklemede 503 (5 duvar posteri ZIP'i + 10 görsel). Neden: ürün kaydı 5 ZIP'i yeniden açıp denetliyordu
+  (Cloudflare işlem süresi sınırı). Artık denetim parça yüklemede bir kez; 2.5 MB üstünde hafif (ZIP içerik listesi, tehlikeli
+  dosya, PDF sonu), sonuç parça kaydında saklanır; kayıt dosyayı tek okuyup tek yazar. KV günlük sınırı dolunca açık mesaj
+  (STORAGE_LIMIT). Telefon parçayı bir kez yeniden dener ve "Dosya 3/5 gönderiliyor" gösterir.
