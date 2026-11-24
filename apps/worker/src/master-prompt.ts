@@ -58,13 +58,23 @@ export function buildMasterPrompt(input: MasterPromptInput): string {
   ];
   if (hasArt) steps.push({ title: "Görseller", body: claude
     ? "Brief B'deki görselleri kodla temiz vektör SVG olarak, her yanıtta bir tane çiz; Brief B'nin başındaki kurallara uy, spec paletini ve tek tutarlı stili kullan ve her birini PNG'ye çevir. Adlarını Brief B sırasıyla art-01.png, art-02.png diye koy; hangisinin nereye gideceğini 1. adımdaki sayfa planı söyler."
-    : "Brief B'deki görselleri her yanıtta bir tane olacak şekilde üret; Brief B'nin başındaki kurallara uy, spec paletini ve tek tutarlı stili kullan. Adlarını Brief B sırasıyla art-01.png, art-02.png diye koy; hangisinin nereye gideceğini 1. adımdaki sayfa planı söyler." });
+    : "Brief B'deki görselleri sırayla üret: görsel aracın bir yanıtta birden fazla görsel üretebiliyorsa durmadan art arda üret, yalnız bir tane üretebiliyorsa her yanıtta bir tane üret ve son satırda sıradakinin numarasını yaz. Brief B'nin başındaki kurallara uy, spec paletini ve tek tutarlı stili kullan. Adlarını Brief B sırasıyla art-01.png, art-02.png diye koy; hangisinin nereye gideceğini 1. adımdaki sayfa planı söyler." });
   steps.push({ title: "Ürün dosyaları", body: "Ürün dosyalarını Brief A'da yazdığı gibi, geçiş geçiş (PASS 1, 2, 3) kur. Her formatı teslim et; hiçbiri eksik olmasın. Adımı bitirmeden önce bitmiş dosyalarda Otomatik QA betiğini çalıştır, çıktısını aynen yapıştır, her FAIL satırını düzelt ve sonucu bana Türkçe kısaca anlat. Sonra Brief A'daki Etsy yükleme setini (en fazla 5 dosya, her biri 20 MB'den küçük) içeren TEK bir indirme zip'i ver ki hepsini bir kerede indireyim. Kod çalıştıramıyor ya da dosya oluşturamıyorsan bunu adımın başında Türkçe söyle, eksiksiz dosya içeriğini (ör. PDF olarak kaydedebileceğim baskıya hazır HTML) ver ve otomatik kontrolü UNVERIFIED olarak işaretle; yapılmamış testlere PASS yazma ve ürünü satışa hazır sayma." });
   if (input.renderPrompt) steps.push({ title: "Ürün renderları", body: `Brief R'deki renderları her yanıtta bir tane olacak şekilde üret. 1. adımdaki ${spec} JSON'unun renklerini, stilini ve bitmiş ölçüsünü kullan; tam sayılar şemalarda ve çizimlerde kalır.` });
-  steps.push({ title: "İlan görselleri", body: claude
+  const codeVisuals = input.adVisuals.filter((visual) => visual.tool === "code").map((visual) => `C${visual.slot}`);
+  const imageVisuals = input.adVisuals.filter((visual) => visual.tool !== "code").map((visual) => `C${visual.slot}`);
+  // Kodla yapılan görseller tek Python betiğiyle aynı yanıtta biter; yalnız görsel aracı gerekenler yanıt başına birdir.
+  if (codeVisuals.length) {
+    const [first, ...scenes] = imageVisuals;
+    steps.push({ title: "İlan görselleri", body: claude
+      ? `${imageVisuals.join(", ")} için spec değerleri doldurulmuş İngilizce sahne promptlarını TEK yanıtta, alt alta ver (her birinin altında bir satır Türkçe açıklama; ${first} yalnız temalı zemindir, sayfasız ve yazısız). Aynı yanıtta ${codeVisuals.join(", ")} görsellerini gerçek dosyalardan TEK bir Python betiğiyle kodla üret ve başlık/rozetleri Brief C kurallarıyla ekle; zemine ihtiyaç duyanları (backdrop.png) ben ${first} zeminini yükleyince tamamla. Sahneler gelince gerçek sayfaları yerleştir, başlığı ekle ve hepsini listing-01.jpg sırasıyla tek zip'te ver. Başka satıcıların ya da internetin görsellerini asla kullanma; görsel aracına yazı, harf veya logo çizdirme.`
+      : `Bu adımı hızlı bitir: önce ${first} için görsel aracıyla yalnız temalı zemini üret (sayfasız, yazısız) ve backdrop.png olarak kaydet. Hemen ardından, AYNI yanıtta durmadan, ${first} kapağını ve ${codeVisuals.join(", ")} görsellerini gerçek dosyalardan TEK bir Python betiğiyle kodla üret; gerçek sayfaları yerleştir, başlık ve rozetleri Brief C kurallarıyla (Pillow) ekle. Sonra ${scenes.join(" ve ")} sahnelerini görsel aracıyla üret (araç izin veriyorsa art arda, vermiyorsa her yanıtta bir tane) ve başlıklarını kodla ekle. Görselde görünen ürün ${realProduct} olmalı; başka satıcıların ya da internetin görsellerini asla kullanma. Görsel aracına yazı, harf veya logo çizdirme (görsel modelleri yazıyı bozar). Son görsel bitince bütün ilan görsellerini listing-01.jpg sırasıyla TEK zip'te ver.` });
+  }
+  else steps.push({ title: "İlan görselleri", body: claude
     ? `Brief C'deki ilan görsellerini sırayla yap: önizleme, düz serim ve ölçü görsellerini ${input.renderPrompt ? "renderlardan" : "bu sohbette yapılan gerçek sayfalardan"} kodla kur; fotoğraf gibi her sahne için spec değerleri doldurulmuş İngilizce promptu ver ve altına bir satır Türkçe açıklama yaz, ben bir görsel aracında çalıştırayım. Başka satıcıların ya da internetin görsellerini asla kullanma. Görsel aracına yazı, harf veya logo çizdirme; ben görseli yükleyince başlığı Brief C'nin başlık kurallarıyla kodla sen eklersin.`
     : `Brief C'deki ilan görsellerini sırayla, her yanıtta bir tane üret. Görselde görünen ürün ${realProduct} olmalı. Onları görsel olarak göremiyorsan benden Türkçe olarak 2-3 ekran görüntüsü yüklememi iste; başka satıcıların ya da internetin görsellerini asla kullanma. Görsel aracına yazı, harf veya logo çizdirme (görsel modelleri yazıyı bozar); görsel bitince Brief C'deki başlığı, Brief C'nin başındaki başlık kurallarıyla kodla (Python Pillow) ekle ve bitmiş görseli ver.` });
-  if (input.pins?.length && pinVisual) steps.push({ title: "Pinterest görselleri", body: claude
+  if (input.pins?.length && pinVisual && pinVisual.tool === "code") steps.push({ title: "Pinterest görselleri", body: `Brief D'deki her pin için görsel aracını yeniden kullanmadan, C1'in backdrop.png zeminini ve gerçek sayfaları kodla 2:3 dikey yerleştir; her pinde sayfa seçimini ve yerleşimi değiştir ki pinler birbirinden farklı görünsün. Hepsini TEK betikte, aynı yanıtta üret; üstteki %30'a pinin başlığını Brief C'nin başlık kurallarıyla kodla ekle.` });
+  else if (input.pins?.length && pinVisual) steps.push({ title: "Pinterest görselleri", body: claude
     ? `Brief D'deki her pin için C${pinVisual.slot} görseline dayanan, spec değerleri doldurulmuş 2:3 dikey bir görsel promptu ver (İngilizce, altında bir satır Türkçe açıklama); pinler birbirinden farklı görünsün diye sahneyi her pinin konusuna göre değiştir ve üstteki %30'u başlık için boş bırak; görseli yükleyince başlığı kodla sen eklersin.`
     : `Brief D'deki her pin için C${pinVisual.slot} görseline dayanan 2:3 dikey bir görsel üret; pinler birbirinden farklı görünsün diye sahneyi her pinin konusuna göre değiştir. Üstteki %30'u boş bırak ve pinin başlığını Brief C'nin başlık kurallarıyla kodla ekle.` });
   steps.push({ title: "Son kontrol", body: input.qa?.length
@@ -107,7 +117,8 @@ export function buildMasterPrompt(input: MasterPromptInput): string {
   if (input.renderPrompt) {
     lines.push("", "## Brief R - product renders (one image per reply)", input.renderPrompt.trim());
   }
-  lines.push("", "## Brief C - listing images and separate marketing visuals (one per reply, in this order)",
+  const batched = input.adVisuals.some((visual) => visual.tool === "code");
+  lines.push("", `## Brief C - listing images and separate marketing visuals (${batched ? "[code] images in one Python run in the same reply; [image tool] scenes one per reply" : "one per reply, in this order"})`,
     // Kapak rakiplerden daha dikkat çekici olur (dev başlık, büyük sayı rozeti, temalı zengin zemin), ama rakiplerin
     // hataları yapılmaz: logo/marka/ünlü adı, sahte insan fotoğrafı, 5-6 rozetle kalabalık, okunmayan minik yazı, abartılı sayı.
     "Channel and delivery map: C1-C10 are the ten Etsy gallery images. Upload them in this order: C1, C4, C2, C3, C5, C6, C7, C8, C9, C10. Name them listing-01.jpg through listing-10.jpg in that upload order. C11 is the Pinterest reference and C12 is the social ad; save marketing assets separately, never as Etsy buyer download files or gallery substitutes.",
@@ -139,7 +150,7 @@ export function buildMasterPrompt(input: MasterPromptInput): string {
     "- Decorations never cover the product, the headline, a badge or any text, and the real product stays the hero, unchanged.",
     "- No characters, mascots, animals, logos, app icons or words in the decorations; check the finished image at thumbnail size and remove any decoration that touches the product or the text.");
   for (const visual of input.adVisuals) {
-    lines.push(`### C${visual.slot}. ${visual.titleEn} - ${aspectEn(visual.aspect)}`, `Used for: ${visual.useEn}${visual.overlay ? `. Headline (add in code): "${visual.overlay}"` : ""}`, visual.prompt, "");
+    lines.push(`### C${visual.slot}. ${visual.titleEn} - ${aspectEn(visual.aspect)}${batched ? ` [${visual.tool === "code" ? "code" : "image tool"}]` : ""}`, `Used for: ${visual.useEn}${visual.overlay ? `. Headline (add in code): "${visual.overlay}"` : ""}`, visual.prompt, "");
   }
   if (input.pins?.length) {
     lines.push("## Brief D - Pinterest pins");

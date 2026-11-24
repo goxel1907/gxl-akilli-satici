@@ -2,6 +2,7 @@ import { etsyRequest, EtsyIntegrationError, type EtsyRuntimeEnv } from "./etsy.j
 import { inferPrintableKind, normalizeKeyword, scoreTrend, type PrintableKind } from "./etsy-trends.js";
 import { buildCompetition } from "./pattern-seed.js";
 import { buildMarketStrategy } from "./market-strategy.js";
+import { planCoverColor } from "./color-standout.js";
 
 type ResearchProduct = { kind: PrintableKind; productType: string; keyword?: string; pageCount?: number; competitorLinks?: string };
 export function competitorIds(value = ""): string[] {
@@ -77,6 +78,8 @@ export async function researchPrintableMarket(env: EtsyRuntimeEnv, input: Resear
   const competition = buildCompetition(result, input.kind, input.pageCount, []);
   if (!competition.launchPriceUsd) throw new EtsyIntegrationError("VALIDATION_FAILED", "Karşılaştırılabilir rakip fiyatı alınamadı. Başka arama deneyin.", 400);
   const marketBriefEn = `Fresh product-matched Etsy sample for ${JSON.stringify(keyword)}; checked ${result.scannedAt}; ${result.strategy.sampleSize} eligible digital listings. Comparable USD median: ${result.strategy.pricing.medianUsd.toFixed(2)} USD. Candidate launch price: ${competition.launchPriceUsd.toFixed(2)} USD (heuristic test, not an optimal-price claim). Observations are titles/tags, not verified sales or buyer preferences.`;
-  return { keyword, scannedAt: result.scannedAt, sampleSize: result.strategy.sampleSize, selectedIds, strategy: result.strategy, marketBriefEn, competition, trendTags: result.topTags.map(item => item.tag),
+  // Rakiplerin başlık ve etiketlerindeki renkler: kapak zemini bunlardan ayrışan doygun bir renkle yapılır.
+  const colorPlan = planCoverColor({ competitorTexts: comparable.map(row => `${String(row.title || "")} ${Array.isArray(row.tags) ? row.tags.join(" ") : ""}`), theme: `${keyword} ${input.productType}` });
+  return { keyword, scannedAt: result.scannedAt, sampleSize: result.strategy.sampleSize, selectedIds, strategy: result.strategy, marketBriefEn, competition, colorPlan, trendTags: result.topTags.map(item => item.tag),
     noteTr: "Etsy aramasındaki aynı tür ve konuda eşleştirilen dijital ilan örneklemidir. Favori ve ilan sayıları satış değildir; fiyatlar gözlenen örnekleme dayanır." };
 }

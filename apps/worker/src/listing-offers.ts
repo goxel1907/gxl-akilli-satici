@@ -66,7 +66,7 @@ export async function createListingOffers(env:EtsyRuntimeEnv,store:OfferStore|un
       const recommendation=await recommendProduct(input,research,store);
       if(recommendation.requiresNewTopic)continue;
       const budget=recommendation.contentBudget;
-      input={...input,pageCount:input.pageCount?budget.effective:budget.suggested,priceUsd:research.competition.launchPriceUsd,trendTags:research.trendTags,referenceNotes:research.marketBriefEn,creativeDirection:recommendation.directionEn,seed:crypto.randomUUID(),avoidNames:usedNames};
+      input={...input,pageCount:input.pageCount?budget.effective:budget.suggested,priceUsd:research.competition.launchPriceUsd,trendTags:research.trendTags,coverColor:research.colorPlan.coverColor,coverHex:research.colorPlan.coverHex,crowdedColors:research.colorPlan.crowded,referenceNotes:research.marketBriefEn,creativeDirection:recommendation.directionEn,seed:crypto.randomUUID(),avoidNames:usedNames};
       budget.effective=input.pageCount!;
       const blueprint=scopePlan(input);
       const brief=buildPrintableBrief(input),listing=buildPrintableListing(input,brief.name);

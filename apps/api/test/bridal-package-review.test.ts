@@ -29,7 +29,8 @@ test("gallery delivery has ten Etsy visuals and separately labeled marketing ass
   assert.equal(brief.adVisuals.find(visual => visual.channel === "pinterest")?.slot, 11);
   assert.equal(brief.adVisuals.find(visual => visual.channel === "social")?.slot, 12);
   assert.match(brief.masterPrompt, /C1, C4, C2, C3, C5, C6, C7, C8, C9, C10/);
-  assert.match(brief.masterPrompt, /C11 görseline/);
+  assert.match(brief.masterPrompt, /C1'in backdrop\.png zeminini/);
+  assert.ok(brief.adVisuals.filter(visual => visual.tool === "image").length <= 3, "only the cover backdrop and two scenes need the image tool");
   assert.match(brief.adVisuals[0].overlay!, /10 CORE GAME PAGES/);
   assert.doesNotMatch(brief.masterPrompt, /largest outside traffic|best-selling Etsy covers/);
 });
