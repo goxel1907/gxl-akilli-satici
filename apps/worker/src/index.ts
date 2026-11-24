@@ -572,7 +572,7 @@ export async function handleRequest(request: Request, env: Env, context?: {waitU
         budget.effective = input.pageCount!;
         recommendation.productionBriefEn = recommendation.productionBriefEn.replace(/Core scope: \d+/,`Core scope: ${input.pageCount}`);
       }
-      if (research) input = { ...input, priceUsd: research.competition.launchPriceUsd, trendTags: research.trendTags, referenceNotes: `${research.marketBriefEn}${input.referenceNotes && !/^(?:Etsy market brief|Fresh product-matched Etsy sample)/i.test(input.referenceNotes.trim()) ? `\nSeller design notes (not independent market evidence): ${input.referenceNotes}` : ""}` };
+      if (research) input = { ...input, priceUsd: research.competition.launchPriceUsd, trendTags: research.trendTags, coverColor: research.colorPlan.coverColor, coverHex: research.colorPlan.coverHex, crowdedColors: research.colorPlan.crowded, referenceNotes: `${research.marketBriefEn}${input.referenceNotes && !/^(?:Etsy market brief|Fresh product-matched Etsy sample)/i.test(input.referenceNotes.trim()) ? `\nSeller design notes (not independent market evidence): ${input.referenceNotes}` : ""}` };
       const store = env.ETSY_OAUTH as unknown as TrendStore | undefined;
       const usedNames = await readUsedNames(store);
       const brief = buildPrintableBrief({ ...input, avoidNames: usedNames });

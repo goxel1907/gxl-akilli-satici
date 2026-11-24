@@ -117,20 +117,20 @@ const COLOR_LEXICON: Array<{ name: string; hue?: number }> = [
 const STYLE_PALETTES: Array<{ pattern: RegExp; label: string; palettes: string[][] }> = [
   // Önce bayram ve mevsim stilleri: "christmas ephemera" Noel paletini alır, vintage veya dark academia paletini değil.
   // Her stilde birkaç palet var; aynı aramada tekrar üretilen ürünler farklı görünür.
-  { pattern: /christmas|holiday|xmas|noel/, label: "holiday", palettes: [["cherry red", "forest green", "ivory"], ["burgundy", "sage green", "gold"], ["wine", "olive green", "cream"], ["dusty blue", "silver", "ivory"]] },
-  { pattern: /halloween|spooky|ghost|pumpkin/, label: "halloween", palettes: [["burnt orange", "black", "cream"], ["plum", "orange", "charcoal"], ["rust", "olive", "oatmeal"]] },
-  { pattern: /fall|autumn|thanksgiving|harvest/, label: "autumn", palettes: [["rust", "mustard", "oatmeal"], ["burnt orange", "olive", "cream"], ["terracotta", "camel", "ivory"]] },
-  { pattern: /winter|snow/, label: "winter", palettes: [["dusty blue", "silver", "white"], ["navy", "ivory", "silver"], ["sage green", "white", "camel"]] },
-  { pattern: /easter|spring|pastel|bunny/, label: "spring", palettes: [["lavender", "mint", "butter yellow"], ["baby pink", "sky blue", "cream"], ["sage green", "blush", "ivory"]] },
-  { pattern: /valentine|romantic|heart|coquette|bow/, label: "romantic", palettes: [["blush", "cherry red", "ivory"], ["dusty rose", "wine", "cream"], ["baby pink", "burgundy", "white"]] },
-  { pattern: /coastal|beach|ocean|summer|nautical/, label: "coastal", palettes: [["navy", "sand", "white"], ["aqua", "coral", "ivory"], ["dusty blue", "sand", "cream"]] },
+  { pattern: /christmas|holiday|xmas|noel/, label: "holiday", palettes: [["cherry red", "forest green", "ivory"], ["burgundy", "sage green", "gold"], ["wine", "olive green", "cream"], ["dusty blue", "silver", "ivory"], ["emerald", "cherry red", "gold"], ["navy", "gold", "cherry red"]] },
+  { pattern: /halloween|spooky|ghost|pumpkin/, label: "halloween", palettes: [["burnt orange", "black", "cream"], ["plum", "orange", "charcoal"], ["rust", "olive", "oatmeal"], ["purple", "orange", "black"]] },
+  { pattern: /fall|autumn|thanksgiving|harvest/, label: "autumn", palettes: [["rust", "mustard", "oatmeal"], ["burnt orange", "olive", "cream"], ["terracotta", "camel", "ivory"], ["burgundy", "mustard", "teal"]] },
+  { pattern: /winter|snow/, label: "winter", palettes: [["dusty blue", "silver", "white"], ["navy", "ivory", "silver"], ["sage green", "white", "camel"], ["cobalt", "white", "silver"]] },
+  { pattern: /easter|spring|pastel|bunny/, label: "spring", palettes: [["lavender", "mint", "butter yellow"], ["baby pink", "sky blue", "cream"], ["sage green", "blush", "ivory"], ["coral", "teal", "butter yellow"]] },
+  { pattern: /valentine|romantic|heart|coquette|bow/, label: "romantic", palettes: [["blush", "cherry red", "ivory"], ["dusty rose", "wine", "cream"], ["baby pink", "burgundy", "white"], ["hot pink", "cherry red", "white"]] },
+  { pattern: /coastal|beach|ocean|summer|nautical/, label: "coastal", palettes: [["navy", "sand", "white"], ["aqua", "coral", "ivory"], ["dusty blue", "sand", "cream"], ["cobalt", "coral", "white"]] },
   { pattern: /dark academia|gothic|grimoire|witch|occult/, label: "dark academia", palettes: [["burgundy", "forest green", "gold"], ["plum", "olive", "cream"], ["charcoal", "wine", "camel"]] },
-  { pattern: /botanical|floral|wildflower|garden|cottagecore|moss|mushroom|fern/, label: "botanical", palettes: [["sage green", "terracotta", "cream"], ["olive", "blush", "ivory"], ["forest green", "mustard", "oatmeal"], ["dusty rose", "sage green", "cream"]] },
-  { pattern: /boho|bohemian|desert|terracotta/, label: "boho", palettes: [["terracotta", "mustard", "cream"], ["rust", "sand", "sage"], ["blush", "camel", "olive"], ["burnt orange", "beige", "dusty rose"]] },
+  { pattern: /botanical|floral|wildflower|garden|cottagecore|moss|mushroom|fern/, label: "botanical", palettes: [["sage green", "terracotta", "cream"], ["olive", "blush", "ivory"], ["forest green", "mustard", "oatmeal"], ["dusty rose", "sage green", "cream"], ["emerald", "coral", "cream"], ["teal", "mustard", "ivory"]] },
+  { pattern: /boho|bohemian|desert|terracotta/, label: "boho", palettes: [["terracotta", "mustard", "cream"], ["rust", "sand", "sage"], ["blush", "camel", "olive"], ["burnt orange", "beige", "dusty rose"], ["teal", "burnt orange", "cream"]] },
   { pattern: /vintage|retro|antique|victorian|ephemera|nostalgic/, label: "vintage", palettes: [["dusty rose", "sand", "olive"], ["mustard", "teal", "cream"], ["rust", "dusty blue", "ivory"]] },
-  { pattern: /minimal|minimalist|modern|neutral|scandi|clean/, label: "minimalist", palettes: [["charcoal", "sand", "white"], ["black", "beige", "olive"], ["sage green", "oatmeal", "white"], ["dusty blue", "beige", "ivory"]] },
+  { pattern: /minimal|minimalist|modern|neutral|scandi|clean/, label: "minimalist", palettes: [["charcoal", "sand", "white"], ["black", "beige", "olive"], ["sage green", "oatmeal", "white"], ["dusty blue", "beige", "ivory"], ["cobalt", "white", "black"], ["emerald", "white", "black"]] },
   { pattern: /western|cowgirl|rodeo/, label: "western", palettes: [["rust", "tan", "denim"], ["terracotta", "camel", "cream"], ["burnt orange", "sand", "denim"]] },
-  { pattern: /kawaii|cute|rainbow|kids|whimsical/, label: "playful", palettes: [["baby pink", "mint", "butter yellow"], ["lavender", "peach", "sky blue"], ["coral", "aqua", "butter yellow"]] }
+  { pattern: /kawaii|cute|rainbow|kids|whimsical/, label: "playful", palettes: [["baby pink", "mint", "butter yellow"], ["lavender", "peach", "sky blue"], ["coral", "aqua", "butter yellow"], ["cobalt", "hot pink", "yellow"]] }
 ];
 // Hedef kitle: etiket ve başlıklarda geçen alıcı grupları.
 const AUDIENCE_TERMS: Array<[string, string]> = [["busy moms", "busy moms"], ["moms", "moms"], ["mom", "moms"], ["teachers", "teachers"], ["teacher", "teachers"], ["homeschool", "homeschool families"], ["toddlers", "toddlers"], ["toddler", "toddlers"], ["preschool", "preschoolers"], ["kids", "kids"], ["teens", "teens"], ["students", "students"], ["adults", "adults"], ["adult", "adults"], ["seniors", "seniors"], ["women", "women"], ["brides", "brides-to-be"], ["bride", "brides-to-be"], ["couples", "couples"], ["nurses", "nurses"], ["book lovers", "book lovers"], ["bookish", "book lovers"], ["readers", "book lovers"], ["beginners", "beginners"], ["crafters", "crafters"], ["journalers", "journalers"]];
@@ -411,17 +411,27 @@ function hueDistance(a: number, b: number): number {
 
 // Palet: trend rengi varsa korunur; eksik kalan renkler ton uyumuna göre tamamlanır ve
 // bu arama için daha önce kullanılmış paletler tekrar seçilmez.
-function buildPalette(trendColors: string[], random: () => number, usedPalettes: Set<string>, styleTexts: string[] = []): { colors: string[]; source: string } {
+function buildPalette(seenColors: string[], random: () => number, usedPalettes: Set<string>, styleTexts: string[] = [], differentiate = true): { colors: string[]; source: string } {
+  // Rakiplerde sık görülen renkler kopyalanmaz: yalnız aranan ifadede geçen renk (ör. "pink christmas") korunur,
+  // diğerleri "kalabalık" sayılır ve palet onlardan ayrışacak şekilde seçilir (hep aynı bej/adaçayı görünüm olmasın).
+  const keywordText = (styleTexts[0] || "").toLowerCase();
+  // Örgü/dikiş kalıbında iplik rengi alıcı tercihidir; orada trend rengi korunur.
+  const trendColors = differentiate ? seenColors.filter((name) => new RegExp(`\\b${name}\\b`).test(keywordText)) : seenColors;
+  const crowded = seenColors.filter((name) => !trendColors.includes(name));
+  const crowdedHues = crowded.map((name) => COLOR_LEXICON.find((color) => color.name === name)?.hue).filter((hue): hue is number => hue !== undefined);
+  const overlap = (palette: string[]) => palette.filter((name) => crowded.some((other) => other === name || other.includes(name) || name.includes(other))).length;
   const hasHue = trendColors.some((name) => COLOR_LEXICON.find((color) => color.name === name)?.hue !== undefined);
   if (!hasHue) {
     // Palet ürünün ana temasından gelir: en önemli ifadeden başlayarak ilk eşleşen stil kullanılır (stiller karıştırılmaz).
     const style = styleTexts.map((text) => STYLE_PALETTES.find((item) => item.pattern.test(text))).find(Boolean);
-    const options = style ? style.palettes.map((palette) => ({ palette, label: style.label })) : [];
+    const all = style ? style.palettes.map((palette) => ({ palette, label: style.label })) : [];
+    const least = all.length ? Math.min(...all.map((option) => overlap(option.palette))) : 0;
+    const options = all.filter((option) => overlap(option.palette) === least);
     if (options.length) {
       const start = Math.floor(random() * options.length);
       for (let offset = 0; offset < options.length; offset += 1) {
         const option = options[(start + offset) % options.length];
-        if (!usedPalettes.has([...option.palette].sort().join("|")) || offset === options.length - 1) return { colors: option.palette, source: `trendin ${option.label} stiline uygun palet` };
+        if (!usedPalettes.has([...option.palette].sort().join("|")) || offset === options.length - 1) return { colors: option.palette, source: `trendin ${option.label} stiline uygun palet${crowded.length ? `; rakiplerde sık görülen ${crowded.slice(0, 3).join(", ")} renklerinden ayrışır` : ""}` };
       }
     }
   }
@@ -433,7 +443,8 @@ function buildPalette(trendColors: string[], random: () => number, usedPalettes:
   const pick = <T>(list: T[]) => list[Math.floor(random() * list.length)];
   let best: string[] = [];
   for (let attempt = 0; attempt < 24; attempt += 1) {
-    const base = hues[0] ? lexicon(hues[0])! : pick(allChromatic);
+    const fresh = allChromatic.filter((color) => crowdedHues.every((hue) => hueDistance(hue, color.hue!) >= 50));
+    const base = hues[0] ? lexicon(hues[0])! : pick(fresh.length ? fresh : allChromatic);
     const companions = allChromatic.filter((color) => color.name !== base.name && !color.name.includes(base.name) && !base.name.includes(color.name) && (hueDistance(color.hue!, base.hue!) >= 100 || (hueDistance(color.hue!, base.hue!) >= 25 && hueDistance(color.hue!, base.hue!) <= 60)));
     const second = hues[1] && attempt === 0 ? hues[1] : (pick(companions) || pick(allChromatic)).name;
     const third = neutrals[0] && attempt < 2 ? neutrals[0] : pick(allNeutral);
@@ -441,7 +452,7 @@ function buildPalette(trendColors: string[], random: () => number, usedPalettes:
     best = palette;
     if (!usedPalettes.has([...palette].sort().join("|"))) break;
   }
-  const source = hues.length >= 2 ? "trend renkleri ve yeni tamamlayıcı" : hues.length === 1 ? "trend rengi ve uyumlu yeni renkler" : "trendde renk sinyali yok; bu arama için kullanılmamış yeni palet";
+  const source = hues.length >= 2 ? "aranan renkler ve yeni tamamlayıcı" : hues.length === 1 ? "aranan renk ve uyumlu yeni renkler" : crowded.length ? `rakiplerde sık görülen ${crowded.slice(0, 3).join(", ")} renklerinden ayrışan yeni palet` : "trendde renk sinyali yok; bu arama için kullanılmamış yeni palet";
   return { colors: best, source };
 }
 
@@ -646,7 +657,7 @@ export function buildPatternSeed(keywordInput: string, result: TrendResult | und
   const descriptors = mineLexicon(texts, COLOR_DESCRIPTORS).map(([name]) => name);
   // ABD yazımı: "grey" → "gray".
   const trendColors = colorRank.map(([name]) => name.replace(/\bgrey\b/, "gray")).filter((name, index, list) => !list.some((other, otherIndex) => otherIndex !== index && other.includes(name) && other !== name)).slice(0, 4);
-  const palette = buildPalette(trendColors, random, new Set(history.palettes), [keyword, ...chosen.features, ...risingFeatures, ...descriptors]);
+  const palette = buildPalette(trendColors, random, new Set(history.palettes), [keyword, ...chosen.features, ...risingFeatures, ...descriptors], studio !== "pattern");
   const headPattern = new RegExp(`\\b${product.head.replace(/[^a-z0-9]/g, "")}s?\\b`);
   const titleTexts = (result?.examples || []).map((example) => ({ text: String(example.title || ""), weight: 1 }));
   const productTexts = [...texts, ...titleTexts].filter((item) => headPattern.test(clean(item.text)));

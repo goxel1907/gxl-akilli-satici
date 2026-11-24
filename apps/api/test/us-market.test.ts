@@ -142,7 +142,8 @@ test("every category's package asks for an eye-catching cover and bans the compe
       assert.match(prompt, /No logos or app icons of any kind/, kind);
       assert.match(prompt, /No photos of people \(real or AI-made\) as the hero/, kind);
       assert.match(prompt, /No inflated or vague numbers/, kind);
-      assert.match(prompt, /rich, saturated themed backdrop/, kind);
+      assert.match(prompt, /rich, saturated [^.]*themed backdrop/, kind);
+      assert.match(prompt, /stand out in Etsy search/, kind);
       assert.doesNotMatch(prompt, /soft neutral tones/, kind);
     }
   }

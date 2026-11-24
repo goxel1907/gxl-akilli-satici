@@ -14,6 +14,8 @@ export interface AdVisual {
   aspect: string;
   overlay?: string;
   prompt: string;
+  // "code": Python ile gerçek dosyalardan, aynı yanıtta toplu yapılır; "image": görsel aracı gerekir (yanıt başına bir tane).
+  tool?: "code" | "image";
 }
 
 export interface AdVisualInput {
@@ -28,6 +30,10 @@ export interface AdVisualInput {
   seed?: string;
   // Yalnız kâğıt paketi (süs kesimi yok): sahnelerde ephemera gösterilmez.
   papersOnly?: boolean;
+  // Rakiplerden ayrışan kapak zemini (color-standout.ts) ve rakiplerin sık kullandığı renkler.
+  coverColor?: string;
+  coverHex?: string;
+  crowdedColors?: string[];
 }
 
 const cap = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
@@ -272,8 +278,11 @@ export function buildAdVisuals(input: AdVisualInput): AdVisual[] {
     ? `the finished ${input.productType} on a solid backdrop in one palette color, shot top-down`
     : "a top-down flat lay of the pages on a solid backdrop in one palette color";
 
+  const crowded = (input.crowdedColors || []).filter(Boolean);
+  const coverTone = input.coverColor ? `${input.coverColor}${input.coverHex ? ` (${input.coverHex})` : ""}` : "deep, saturated theme-color";
+  const coverBackdrop = `but on a rich, saturated ${coverTone} themed backdrop that fits the product's theme and season, with layered theme props and soft bokeh at the edges; this backdrop color was chosen to stand out in Etsy search${crowded.length ? `, where most competing covers use ${crowded.join(", ")}, so never use those as the main background` : ""}; never a plain desk, an empty room or a beige background.${isPattern ? "" : " Fastest honest method: make only this themed backdrop with the image tool (props, color and bokeh, with an empty surface in the middle and no pages or text), save it as backdrop.png, then paste the real pages into it in code with a soft drop shadow. The Pinterest and social images reuse backdrop.png."}`;
   const visuals: Array<Omit<AdVisual, "slot">> = [
-    { titleTr: "Kapak (ana görsel)", useTr: "Etsy arama sonuçlarındaki küçük görsel; tıklanma oranını belirler", titleEn: "Cover (main image)", useEn: "Etsy search thumbnail; it decides the click-through rate", aspect: "4:3 yatay · 3000x2250 px", overlay: /PAGES$/.test(shortName) && input.pageCount ? `${input.pageCount} ${shortName}` : input.kind === "resume" ? `${shortName} · EDITABLE DOCX` : [shortName, pages].filter(Boolean).join(" · "), prompt: `${base} Hero shot: ${subject}${highlight} as a fanned stack, an angled spread or a large screen (whichever fits this product), styled with the props of this scene: ${pickScene(0)}, but on a rich, saturated themed backdrop that fits the product's theme and season, in the palette's deepest color, with layered theme props and soft bokeh at the edges; never a plain desk, an empty room or a beige background. The product fills about 60% of the frame and is instantly recognizable at thumbnail size. ${space} Also leave one lower corner clear for a round count badge added in code.` },
+    { titleTr: "Kapak (ana görsel)", useTr: "Etsy arama sonuçlarındaki küçük görsel; tıklanma oranını belirler", titleEn: "Cover (main image)", useEn: "Etsy search thumbnail; it decides the click-through rate", aspect: "4:3 yatay · 3000x2250 px", overlay: /PAGES$/.test(shortName) && input.pageCount ? `${input.pageCount} ${shortName}` : input.kind === "resume" ? `${shortName} · EDITABLE DOCX` : [shortName, pages].filter(Boolean).join(" · "), prompt: `${base} Hero shot: ${subject}${highlight} as a fanned stack, an angled spread or a large screen (whichever fits this product), styled with the props of this scene: ${pickScene(0)}, ${coverBackdrop} The product fills about 60% of the frame and is instantly recognizable at thumbnail size. ${space} Also leave one lower corner clear for a round count badge added in code.` },
     { titleTr: "Kullanım sahnesi", useTr: "Etsy galerisi; gerçek içerik önizlemesinden sonra alıcının ürünü kendi hayatında hayal etmesi için", titleEn: "Lifestyle scene", useEn: "Etsy gallery after the actual content preview; helps buyers picture the product in their own life", aspect: "4:3 yatay · 3000x2250 px", prompt: `${base} Lifestyle scene: ${subject}, ${pickScene(1)}. Candid, aspirational, uncluttered.` },
     { titleTr: "Yakın çekim kalite detayı", useTr: "Etsy galerisi; baskı/ilmek kalitesini gösterir", titleEn: "Close-up quality detail", useEn: isPattern ? "Etsy gallery; shows the finished detail" : input.kind === "digital_planner" || input.kind === "slides" ? "Etsy gallery; shows the crisp detail on screen" : input.kind === "resume" ? "Etsy gallery; shows the clean layout" : "Etsy gallery; shows print quality", aspect: "4:3 yatay · 3000x2250 px", prompt: `${base} Macro close-up of ${closeUp}, ${subject}, razor-sharp focus, gentle side light.` },
     { titleTr: isPattern ? "PDF içeriği" : "Neler var? (içerik kolajı)", useTr: "Etsy galerisi; alıcının ne aldığını tek bakışta görmesi için", titleEn: isPattern ? "What is in the PDF" : "What's included (content collage)", useEn: "Etsy gallery; shows at a glance what the buyer gets", aspect: "4:3 yatay · 3000x2250 px", overlay: isPattern ? PATTERN_INCLUDED[input.craft!] : `WHAT'S INCLUDED${pages ? ` · ${pages}` : ""}`, prompt: !isPattern ? previewPrompt : `${base} Flat lay grid of ${isPattern ? "printed pattern pages and a tablet showing the PDF (the pattern pages may show their own printed text), next to the finished piece and materials" : input.kind === "wall_art" ? `all ${input.pageCount || 3} prints of the set side by side` : input.kind === "digital_planner" ? `${includedRange} different planner pages shown on tablet screens` : `${includedRange} different printed pages from the product arranged neatly`} on a light linen surface, top-down, even spacing. ${space}` },
@@ -287,5 +296,21 @@ export function buildAdVisuals(input: AdVisualInput): AdVisual[] {
     { titleTr: "Pinterest pini", useTr: "Pinterest; ölçülerek denenebilecek dış trafik kanalı", titleEn: "Pinterest pin", useEn: "Pinterest; an external traffic channel to test and measure", aspect: "2:3 dikey · 1000x1500 px", overlay: `${input.productType.toUpperCase()}${input.features?.[0] ? ` · ${input.features[0].toUpperCase()}` : ""}`, prompt: `${base} Vertical pin composition: ${subject}${highlight}, ${pickScene(3)}, styled from slightly above. Leave a clean band across the top 30% for a bold headline.` },
     { titleTr: "Instagram / Facebook reklamı", useTr: "Instagram akışı, hikâye ve Facebook reklamı; ilk saniyede dikkat çeker", titleEn: "Instagram / Facebook ad", useEn: "Instagram feed, story and Facebook ad; must stop the scroll in the first second", aspect: "1:1 kare · 1080x1080 px", overlay: isPattern ? "PDF PATTERN · INSTANT DOWNLOAD" : "INSTANT DOWNLOAD", prompt: `${base} Bold, scroll-stopping ad image: ${subject} as the hero, ${adScene}, vivid but on-palette accent prop, strong contrast. ${space} In the next reply, make the same scene as a 9:16 story image (1080x1920 px).` }
   ];
-  return visuals.map((visual, index) => ({ slot: index + 1, channel: index < 10 ? "etsy" : index === 10 ? "pinterest" : "social", ...visual }));
+  // Basılı/dijital ürünlerde yalnız kapak zemini ve iki kullanım sahnesi görsel aracıyla yapılır; geri kalanı gerçek
+  // dosyalardan kodla, aynı yanıtta toplu üretilir. Böylece sohbet her görselde durup "devam" istemez ve görseller gerçek dosyayı gösterir.
+  if (!isPattern) {
+    const code = "Make this image in code, not with an image tool, from the real final files (keep every page unchanged). Do not add any new text, letters, logos or watermarks except the headline and badges described here. Never use another seller's images.";
+    const unit = input.kind === "slides" ? "slide" : input.kind === "spreadsheet" ? "tab" : input.kind === "wall_art" ? "print" : input.kind === "wallpaper" ? "wallpaper" : input.kind === "app_icons" ? "icon sheet" : "page";
+    const screen = input.kind === "digital_planner" || input.kind === "slides" || input.kind === "spreadsheet" || input.kind === "wallpaper" || input.kind === "app_icons";
+    const sizes = screen
+      ? "a phone, a tablet and a laptop screen as simple flat device outlines (no logos)"
+      : input.kind === "wall_art" ? "each included print size from the spec as flat frame outlines" : "each included paper size from the spec as flat sheet outlines";
+    visuals[2] = { ...visuals[2], prompt: `${code} Crop the most detailed area of one real ${unit} at 200-300% zoom so the fine detail is sharp, and place it on a clean palette-color background with a soft drop shadow and a thin frame. ${space}` };
+    visuals[4] = { ...visuals[4], prompt: `${code} Draw ${sizes} at true relative scale on a light palette background, paste the real ${unit} inside each one, and label each with its size in the heading font. ${space} No logos.` };
+    visuals[6] = { ...visuals[6], prompt: `${code} ${visuals[6].prompt.slice(base.length + 1)} Draw any phones, tablets, screens or frames as simple flat outlines in code, no logos.` };
+    visuals[7] = { ...visuals[7], prompt: `${code} Three equal numbered panels with simple flat icons drawn in code (a download arrow, ${screen ? "a screen" : input.kind === "wall_art" ? "a printer and a frame" : "a printer"} and the finished use), each above a small preview of the real ${unit}s; the numbers match the headline. No logos. ${space}` };
+    visuals[10] = { ...visuals[10], prompt: `${code} Reuse backdrop.png from C1, cropped or extended to 2:3, paste the real ${unit}s large in the lower 70% with a soft drop shadow, and keep the top 30% clean for the headline. If backdrop.png is missing, use the C2 lifestyle image.` };
+    visuals[11] = { ...visuals[11], prompt: `${code} Bold, scroll-stopping ad: reuse backdrop.png from C1 at 1:1, paste the real ${unit}s as the hero with strong contrast and a soft drop shadow. ${space} In the same run, make the same layout as a 9:16 story image (1080x1920 px).` };
+  }
+  return visuals.map((visual, index) => ({ slot: index + 1, channel: index < 10 ? "etsy" : index === 10 ? "pinterest" : "social", ...visual, tool: /^(?:Make|Build) this image in code/.test(visual.prompt) ? "code" : "image" }));
 }

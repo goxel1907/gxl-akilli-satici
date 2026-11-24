@@ -4,6 +4,7 @@ import { EtsyIntegrationError } from "./etsy.js";
 import type { MarketStrategy } from "./market-strategy.js";
 import { generateStructuredObject, hasAiProvider, type AiRuntimeEnv } from "../../api/src/structured-ai.js";
 import { buildAdVisuals, type AdVisual } from "./ad-visuals.js";
+import { planCoverColor } from "./color-standout.js";
 import { calendarYear, type PrintableKind } from "./etsy-trends.js";
 import { hasBrandName, isIpRisky } from "./ip-guard.js";
 import { buildMasterPrompt } from "./master-prompt.js";
@@ -38,6 +39,10 @@ export interface PrintablePlanInput {
   priceUsd?: number;
   // Satıcının kullandığı yapay zekâ (ChatGPT veya Claude); paket ona göre yazılır.
   assistant?: "chatgpt" | "claude";
+  // Kapak zemini: rakiplerin sık kullandığı renklerden (crowdedColors) ayrışan doygun renk (color-standout.ts).
+  coverColor?: string;
+  coverHex?: string;
+  crowdedColors?: string[];
 }
 
 export interface PrintableBrief {
@@ -456,7 +461,10 @@ export function normalizePrintablePlanInput(raw: Record<string, unknown>): Print
     seed: cleanText(raw.seed, 60) || undefined,
     aiAssisted: raw.aiAssisted !== false,
     ...(Number(raw.priceUsd) > 0 ? { priceUsd: Math.round(Number(raw.priceUsd) * 100) / 100 } : {}),
-    ...(raw.assistant === "chatgpt" || raw.assistant === "claude" ? { assistant: raw.assistant } : {})
+    ...(raw.assistant === "chatgpt" || raw.assistant === "claude" ? { assistant: raw.assistant } : {}),
+    ...(cleanText(raw.coverColor, 30) ? { coverColor: cleanText(raw.coverColor, 30).toLowerCase() } : {}),
+    ...(/^#[0-9a-f]{6}$/i.test(String(raw.coverHex || "")) ? { coverHex: String(raw.coverHex).toUpperCase() } : {}),
+    ...(cleanList(raw.crowdedColors, 5, 30).length ? { crowdedColors: cleanList(raw.crowdedColors, 5, 30).map((item) => item.toLowerCase()) } : {})
   };
 }
 
@@ -1024,7 +1032,7 @@ function originalityPlan(prepared: Prepared, profile: KindProfile): { tr: string
         : "Use only fonts licensed for commercial use (for example Google Fonts) and list them; all text and artwork must be your own.",
       "Never use another seller's Etsy listing, photos or Pinterest pins, or any copyrighted image, as a reference or input; describe a style in words only.",
       "Never use trademarked names, characters, celebrities, logos or brand styles.",
-      input.colors?.length ? `Use this palette: ${input.colors.join(", ")}.` : "Propose a fresh palette with color names and hex codes."
+      input.colors?.length ? `Use this palette: ${input.colors.join(", ")}.` : `Propose a fresh palette with color names and hex codes${input.crowdedColors?.length ? ` that is clearly different from the colors most competing listings use (${input.crowdedColors.join(", ")})` : ""}.`
     ]
   };
 }
@@ -1197,6 +1205,7 @@ function buildPdfPrompt(prepared: Prepared, profile: KindProfile, name: string, 
       : `- Size: ${pages} core pages; the cover, ${input.kind === "digital_planner" ? "import guide" : "how-to-print"}, thank-you and license pages come on top`,
     `- Formats (deliver each as its own file): ${formats.join(", ")}`,
     `- Palette: ${input.colors?.length ? input.colors.join(", ") : "propose one with hex codes"}`,
+    ...(input.coverColor ? [`- Cover backdrop: ${input.coverColor}${input.coverHex ? ` (${input.coverHex})` : ""}, chosen to stand out in Etsy search${input.crowdedColors?.length ? ` where competing covers mostly use ${input.crowdedColors.join(", ")}` : ""}`] : []),
     // "moody botanical and botanical" yazılmaz: başka bir özelliğin içinde geçen özellik listede tekrar edilmez.
     ...(features.length ? [`- Selected design terms (not verified buyer preferences): ${joinWords(distinctFeatures(features).map(proseCase))}`] : []),
     // Tema satırı yalnız gerçek bir tema/stil varsa onu adlandırır ("led by daily" gibi anlamsız tema yazılmaz).
@@ -1523,7 +1532,8 @@ export function buildPrintableBrief(raw: PrintablePlanInput): PrintableBrief {
   const pdfPrompt = buildPdfPrompt(prepared, profile, name, rules.en, art) + (input.creativeDirection ? `\n\n## Product-specific creative direction\n${input.creativeDirection}\nKeep every deliverable and count aligned with the authoritative spec; do not promise features that cannot be completed.` : "");
   // Görsel promptuna yalnız görünen özellikler girer ("iPad", "daily" gibi içerik kelimeleri değil).
   const visibleFeatures = (input.trendFeatures || []).filter((feature) => themeFamilies(feature).size || art.subjects.some((subject) => subject.toLowerCase().includes(feature)));
-  const adVisuals = buildAdVisuals({ kind: input.kind, productType: input.productType, name, colors: input.colors, features: visibleFeatures, formats, pageCount: pages, seed: input.seed, papersOnly: input.kind === "paper_craft" && paperMode(input.productType) === "papers" });
+  const cover = input.coverColor && input.coverHex ? { coverColor: input.coverColor, coverHex: input.coverHex, crowded: input.crowdedColors || [] } : planCoverColor({ theme: `${input.keyword || ""} ${input.productType} ${(input.trendFeatures || []).join(" ")}`, palette: input.colors, avoid: input.crowdedColors });
+  const adVisuals = buildAdVisuals({ kind: input.kind, productType: input.productType, name, colors: input.colors, features: visibleFeatures, formats, pageCount: pages, seed: input.seed, papersOnly: input.kind === "paper_craft" && paperMode(input.productType) === "papers", coverColor: cover.coverColor, coverHex: cover.coverHex, crowdedColors: cover.crowded });
   const pins = buildPins(prepared, name, art);
   return {
     name,

@@ -81,3 +81,8 @@ Güncelleme: 9 Kasım 2026
   (Cloudflare işlem süresi sınırı). Artık denetim parça yüklemede bir kez; 2.5 MB üstünde hafif (ZIP içerik listesi, tehlikeli
   dosya, PDF sonu), sonuç parça kaydında saklanır; kayıt dosyayı tek okuyup tek yazar. KV günlük sınırı dolunca açık mesaj
   (STORAGE_LIMIT). Telefon parçayı bir kez yeniden dener ve "Dosya 3/5 gönderiliyor" gösterir.
+- 24 Kasım (2): Dijital kapak rakiplerden ayrışır. color-standout.ts rakip başlık/etiketlerindeki renkleri sayar (her ilan bir kez);
+  kapak zemini bunlardan ton olarak uzak, temaya uygun doygun renk (hex ile) olur. Seed paleti rakip renklerini kopyalamaz
+  (yalnız aranan ifadedeki renk kalır; örgü kalıplarında iplik rengi korunur), stillere canlı paletler eklendi.
+  Hız: basılı/dijital türlerde yalnız C1 zemini, C2 ve C6 görsel aracıyla; C3-C5, C7-C12 gerçek dosyalardan tek Python
+  betiğiyle aynı yanıtta (AdVisual.tool). Pin/reklam C1 backdrop.png'yi yeniden kullanır.
