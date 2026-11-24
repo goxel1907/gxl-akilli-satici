@@ -271,6 +271,16 @@ test("real screen buttons drive Trend → Studio → Digital → draft → verif
     assert.equal(visible(renderer.root.findByProps({testID:"saved-production-agents"})),true);
     assert.ok(renderer.root.findAllByType("Text" as any).some(node => visible(node) && text(node) === "Sırada: Üretim ajanı (ChatGPT)"));
     assert.ok(renderer.root.findAllByType("Text" as any).some(node => visible(node) && /^Ajan hattı · 6\/15 tamam/.test(text(node))));
+    // Üretimi Gemini'ye ver: paket Gemini için yeniden yazılır, ürün adı ve başlık aynı kalır.
+    await tap(renderer,/^Gemini$/);
+    await waitFor(()=>buttons(renderer,/^Tek paketi Gemini’ye gönder$/).length>=1);
+    const switched=JSON.parse(ui.storage.get(PRINTABLE_WORKSPACE_KEY)!);
+    assert.equal(switched.input.assistant,"gemini"); assert.equal(switched.plan.brief.name,plan.brief.name); assert.equal(switched.plan.listing.title,plan.listing.title);
+    assert.match(switched.plan.brief.masterPrompt,/- Gemini: görselleri yerleşik görsel aracınla üret/);
+    assert.match(switched.plan.brief.masterPrompt,/## Evidence-based market strategy/,"research sections are kept");
+    assert.ok(renderer.root.findAllByType("Text" as any).some(node=>visible(node)&&text(node)==="Sırada: Üretim ajanı (Gemini)"));
+    await tap(renderer,/^ChatGPT$/);
+    await waitFor(()=>buttons(renderer,/^Tek paketi ChatGPT’ye gönder$/).length>=1);
     await tap(renderer,/^Dosyalarım hazır, ajanlara ver →$/);
     assert.equal(field(renderer, /^Ürün adı$/).props.value, plan.brief.name);
     assert.equal(field(renderer, /^Başlık \(/).props.value, plan.listing.title);

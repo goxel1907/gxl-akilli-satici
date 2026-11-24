@@ -5,7 +5,8 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import ListingMascot from "./ListingMascot";
 import {PRINTABLE_WORKSPACE_KEY,parsePrintableWorkspace,type PrintableWorkspace} from "./workflow-state";
 import {assistantAcc,assistantHome,assistantName,assistantTo} from "./assistants";
-import {AgentPipeline} from "./AgentTeam";
+import {AgentPipeline,useAgentTeam} from "./AgentTeam";
+import {ASSISTANTS,isAssistant} from "./assistants";
 import {markPublishedFromEtsy,PRODUCTION_TRACKER_KEY,PRODUCTION_STAGES,EXTERNAL_STAGES,productionId,readProductionRecords,rememberProduction,changeProduction,syncProductionProduct,parseProductionReceipt,productionTrackingPrompt,productionContinuation,savedConversationUrl,setProductionConversation,removeProduction,type ProductionRecord,type ProductionStage} from "./production-tracker";
 
 const ACTIVE_KEY="gxl.productionActive.v1";
@@ -60,7 +61,8 @@ export function useProductionRecords(){
   return {rows,loaded};
 }
 const sourceLabel=(row:ProductionRecord)=>row.source==="app"?"Uygulama kaydı":row.source==="assistant"?"Asistan bildirimi; dosyalar doğrulanmadı":"Senin bildirimin";
-export function ProductionWorkList({onResume,compact=false}:{onResume:(row:ProductionRecord,options?:{upload?:boolean})=>void;compact?:boolean}){
+type ApiRequest=(path:string,init?:RequestInit)=>Promise<any>;
+export function ProductionWorkList({onResume,compact=false,request}:{onResume:(row:ProductionRecord,options?:{upload?:boolean})=>void;compact?:boolean;request?:ApiRequest}){
   const {rows}=useProductionRecords(),[all,setAll]=useState(false),[opened,setOpened]=useState<string>();
   const ordered=[...rows].sort((a,b)=>Number(a.stage==="published")-Number(b.stage==="published")||b.updatedAt.localeCompare(a.updatedAt)),openRows=ordered.filter(row=>row.stage!=="published"),publishedCount=rows.length-openRows.length,latest=openRows[0],selected=rows.find(row=>row.id===opened);
   const close=()=>{setAll(false);setOpened(undefined);};
@@ -79,7 +81,7 @@ export function ProductionWorkList({onResume,compact=false}:{onResume:(row:Produ
     <Pressable accessibilityRole="button" style={s.primary} onPress={()=>openWork(latest)}><Text style={s.white}>{compact?"İlan çalışmasına dön":"Son çalışmayı aç"}</Text></Pressable>
     {(openRows.length>1||publishedCount>0)&&<Pressable accessibilityRole="button" style={s.secondary} onPress={()=>setAll(true)}><Text style={s.link}>{openRows.length>1?`Açık çalışmalar (${openRows.length})`:"Tüm çalışmalar"}{publishedCount?` · ${publishedCount} yayında`:""}</Text></Pressable>}
     <Modal visible={all||Boolean(selected)} animationType="slide" onRequestClose={close}><SafeAreaView style={s.safe}><ScrollView contentContainerStyle={s.content}>
-      {selected?<SavedProductionDetails key={selected.id} record={selected} onClose={close} onResume={()=>{close();onResume(selected);}} onUpload={()=>{close();onResume(selected,{upload:true});}}/>:<><Text style={s.heading}>İlan çalışmalarım</Text><Pressable accessibilityRole="button" onPress={close}><Text style={s.link}>Çalışma listesini kapat</Text></Pressable>{ordered.map(row=><View style={s.card} key={row.id}><Text style={s.name}>{row.workspace.plan.brief.name}</Text><Text style={s.status}>{PRODUCTION_STAGES[row.stage]}</Text><Text style={s.small}>{sourceLabel(row)}</Text><Pressable accessibilityRole="button" accessibilityLabel={`${row.workspace.plan.brief.name} çalışmasına devam et`} style={s.primary} onPress={()=>openWork(row)}><Text style={s.white}>Bu çalışmaya devam et</Text></Pressable></View>)}</>}
+      {selected?<SavedProductionDetails key={selected.id} record={selected} request={request} onClose={close} onResume={()=>{close();onResume(selected);}} onUpload={()=>{close();onResume(selected,{upload:true});}}/>:<><Text style={s.heading}>İlan çalışmalarım</Text><Pressable accessibilityRole="button" onPress={close}><Text style={s.link}>Çalışma listesini kapat</Text></Pressable>{ordered.map(row=><View style={s.card} key={row.id}><Text style={s.name}>{row.workspace.plan.brief.name}</Text><Text style={s.status}>{PRODUCTION_STAGES[row.stage]}</Text><Text style={s.small}>{sourceLabel(row)}</Text><Pressable accessibilityRole="button" accessibilityLabel={`${row.workspace.plan.brief.name} çalışmasına devam et`} style={s.primary} onPress={()=>openWork(row)}><Text style={s.white}>Bu çalışmaya devam et</Text></Pressable></View>)}</>}
     </ScrollView></SafeAreaView></Modal>
   </View>;
 }
@@ -99,7 +101,25 @@ export function remainingWork(record:ProductionRecord):{titleTr:string;detailTr:
   return {titleTr:`Sırada: ${tool} üretimi bitirsin`,detailTr:`${tool} dosyaları hazırlıyor. Dosyalar bitince GXL klasörüne koy ve aşağıdaki düğmeye bas.`,action:"resume",labelTr:"Dosyalarım hazır, ajanlara ver →"};
 }
 
-function SavedProductionDetails({record,onClose,onResume,onUpload}:{record:ProductionRecord;onClose:()=>void;onResume:()=>void;onUpload?:()=>void}){
+// Paketin araştırma ve ilan bölümleri (sonradan eklenen kısımlar) yeniden yazımda aynen korunur.
+const APPENDIX_MARKERS=["\n\n## Selected product design plan","\n\n## Product recommendation and originality checks","\n\n## Evidence-based market strategy"];
+export function packageAppendix(masterPrompt:string):string{
+  const at=APPENDIX_MARKERS.map(marker=>masterPrompt.indexOf(marker)).filter(index=>index>=0);
+  return at.length?masterPrompt.slice(Math.min(...at)):"";
+}
+function SavedProductionDetails({record,onClose,onResume,onUpload,request}:{record:ProductionRecord;onClose:()=>void;onResume:()=>void;onUpload?:()=>void;request?:ApiRequest}){
+  const {team}=useAgentTeam();
+  // Üretimi başka yapay zekâya ver: paket aynı ürün adı, başlık, etiket ve fiyatla o yapay zekâya göre yeniden yazılır.
+  const switchProducer=(next:string)=>run(async()=>{
+    if(!request||!isAssistant(next)||next===record.workspace.input.assistant)return;
+    const {workspace}=record,visual=next!=="claude"&&team.visuals!==next?team.visuals:undefined;
+    const research=workspace.plan.research||{};
+    const result=await request("/api/printables/repackage",{method:"POST",body:JSON.stringify({name:workspace.plan.brief.name,listing:workspace.plan.listing,input:workspace.input,assistant:next,visualAssistant:visual,priceUsd:workspace.plan.brief.priceUsd,coverColor:research.colorPlan?.coverColor,coverHex:research.colorPlan?.coverHex,crowdedColors:research.colorPlan?.crowded,appendix:packageAppendix(String(workspace.plan.brief.masterPrompt||""))})});
+    if(!result?.brief?.masterPrompt||result.quality?.ok===false)throw new Error("Paket bu yapay zekâ için kalite denetiminden geçmedi; mevcut paket korunuyor.");
+    const updated={...workspace,savedAt:new Date().toISOString(),input:{...workspace.input,assistant:next,visualAssistant:visual},plan:{...workspace.plan,brief:result.brief,quality:result.quality}};
+    await mutateProduction(rows=>rememberProduction(rows,updated));await saveProductionWorkspace(updated);
+    Alert.alert("Paket hazır",`Paket ${assistantName(next)} için yeniden yazıldı. Ürün adı, başlık, etiketler ve fiyat aynı kaldı. Şimdi 'Tek paketi ${assistantTo(next)} gönder'e bas.`);
+  });
   const [linkEditing,setLinkEditing]=useState(false),[link,setLink]=useState(record.conversationUrl||""),[details,setDetails]=useState(false),[busy,setBusy]=useState(false);
   const {workspace}=record,tool=assistantName(workspace.input.assistant),toolAcc=assistantAcc(workspace.input.assistant),conversation=savedConversationUrl(record.conversationUrl||"",workspace.input.assistant);
   const run=async(action:()=>Promise<unknown>)=>{setBusy(true);try{await action();}catch(error){Alert.alert("Çalışma işlemi tamamlanamadı",error instanceof Error?error.message:"Yeniden deneyin.");}finally{setBusy(false);}};
@@ -109,9 +129,10 @@ function SavedProductionDetails({record,onClose,onResume,onUpload}:{record:Produ
     {(()=>{const work=remainingWork(record);return <View style={s.card} testID="saved-production-agents">
       <Text style={s.heading}>{work.titleTr}</Text>
       <Text style={s.body}>{work.detailTr}</Text>
+      {work.action==="share"&&!!request&&<><Text style={s.label}>Üretimi kim yapsın?</Text><View style={s.chips}>{ASSISTANTS.map(item=><Pressable key={item.id} accessibilityRole="button" disabled={busy} style={[s.chip,workspace.input.assistant===item.id&&s.chipOn]} onPress={()=>switchProducer(item.id)}><Text style={workspace.input.assistant===item.id?s.chipTextOn:s.chipText}>{item.label}</Text></Pressable>)}</View><Text style={s.small}>Seçince paket o yapay zekâya göre yeniden yazılır; ürün adı, başlık, etiketler ve fiyat değişmez.</Text></>}
       {work.action==="share"&&<Pressable accessibilityRole="button" style={s.primary} disabled={busy} onPress={()=>run(()=>shareProductionPackage(workspace))}><Text style={s.white}>{work.labelTr}</Text></Pressable>}
       {work.action!=="none"&&<Pressable accessibilityRole="button" style={work.action==="share"?s.secondary:s.primary} disabled={busy} onPress={!record.productId&&onUpload?onUpload:onResume}><Text style={work.action==="share"?s.link:s.white}>{work.action==="share"?"Dosyalarım hazır, ajanlara ver →":work.labelTr}</Text></Pressable>}
-      <AgentPipeline kind="digital" stage={agentStage(record)} complete={record.stage==="published"}/>
+      <AgentPipeline kind="digital" stage={agentStage(record)} complete={record.stage==="published"} workspaceAssistant={workspace.input.assistant} workspaceVisual={workspace.input.visualAssistant}/>
     </View>;})()}
     <Text style={s.body}>Bu ürünün kayıtlı paketi açık. Başlık, açıklama, etiketler, fiyat ve kapsam aşağıda korunuyor.</Text>
     <Pressable accessibilityRole="button" style={s.secondary} disabled={busy} onPress={()=>Alert.alert("Çalışma silinsin mi?","Bu ilan çalışması uygulamadaki listeden kaldırılır. Etsy'deki taslağa veya ilana dokunulmaz.",[{text:"Vazgeç",style:"cancel"},{text:"Sil",style:"destructive",onPress:()=>run(async()=>{await deleteProduction(record.id);onClose();})}])}><Text style={s.link}>Bu çalışmayı listeden sil</Text></Pressable>
@@ -143,7 +164,7 @@ export default function ProductionJourney({workspace,onUpload,onOpenProduct}:{wo
     <Text style={s.status}>Takip: {PRODUCTION_STAGES[record.stage]}</Text><Text style={s.small}>{sourceLabel(record)} · {new Date(record.updatedAt).toLocaleString("tr-TR")}</Text>
     {record.checkedAt&&<Text style={s.small}>Son Etsy doğrulaması: {record.etsyState} · {new Date(record.checkedAt).toLocaleString("tr-TR")}</Text>}
     <ListingMascot step={uploaded?record.stage==="published"||record.stage==="draft"?5:4:downloaded?3:2} complete={record.stage==="published"} title={uploaded?"Aynı ilanın Etsy adımlarına devam et":downloaded?"Dosyalarını aynı ilana yükleyelim":record.stage==="package_ready"?"Şimdi ürün dosyalarını üretelim":"Aynı ürünü takip ediyorum"} instruction={instruction} actionLabel={uploaded?"Ürün kaydı ve Etsy durumuna git":downloaded?"Dosyalarım hazır, yüklemeye geç":record.stage==="package_ready"?`Tek paketi ${toTool} gönder`:"Aynı sohbet için devam metnini aç"} onAction={uploaded?onOpenProduct:downloaded?onUpload:()=>share(record.stage!=="package_ready")} disabled={busy}/>
-    <AgentPipeline kind="digital" stage={agentStage(record)}/>
+    <AgentPipeline kind="digital" stage={agentStage(record)} workspaceAssistant={workspace.input.assistant} workspaceVisual={workspace.input.visualAssistant}/>
     {!uploaded&&<>
       <Pressable accessibilityRole="button" style={s.secondary} disabled={busy} onPress={()=>setStatusModal(true)}><Text style={s.link}>Üretim durumunu güncelle / içe aktar</Text></Pressable>
       {!downloaded&&<Pressable accessibilityRole="button" style={s.secondary} disabled={busy} onPress={onUpload}><Text style={s.link}>Dosyalarım hazır, yüklemeye geç</Text></Pressable>}
@@ -154,4 +175,4 @@ export default function ProductionJourney({workspace,onUpload,onOpenProduct}:{wo
     <Modal visible={statusModal} animationType="slide" onRequestClose={()=>setStatusModal(false)}><SafeAreaView style={s.safe}><ScrollView contentContainerStyle={s.content}><Text style={s.heading}>{workspace.plan.brief.name}</Text><Text style={s.name}>Üretim nerede kaldı?</Text><Text style={s.small}>Aşağıdaki seçimler senin bildirimin olarak kaydedilir. İndirme veya yayın otomatik doğrulanmış sayılmaz.</Text>{EXTERNAL_STAGES.map(stage=><Pressable key={stage} accessibilityRole="button" disabled={busy} style={s.secondary} onPress={()=>update(stage)}><Text style={s.link}>{stage==="generating"?"Sohbete gönderdim, üretim sürüyor":PRODUCTION_STAGES[stage]}</Text></Pressable>)}<Text style={s.label}>Sohbet durumunu içe aktar</Text><Text style={s.small}>Aynı ürüne ait GXL_PROGRESS JSON’unu yapıştır. Başlık, fiyat veya dosyalar bu metinle değiştirilmez.</Text><TextInput accessibilityLabel="GXL üretim durumu JSON" multiline style={s.input} value={receipt} onChangeText={setReceipt} autoCapitalize="none"/><Pressable accessibilityRole="button" style={s.primary} disabled={busy||!receipt.trim()} onPress={()=>{try{const stage=parseProductionReceipt(receipt,record);void update(stage,"assistant");}catch(error){Alert.alert("Durum alınamadı",(error as Error).message);}}}><Text style={s.white}>Bu ürünün durumunu kaydet</Text></Pressable><Pressable accessibilityRole="button" style={s.secondary} onPress={()=>setStatusModal(false)}><Text style={s.link}>Üretim durumunu kapat</Text></Pressable></ScrollView></SafeAreaView></Modal>
   </View>;
 }
-const s=StyleSheet.create({safe:{flex:1,backgroundColor:"#F5F2E9"},content:{padding:20,gap:10,paddingBottom:45},card:{padding:16,backgroundColor:"white",borderRadius:18,borderWidth:1,borderColor:"#DBE1DA",marginBottom:12},heading:{fontSize:16,fontWeight:"800",color:"#315B4C",marginBottom:8},name:{fontSize:17,fontWeight:"700",color:"#17221E",lineHeight:24},status:{fontSize:14,fontWeight:"700",color:"#315B4C",marginVertical:8},small:{fontSize:12,lineHeight:18,color:"#66716B",marginBottom:8},body:{fontSize:14,lineHeight:21,color:"#344039"},label:{fontSize:14,fontWeight:"700",marginVertical:10,color:"#315B4C"},primary:{backgroundColor:"#315B4C",borderRadius:12,padding:14,alignItems:"center",marginVertical:6},white:{fontWeight:"800",color:"white",textAlign:"center"},secondary:{borderWidth:1,borderColor:"#B7CFC0",borderRadius:12,padding:12,alignItems:"center",marginVertical:6},link:{fontSize:13,fontWeight:"700",color:"#315B4C"},input:{borderWidth:1,borderColor:"#B7CFC0",backgroundColor:"white",borderRadius:12,padding:12,minHeight:110,color:"#17221E"}});
+const s=StyleSheet.create({chips:{flexDirection:"row",flexWrap:"wrap",gap:8,marginVertical:6},chip:{borderWidth:1,borderColor:"#B9C7BF",borderRadius:18,paddingHorizontal:12,paddingVertical:6,backgroundColor:"#F5F2E9"},chipOn:{backgroundColor:"#315B4C",borderColor:"#315B4C"},chipText:{color:"#26302B",fontWeight:"600"},chipTextOn:{color:"#FFFFFF",fontWeight:"700"},safe:{flex:1,backgroundColor:"#F5F2E9"},content:{padding:20,gap:10,paddingBottom:45},card:{padding:16,backgroundColor:"white",borderRadius:18,borderWidth:1,borderColor:"#DBE1DA",marginBottom:12},heading:{fontSize:16,fontWeight:"800",color:"#315B4C",marginBottom:8},name:{fontSize:17,fontWeight:"700",color:"#17221E",lineHeight:24},status:{fontSize:14,fontWeight:"700",color:"#315B4C",marginVertical:8},small:{fontSize:12,lineHeight:18,color:"#66716B",marginBottom:8},body:{fontSize:14,lineHeight:21,color:"#344039"},label:{fontSize:14,fontWeight:"700",marginVertical:10,color:"#315B4C"},primary:{backgroundColor:"#315B4C",borderRadius:12,padding:14,alignItems:"center",marginVertical:6},white:{fontWeight:"800",color:"white",textAlign:"center"},secondary:{borderWidth:1,borderColor:"#B7CFC0",borderRadius:12,padding:12,alignItems:"center",marginVertical:6},link:{fontSize:13,fontWeight:"700",color:"#315B4C"},input:{borderWidth:1,borderColor:"#B7CFC0",backgroundColor:"white",borderRadius:12,padding:12,minHeight:110,color:"#17221E"}});

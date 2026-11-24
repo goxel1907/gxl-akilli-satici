@@ -8,10 +8,14 @@ import { agentState, digitalPipeline, physicalPipeline, type AgentOwner } from "
 const ownerLabel = (owner: AgentOwner) => owner === "goxi" ? "Goxi · otomatik" : owner === "seller" ? "Sen" : assistantName(owner);
 
 // Ajan hattı: üründen yayına tüm işler; kim yapıyor (Goxi otomatik, ChatGPT/Claude/Gemini ya da sen) ve hangisi sırada.
-export function AgentPipeline({ kind, stage, complete }: { kind: "digital" | "physical"; stage: number; complete?: boolean }) {
+// workspaceAssistant/workspaceVisual: bu çalışmanın paketini gerçekte hangi yapay zekâ üretiyor (ekip ayarı değil).
+// Eski paketlerde görselleri üretici yapar (Claude hariç: o görsel üretemez, ekibin görselcisine kalır).
+export function AgentPipeline({ kind, stage, complete, workspaceAssistant, workspaceVisual }: { kind: "digital" | "physical"; stage: number; complete?: boolean; workspaceAssistant?: string; workspaceVisual?: string }) {
   const { team } = useAgentTeam();
   const [open, setOpen] = useState(false);
-  const agents = kind === "digital" ? digitalPipeline(team) : physicalPipeline(team);
+  const producer = isAssistant(workspaceAssistant) ? workspaceAssistant : team.producer;
+  const visuals = isAssistant(workspaceVisual) ? workspaceVisual : workspaceAssistant && producer !== "claude" ? producer : team.visuals;
+  const agents = kind === "digital" ? digitalPipeline({ ...team, producer, visuals }) : physicalPipeline(team);
   const states = agents.map((agent) => agentState(agent, stage, complete));
   const done = states.filter((state) => state === "done").length;
   const active = agents.filter((_, index) => states[index] === "active");

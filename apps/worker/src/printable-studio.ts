@@ -35,6 +35,8 @@ export interface PrintablePlanInput {
   audience?: string;
   seed?: string;
   avoidNames?: string[];
+  // Kayıtlı çalışmanın paketi başka yapay zekâ için yeniden yazılırken ürün adı aynı kalır (sunucu verir, istemciden gelmez).
+  fixedName?: string;
   aiAssisted?: boolean;
   priceUsd?: number;
   // Satıcının kullandığı yapay zekâ (ChatGPT veya Claude); paket ona göre yazılır.
@@ -1528,7 +1530,7 @@ export function buildPrintableBrief(raw: PrintablePlanInput): PrintableBrief {
   const pages = input.pageCount || profile.defaultPages;
   // Ada yalnız tek kelimelik renk/stil girer; "Library Ephemera Govery Junk Journal Kit" gibi uzun adlar oluşmaz.
   const accents = [...(input.trendFeatures || []), ...(input.colors || [])].filter((accent) => !accent.includes(" ") && !/^(black|charcoal|gray|grey|brown|chocolate)$/.test(accent));
-  const name = coinProductName({ productType: input.productType, salt: `${input.seed || ""}|${input.kind}|${input.productType}|${input.referenceNotes || ""}`, accents, avoidNames: input.avoidNames });
+  const name = raw.fixedName || coinProductName({ productType: input.productType, salt: `${input.seed || ""}|${input.kind}|${input.productType}|${input.referenceNotes || ""}`, accents, avoidNames: input.avoidNames });
   const rules = originalityPlan(prepared, profile);
   const art = buildArtPlan(prepared, profile, pages);
   const formats = input.formats?.length ? input.formats : profile.defaultFormats;
