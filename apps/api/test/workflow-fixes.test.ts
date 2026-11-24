@@ -227,3 +227,51 @@ test("a full daily storage quota gives a clear Turkish message instead of an une
   assert.equal(response.status, 503);
   assert.match((await response.json() as { error: string }).error, /günlük depolama sınırı/);
 });
+
+test("a 9 MB ZIP arrives in 4 MB chunks, is checked from its head and tail, saved without copying and downloaded byte for byte", async () => {
+  const { zipSync } = await import("fflate");
+  const { store, values } = memory();
+  const env = { APP_ACCESS_TOKEN: "local-test", ETSY_OAUTH: store as never };
+  const auth = { authorization: "Bearer local-test" };
+  const noise = (size: number, seed: number) => { const out = new Uint8Array(size); let x = seed; for (let i = 0; i < size; i++) { x = (x * 1103515245 + 12345) >>> 0; out[i] = x >>> 24; } return out; };
+  const send = async (bytes: Uint8Array, name: string, upload: string) => {
+    const chunk = 4 * 1024 * 1024, total = Math.ceil(bytes.length / chunk);
+    let last: Response | undefined;
+    for (let index = 0; index < total; index++) {
+      last = await handleRequest(new Request(`https://local.invalid/api/digital/upload-chunk?upload=${upload}&index=${index}&total=${total}&size=${bytes.length}&name=${encodeURIComponent(name)}&confirm=true`, { method: "POST", headers: { ...auth, "content-type": "application/octet-stream" }, body: bytes.slice(index * chunk, (index + 1) * chunk) }), env);
+      if (index < total - 1) assert.equal(last.status, 201, await last.clone().text());
+    }
+    return { status: last!.status, body: await last!.json() as { id?: string; error?: string } };
+  };
+  const zip = Uint8Array.from(zipSync({ "Print-1-2x3.png": noise(3_000_000, 1), "Print-2-2x3.png": noise(3_000_000, 2), "Print-3-2x3.png": noise(3_000_000, 3) }, { level: 0 }));
+  assert.ok(zip.length > 8 * 1024 * 1024);
+  const staged = await send(zip, "Green-Uluven-Botanical-Wall-Art-2x3.zip", "a".repeat(32));
+  assert.equal(staged.status, 201, staged.body.error);
+  const image = noise(200_000, 9); image.set([0xff, 0xd8, 0xff, 0xe0], 0);
+  const part = new FormData(); part.set("confirm", "true"); part.set("role", "image"); part.set("asset", new File([image], "listing-01.jpg", { type: "image/jpeg" }));
+  const imageId = (await (await handleRequest(new Request("https://local.invalid/api/digital/upload-part", { method: "POST", headers: auth, body: part }), env)).json() as { id: string }).id;
+  // Kayıt parçaları okumaz: depo okuması sayılır.
+  let blobReads = 0; const get = store.get.bind(store);
+  (store as any).get = async (key: string, type?: string) => { if (/^digital:(chunk|blob):/.test(key)) blobReads++; return (get as any)(key, type); };
+  const form = new FormData();
+  form.set("metadata", JSON.stringify({ confirm: true, kind: "wall_art", name: "Green Uluven Botanical Wall Art", productType: "botanical wall art", prices: { usd: "7.99" }, listing: { title: "Botanical Wall Art Set of 3", description: "WHAT'S INCLUDED\n• 3 art prints\n• Formats: 2:3 ratio", tags: [], materials: [] } }));
+  form.set("parts", JSON.stringify({ files: [staged.body.id], images: [imageId] }));
+  const saved = await handleRequest(new Request("https://local.invalid/api/digital/products", { method: "POST", headers: auth, body: form }), env);
+  assert.equal(saved.status, 201, await saved.clone().text());
+  assert.equal(blobReads, 0, "saving the product never reads the uploaded bytes again");
+  (store as any).get = get;
+  const product = (await saved.json() as { product: { id: string; files: Array<{ key?: string; size: number }> } }).product;
+  assert.match(product.files[0].key!, /^digital:chunked:a{32}:3$/);
+  assert.equal(product.files[0].size, zip.length);
+  const { readStoredFile } = await import("../../worker/src/digital-delivery.js");
+  assert.deepEqual(new Uint8Array((await readStoredFile(store as never, product.files[0].key!))!), zip);
+  assert.ok(![...values.keys()].some(key => key.startsWith("digital:pending-part:")), "no abandoned-upload markers are left");
+  // Çalıştırılabilir dosya son parçadan okunan içerik listesinde yakalanır; yanlış boyutlu parça reddedilir.
+  const bad = Uint8Array.from(zipSync({ "Print.png": noise(4_500_000, 4), "setup.exe": noise(100_000, 5) }, { level: 0 }));
+  const rejected = await send(bad, "Green-Uluven-Botanical-Wall-Art-Bad.zip", "b".repeat(32));
+  assert.equal(rejected.status, 400); assert.match(rejected.body.error || "", /çalıştırılabilir/);
+  const short = await handleRequest(new Request(`https://local.invalid/api/digital/upload-chunk?upload=${"c".repeat(32)}&index=0&total=2&size=${5 * 1024 * 1024}&name=x.zip&confirm=true`, { method: "POST", headers: auth, body: new Uint8Array(1000) }), env);
+  assert.equal(short.status, 400);
+  const tooBig = await handleRequest(new Request(`https://local.invalid/api/digital/upload-chunk?upload=${"d".repeat(32)}&index=0&total=6&size=${21 * 1024 * 1024}&name=big.zip&confirm=true`, { method: "POST", headers: auth, body: new Uint8Array(10) }), env);
+  assert.match((await tooBig.json() as { error: string }).error, /20 MB; bu ZIP'i ikiye bölün/);
+});
