@@ -17,7 +17,7 @@ type Fetcher = typeof fetch;
 export interface DigitalStore {
   get(key: string): Promise<string | null>;
   get(key: string, type: "arrayBuffer"): Promise<ArrayBuffer | null>;
-  put(key: string, value: string | ArrayBuffer, options?: { expirationTtl?: number }): Promise<void>;
+  put(key: string, value: string | ArrayBuffer | ReadableStream, options?: { expirationTtl?: number }): Promise<void>;
   delete(key: string): Promise<void>;
   // KV liste özelliği: yarıda bırakılan yüklemelerin dosyalarını temizlemek için (yoksa temizlik atlanır).
   list?(options: { prefix: string; limit?: number }): Promise<{ keys: Array<{ name: string }> }>;
@@ -471,6 +471,48 @@ export async function stageDigitalChunk(store: DigitalStore, info: { upload: str
   const storedKey = `${CHUNKED_PREFIX}${upload}:${total}`;
   await store.put(`${PENDING_PREFIX}${id}`, JSON.stringify({ key: storedKey, at: now }));
   await store.delete(`${PENDING_PREFIX}c-${upload}`).catch(() => undefined);
+  await store.put(`${PART_PREFIX}${id}:meta`, JSON.stringify({ name, size, role: "file", storedKey, qa }), { expirationTtl: 86400 });
+  await sweepAbandonedParts(store, now).catch(() => undefined);
+  return { id, name, size };
+}
+
+// Uzak kaynaktan (Google Drive) gelen büyük satış dosyası: telefon hiç yüklemez. Baş ve son aralık istekleriyle
+// denetlenir (tür, ZIP içerik listesi / PDF sonu, tehlikeli dosya), sonra gövde akışla doğrudan kalıcı anahtara yazılır.
+export async function stageRemoteSaleFile(store: DigitalStore, info: { name: string; size: number }, range: (start: number, end: number) => Promise<Uint8Array>, body: () => Promise<ReadableStream | ArrayBuffer>, now = Date.now()) {
+  const name = String(info.name || "").slice(0, 120) || "file.zip", size = Number(info.size);
+  if (!Number.isFinite(size) || size < 1024) throw new DigitalDeliveryError("VALIDATION_FAILED", `${name}: dosya boş ya da çok küçük.`);
+  if (size > MAX_PDF_BYTES) throw new DigitalDeliveryError("VALIDATION_FAILED", `${name}: ${(size / 1048576).toFixed(1)} MB. Etsy dijital dosya sınırı 20 MB; bu ZIP'i ikiye bölün (ör. oranları iki ZIP'e ayırın).`);
+  const edge = 256 * 1024;
+  const head = await range(0, Math.min(size, edge) - 1);
+  const tailLength = Math.min(size, edge + 65_557);
+  const tail = await range(size - tailLength, size - 1);
+  const isPdf = startsWith(head, [0x25, 0x50, 0x44, 0x46, 0x2d]);
+  const isZip = startsWith(head, [0x50, 0x4b, 0x03, 0x04]);
+  if (!isPdf && !isZip) throw new DigitalDeliveryError("VALIDATION_FAILED", `${name} geçerli bir PDF veya ZIP değil.`);
+  let names = [name];
+  if (isPdf) {
+    if (!new TextDecoder().decode(tail.subarray(Math.max(0, tail.length - 2048))).includes("%%EOF")) throw new DigitalDeliveryError("VALIDATION_FAILED", `${name}: PDF eksik ya da yarım görünüyor. Dosyayı yeniden kaydedin.`);
+  } else {
+    let found = zipEntryNamesAt(tail.slice().buffer, size - tail.length);
+    if (found === undefined) {
+      const view = new DataView(tail.buffer, tail.byteOffset, tail.byteLength);
+      for (let end = tail.length - 22; end >= 0 && found === undefined; end -= 1) {
+        if (view.getUint32(end, true) !== 0x06054b50) continue;
+        const offset = view.getUint32(end + 16, true);
+        if (size - offset > 4 * 1024 * 1024) break;
+        found = zipEntryNamesAt((await range(offset, size - 1)).slice().buffer, offset);
+      }
+    }
+    names = (found || []).filter((entry) => !entry.toLowerCase().startsWith("__macosx/") && !/(?:^|\/)\.ds_store$/i.test(entry));
+    if (!names.length) throw new DigitalDeliveryError("VALIDATION_FAILED", `${name}: ZIP içerik listesi okunamadı veya boş. Dosyayı yeniden dışa aktarın.`);
+    const blocked = names.find((entry) => BLOCKED_ENTRY.test(entry));
+    if (blocked) throw new DigitalDeliveryError("VALIDATION_FAILED", `${blocked}: çalıştırılabilir dosya veya makro teslim paketinde olamaz.`);
+  }
+  const qa = { kind: isPdf ? "pdf" as const : "zip" as const, names, checks: names.length, hash: size > LIGHT_QA_BYTES ? await edgeFingerprint(size, head, tail) : await sha256(tail.slice().buffer), light: true };
+  const id = crypto.randomUUID();
+  const storedKey = `${BLOB_PREFIX}${id}`;
+  await store.put(`${PENDING_PREFIX}${id}`, JSON.stringify({ key: storedKey, at: now }));
+  await store.put(storedKey, await body());
   await store.put(`${PART_PREFIX}${id}:meta`, JSON.stringify({ name, size, role: "file", storedKey, qa }), { expirationTtl: 86400 });
   await sweepAbandonedParts(store, now).catch(() => undefined);
   return { id, name, size };

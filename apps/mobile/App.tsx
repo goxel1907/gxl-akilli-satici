@@ -11,7 +11,8 @@ import OwnerNotificationsPanel from "./OwnerNotificationsPanel";
 import ProductionJourney, { ProductionWorkList, useProductionRecords, saveProductionWorkspace, activeProduction, syncTrackedProduct, syncTrackedProducts, shareProductionPackage, restoreProductions } from "./ProductionTracker";
 import { type ProductionRecord } from "./production-tracker";
 import { appendLocalFile, uploadInChunks } from "./upload-file";
-import { archiveUploaded, chooseFolder, entryName, folderSupported, GXL_FOLDER_KEY, scanFolder } from "./gxl-folder";
+import { archiveUploaded, chooseFolder, downloadToCache, entryName, folderSupported, GXL_FOLDER_KEY, scanFolder, unzipImages } from "./gxl-folder";
+import { DriveCard, DriveReminder, useDriveStatus } from "./DriveConnect";
 import { isLiveReadPath } from "./live-check";
 import { sameProduct } from "./product-identity";
 import { mergeLocalProducts, generationKey, uploadPrices, PRINTABLE_WORKSPACE_KEY, parsePrintableWorkspace, type PrintableWorkspace } from "./workflow-state";
@@ -503,6 +504,9 @@ function AccessSetup({ onSave }: { onSave: (value: string) => Promise<void> }) {
     </SafeAreaView>
   );
 }
+
+// Drive köprüsü istekleri uygulama anahtarıyla gider; Google anahtarları yalnız sunucuda durur.
+const driveRequest = (path: string, init: RequestInit = {}) => apiJson(path, { ...init, headers: { ...apiHeaders(true), ...(init.headers || {}) } });
 
 async function openUrl(url: string, label: string) {
   try {
@@ -1216,6 +1220,7 @@ function EtsyScreen({ online, channels, active = true, initialSection = "Trend",
       <View style={styles.agentHeroTop}><View style={styles.shopierLogo}><Ionicons name="color-palette" size={22} color="white" /></View><View style={{ flex: 1 }}><Text style={styles.agentHeroTitle}>Etsy Merkezi</Text><Text style={styles.agentHeroText}>{shopReady ? `${etsyShopLine(etsy)} · Trend, Stüdyo ve Dijital ürünler` : "Trend, otomatik keşif ve stüdyo mağaza açılmadan da çalışır. Taslak ve yayınlama mağaza açılınca etkinleşir."}</Text></View></View>
     </View>
     {!shopReady && online && section !== "Kılavuz" && <Pressable style={styles.guardrail} onPress={() => setSection("Kılavuz")}><Ionicons name="storefront-outline" size={20} color="#315B4C" /><Text style={[styles.guardrailText, { flex: 1 }]}>{authorized ? "Etsy hesabı yetkili, mağaza açılışı bekleniyor. Adımlar için dokunun: Kılavuz → Mağaza açılışı." : "Etsy mağazası henüz bağlı değil. Adımlar için dokunun: Kılavuz → Mağaza açılışı."}</Text><Ionicons name="chevron-forward" size={18} color="#315B4C" /></Pressable>}
+    <DriveReminder request={driveRequest} onOpen={(url) => openUrl(url, "Google")} />
     <View style={styles.segment}>
       {(["Trend", "Stüdyo", "Dijital", "Pinterest", "Kılavuz"] as const).map((item) => <Pressable key={item} style={[styles.segmentItem, section === item && styles.segmentActive]} onPress={() => setSection(item)}><Text style={[styles.segmentText, section === item && styles.segmentTextActive]}>{item}</Text></Pressable>)}
     </View>
@@ -2525,6 +2530,36 @@ function DigitalUploadForm({ visible, suspended = false, prefill, onClose, onSav
       setFolderUri(undefined);
     } finally { setUploadStep(""); }
   };
+  // Google Drive: dosyalar sunucuya Drive'dan gelir; telefon yalnız büyük görseli küçültür ve görsel paketini açar.
+  const drive = useDriveStatus(driveRequest, Boolean(visible));
+  const [driveNotes, setDriveNotes] = useState<string[]>([]);
+  const takeFromDrive = async () => {
+    setUploadStep("Drive'daki GXL klasörü okunuyor…");
+    try {
+      const { entries } = await driveRequest("/api/drive/files");
+      const notes: string[] = entries.filter((entry: any) => entry.noteTr && entry.role === "skip").map((entry: any) => `${entry.name}: ${entry.noteTr}`);
+      const sale = entries.filter((entry: any) => entry.role === "file");
+      if (sale.length > 5) notes.push(`Drive'da ${sale.length} satış dosyası var; Etsy 5 dosya alır, ilk 5 tanesi seçildi.`);
+      const picked: any[] = [];
+      for (const entry of entries.filter((row: any) => row.role === "image" || row.role === "image_zip")) {
+        if (entry.role === "image" && entry.size <= 8 * 1024 * 1024) { picked.push({ driveId: entry.id, name: entry.name, fileName: entry.name, size: entry.size, mimeType: entry.mimeType || "image/jpeg" }); continue; }
+        setUploadStep(`${entry.name} telefona alınıyor…`);
+        const local = await downloadToCache(`${API_URL}/api/drive/file/${entry.id}`, apiHeaders(), entry.name);
+        if (entry.role === "image") picked.push({ uri: local, name: entry.name, fileName: entry.name, size: entry.size, mimeType: entry.mimeType || "image/png" });
+        else { const opened = await unzipImages(local, entry.name); picked.push(...opened); notes.push(`${entry.name} açıldı: ${opened.length} görsel.`); }
+      }
+      picked.sort((a, b) => String(a.name).localeCompare(String(b.name), undefined, { numeric: true, sensitivity: "base" }));
+      if (picked.length > 10) notes.push(`${picked.length} görsel bulundu; Etsy 10 görsel alır, ilk 10 tanesi (ad sırasıyla) seçildi.`);
+      if (!sale.length) notes.push("Drive'daki GXL klasöründe PDF veya ZIP yok. Yapay zekâdan aldığın satış dosyalarını oraya kaydet.");
+      if (!picked.length) notes.push("Drive'daki GXL klasöründe ilan görseli yok (JPG/PNG ya da listing-images.zip).");
+      setFiles(sale.slice(0, 5).map((entry: any) => ({ driveId: entry.id, name: entry.name, fileName: entry.name, size: entry.size, mimeType: entry.mimeType || "application/zip" })));
+      setImages(picked.slice(0, 10));
+      setDriveNotes(notes);
+    } catch (error) {
+      Alert.alert("Drive okunamadı", errorText(error));
+      drive.refresh();
+    } finally { setUploadStep(""); }
+  };
   const save = () => {
     if (!name.trim() || !productType.trim() || !title.trim() || !description.trim()) return Alert.alert("Eksik bilgi", "Ürün adı, ürün türü, başlık ve açıklama gerekli. Önce Stüdyo'da ilanı hazırlayın.");
     if (prefill?.handoffName && !sameProduct(prefill.handoff || { name: prefill.handoffName, kind: prefill.kind, productType: prefill.productType }, { name, kind, productType })) return Alert.alert("Ürün kaydı değişti", "Ürün adı ve türü üretim kaydıyla aynı olmalı. Stüdyo’dan yeni paket hazırlayın.");
@@ -2576,6 +2611,7 @@ function DigitalUploadForm({ visible, suspended = false, prefill, onClose, onSav
           for (const [index, file] of files.entries()) {
             const label = file.name || file.fileName || `dosya-${index + 1}`;
             try {
+              if (file.driveId) { setUploadStep(`Dosya ${index + 1}/${files.length} Drive'dan sunucuya alınıyor…`); parts.files.push((await driveRequest("/api/drive/import", { method: "POST", body: JSON.stringify({ confirm: true, fileId: file.driveId, role: "file" }) })).id); continue; }
               const result = await uploadInChunks(file, { apiUrl: API_URL, headers: apiHeaders(), name: label, onProgress: (part, total) => setUploadStep(`Dosya ${index + 1}/${files.length} gönderiliyor${total > 1 ? ` (parça ${part}/${total})` : ""}…`) });
               parts.files.push(result.id);
             } catch (error) { throw new Error(`${label}: ${errorText(error)}`); }
@@ -2583,7 +2619,7 @@ function DigitalUploadForm({ visible, suspended = false, prefill, onClose, onSav
           for (const [index, image] of images.entries()) {
             const label = image.fileName || image.name || `görsel-${index + 1}`;
             setUploadStep(`Görsel ${index + 1}/${images.length} hazırlanıyor ve gönderiliyor…`);
-            try { parts.images.push(await stage(await prepareListingImage(image), "image", index)); }
+            try { parts.images.push(image.driveId && !image.uri ? (await driveRequest("/api/drive/import", { method: "POST", body: JSON.stringify({ confirm: true, fileId: image.driveId, role: "image" }) })).id : await stage(await prepareListingImage(image), "image", index)); }
             catch (error) { throw new Error(`${label}: ${errorText(error)}`); }
           }
           setUploadStep("Ürün kaydediliyor…");
@@ -2605,10 +2641,16 @@ function DigitalUploadForm({ visible, suspended = false, prefill, onClose, onSav
     <SafeAreaView style={styles.formSafe}><StatusBar barStyle="dark-content" /><ScrollView contentContainerStyle={styles.formContent}>
       <View style={styles.formHeader}><Text style={styles.sectionTitle}>Dijital ürün yükle</Text><Pressable onPress={onClose}><Ionicons name="close" size={26} color="#315B4C" /></Pressable></View>
       <ListingGuide input={uploadGuideInput}
-        actionLabel={!files.length ? (folderSupported() ? "Goxi GXL klasöründen alsın" : "Goxi ile ürün dosyalarını seç") : !images.length ? "Goxi ile ilan görsellerini seç" : uploadReady ? "Goxi ile dosyaları güvenli depoya yükle" : undefined}
-        onAction={!files.length ? (folderSupported() ? () => takeFromFolder() : pickFiles) : !images.length ? pickImages : uploadReady ? save : undefined} disabled={saving} />
+        actionLabel={!files.length ? (drive.status?.connected ? "Goxi Drive'dan alsın" : folderSupported() ? "Goxi GXL klasöründen alsın" : "Goxi ile ürün dosyalarını seç") : !images.length ? "Goxi ile ilan görsellerini seç" : uploadReady ? "Goxi ile dosyaları güvenli depoya yükle" : undefined}
+        onAction={!files.length ? (drive.status?.connected ? takeFromDrive : folderSupported() ? () => takeFromFolder() : pickFiles) : !images.length ? pickImages : uploadReady ? save : undefined} disabled={saving} />
+      <DriveCard request={driveRequest} onOpen={(url) => openUrl(url, "Google")} />
+      {drive.status?.connected && <View style={styles.analysisCard}>
+        <Pressable style={[styles.primary, { marginTop: 0, marginBottom: 0 }, saving && styles.primaryDisabled]} disabled={saving} onPress={takeFromDrive}><Text style={styles.primaryText}>Drive'daki GXL klasöründen al</Text><Ionicons name="cloud-download-outline" size={18} color="white" /></Pressable>
+        <Text style={styles.formHint}>Satış dosyalarını telefon yüklemez; sunucu onları Drive'dan kendisi alır.</Text>
+        {driveNotes.map((note) => <Text key={note} style={styles.warningText}>• {note}</Text>)}
+      </View>}
       {folderSupported() && <View style={styles.analysisCard}>
-        <Text style={styles.cardTitle}>GXL klasörü</Text>
+        <Text style={styles.cardTitle}>Telefondaki GXL klasörü</Text>
         <Text style={styles.analysisLine}>{folderUri ? `Klasör: ${entryName(folderUri)}. ` : "Bir kez klasör seç: İndirilenler içinde 'GXL' adlı yeni klasör aç ve onu seç. "}Yapay zekâdan indirdiğin ZIP/PDF dosyalarını ve ilan görsellerini (ya da listing-images.zip paketini) bu klasöre kaydet. Goxi dosyaları ayırır, görselleri sıralar ve küçültür; yüklenenleri 'Yuklendi' klasörüne taşır.</Text>
         <Pressable style={[styles.primary, { marginTop: 8, marginBottom: 0 }, saving && styles.primaryDisabled]} disabled={saving} onPress={() => takeFromFolder()}><Text style={styles.primaryText}>{folderUri ? "GXL klasöründen al" : "GXL klasörünü seç ve al"}</Text><Ionicons name="folder-open-outline" size={18} color="white" /></Pressable>
         {!!folderUri && <Pressable onPress={() => takeFromFolder(true)}><Text style={styles.linkNote}>Klasörü değiştir</Text></Pressable>}
@@ -2633,7 +2675,7 @@ function DigitalUploadForm({ visible, suspended = false, prefill, onClose, onSav
       <Field label={`Başlık (${title.length}/140)`} value={title} onChangeText={setTitle} multiline />
       <Field label="Etiketler (virgülle, 13 adet, her biri en fazla 20 karakter)" value={tags} onChangeText={setTags} multiline autoCapitalize="none" />
       <Field label="Açıklama" value={description} onChangeText={setDescription} multiline style={[styles.input, { minHeight: 160, textAlignVertical: "top" }]} />
-      <ListingReviewCard producer={prefill?.assistant} runAuto={(body) => apiJson("/api/agents/review", { method: "POST", headers: apiHeaders(true), body: JSON.stringify(body) })} images={images.length} sellers={prefill?.research?.salesProof?.sellers || []} context={{ kind: "digital", title, tags: tags.split(",").map((tag: string) => tag.trim()).filter(Boolean), description, priceUsd: Number(priceUsd.replace(",", ".")) || undefined, targetSearch: prefill?.research?.keyword, provenSellers: provenSellerLines(prefill?.research?.salesProof) }} onApply={(next) => { setTitle(next.title); setTags(next.tags.join(", ")); setDescription(next.description); }} />
+      <ListingReviewCard autoRun producer={prefill?.assistant} runAuto={(body) => apiJson("/api/agents/review", { method: "POST", headers: apiHeaders(true), body: JSON.stringify(body) })} images={images.length} sellers={prefill?.research?.salesProof?.sellers || []} context={{ kind: "digital", title, tags: tags.split(",").map((tag: string) => tag.trim()).filter(Boolean), description, priceUsd: Number(priceUsd.replace(",", ".")) || undefined, targetSearch: prefill?.research?.keyword, provenSellers: provenSellerLines(prefill?.research?.salesProof) }} onApply={(next) => { setTitle(next.title); setTags(next.tags.join(", ")); setDescription(next.description); }} />
       <View style={styles.card}>
         {kind === "pattern" && <Toggle label="Deseni ben veya mağaza üyem yazdı (yapay zekâ yazmadı)" value={ownPattern} onChange={setOwnPattern} />}
         <Toggle label={kind === "pattern" ? "Desen bizzat örülerek / yapılarak test edildi" : testLabel(kind)} value={testMade} onChange={setTestMade} />
@@ -3501,7 +3543,7 @@ function EtsyPlanResult({ plan, payload, etsyReady, priceSourceLabel, preparePro
         {(plan.salesProof?.sellers || []).filter((row: any) => typeof row.reviews === "number" || typeof row.shopSales === "number").slice(0, 4).map((row: any) => <Pressable key={row.id} onPress={() => openUrl(row.url, "Etsy ilanı")}><Text style={styles.linkNote} numberOfLines={2}>{row.priceUsd ? `${row.priceUsd.toFixed(2)} USD · ` : ""}{typeof row.reviews === "number" ? `${row.reviews} yorum · ` : ""}{typeof row.shopSales === "number" ? `mağaza ${row.shopSales} satış · ` : ""}{row.title}</Text></Pressable>)}
         {plan.competitors.map((item: any, index: number) => <Pressable key={`${item.url}-${index}`} onPress={() => item.url && openUrl(item.url, "Etsy ilanı")}><Text style={styles.linkNote} numberOfLines={2}>{item.priceUsd ? `${item.priceUsd.toFixed(2)} USD · ` : ""}{item.favorites} favori · {item.title}</Text></Pressable>)}
       </View>}
-      <ListingReviewCard producer={chatAssistant} runAuto={(body) => apiJson("/api/agents/review", { method: "POST", headers: apiHeaders(true), body: JSON.stringify(body) })} images={photoCount || 0} sellers={plan.salesProof?.sellers || []} context={{ kind: "physical", title, tags: tags.split(",").map((tag: string) => tag.trim()).filter(Boolean), description, priceUsd: Number(String(priceUsd).replace(",", ".")) || undefined, targetSearch: plan.primaryKeyword, provenSellers: provenSellerLines(plan.salesProof) }} onApply={(next) => { setTitle(next.title); setTags(next.tags.join(", ")); setDescription(next.description); setGlossSource({ title: next.title, tags: next.tags }); }} />
+      <ListingReviewCard autoRun producer={chatAssistant} runAuto={(body) => apiJson("/api/agents/review", { method: "POST", headers: apiHeaders(true), body: JSON.stringify(body) })} images={photoCount || 0} sellers={plan.salesProof?.sellers || []} context={{ kind: "physical", title, tags: tags.split(",").map((tag: string) => tag.trim()).filter(Boolean), description, priceUsd: Number(String(priceUsd).replace(",", ".")) || undefined, targetSearch: plan.primaryKeyword, provenSellers: provenSellerLines(plan.salesProof) }} onApply={(next) => { setTitle(next.title); setTags(next.tags.join(", ")); setDescription(next.description); setGlossSource({ title: next.title, tags: next.tags }); }} />
       {plan.warnings.map((warning: string) => <Text style={styles.warningText} key={warning}>• {warning}</Text>)}
       <Pressable style={[styles.analyzeButton, { marginTop: 14 }, (eligibility.status !== "allowed" || saving || Boolean(draft)) && styles.primaryDisabled]} disabled={eligibility.status !== "allowed" || saving || Boolean(draft)} onPress={createDraft}>{saving ? <ActivityIndicator color="white" /> : <Ionicons name="storefront-outline" size={18} color="white" />}<Text style={styles.primaryText}>{eligibility.status === "blocked" ? "Etsy'de yayınlanamaz" : draft ? "Taslak oluşturuldu" : "Etsy taslağı oluştur"}</Text></Pressable>
       {!!savingText && <Text style={styles.formHint}>{savingText}</Text>}
@@ -4157,8 +4199,8 @@ function PhotoListingStudio({ online, etsyReady, wizard, onStepChange }: any) {
   const removePhoto = (uri: string) => setPhotos((current) => current.filter((photo) => photo.uri !== uri));
   const makeCover = (uri: string) => setPhotos((current) => [...current.filter((photo) => photo.uri === uri), ...current.filter((photo) => photo.uri !== uri)]);
 
-  const analyze = async () => {
-    if (!photos.length) return Alert.alert("Fotoğraf gerekli", "Önce ürünün fotoğrafını çekin veya seçin.");
+  const analyze = async (options: { silent?: boolean } = {}) => {
+    if (!photos.length) return options.silent ? undefined : Alert.alert("Fotoğraf gerekli", "Önce ürünün fotoğrafını çekin veya seçin.");
     const requestedKey = inputKey;
     setAnalyzing(true);
     try {
@@ -4170,16 +4212,30 @@ function PhotoListingStudio({ online, etsyReady, wizard, onStepChange }: any) {
       const { analysis: result } = await apiJson("/api/products/photo-analyze", { method: "POST", headers: apiHeaders(true), body: JSON.stringify({ imageDataUrls: images, kind: kind || undefined, name: nameTr.trim() || undefined }) });
       if (liveInputKey.current !== requestedKey) return;
       applyAnalysis(result);
-    } catch (error) { if (liveInputKey.current === requestedKey) Alert.alert("Sunucu analizi kullanılamıyor", `${errorText(error)}\nChatGPT / Claude sohbeti seçeneğini kullanabilir veya alanları elle doldurabilirsiniz.`); }
+    } catch (error) { if (liveInputKey.current === requestedKey && !options.silent) Alert.alert("Sunucu analizi kullanılamıyor", `${errorText(error)}\nChatGPT / Claude sohbeti seçeneğini kullanabilir veya alanları elle doldurabilirsiniz.`); }
     finally { setAnalyzing(false); }
   };
 
+  // Tanıma ajanı: fotoğraf eklenince sunucu analizi kendiliğinden çalışır (ürün başına bir kez); satıcı düğmeye basmaz.
+  const autoAnalyzed = useRef("");
+  useEffect(() => {
+    if (!photos.length || !online || analyzing || analysis || autoAnalyzed.current === sourceId) return;
+    autoAnalyzed.current = sourceId;
+    analyze({ silent: true });
+  }, [photos.length, online, sourceId]);
+  // Kargo ajanı: son girilen Shipentegra ücreti ürün türüne göre hatırlanır ve boş alana gelir (satıcı teyit eder).
+  const [shippingRecalled, setShippingRecalled] = useState(false);
+  useEffect(() => {
+    if (!kind || shippingTry.trim()) return;
+    AsyncStorage.getItem(`gxl.lastShipping.${kind}`).then((value) => { if (value && !shippingTry.trim()) { setShippingTry(value); setShippingRecalled(true); } }).catch(() => undefined);
+  }, [kind]);
   const prepare = async () => {
     if (!photos.length) return Alert.alert("Fotoğraf gerekli", "Etsy ilanı için en az bir fotoğraf ekleyin; 5 ve üzeri önerilir.");
     if (!kind) return Alert.alert("Ürün türü", "Örgü, tesbih, vintage veya diğer seçeneklerinden birini seçin.");
     if (nameTr.trim().length < 3) return Alert.alert("Ürün adı", "Ürünün Türkçe adını yazın; fotoğraf analizi de önerebilir.");
     if (!knit && origin === "unknown") return Alert.alert("Üretim bilgisi", "Bu ürünü kim yaptı sorusunu yanıtlayın. Uygulama ürünü sizin yaptığınızı veya tasarladığınızı varsaymaz.");
     const net = parseAmount(priceTry);
+    if (parseAmount(shippingTry)) AsyncStorage.setItem(`gxl.lastShipping.${kind}`, shippingTry.trim()).catch(() => undefined);
     if (!net) return Alert.alert("Elinize geçecek tutar", "Bu üründen elinize geçmesini istediğiniz tutarı TL olarak yazın. Etsy fiyatı, Etsy kesintileri ve kargo maliyetiniz eklenerek buna göre hesaplanır; alıcı ücretsiz kargo görür.");
     const list = (text: string) => text.split(",").map((item) => item.trim()).filter(Boolean);
     const vintage = kind === "vintage" || origin === "vintage";
@@ -4407,6 +4463,7 @@ function PhotoListingStudio({ online, etsyReady, wizard, onStepChange }: any) {
       <View style={{ flex: 1 }}><Field label="ABD'ye kargo (TL)" value={shippingTry} onChangeText={setShippingTry} keyboardType="decimal-pad" placeholder="900" /></View>
       <View style={{ width: 70 }}><Field label="Adet" value={quantity} onChangeText={setQuantity} keyboardType="number-pad" /></View>
     </View>
+    {shippingRecalled && <Text style={styles.formHint}>Kargo ücreti bu türdeki son ürününden dolduruldu. Paket ağırlığı farklıysa Shipentegra'dan teyit edip düzelt.</Text>}
     <Toggle label="Hazır, hemen gönderilebilir" value={readyToShip} onChange={setReadyToShip} />
     {wizard && <Text style={styles.formHint}>Elinize geçecek: Etsy kesintileri düşüldükten sonra size kalacak tutar; Etsy fiyatı buna göre hesaplanır. ABD'ye kargo: paketli ürünü göndermenin size maliyeti; Shipentegra kullanıyorsanız uygulamasındaki 'Fiyat Hesapla' ile paketli ağırlık ve ölçüden ABD fiyatını alıp yazın (Alaska/Hawaii dahil). Kargoyu siz ödersiniz: bu tutar Etsy fiyatına eklenir, alıcı ücretsiz kargo görür. "Hazır" kapalıysa ürün sipariş gelince yapılır demektir.</Text>}
     </>}
