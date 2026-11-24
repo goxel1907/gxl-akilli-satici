@@ -116,3 +116,5 @@ Güncelleme: 9 Kasım 2026
   iki ajan hattı ve Drive kartı burada. Seçili ilan çalışmasında (ProductionJourney) da ajan hattı görünür.
 - 25 Kasım (2): Google anahtarı uygulamadan girilir (POST /api/drive/credentials; secret KV'de AES-GCM, APP_ACCESS_TOKEN
   türevli anahtar; yanıtlarda dönmez). Cloudflare gizli ayarı varsa o önce gelir. Drive kartı kurulum adımları telefona göre.
+- 25 Kasım (3): Kayıtlı çalışma ekranında (Son çalışmayı aç) en üstte kalan iş kartı + ajan hattı (remainingWork/agentStage).
+  'Dosyalarım hazır, ajanlara ver' yükleme ekranını aynı ürün kaydıyla doğrudan açar (productionResume.upload / uploadAsk).
